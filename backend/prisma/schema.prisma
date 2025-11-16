@@ -1,0 +1,756 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  Farmer
+  Processor
+  Roaster
+  HeadJudge
+  Cupper
+  Admin
+}
+
+enum ProcessingBatchStatus {
+  ToProcess
+  Drying
+  Completed
+}
+
+enum FarmRequestStatus {
+  Pending
+  Approved
+  Rejected
+}
+
+enum HarvestLotStatus {
+  ReadyForProcessing
+  Processing
+}
+
+enum ParchmentLotStatus {
+  AwaitingHulling
+  Hulled
+}
+
+enum GreenBeanSourceType {
+  Internal
+  External
+}
+
+enum GreenBeanAvailabilityStatus {
+  Available
+  Withdrawn
+}
+
+enum WithdrawalType {
+  Sale
+  RoastingStock
+  Sample
+  Export
+  Other
+}
+
+enum CuppingSessionType {
+  QC
+  Competition
+}
+
+enum CuppingSessionStatus {
+  Setup
+  Scoring
+  Adjudication
+  Finalized
+}
+
+enum SaleOrderStatus {
+  Draft
+  Confirmed
+  Delivered
+  Cancelled
+}
+
+enum InvoiceStatus {
+  Draft
+  Sent
+  Paid
+  Overdue
+}
+
+enum CustomerType {
+  Roaster
+  Distributor
+  Retailer
+  Other
+}
+
+enum WeatherSource {
+  Manual
+  API
+}
+
+enum RoastLevel {
+  Light
+  Medium
+  Dark
+}
+
+model User {
+  id                  String    @id @default(uuid())
+  email               String?   @unique
+  username            String?   @unique
+  password            String    // hashed with bcrypt
+  name                String
+  roles               UserRole[]
+  isActive            Boolean   @default(true)
+  isSuperAdmin        Boolean   @default(false)
+  mustChangePassword  Boolean   @default(true)
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  lastLogin           DateTime?
+  
+  // Relations
+  createdFarms        Farm[]                    @relation("FarmOwner")
+  farmRequests        FarmRequest[]
+  reviewedFarmRequests FarmRequest[]            @relation("FarmRequestReviewer")
+  harvestLots         HarvestLot[]               @relation("HarvestLotCreator")
+  processingBatches   ProcessingBatch[]         @relation("ProcessingBatchCreator")
+  greenBeanLots       GreenBeanLot[]            @relation("GreenBeanLotCreator")
+  cuppingSessions     CuppingSession[]          @relation("SessionCreator")
+  cuppingJudges       CuppingSessionJudge[]
+  judgeScores         JudgeScore[]
+  gapLogs             GAPLogEntry[]
+  soilAnalyses        SoilAnalysis[]
+  weatherRecords      WeatherRecord[]
+  roasterInventory    RoasterInventoryItem[]
+  roastBatches        RoastBatch[]
+  saleOrders          SaleOrder[]
+  invoices            Invoice[]
+  pricingHistory      PricingHistory[]
+  withdrawalHistory   GreenBeanWithdrawal[]      @relation("WithdrawalUser")
+  priceSetGreenBeans  GreenBeanLot[]            @relation("PriceSetter")
+  
+  @@index([email])
+  @@index([username])
+  @@index([isActive])
+}
+
+model Farm {
+  id                  String    @id @default(uuid())
+  farmName            String
+  location            String
+  latitude            Float?
+  longitude           Float?
+  altitude            String?
+  
+  ownerId             String
+  owner               User      @relation("FarmOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  // Relations
+  harvestLots         HarvestLot[]
+  gapLogs             GAPLogEntry[]
+  soilAnalyses        SoilAnalysis[]
+  weatherRecords      WeatherRecord[]
+  
+  @@index([ownerId])
+}
+
+model FarmRequest {
+  id                  String              @id @default(uuid())
+  farmName            String
+  location            String
+  altitude            String?
+  size                String?
+  latitude            Float?
+  longitude           Float?
+  ownerName           String
+  requesterId         String
+  requester           User                @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+  requestDate         DateTime            @default(now())
+  status              FarmRequestStatus    @default(Pending)
+  reason              String
+  adminNotes          String?
+  reviewDate          DateTime?
+  reviewedBy          String?
+  reviewer            User?               @relation("FarmRequestReviewer", fields: [reviewedBy], references: [id])
+  
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  
+  @@index([requesterId])
+  @@index([status])
+}
+
+model CropYear {
+  id                  String    @id @default(uuid())
+  year                String    // e.g., "2024/2025"
+  startDate           DateTime
+  endDate             DateTime
+  description         String?
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  // Relations
+  harvestLots         HarvestLot[]
+  processingBatches   ProcessingBatch[]
+  
+  @@unique([year])
+}
+
+model HarvestLot {
+  id                  String            @id @default(uuid())
+  farmerName          String
+  cherryVariety       String
+  weightKg            Float
+  farmPlotLocation    String
+  harvestDate         DateTime
+  status              HarvestLotStatus  @default(ReadyForProcessing)
+  cropYearId          String?
+  cropYear            CropYear?         @relation(fields: [cropYearId], references: [id])
+  farmId              String?
+  farm                Farm?             @relation(fields: [farmId], references: [id], onDelete: SetNull)
+  createdById         String?
+  createdBy           User?             @relation("HarvestLotCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  
+  // Relations
+  processingBatches   ProcessingBatch[]
+  parchmentLots       ParchmentLot[]
+  
+  @@index([farmId])
+  @@index([status])
+  @@index([harvestDate])
+}
+
+model ProcessingBatch {
+  id                  String                  @id @default(uuid())
+  harvestLotId        String
+  harvestLot          HarvestLot              @relation(fields: [harvestLotId], references: [id], onDelete: Cascade)
+  createdById         String?
+  createdBy           User?                   @relation("ProcessingBatchCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  status              ProcessingBatchStatus   @default(ToProcess)
+  processType         String
+  processNotes        String?
+  cropYearId          String?
+  cropYear            CropYear?               @relation(fields: [cropYearId], references: [id])
+  parchmentWeightKg   Float?
+  moistureContent     Float?
+  baggingDate         DateTime?
+  dryingStartDate     DateTime?
+  dryingEndDate       DateTime?
+  
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  
+  // Relations
+  dryingLogs          DryingLogEntry[]
+  parchmentLots       ParchmentLot[]
+  
+  @@index([harvestLotId])
+  @@index([status])
+}
+
+model DryingLogEntry {
+  id                  String            @id @default(uuid())
+  processingBatchId   String
+  processingBatch     ProcessingBatch   @relation(fields: [processingBatchId], references: [id], onDelete: Cascade)
+  date                DateTime
+  moistureContent     Float
+  ambientTemp         Float
+  relativeHumidity    Float
+  
+  createdAt           DateTime          @default(now())
+  
+  @@index([processingBatchId, date])
+}
+
+model PhysicalTestResults {
+  id                  String        @id @default(uuid())
+  parchmentLotId      String        @unique
+  parchmentLot        ParchmentLot  @relation(fields: [parchmentLotId], references: [id], onDelete: Cascade)
+  sampleWeightGrams   Float
+  greenBeanWeightGrams Float
+  greenBeanMoisture   Float
+  waterActivity       Float
+  density             Float
+  defectCount         Int
+  notes               String?
+  
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+}
+
+model ParchmentLot {
+  id                  String                @id @default(uuid())
+  processingBatchId   String
+  processingBatch     ProcessingBatch       @relation(fields: [processingBatchId], references: [id], onDelete: Cascade)
+  harvestLotId        String
+  harvestLot          HarvestLot            @relation(fields: [harvestLotId], references: [id], onDelete: Cascade)
+  initialWeightKg     Float
+  currentWeightKg     Float
+  moistureContent     Float
+  processType         String
+  status              ParchmentLotStatus     @default(AwaitingHulling)
+  
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  
+  // Relations
+  physicalTestResults PhysicalTestResults?
+  greenBeanLots       GreenBeanLot[]
+  
+  @@index([processingBatchId])
+  @@index([status])
+}
+
+model GreenBeanLot {
+  id                  String                      @id @default(uuid())
+  sourceType          GreenBeanSourceType
+  parchmentLotId      String?
+  parchmentLot        ParchmentLot?               @relation(fields: [parchmentLotId], references: [id], onDelete: SetNull)
+  grade               String
+  initialWeightKg     Float
+  currentWeightKg     Float
+  availabilityStatus  GreenBeanAvailabilityStatus  @default(Available)
+  pricePerKg          Float?
+  currency            String?
+  priceSetDate        DateTime?
+  priceSetBy          String?
+  priceSetter         User?                       @relation("PriceSetter", fields: [priceSetBy], references: [id])
+  createdById         String?
+  
+  // External source details (stored as JSON)
+  externalSource      Json?
+  
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+  
+  // Relations
+  cuppingScores       CuppingScore[]
+  cuppingSamples      CuppingSample[]
+  withdrawalHistory   GreenBeanWithdrawal[]
+  roasterInventory    RoasterInventoryItem[]
+  roastBatches        RoastBatch[]
+  saleOrderItems      SaleOrderItem[]
+  invoiceItems        InvoiceItem[]
+  pricingHistory      PricingHistory[]
+  createdBy           User?                       @relation("GreenBeanLotCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  
+  @@index([sourceType])
+  @@index([availabilityStatus])
+  @@index([parchmentLotId])
+}
+
+model GreenBeanWithdrawal {
+  id                  String            @id @default(uuid())
+  greenBeanLotId      String
+  greenBeanLot        GreenBeanLot      @relation(fields: [greenBeanLotId], references: [id], onDelete: Cascade)
+  amountKg            Float
+  withdrawalType      WithdrawalType
+  purpose             String
+  notes               String?
+  date                DateTime          @default(now())
+  withdrawnBy         String?
+  withdrawnByUser     User?            @relation("WithdrawalUser", fields: [withdrawnBy], references: [id], onDelete: SetNull)
+  withdrawnByName     String?
+  salePrice           Float?
+  currency            String?
+  customerName        String?
+  invoiceNumber       String?
+  deliveryAddress     String?
+  totalAmount         Float?
+  
+  createdAt           DateTime         @default(now())
+  
+  @@index([greenBeanLotId])
+  @@index([date])
+}
+
+model ActivityType {
+  id                  String    @id @default(uuid())
+  name                String    @unique
+  description         String?
+  isActive            Boolean   @default(true)
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  // Relations
+  gapLogs             GAPLogEntry[]
+  
+  @@index([isActive])
+}
+
+model ProcessType {
+  id                  String    @id @default(uuid())
+  name                String    @unique
+  description         String?
+  colorScheme         Json // JSON object with borderColor, iconBg, iconColor, badgeColor
+  isActive            Boolean   @default(true)
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  @@index([isActive])
+}
+
+model GAPLogEntry {
+  id                  String        @id @default(uuid())
+  farmId              String?
+  farm                Farm?         @relation(fields: [farmId], references: [id], onDelete: SetNull)
+  farmPlotLocation    String
+  activityTypeId      String
+  activityType        ActivityType  @relation(fields: [activityTypeId], references: [id], onDelete: Restrict)
+  activityTypeName    String        // Denormalized for quick access
+  date                DateTime
+  productUsed         String
+  quantity            String
+  notes               String?
+  createdBy           String?
+  createdByUser       User?         @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  
+  @@index([farmId])
+  @@index([date])
+  @@index([activityTypeId])
+}
+
+model SoilAnalysis {
+  id                  String        @id @default(uuid())
+  farmId              String
+  farm                Farm          @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  farmPlotLocation    String
+  testDate            DateTime
+  labName             String?
+  certificateNumber   String?
+  
+  // Core soil chemistry data
+  pH                  Float
+  phosphorus          Float
+  potassium           Float
+  nitrogen            Float
+  calcium             Float
+  magnesium           Float
+  
+  // Optional additional nutrients
+  organicMatter       Float?
+  sulfur              Float?
+  zinc                Float?
+  iron                Float?
+  manganese           Float?
+  copper              Float?
+  boron               Float?
+  
+  // Metadata
+  notes               String?
+  recommendations     String?
+  createdBy           String
+  createdByUser       User          @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  createdByRole       UserRole
+  attachmentUrl       String?
+  
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  
+  @@index([farmId])
+  @@index([testDate])
+}
+
+model WeatherRecord {
+  id                  String        @id @default(uuid())
+  farmId              String
+  farm                Farm          @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  farmPlotLocation    String
+  recordDate          DateTime
+  temperatureMin      Float
+  temperatureMax      Float
+  temperatureAvg      Float
+  rainfall            Float
+  humidity            Float
+  source              WeatherSource @default(Manual)
+  notes               String?
+  recordedBy          String?
+  recordedByUser      User?         @relation(fields: [recordedBy], references: [id], onDelete: SetNull)
+  
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  
+  @@index([farmId])
+  @@index([recordDate])
+}
+
+model CuppingSession {
+  id                  String                @id @default(uuid())
+  name                String
+  date                DateTime              @default(now())
+  type                CuppingSessionType
+  status              CuppingSessionStatus  @default(Setup)
+  finalResults       Json? // JSON object with final results
+  createdBy           String
+  creator             User                  @relation("SessionCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  
+  // Relations
+  samples             CuppingSample[]
+  judges              CuppingSessionJudge[]
+  scores              JudgeScore[]
+  
+  @@index([date])
+  @@index([status])
+}
+
+model CuppingSample {
+  id                  String            @id @default(uuid())
+  cuppingSessionId    String
+  cuppingSession      CuppingSession    @relation(fields: [cuppingSessionId], references: [id], onDelete: Cascade)
+  blindCode           String
+  greenBeanLotId      String?
+  greenBeanLot        GreenBeanLot?     @relation(fields: [greenBeanLotId], references: [id], onDelete: SetNull)
+  submitterInfo       Json // JSON: { name: string }
+  originInfo          Json // JSON: { farm: string }
+  lotInfo             Json // JSON: { process: string }
+  
+  createdAt           DateTime          @default(now())
+  
+  // Relations
+  scores              JudgeScore[]
+  
+  @@index([cuppingSessionId])
+  @@index([blindCode])
+}
+
+model CuppingSessionJudge {
+  id                  String            @id @default(uuid())
+  cuppingSessionId    String
+  cuppingSession      CuppingSession     @relation(fields: [cuppingSessionId], references: [id], onDelete: Cascade)
+  judgeId             String
+  judge               User               @relation(fields: [judgeId], references: [id], onDelete: Restrict)
+  judgeName           String
+  judgeRole           UserRole
+  
+  createdAt           DateTime          @default(now())
+  
+  @@unique([cuppingSessionId, judgeId])
+  @@index([cuppingSessionId])
+}
+
+model JudgeScore {
+  id                  String            @id @default(uuid())
+  cuppingSessionId    String
+  cuppingSession      CuppingSession    @relation(fields: [cuppingSessionId], references: [id], onDelete: Cascade)
+  sampleId            String
+  sample              CuppingSample     @relation(fields: [sampleId], references: [id], onDelete: Cascade)
+  judgeId             String
+  judge               User               @relation(fields: [judgeId], references: [id], onDelete: Restrict)
+  judgeName           String
+  scores              Json // JSON: { [attribute: string]: number }
+  notes               String
+  totalScore          Float
+  
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  
+  @@unique([cuppingSessionId, sampleId, judgeId])
+  @@index([cuppingSessionId])
+  @@index([sampleId])
+  @@index([judgeId])
+}
+
+model CuppingScore {
+  id                  String        @id @default(uuid())
+  greenBeanLotId      String
+  greenBeanLot        GreenBeanLot  @relation(fields: [greenBeanLotId], references: [id], onDelete: Cascade)
+  sessionId           String
+  score               Float
+  
+  createdAt           DateTime      @default(now())
+  
+  @@unique([greenBeanLotId, sessionId])
+  @@index([greenBeanLotId])
+  @@index([sessionId])
+}
+
+model RoasterInventoryItem {
+  id                  String            @id @default(uuid())
+  roasterId           String
+  roaster             User              @relation(fields: [roasterId], references: [id], onDelete: Cascade)
+  greenBeanLotId      String
+  greenBeanLot        GreenBeanLot      @relation(fields: [greenBeanLotId], references: [id], onDelete: Restrict)
+  claimedWeightKg     Float
+  remainingWeightKg   Float
+  
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  
+  // Relations
+  roastBatches        RoastBatch[]
+  
+  @@unique([roasterId, greenBeanLotId])
+  @@index([roasterId])
+}
+
+model RoastBatch {
+  id                  String                  @id @default(uuid())
+  roasterId           String
+  roaster             User                    @relation(fields: [roasterId], references: [id], onDelete: Restrict)
+  roasterInventoryId  String
+  roasterInventory    RoasterInventoryItem     @relation(fields: [roasterInventoryId], references: [id], onDelete: Restrict)
+  greenBeanLotId      String
+  greenBeanLot        GreenBeanLot             @relation(fields: [greenBeanLotId], references: [id], onDelete: Restrict)
+  roastDate           DateTime                @default(now())
+  batchSizeKg         Float
+  yieldPercentage     Float
+  roastedWeightKg     Float?
+  weightLossPct       Float?
+  roastLevel          RoastLevel?
+  roastProfileNotes   String
+  flavorNotes         String?
+  
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  
+  @@index([roasterId])
+  @@index([roastDate])
+}
+
+model Customer {
+  id                  String        @id @default(uuid())
+  name                String
+  type                CustomerType
+  contactEmail        String?
+  contactPhone        String?
+  address             String?
+  notes               String?
+  
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  
+  // Relations
+  saleOrders          SaleOrder[]
+  
+  @@index([type])
+}
+
+model SaleOrder {
+  id                  String            @id @default(uuid())
+  orderNumber         String            @unique
+  customerId          String
+  customer            Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customerName        String
+  orderDate           DateTime          @default(now())
+  status              SaleOrderStatus   @default(Draft)
+  totalAmount         Float
+  currency            String
+  notes               String?
+  createdBy           String
+  creator             User              @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  
+  // Relations
+  items               SaleOrderItem[]
+  invoices            Invoice[]
+  
+  @@index([customerId])
+  @@index([status])
+  @@index([orderDate])
+}
+
+model SaleOrderItem {
+  id                  String        @id @default(uuid())
+  saleOrderId         String
+  saleOrder           SaleOrder     @relation(fields: [saleOrderId], references: [id], onDelete: Cascade)
+  greenBeanLotId      String
+  greenBeanLot        GreenBeanLot  @relation(fields: [greenBeanLotId], references: [id], onDelete: Restrict)
+  lotGrade            String
+  quantity            Float
+  pricePerKg          Float
+  subtotal            Float
+  
+  createdAt           DateTime      @default(now())
+  
+  @@index([saleOrderId])
+  @@index([greenBeanLotId])
+}
+
+model Invoice {
+  id                  String          @id @default(uuid())
+  invoiceNumber       String          @unique
+  saleOrderId         String
+  saleOrder           SaleOrder       @relation(fields: [saleOrderId], references: [id], onDelete: Restrict)
+  issueDate           DateTime        @default(now())
+  dueDate             DateTime?
+  status              InvoiceStatus   @default(Draft)
+  subtotal            Float
+  tax                 Float?
+  totalAmount         Float
+  currency            String
+  notes               String?
+  createdBy           String
+  creator             User            @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  
+  // Relations
+  items               InvoiceItem[]
+  
+  @@index([saleOrderId])
+  @@index([status])
+  @@index([issueDate])
+}
+
+model InvoiceItem {
+  id                  String        @id @default(uuid())
+  invoiceId            String
+  invoice              Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  greenBeanLotId       String
+  greenBeanLot         GreenBeanLot  @relation(fields: [greenBeanLotId], references: [id], onDelete: Restrict)
+  lotGrade             String
+  quantity             Float
+  pricePerKg           Float
+  subtotal             Float
+  
+  createdAt            DateTime      @default(now())
+  
+  @@index([invoiceId])
+  @@index([greenBeanLotId])
+}
+
+model PricingHistory {
+  id                  String        @id @default(uuid())
+  greenBeanLotId      String
+  greenBeanLot        GreenBeanLot  @relation(fields: [greenBeanLotId], references: [id], onDelete: Cascade)
+  pricePerKg          Float
+  currency             String
+  effectiveDate        DateTime      @default(now())
+  setBy                String
+  setter               User          @relation(fields: [setBy], references: [id], onDelete: Restrict)
+  notes                String?
+  
+  createdAt            DateTime      @default(now())
+  
+  @@index([greenBeanLotId])
+  @@index([effectiveDate])
+}
+

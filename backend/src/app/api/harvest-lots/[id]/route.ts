@@ -1,0 +1,94 @@
+import { NextRequest, NextResponse } from 'next/server'
+import prisma from '@/lib/prisma'
+import { requireAuth, handleApiError } from '@/lib/middleware'
+
+// GET /api/harvest-lots/:id
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    await requireAuth(request)
+
+    const harvestLot = await prisma.harvestLot.findUnique({
+      where: { id: params.id },
+      include: {
+        farm: {
+          select: {
+            id: true,
+            farmName: true,
+            location: true,
+          },
+        },
+        cropYear: {
+          select: {
+            id: true,
+            year: true,
+          },
+        },
+        processingBatches: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    })
+
+    if (!harvestLot) {
+      return NextResponse.json(
+        { error: 'Harvest lot not found' },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json({ harvestLot })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
+
+// PUT /api/harvest-lots/:id
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    await requireAuth(request)
+
+    const body = await request.json()
+    const { farmerName, cherryVariety, weightKg, farmPlotLocation, harvestDate, status, cropYearId, farmId } = body
+
+    const updateData: any = {}
+    if (farmerName !== undefined) updateData.farmerName = farmerName
+    if (cherryVariety !== undefined) updateData.cherryVariety = cherryVariety
+    if (weightKg !== undefined) updateData.weightKg = parseFloat(weightKg)
+    if (farmPlotLocation !== undefined) updateData.farmPlotLocation = farmPlotLocation
+    if (harvestDate !== undefined) updateData.harvestDate = new Date(harvestDate)
+    if (status !== undefined) updateData.status = status
+    if (cropYearId !== undefined) updateData.cropYearId = cropYearId
+    if (farmId !== undefined) updateData.farmId = farmId
+
+    const updatedHarvestLot = await prisma.harvestLot.update({
+      where: { id: params.id },
+      data: updateData,
+      include: {
+        farm: {
+          select: {
+            id: true,
+            farmName: true,
+            location: true,
+          },
+        },
+        cropYear: {
+          select: {
+            id: true,
+            year: true,
+          },
+        },
+      },
+    })
+
+    return NextResponse.json({ harvestLot: updatedHarvestLot })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
+
