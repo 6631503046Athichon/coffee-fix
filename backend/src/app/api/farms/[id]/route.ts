@@ -1,0 +1,126 @@
+import { NextRequest, NextResponse } from 'next/server'
+import prisma from '@/lib/prisma'
+import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+
+// GET /api/farms/:id
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const user = await requireAuth(request)
+
+    const farm = await prisma.farm.findUnique({
+      where: { id: params.id },
+      include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        harvestLots: {
+          take: 10,
+          orderBy: { harvestDate: 'desc' },
+        },
+      },
+    })
+
+    if (!farm) {
+      return NextResponse.json(
+        { error: 'Farm not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check permission
+    if (!user.roles.includes('Admin') && farm.ownerId !== user.id) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
+      )
+    }
+
+    return NextResponse.json({ farm })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
+
+// PUT /api/farms/:id
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const user = await requireAuth(request)
+
+    const farm = await prisma.farm.findUnique({
+      where: { id: params.id },
+    })
+
+    if (!farm) {
+      return NextResponse.json(
+        { error: 'Farm not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check permission
+    if (!user.roles.includes('Admin') && farm.ownerId !== user.id) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
+      )
+    }
+
+    const body = await request.json()
+    const { farmName, location, latitude, longitude, altitude } = body
+
+    const updateData: any = {}
+    if (farmName !== undefined) updateData.farmName = farmName
+    if (location !== undefined) updateData.location = location
+    if (latitude !== undefined) updateData.latitude = latitude ? parseFloat(latitude) : null
+    if (longitude !== undefined) updateData.longitude = longitude ? parseFloat(longitude) : null
+    if (altitude !== undefined) updateData.altitude = altitude
+
+    const updatedFarm = await prisma.farm.update({
+      where: { id: params.id },
+      data: updateData,
+      include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    })
+
+    return NextResponse.json({ farm: updatedFarm })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
+
+// DELETE /api/farms/:id
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const user = await requireAuth(request)
+    requireRole(user, ['Admin'])
+
+    await prisma.farm.delete({
+      where: { id: params.id },
+    })
+
+    return NextResponse.json({ message: 'Farm deleted successfully' })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
+
