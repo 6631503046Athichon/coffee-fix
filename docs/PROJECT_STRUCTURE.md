@@ -41,7 +41,13 @@ coffee-fix/
 │   └── README.md          # Backend Documentation
 │
 ├── docs/                  # เอกสารโปรเจกต์
+│   ├── backend/           # Backend Documentation
+│   │   └── API_TESTING.md    # Backend API Testing Guide
+│   ├── frontend/          # Frontend Documentation
+│   │   └── API_INTEGRATION.md  # Frontend API Integration Guide
+│   ├── API_TESTING.md     # General API Testing Guide
 │   ├── README.md          # Project Overview
+│   ├── PROJECT_STRUCTURE.md  # Project Structure (this file)
 │   └── metadata.json      # Project Metadata
 │
 ├── .git/                  # Git Repository

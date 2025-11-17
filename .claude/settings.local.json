@@ -3,7 +3,11 @@
     "allow": [
       "Bash(npx prisma generate:*)",
       "Bash(netstat:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(curl:*)",
+      "Bash(nul)",
+      "Bash(npm run dev:*)",
+      "Bash(ping:*)"
     ],
     "deny": [],
     "ask": []

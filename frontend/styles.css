@@ -74,3 +74,18 @@
   border-radius: 4px;
   cursor: pointer;
 }
+
+/* Hide browser default password reveal buttons */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
+input[type="password"]::-webkit-credentials-auto-fill-button {
+  display: none !important;
+}
+
+/* For Firefox */
+input[type="password"] {
+  -moz-appearance: textfield;
+}

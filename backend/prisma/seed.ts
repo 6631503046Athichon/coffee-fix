@@ -9,10 +9,10 @@ async function main() {
   // Create default admin user
   const adminPassword = await hashPassword('admin123')
   const admin = await prisma.user.upsert({
-    where: { email: 'admin@coffee.com' },
+    where: { email: '6631503046@lamduan.mfu.ac.th' },
     update: {},
     create: {
-      email: 'admin@coffee.com',
+      email: '6631503046@lamduan.mfu.ac.th',
       username: 'admin',
       password: adminPassword,
       name: 'Admin User',
@@ -23,6 +23,24 @@ async function main() {
     },
   })
   console.log('✅ Created admin user:', admin.email)
+
+  // Create second admin user for ownership transfer
+  const secondAdminPassword = await hashPassword('admin123')
+  const secondAdmin = await prisma.user.upsert({
+    where: { email: 'admin2@coffee.com' },
+    update: {},
+    create: {
+      email: 'admin2@coffee.com',
+      username: 'admin2',
+      password: secondAdminPassword,
+      name: 'Second Admin',
+      roles: [UserRole.Admin],
+      isActive: true,
+      isSuperAdmin: false,
+      mustChangePassword: false,
+    },
+  })
+  console.log('✅ Created second admin user:', secondAdmin.email)
 
   // Create default users from mock data
   const users = [

@@ -75,6 +75,8 @@ export async function POST(request: NextRequest) {
         isActive: user.isActive,
         isSuperAdmin: user.isSuperAdmin,
         mustChangePassword: user.mustChangePassword,
+        mustChangeUsername: user.mustChangeUsername,
+        mustChangeEmail: user.mustChangeEmail,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },

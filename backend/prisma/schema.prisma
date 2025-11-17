@@ -113,7 +113,9 @@ model User {
   isActive            Boolean   @default(true)
   isSuperAdmin        Boolean   @default(false)
   mustChangePassword  Boolean   @default(true)
-  
+  mustChangeUsername  Boolean   @default(false)
+  mustChangeEmail     Boolean   @default(false)
+
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   lastLogin           DateTime?
@@ -138,6 +140,7 @@ model User {
   pricingHistory      PricingHistory[]
   withdrawalHistory   GreenBeanWithdrawal[]      @relation("WithdrawalUser")
   priceSetGreenBeans  GreenBeanLot[]            @relation("PriceSetter")
+  passwordResetTokens PasswordResetToken[]
   
   @@index([email])
   @@index([username])
@@ -752,5 +755,20 @@ model PricingHistory {
   
   @@index([greenBeanLotId])
   @@index([effectiveDate])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  
+  createdAt DateTime @default(now())
+  
+  @@index([token])
+  @@index([userId])
+  @@index([expiresAt])
 }
 
