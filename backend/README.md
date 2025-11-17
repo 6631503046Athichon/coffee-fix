@@ -42,6 +42,19 @@ FRONTEND_URL="http://localhost:5173"
 
 # Node Environment
 NODE_ENV="development"
+
+# Email Configuration (Optional - for password reset emails)
+# Set EMAIL_ENABLED=true to enable email sending
+EMAIL_ENABLED="false"
+# Resend API (Recommended - similar to Go resend-go implementation)
+# Works from localhost - no need for production server!
+RESEND_API_KEY="re_your_resend_api_key"
+# For development/testing: Use Resend's test email (works immediately)
+RESEND_FROM="onboarding@resend.dev"
+# For production: Use your verified domain
+# RESEND_FROM="no-reply@yourdomain.com"  # Must be verified domain in Resend
+# Or use EMAIL_FROM as fallback
+EMAIL_FROM="Coffee Lab <onboarding@resend.dev>"
 ```
 
 ### 3. Database Setup
@@ -64,6 +77,10 @@ npm run dev
 ```
 
 The API will be available at `http://localhost:3000`
+
+### Testing with Postman
+
+See `../docs/backend/API_TESTING.md` for detailed API testing guide.
 
 ## API Endpoints
 

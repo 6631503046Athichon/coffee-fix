@@ -227,9 +227,19 @@ export interface CuppingSession {
 export interface User {
   id: string;
   name: string;
+  email?: string;
+  username?: string;
   roles: UserRole[]; // Changed to support multiple roles
+  farmId?: string;
   /** Whether the account is active and can sign in */
   isActive?: boolean; // default true
+  isSuperAdmin?: boolean;
+  mustChangePassword?: boolean;
+  mustChangeUsername?: boolean;
+  mustChangeEmail?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  lastLogin?: string;
 }
 
 export interface GAPLogEntry {

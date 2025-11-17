@@ -1,7 +1,7 @@
 
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, BarChart, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Microscope, Wind, Tag } from 'lucide-react';
 
 import { UserRole, User, CuppingSessionType } from './types';
@@ -16,6 +16,9 @@ import { getAllActivityTypes, initializeActivityTypes } from './services/activit
 import { getAllProcessTypes, initializeProcessTypes, resetProcessTypes } from './services/processTypeService';
 import { Sidebar, Header } from './components/layout';
 import Login from './components/auth/Login';
+import ForgotPassword from './components/auth/ForgotPassword';
+import ResetPassword from './components/auth/ResetPassword';
+import { FirstLoginSetup } from './components/auth/FirstLoginSetup';
 import Dashboard from './components/Dashboard';
 import ProcessorWorkbench from './components/processor/ProcessorWorkbench';
 import CuppingHub from './components/cupper/CuppingHub';
@@ -36,6 +39,17 @@ import FarmManagement from './components/admin/FarmManagement';
 import ActivityTypeManagement from './components/admin/ActivityTypeManagement';
 import ProcessTypeManagement from './components/admin/ProcessTypeManagement';
 import RoasterWorkbench from './components/roaster/RoasterWorkbench';
+
+// First Login Setup Wrapper
+const FirstLoginSetupWrapper: React.FC = () => {
+  const { currentUser } = useAuth();
+
+  if (!currentUser) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <FirstLoginSetup user={currentUser} />;
+};
 
 // Protected routes component
 const ProtectedRoutes: React.FC = () => {
@@ -223,6 +237,9 @@ const App: React.FC = () => {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/first-login-setup" element={<FirstLoginSetupWrapper />} />
   {/* Public Route - no login required */}
         <Route
           path="/traceability/:lotId"
@@ -233,6 +250,18 @@ const App: React.FC = () => {
           }
         />
         <Route path="/*" element={<ProtectedRoutes />} />
+        {/* 404 Fallback */}
+        <Route path="*" element={
+          <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+            <div className="text-center">
+              <h1 className="text-4xl font-bold text-gray-900 mb-4">404</h1>
+              <p className="text-gray-600 mb-6">Page not found</p>
+              <Link to="/login" className="text-blue-600 hover:text-blue-700">
+                Go to Login
+              </Link>
+            </div>
+          </div>
+        } />
       </Routes>
     </AuthProvider>
   );

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { hashPassword } from '@/lib/auth'
+import { generateUsername, generatePassword } from '@/lib/credentialGenerator'
 
 // GET /api/users - List all users
 export async function GET(request: NextRequest) {
@@ -37,23 +38,9 @@ export async function POST(request: NextRequest) {
     requireRole(user, ['Admin'])
 
     const body = await request.json()
-    const { username, email, password, name, roles, isActive } = body
+    const { name, roles, isActive, autoGenerate = true } = body
 
     // Validation
-    if (!username && !email) {
-      return NextResponse.json(
-        { error: 'Username or email is required' },
-        { status: 400 }
-      )
-    }
-
-    if (!password || password.length < 6) {
-      return NextResponse.json(
-        { error: 'Password must be at least 6 characters' },
-        { status: 400 }
-      )
-    }
-
     if (!name) {
       return NextResponse.json(
         { error: 'Name is required' },
@@ -61,36 +48,65 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [
-          email ? { email } : {},
-          username ? { username } : {},
-        ].filter(obj => Object.keys(obj).length > 0),
-      },
+    if (!roles || roles.length === 0) {
+      return NextResponse.json(
+        { error: 'At least one role is required' },
+        { status: 400 }
+      )
+    }
+
+    // Auto-generate credentials based on first role
+    let username: string
+    let password: string
+    let plainPassword: string | undefined
+
+    if (autoGenerate) {
+      // Generate username based on primary role
+      const primaryRole = roles[0]
+      username = await generateUsername(primaryRole, prisma)
+
+      // Generate random password
+      plainPassword = generatePassword(12)
+      password = await hashPassword(plainPassword)
+    } else {
+      // Manual credentials (for backward compatibility)
+      const { username: manualUsername, password: manualPassword } = body
+
+      if (!manualUsername || !manualPassword) {
+        return NextResponse.json(
+          { error: 'Username and password are required when autoGenerate is false' },
+          { status: 400 }
+        )
+      }
+
+      username = manualUsername
+      password = await hashPassword(manualPassword)
+    }
+
+    // Check if username already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { username }
     })
 
     if (existingUser) {
       return NextResponse.json(
-        { error: 'User with this email or username already exists' },
+        { error: 'Username already exists' },
         { status: 409 }
       )
     }
 
-    // Hash password
-    const hashedPassword = await hashPassword(password)
-
-    // Create user
+    // Create user with flags requiring first login changes
     const newUser = await prisma.user.create({
       data: {
-        username: username || null,
-        email: email || null,
-        password: hashedPassword,
+        username,
+        email: null, // Will be set on first login
+        password,
         name,
         roles: roles || [],
         isActive: isActive !== undefined ? isActive : true,
         mustChangePassword: true,
+        mustChangeUsername: true,
+        mustChangeEmail: true,
       },
       select: {
         id: true,
@@ -99,14 +115,29 @@ export async function POST(request: NextRequest) {
         name: true,
         roles: true,
         isActive: true,
+        isSuperAdmin: true,
+        mustChangePassword: true,
+        mustChangeUsername: true,
+        mustChangeEmail: true,
         createdAt: true,
       },
     })
 
-    return NextResponse.json(
-      { user: newUser, message: 'User created successfully' },
-      { status: 201 }
-    )
+    // Return generated credentials to admin
+    const response: any = {
+      user: newUser,
+      message: 'User created successfully'
+    }
+
+    if (autoGenerate && plainPassword) {
+      response.credentials = {
+        username,
+        password: plainPassword,
+        message: 'Save these credentials! User must change them on first login.'
+      }
+    }
+
+    return NextResponse.json(response, { status: 201 })
   } catch (error) {
     return handleApiError(error)
   }
