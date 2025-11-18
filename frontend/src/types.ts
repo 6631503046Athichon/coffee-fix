@@ -54,6 +54,8 @@ export interface Farm {
   location: string;
   latitude?: number;
   longitude?: number;
+  altitudeMeters?: number;
+  sizeHectares?: number;
   varieties?: string[];
   createdAt?: string;
   updatedAt?: string;
@@ -61,24 +63,6 @@ export interface Farm {
   archivedAt?: string;
   /** Optional: the owner user id (farmer) who owns this farm */
   ownerUserId?: string;
-}
-
-export interface FarmRequest {
-  id: string;
-  farmName: string;
-  location: string;
-  altitude?: string;
-  size?: string;
-  latitude?: number; // GPS latitude coordinate
-  longitude?: number; // GPS longitude coordinate
-  ownerName: string; // Farmer who requested
-  requesterId: string; // User ID of the farmer
-  requestDate: string;
-  status: 'Pending' | 'Approved' | 'Rejected';
-  reason: string; // Why farmer is requesting this farm
-  adminNotes?: string; // Admin comments during review
-  reviewDate?: string;
-  reviewedBy?: string; // Admin who reviewed
 }
 
 export interface HarvestLot {
@@ -252,6 +236,8 @@ export interface User {
 
 export interface GAPLogEntry {
   id: string;
+  /** Reference to the farm entry from Farm Management */
+  farmId?: string;
   farmPlotLocation: string;
   activityType: string; // Activity type name (dynamic from ActivityType)
   date: string;
@@ -435,7 +421,6 @@ export interface ComprehensiveQualityReport {
 export interface AppData {
   users: User[];
   farms: Farm[];
-  farmRequests: FarmRequest[];
   harvestLots: HarvestLot[];
   processingBatches: ProcessingBatch[];
   parchmentLots: ParchmentLot[];

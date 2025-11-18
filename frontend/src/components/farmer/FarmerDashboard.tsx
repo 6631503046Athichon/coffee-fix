@@ -2,9 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { HarvestLot, Farm, FarmRequest, CropYear, UserRole, SCA_ATTRIBUTES } from '../../types';
-import { addFarmRequest } from '../../services/farmRequestService';
-import { ChevronRight, PlusCircle, ArrowUp, ArrowDown, BarChart, Weight, Wind, Coffee, Award, Send } from 'lucide-react';
+import { HarvestLot, Farm, CropYear, UserRole, SCA_ATTRIBUTES } from '../../types';
+import { ChevronRight, PlusCircle, ArrowUp, ArrowDown, BarChart, Weight, Wind, Coffee, Award } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer } from 'recharts';
 import Select from '../common/Select';
@@ -14,7 +13,7 @@ import { Input } from '../common/Input';
 import { PageHeader } from '../common/PageHeader';
 import { Alert } from '../common/Alert';
 import { StatCard } from '../common/StatCard';
-import { generateHarvestLotId, generateFarmRequestId } from '../../utils/idGenerator';
+import { generateHarvestLotId } from '../../utils/idGenerator';
 import { toFixed2 } from '../../utils/formatters';
 
 type SortableKeys = keyof HarvestLot;
@@ -87,16 +86,6 @@ const FarmerDashboard: React.FC = () => {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
-  // Farm Request Form States
-  const [farmName, setFarmName] = useState('');
-  const [farmLocation, setFarmLocation] = useState('');
-  const [farmAltitude, setFarmAltitude] = useState('');
-  const [farmSize, setFarmSize] = useState('');
-  const [farmLatitude, setFarmLatitude] = useState('');
-  const [farmLongitude, setFarmLongitude] = useState('');
-  const [farmRequestReason, setFarmRequestReason] = useState('');
-  const [showFarmRequestSuccess, setShowFarmRequestSuccess] = useState(false);
-
   // Harvest Lot Form States
   const [selectedFarmId, setSelectedFarmId] = useState('');
   const [cherryVariety, setCherryVariety] = useState('');
@@ -112,50 +101,6 @@ const FarmerDashboard: React.FC = () => {
 
   const handleRowClick = (lotId: string) => {
     navigate(`/farmer-dashboard/${lotId}`);
-  };
-  
-  const handleFarmRequestSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!currentUser) {
-      alert('You must be logged in to submit a farm request');
-      return;
-    }
-
-    const newFarmRequest: FarmRequest = {
-      id: generateFarmRequestId(data.farmRequests.map(req => req.id)),
-      farmName: farmName,
-      location: farmLocation,
-      altitude: farmAltitude || undefined,
-      size: farmSize || undefined,
-      latitude: farmLatitude ? parseFloat(farmLatitude) : undefined,
-      longitude: farmLongitude ? parseFloat(farmLongitude) : undefined,
-      ownerName: currentUser.name,
-      requesterId: currentUser.id,
-      requestDate: new Date().toISOString().split('T')[0],
-      status: 'Pending',
-      reason: farmRequestReason,
-    };
-
-    // Save to localStorage
-    addFarmRequest(newFarmRequest);
-
-    // Update context state
-    setData(prevData => ({
-      ...prevData,
-      farmRequests: [newFarmRequest, ...prevData.farmRequests],
-    }));
-
-    // Reset form
-    setFarmName('');
-    setFarmLocation('');
-    setFarmAltitude('');
-    setFarmSize('');
-    setFarmLatitude('');
-    setFarmLongitude('');
-    setFarmRequestReason('');
-    setShowFarmRequestSuccess(true);
-    setTimeout(() => setShowFarmRequestSuccess(false), 5000);
   };
 
   const handleLotSubmit = (e: React.FormEvent) => {
@@ -418,113 +363,7 @@ const FarmerDashboard: React.FC = () => {
             </div>
         )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-white shadow-sm rounded-lg p-8 border border-gray-200">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <Send className="h-5 w-5 text-blue-600" />
-            </div>
-            Request New Farm
-          </h2>
-          <p className="text-sm text-gray-600 mb-6">
-            Submit a request for admin approval. Provide detailed information about your farm for faster processing.
-          </p>
-          <form onSubmit={handleFarmRequestSubmit} className="space-y-5">
-              <Input
-                label="Farm Name"
-                type="text"
-                id="farmName"
-                value={farmName}
-                onChange={e => setFarmName(e.target.value)}
-                required
-                placeholder="e.g., Highland Valley Farm"
-              />
-              <Input
-                label="Location"
-                type="text"
-                id="farmLocation"
-                value={farmLocation}
-                onChange={e => setFarmLocation(e.target.value)}
-                required
-                placeholder="e.g., Chiang Mai, North Thailand"
-              />
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Altitude"
-                  type="text"
-                  id="farmAltitude"
-                  value={farmAltitude}
-                  onChange={e => setFarmAltitude(e.target.value)}
-                  placeholder="e.g., 1200m"
-                />
-                <Input
-                  label="Size"
-                  type="text"
-                  id="farmSize"
-                  value={farmSize}
-                  onChange={e => setFarmSize(e.target.value)}
-                  placeholder="e.g., 5 hectares"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Latitude"
-                  type="number"
-                  step="any"
-                  id="farmLatitude"
-                  value={farmLatitude}
-                  onChange={e => setFarmLatitude(e.target.value)}
-                  placeholder="e.g., 18.7883"
-                  helperText="Range: -90 to 90"
-                />
-                <Input
-                  label="Longitude"
-                  type="number"
-                  step="any"
-                  id="farmLongitude"
-                  value={farmLongitude}
-                  onChange={e => setFarmLongitude(e.target.value)}
-                  placeholder="e.g., 98.9853"
-                  helperText="Range: -180 to 180"
-                />
-              </div>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-xs text-blue-700">
-                  <strong>Tip:</strong> GPS coordinates help us fetch weather data for your farm. You can find coordinates using Google Maps or GPS apps.
-                </p>
-              </div>
-              <div>
-                  <label htmlFor="farmRequestReason" className="block text-sm font-semibold text-gray-700 mb-2">
-                    Reason for Request <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    id="farmRequestReason"
-                    value={farmRequestReason}
-                    onChange={e => setFarmRequestReason(e.target.value)}
-                    required
-                    rows={3}
-                    className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all resize-none"
-                    placeholder="Explain why you're requesting this farm (e.g., expanding operations, new plot with excellent microclimate)"
-                  />
-              </div>
-              <div className="flex items-end justify-between min-h-12 pt-2">
-                  {showFarmRequestSuccess && (
-                    <Alert variant="success" className="flex-1 mr-4">
-                      Request submitted for admin review!
-                    </Alert>
-                  )}
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    icon={<Send className="h-4 w-4" />}
-                    className="ml-auto"
-                  >
-                    Submit Request
-                  </Button>
-              </div>
-          </form>
-        </div>
-
+      <div className="grid grid-cols-1 gap-8">
         <div className="bg-white shadow-sm rounded-lg p-8 border border-gray-200">
           <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
             <div className="p-2 bg-green-100 rounded-lg">

@@ -2,7 +2,7 @@
 import * as React from 'react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { GAPLogEntry, UserRole } from '../../types';
+import { Farm, GAPLogEntry, UserRole } from '../../types';
 import { PlusCircle, Filter, FileText, Printer, X, CheckCircle, Edit, Trash2 } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
 import Select from '../common/Select';
@@ -22,7 +22,7 @@ const GAPComplianceHelper: React.FC = () => {
     const activeActivityTypes = data.activityTypes.filter(t => t.isActive);
     const defaultActivityType = activeActivityTypes.length > 0 ? activeActivityTypes[0].name : '';
 
-    const [farmPlotLocation, setFarmPlotLocation] = React.useState('');
+    const [selectedFarmId, setSelectedFarmId] = React.useState('');
     const [activityType, setActivityType] = React.useState<string>(defaultActivityType);
     const [date, setDate] = React.useState(new Date().toISOString().substring(0, 10));
     const [productUsed, setProductUsed] = React.useState('');
@@ -39,21 +39,95 @@ const GAPComplianceHelper: React.FC = () => {
     const reportContentRef = React.useRef<HTMLDivElement>(null);
     const formRef = React.useRef<HTMLDivElement>(null);
 
-    // Get user's farms only (admins see all)
-    const userFarms = React.useMemo(() => {
-        if (!currentUser) return [];
-        const isAdmin = currentUser.roles?.includes(UserRole.Admin);
-        if (isAdmin) return data.farms;
-        return data.farms.filter(f => f.ownerId === currentUser.id);
-    }, [data.farms, currentUser]);
+    const isAdmin = currentUser?.roles?.includes(UserRole.Admin) ?? false;
 
-    const uniquePlots = React.useMemo(() => {
-        const plots = new Set(userFarms.map(f => f.location));
-        return ['All', ...Array.from(plots).sort()];
-    }, [userFarms]);
+    const farmMap = React.useMemo(() => {
+        const map = new Map<string, Farm>();
+        data.farms.forEach(farm => map.set(farm.id, farm));
+        return map;
+    }, [data.farms]);
+
+    // Get farms aligned with Farm Management (admins see all)
+    const accessibleFarms = React.useMemo(() => {
+        if (!currentUser) return [];
+        if (isAdmin) return data.farms;
+        return data.farms.filter(
+            farm => farm.ownerUserId === currentUser.id || farm.farmerName === currentUser.name,
+        );
+    }, [currentUser, data.farms, isAdmin]);
+
+    const buildFarmLabel = React.useCallback((farm: Farm) => {
+        if (farm.name && farm.location) {
+            return `${farm.name} • ${farm.location}`;
+        }
+        return farm.name ?? farm.location;
+    }, []);
+
+    const sortedAccessibleFarms = React.useMemo(
+        () => [...accessibleFarms].sort((a, b) => buildFarmLabel(a).localeCompare(buildFarmLabel(b))),
+        [accessibleFarms, buildFarmLabel],
+    );
+
+    const farmOptions = React.useMemo(
+        () => sortedAccessibleFarms.map(farm => ({ value: farm.id, label: buildFarmLabel(farm) })),
+        [sortedAccessibleFarms, buildFarmLabel],
+    );
+
+    const matchFarmIdFromLocation = React.useCallback(
+        (location?: string) => {
+            if (!location) return undefined;
+            const normalized = location.toLowerCase();
+            return accessibleFarms.find(farm => {
+                const nameMatch = farm.name && normalized.includes(farm.name.toLowerCase());
+                const locationMatch = farm.location && normalized.includes(farm.location.toLowerCase());
+                return nameMatch || locationMatch;
+            })?.id;
+        },
+        [accessibleFarms],
+    );
+
+    const canViewLog = React.useCallback(
+        (log: GAPLogEntry) => {
+            if (!currentUser) return false;
+            if (isAdmin) return true;
+            if (log.farmId) {
+                return accessibleFarms.some(farm => farm.id === log.farmId);
+            }
+            return Boolean(matchFarmIdFromLocation(log.farmPlotLocation));
+        },
+        [accessibleFarms, currentUser, isAdmin, matchFarmIdFromLocation],
+    );
+
+    const farmFilterOptions = React.useMemo(() => {
+        const legacyOptions = new Map<string, true>();
+        data.gapLogs.forEach(log => {
+            if (!log.farmId && log.farmPlotLocation && canViewLog(log)) {
+                legacyOptions.set(log.farmPlotLocation, true);
+            }
+        });
+
+        return [
+            { value: 'All', label: 'ทุกฟาร์ม' },
+            ...sortedAccessibleFarms.map(farm => ({ value: farm.id, label: buildFarmLabel(farm) })),
+            ...Array.from(legacyOptions.keys()).map(location => ({ value: location, label: `${location} (เดิม)` })),
+        ];
+    }, [sortedAccessibleFarms, data.gapLogs, canViewLog, buildFarmLabel]);
 
     const handleLogSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!selectedFarmId) {
+            alert('กรุณาเลือกฟาร์มจาก Farm Management ก่อนบันทึกกิจกรรม');
+            return;
+        }
+
+        const selectedFarm = farmMap.get(selectedFarmId);
+        if (!selectedFarm) {
+            alert('ไม่พบฟาร์มที่เลือก');
+            return;
+        }
+
+        const farmLabel = buildFarmLabel(selectedFarm);
         
         if (editingLog) {
             // Update existing log
@@ -61,7 +135,16 @@ const GAPComplianceHelper: React.FC = () => {
                 ...prev,
                 gapLogs: prev.gapLogs.map(log =>
                     log.id === editingLog.id
-                        ? { ...log, farmPlotLocation, activityType, date, productUsed, quantity, notes }
+                        ? {
+                            ...log,
+                            farmId: selectedFarm.id,
+                            farmPlotLocation: farmLabel,
+                            activityType,
+                            date,
+                            productUsed,
+                            quantity,
+                            notes,
+                        }
                         : log
                 )
             }));
@@ -70,7 +153,8 @@ const GAPComplianceHelper: React.FC = () => {
             // Create new log
             const newLog: GAPLogEntry = {
                 id: generateGAPLogId(data.gapLogs.map(log => log.id)),
-                farmPlotLocation,
+                farmId: selectedFarm.id,
+                farmPlotLocation: farmLabel,
                 activityType,
                 date,
                 productUsed,
@@ -81,7 +165,7 @@ const GAPComplianceHelper: React.FC = () => {
         }
         
         // Reset form
-        setFarmPlotLocation('');
+        setSelectedFarmId('');
         setActivityType(defaultActivityType);
         setDate(new Date().toISOString().substring(0, 10));
         setProductUsed('');
@@ -93,7 +177,11 @@ const GAPComplianceHelper: React.FC = () => {
 
     const handleEdit = (log: GAPLogEntry) => {
         setEditingLog(log);
-        setFarmPlotLocation(log.farmPlotLocation);
+        if (log.farmId) {
+            setSelectedFarmId(log.farmId);
+        } else {
+            setSelectedFarmId(matchFarmIdFromLocation(log.farmPlotLocation) ?? '');
+        }
         setActivityType(log.activityType);
         setDate(log.date);
         setProductUsed(log.productUsed);
@@ -107,7 +195,7 @@ const GAPComplianceHelper: React.FC = () => {
 
     const handleCancelEdit = () => {
         setEditingLog(null);
-        setFarmPlotLocation('');
+        setSelectedFarmId('');
         setActivityType(defaultActivityType);
         setDate(new Date().toISOString().substring(0, 10));
         setProductUsed('');
@@ -127,24 +215,23 @@ const GAPComplianceHelper: React.FC = () => {
     const filteredLogs = React.useMemo(() => {
         if (!currentUser) return [];
 
-        // Get user's farm locations
-        const userFarmLocations = new Set(userFarms.map(f => f.location));
-        const isAdmin = currentUser.roles?.includes(UserRole.Admin);
-
         return data.gapLogs.filter(log => {
-            // Filter by user's farms (admins see all)
-            const userMatch = isAdmin || userFarmLocations.has(log.farmPlotLocation);
-            const plotMatch = plotFilter === 'All' || log.farmPlotLocation === plotFilter;
+            if (!canViewLog(log)) return false;
+            const plotMatch =
+                plotFilter === 'All'
+                    ? true
+                    : log.farmId === plotFilter || (!log.farmId && log.farmPlotLocation === plotFilter);
             const activityMatch = activityFilter === 'All' || log.activityType === activityFilter;
-            return userMatch && plotMatch && activityMatch;
+            return plotMatch && activityMatch;
         });
-    }, [data.gapLogs, plotFilter, activityFilter, currentUser, userFarms]);
+    }, [data.gapLogs, plotFilter, activityFilter, currentUser, canViewLog]);
     
     const reportData = React.useMemo(() => {
         // fix: Explicitly type the initial value for the reduce function to ensure
         // TypeScript correctly infers the type of `reportData`.
         return filteredLogs.reduce((acc, log) => {
-            (acc[log.farmPlotLocation] = acc[log.farmPlotLocation] || []).push(log);
+            const key = log.farmId ?? log.farmPlotLocation ?? 'ไม่ระบุฟาร์ม';
+            (acc[key] = acc[key] || []).push(log);
             return acc;
         }, {} as Record<string, GAPLogEntry[]>);
     }, [filteredLogs]);
@@ -202,10 +289,11 @@ const GAPComplianceHelper: React.FC = () => {
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-2">Farm/Plot</label>
                                 <Select
-                                  value={farmPlotLocation}
-                                  onChange={(v) => setFarmPlotLocation((v as string) || '')}
-                                  options={uniquePlots.slice(1)}
-                                  placeholder="Select a plot..."
+                                    value={selectedFarmId}
+                                    onChange={(v) => setSelectedFarmId((v as string) || '')}
+                                    options={farmOptions}
+                                    placeholder={farmOptions.length ? 'เลือกฟาร์ม...' : 'ยังไม่มีฟาร์มให้เลือก'}
+                                    disabled={!farmOptions.length}
                                 />
                             </div>
                             <div>
@@ -285,10 +373,10 @@ const GAPComplianceHelper: React.FC = () => {
                             </span>
                             <div className="w-48">
                                 <Select
-                                  value={plotFilter}
-                                  onChange={(v) => setPlotFilter((v as string) || 'All')}
-                                  options={uniquePlots}
-                                  placeholder="All Plots"
+                                    value={plotFilter}
+                                    onChange={(v) => setPlotFilter((v as string) || 'All')}
+                                    options={farmFilterOptions}
+                                    placeholder="ทุกฟาร์ม"
                                 />
                             </div>
                             <div className="w-48">
@@ -323,9 +411,16 @@ const GAPComplianceHelper: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-100">
-                                {filteredLogs.map((log, idx) => (
+                                {filteredLogs.map((log) => {
+                                    const logFarm = log.farmId ? farmMap.get(log.farmId) : undefined;
+                                    const primaryLabel = logFarm?.name ?? log.farmPlotLocation ?? 'ไม่ระบุฟาร์ม';
+                                    const secondaryLabel = logFarm?.location && logFarm?.name ? logFarm.location : undefined;
+                                    return (
                                     <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">{log.farmPlotLocation}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                                            <div>{primaryLabel}</div>
+                                            {secondaryLabel && <div className="text-xs font-normal text-gray-500">{secondaryLabel}</div>}
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{log.date}</td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <Badge variant="primary">
@@ -354,7 +449,8 @@ const GAPComplianceHelper: React.FC = () => {
                                             </div>
                                         </td>
                                     </tr>
-                                ))}
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -395,14 +491,17 @@ const GAPComplianceHelper: React.FC = () => {
                                 </p>
                             </div>
 
-                            {Object.entries(reportData).map(([plot, logs]: [string, GAPLogEntry[]]) => (
-                                <div key={plot} className="mb-6 bg-white rounded-lg shadow-sm p-6 border-l-4 border-indigo-500">
+                            {Object.entries(reportData).map(([groupKey, logs]: [string, GAPLogEntry[]]) => {
+                                const reportFarm = farmMap.get(groupKey);
+                                const displayLabel = reportFarm ? buildFarmLabel(reportFarm) : groupKey;
+                                return (
+                                <div key={groupKey} className="mb-6 bg-white rounded-lg shadow-sm p-6 border-l-4 border-indigo-500">
                                     <div className="flex items-center gap-2 mb-4">
                                         <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
                                             <span className="text-indigo-600 font-bold text-lg">📍</span>
                                         </div>
                                         <h2 className="text-lg font-bold text-gray-900">
-                                            Plot: <span className="text-indigo-600">{plot}</span>
+                                            Plot: <span className="text-indigo-600">{displayLabel}</span>
                                         </h2>
                                     </div>
 
@@ -443,7 +542,8 @@ const GAPComplianceHelper: React.FC = () => {
                                         );
                                     })}
                                 </div>
-                            ))}
+                            );
+                            })}
                         </div>
             </Modal>
         </div>
