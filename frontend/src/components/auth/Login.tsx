@@ -8,7 +8,7 @@ const Login: React.FC = () => {
   const { login } = useAuth();
 
   const [formData, setFormData] = useState({
-    email: '',
+    identifier: '',
     password: '',
   });
 
@@ -22,7 +22,7 @@ const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const user = await login(formData.email, formData.password);
+      const user = await login(formData.identifier, formData.password);
 
       // Check if user needs to complete first login setup
       if (user.mustChangePassword || user.mustChangeUsername || user.mustChangeEmail) {
@@ -62,17 +62,17 @@ const Login: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Email or Username Input */}
               <div>
-                <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
+                <label htmlFor="identifier" className="block text-sm font-semibold text-gray-700 mb-2">
                   Email or Username
                 </label>
                 <input
-                  id="email"
+                  id="identifier"
                   type="text"
                   required
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  value={formData.identifier}
+                  onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
                   className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition-colors shadow-sm hover:border-gray-400"
-                  placeholder="username or email@coffee.com"
+                  placeholder="username or email@.com"
                 />
               </div>
 
