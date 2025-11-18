@@ -18,11 +18,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Check if user is already logged in on mount
   useEffect(() => {
-    const user = authService.getCurrentUser();
-    if (user) {
-      setCurrentUser(user);
-      setIsAuthenticated(true);
-    }
+    const loadUser = async () => {
+      try {
+        const user = await authService.getCurrentUser();
+        if (user) {
+          setCurrentUser(user);
+          setIsAuthenticated(true);
+        }
+      } catch (error) {
+        // User not authenticated - this is fine
+        console.debug('User not authenticated');
+      }
+    };
+
+    loadUser();
   }, []);
 
   const login = async (identifier: string, password: string): Promise<User> => {
