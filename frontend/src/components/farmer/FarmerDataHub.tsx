@@ -58,12 +58,16 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
     
     const filteredLots = useMemo(() => {
         return data.harvestLots.filter(lot => {
+            // Filter by current user (farmers see only their own data, admins see all)
+            const isAdmin = currentUser.role === UserRole.Admin;
+            const userMatch = isAdmin || lot.farmerName === currentUser.name;
+
             const lotYear = new Date(lot.harvestDate).getFullYear().toString();
             const yearMatch = yearFilter === 'All' || lotYear === yearFilter;
             const plotMatch = plotFilter === 'All' || lot.farmPlotLocation === plotFilter;
-            return yearMatch && plotMatch;
+            return userMatch && yearMatch && plotMatch;
         });
-    }, [data.harvestLots, yearFilter, plotFilter]);
+    }, [data.harvestLots, yearFilter, plotFilter, currentUser]);
 
     const handleDelete = (lotId: string, e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent row click
