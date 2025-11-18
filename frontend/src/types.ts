@@ -47,10 +47,18 @@ export interface ProcessType {
 
 export interface Farm {
   id: string;
+  name?: string;
   farmerName: string;
+  ownerName?: string;
+  caretakerName?: string;
   location: string;
   latitude?: number;
   longitude?: number;
+  varieties?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+  archived?: boolean;
+  archivedAt?: string;
   /** Optional: the owner user id (farmer) who owns this farm */
   ownerUserId?: string;
 }

@@ -46,3 +46,7 @@ export function generateFarmRequestId(existingIds: string[]): string {
 export function generateGAPLogId(existingIds: string[]): string {
   return generateNextId(existingIds, 'GAP', 3);
 }
+
+export function generateFarmId(existingIds: string[]): string {
+  return generateNextId(existingIds, 'F', 3);
+}

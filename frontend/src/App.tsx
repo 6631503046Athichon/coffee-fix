@@ -14,6 +14,7 @@ import { getAllWeatherRecords, initializeWeatherRecords } from './services/weath
 import { getAllCustomers, getAllSaleOrders, getAllInvoices, getAllPricingHistory, initializeCustomers, initializeSaleOrders, initializeInvoices, initializePricingHistory } from './services/salesService';
 import { getAllActivityTypes, initializeActivityTypes } from './services/activityTypeService';
 import { getAllProcessTypes, initializeProcessTypes, resetProcessTypes } from './services/processTypeService';
+import { getAllFarms, initializeFarms } from './services/farmService';
 import { Sidebar, Header } from './components/layout';
 import Login from './components/auth/Login';
 import ForgotPassword from './components/auth/ForgotPassword';
@@ -35,7 +36,8 @@ import WeatherMonitoring from './components/farmer/WeatherMonitoring';
 import CupperScoringSheet from './components/cupper/CupperScoringSheet';
 import TraceabilityHub from './components/TraceabilityHub';
 import UserManagement from './components/UserManagement';
-import FarmManagement from './components/admin/FarmManagement';
+import AdminFarmManagement from './components/admin/FarmManagement';
+import FarmerFarmManagement from './components/farmer/FarmManagement';
 import ActivityTypeManagement from './components/admin/ActivityTypeManagement';
 import ProcessTypeManagement from './components/admin/ProcessTypeManagement';
 import RoasterWorkbench from './components/roaster/RoasterWorkbench';
@@ -60,6 +62,7 @@ const ProtectedRoutes: React.FC = () => {
   useEffect(() => {
     const loadDataFromStorage = () => {
       const storedFarmRequests = getAllFarmRequests();
+      const storedFarms = getAllFarms();
       const storedSoilAnalyses = getAllSoilAnalyses();
       const storedWeatherRecords = getAllWeatherRecords();
       const storedActivityTypes = getAllActivityTypes();
@@ -72,6 +75,7 @@ const ProtectedRoutes: React.FC = () => {
       setData(prev => ({
         ...prev,
         farmRequests: storedFarmRequests.length > 0 ? storedFarmRequests : prev.farmRequests,
+        farms: storedFarms.length > 0 ? storedFarms : prev.farms,
         soilAnalyses: storedSoilAnalyses.length > 0 ? storedSoilAnalyses : prev.soilAnalyses,
         weatherRecords: storedWeatherRecords.length > 0 ? storedWeatherRecords : prev.weatherRecords,
         activityTypes: storedActivityTypes.length > 0 ? storedActivityTypes : prev.activityTypes,
@@ -91,7 +95,8 @@ const ProtectedRoutes: React.FC = () => {
       if (e.key && (
         e.key === 'coffee_lab_process_types' ||
         e.key === 'coffee_lab_activity_types' ||
-        e.key === 'coffee_lab_users'
+        e.key === 'coffee_lab_users' ||
+        e.key === 'coffee_lab_farms'
       )) {
         loadDataFromStorage();
       }
@@ -149,6 +154,7 @@ const ProtectedRoutes: React.FC = () => {
 
       // Farmer Section
       { name: 'Farmer Dashboard', href: '/farmer-dashboard', icon: Coffee, roles: [UserRole.Farmer, UserRole.Admin] },
+      { name: 'Farm Management', href: '/farmer-farms', icon: MapPin, roles: [UserRole.Farmer, UserRole.Admin] },
       { name: 'Data Hub', href: '/farmer-data-hub', icon: Database, roles: [UserRole.Farmer, UserRole.Admin] },
       { name: 'GAP Helper', href: '/gap-compliance', icon: ClipboardCheck, roles: [UserRole.Farmer, UserRole.Admin] },
       { name: 'Soil Analysis', href: '/soil-analysis', icon: Microscope, roles: [UserRole.Farmer, UserRole.Processor, UserRole.Admin] },
@@ -198,7 +204,8 @@ const ProtectedRoutes: React.FC = () => {
               <Route path="/competition/:id" element={<CompetitionDashboard currentUserRoles={currentUser?.roles || [UserRole.Farmer]} />} />
               <Route path="/traceability" element={<TraceabilityHub />} />
               <Route path="/users" element={<UserManagement />} />
-              <Route path="/farm-management" element={<FarmManagement />} />
+              <Route path="/farm-management" element={<AdminFarmManagement />} />
+              <Route path="/farmer-farms" element={<FarmerFarmManagement />} />
               <Route path="/activity-types" element={<ActivityTypeManagement />} />
               <Route path="/process-types" element={<ProcessTypeManagement />} />
               <Route path="/farmer-dashboard" element={<FarmerDashboard />} />
@@ -222,6 +229,7 @@ const App: React.FC = () => {
   // Initialize localStorage on app mount
   useEffect(() => {
     initializeFarmRequests(MOCK_DATA.farmRequests);
+    initializeFarms(MOCK_DATA.farms);
     initializeSoilAnalyses(MOCK_DATA.soilAnalyses);
     initializeWeatherRecords(MOCK_DATA.weatherRecords);
     initializeActivityTypes(MOCK_DATA.activityTypes);

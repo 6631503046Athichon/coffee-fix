@@ -1,22 +1,60 @@
-
-
 import { AppData, UserRole, ProcessingBatchStatus, CuppingSessionType, SCA_ATTRIBUTES, Farm, ActivityType, ProcessType, GreenBeanSourceType, RoastLevel } from './types';
 
 export const MOCK_DATA: AppData = {
-  users: [
-    { id: 'user-headjudge', name: 'Artanis', roles: [UserRole.HeadJudge], isActive: true },
-    { id: 'user-cupper1', name: 'Tassadar', roles: [UserRole.Cupper], isActive: true },
-    { id: 'user-cupper2', name: 'Zeratul', roles: [UserRole.Cupper], isActive: true },
-    { id: 'user-cupper3', name: 'Fenix', roles: [UserRole.Cupper], isActive: true },
-    { id: 'user-roaster1', name: 'Jim Raynor', roles: [UserRole.Roaster], isActive: true },
-    { id: 'user-processor1', name: 'Alarak', roles: [UserRole.Processor], isActive: true },
-    { id: 'user-farmer1', name: 'Maria Rodriguez', roles: [UserRole.Farmer], isActive: true },
-  ],
-  farms: [
-    { id: 'F001', farmerName: 'Maria Rodriguez', location: 'Finca La Esmeralda, Plot A', latitude: 8.8137, longitude: -82.5853, ownerUserId: 'user-farmer1' }, // Boquete, Panama
-  { id: 'F002', farmerName: 'John Doe', location: 'Hacienda Elida, Plot C4', latitude: 18.9712, longitude: 98.9867 }, // Chiang Mai, Thailand
-  { id: 'F003', farmerName: 'Somchai Jaidee', location: 'Doi Tung Coffee Garden, Chiang Rai', latitude: 19.9105, longitude: 99.8406 }, // Doi Tung, Chiang Rai, Thailand
-  ],
+    users: [
+      { id: 'user-headjudge', name: 'Artanis', roles: [UserRole.HeadJudge], isActive: true },
+      { id: 'user-cupper1', name: 'Tassadar', roles: [UserRole.Cupper], isActive: true },
+      { id: 'user-cupper2', name: 'Zeratul', roles: [UserRole.Cupper], isActive: true },
+      { id: 'user-cupper3', name: 'Fenix', roles: [UserRole.Cupper], isActive: true },
+      { id: 'user-roaster1', name: 'Jim Raynor', roles: [UserRole.Roaster], isActive: true },
+      { id: 'user-processor1', name: 'Alarak', roles: [UserRole.Processor], isActive: true },
+      { id: 'user-farmer1', name: 'Maria Rodriguez', roles: [UserRole.Farmer], isActive: true },
+    ],
+    farms: [
+      {
+        id: 'F001',
+        name: 'Finca La Esmeralda',
+        farmerName: 'Maria Rodriguez',
+        ownerName: 'Maria Rodriguez',
+        caretakerName: 'Carlos Gomez',
+        location: 'Plot A, Boquete, Panama',
+        latitude: 8.8137,
+        longitude: -82.5853,
+        createdAt: '2025-10-01T08:30:00.000Z',
+        updatedAt: '2025-10-08T10:15:00.000Z',
+        archived: false,
+        ownerUserId: 'user-farmer1',
+        varieties: ['Gesha', 'Typica', 'Caturra'],
+      }, // Boquete, Panama
+      {
+        id: 'F002',
+        name: 'Hacienda Elida',
+        farmerName: 'John Doe',
+        ownerName: 'John Doe',
+        caretakerName: 'Nattapong Sriwattana',
+        location: 'Plot C4, Chiang Mai, Thailand',
+        latitude: 18.9712,
+        longitude: 98.9867,
+        createdAt: '2025-09-20T06:00:00.000Z',
+        updatedAt: '2025-10-05T09:45:00.000Z',
+        archived: false,
+        varieties: ['Caturra', 'Catuai'],
+      }, // Chiang Mai, Thailand
+      {
+        id: 'F003',
+        name: 'Doi Tung Coffee Garden',
+        farmerName: 'Somchai Jaidee',
+        ownerName: 'Somchai Jaidee',
+        caretakerName: 'Nok Phimchan',
+        location: 'Mae Fah Luang, Chiang Rai',
+        latitude: 19.9105,
+        longitude: 99.8406,
+        createdAt: '2025-09-10T03:45:00.000Z',
+        updatedAt: '2025-10-02T14:20:00.000Z',
+        archived: false,
+        varieties: ['Typica', 'Bourbon'],
+      }, // Doi Tung, Chiang Rai, Thailand
+    ],
   farmRequests: [
     {
       id: 'FR001',
