@@ -15,7 +15,6 @@ coffee-fix/
 │   │   │   ├── authService.ts          # Mock authentication
 │   │   │   ├── activityTypeService.ts  # GAP activities
 │   │   │   ├── processTypeService.ts   # Process types
-│   │   │   ├── farmRequestService.ts   # Farm requests
 │   │   │   ├── salesService.ts         # Sales data
 │   │   │   ├── soilAnalysisService.ts  # Soil analysis
 │   │   │   ├── weatherService.ts       # Weather records
