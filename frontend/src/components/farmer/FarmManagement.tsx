@@ -34,6 +34,8 @@ const FarmManagement: React.FC = () => {
 	const [caretakerName, setCaretakerName] = useState('');
 	const [selectedVarieties, setSelectedVarieties] = useState<string[]>([]);
 	const [customVariety, setCustomVariety] = useState('');
+	const [latitudeInput, setLatitudeInput] = useState('');
+	const [longitudeInput, setLongitudeInput] = useState('');
 	const [searchTerm, setSearchTerm] = useState('');
 	const [varietyFilter, setVarietyFilter] = useState('All');
 	const [viewFilter, setViewFilter] = useState<'active' | 'archived'>('active');
@@ -92,7 +94,9 @@ const FarmManagement: React.FC = () => {
 		const avgVarieties = scopedFarms.length === 0
 			? 0
 			: scopedFarms.reduce((sum, farm) => sum + (farm.varieties?.length ?? 0), 0) / scopedFarms.length;
-		const ownedWithGps = scopedFarms.filter(farm => farm.latitude && farm.longitude).length;
+		const ownedWithGps = scopedFarms.filter(
+			farm => farm.latitude !== undefined && farm.latitude !== null && farm.longitude !== undefined && farm.longitude !== null,
+		).length;
 		return {
 			total,
 			uniqueVarietiesCount,
@@ -135,6 +139,8 @@ const FarmManagement: React.FC = () => {
 		setCaretakerName('');
 		setSelectedVarieties([]);
 		setCustomVariety('');
+		setLatitudeInput('');
+		setLongitudeInput('');
 		setFormError(null);
 		setEditingFarmId(null);
 	};
@@ -152,6 +158,12 @@ const FarmManagement: React.FC = () => {
 		setCaretakerName(farm.caretakerName ?? '');
 		setSelectedVarieties(farm.varieties ?? []);
 		setCustomVariety('');
+		setLatitudeInput(
+			farm.latitude !== undefined && farm.latitude !== null ? String(farm.latitude) : '',
+		);
+		setLongitudeInput(
+			farm.longitude !== undefined && farm.longitude !== null ? String(farm.longitude) : '',
+		);
 		setFormError(null);
 		setIsModalOpen(true);
 	};
@@ -184,6 +196,29 @@ const FarmManagement: React.FC = () => {
 			return;
 		}
 
+		const trimmedLat = latitudeInput.trim();
+		const trimmedLng = longitudeInput.trim();
+		let latitude: number | undefined;
+		let longitude: number | undefined;
+		if (trimmedLat || trimmedLng) {
+			if (!trimmedLat || !trimmedLng) {
+				setFormError('กรอกละติจูดและลองจิจูดให้ครบหรือเว้นว่างทั้งคู่');
+				return;
+			}
+			const parsedLat = Number(trimmedLat);
+			const parsedLng = Number(trimmedLng);
+			if (Number.isNaN(parsedLat) || Number.isNaN(parsedLng)) {
+				setFormError('พิกัดต้องเป็นตัวเลขเท่านั้น');
+				return;
+			}
+			if (parsedLat < -90 || parsedLat > 90 || parsedLng < -180 || parsedLng > 180) {
+				setFormError('ละติจูดต้องอยู่ระหว่าง -90 ถึง 90 และลองจิจูดระหว่าง -180 ถึง 180');
+				return;
+			}
+			latitude = parsedLat;
+			longitude = parsedLng;
+		}
+
 		const ownerDisplayName = ownerName.trim();
 		const caretakerDisplayName = caretakerName.trim();
 		const timestamp = new Date().toISOString();
@@ -202,6 +237,8 @@ const FarmManagement: React.FC = () => {
 				caretakerName: caretakerDisplayName,
 				location: farmLocation.trim(),
 				varieties: [...selectedVarieties].sort(),
+				latitude,
+				longitude,
 				updatedAt: timestamp,
 			};
 			updateFarm(updatedFarm);
@@ -221,6 +258,8 @@ const FarmManagement: React.FC = () => {
 				ownerUserId: currentUser.id,
 				varieties: [...selectedVarieties].sort(),
 				archived: false,
+				latitude,
+				longitude,
 				createdAt: timestamp,
 				updatedAt: timestamp,
 			};
@@ -450,13 +489,17 @@ const FarmManagement: React.FC = () => {
 									<Layers3 className="h-4 w-4" />
 									<span>{farm.varieties?.length || 0} สายพันธุ์ที่บันทึก</span>
 								</div>
-								{farm.latitude && farm.longitude ? (
-									<div className="flex items-center gap-2 text-xs text-teal-700">
-										<ShieldCheck className="h-4 w-4" /> พร้อมข้อมูล GPS ({farm.latitude.toFixed(3)}, {farm.longitude.toFixed(3)})
+								{farm.latitude !== undefined && farm.latitude !== null && farm.longitude !== undefined && farm.longitude !== null ? (
+									<div className="flex items-center gap-2 text-xs text-emerald-700">
+										<ShieldCheck className="h-4 w-4 text-emerald-600" />
+										<span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 font-semibold">
+											พร้อมข้อมูล GPS ({farm.latitude.toFixed(3)}, {farm.longitude.toFixed(3)})
+										</span>
 									</div>
 								) : (
-									<div className="flex items-center gap-2 text-xs text-amber-600">
-										<ShieldCheck className="h-4 w-4" /> ยังไม่ได้ระบุพิกัด
+									<div className="flex items-center gap-2 text-xs text-amber-700">
+										<ShieldCheck className="h-4 w-4 text-amber-600" />
+										<span className="px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 font-semibold">ยังไม่ได้ระบุพิกัด</span>
 									</div>
 								)}
 							</div>
@@ -498,6 +541,24 @@ const FarmManagement: React.FC = () => {
 							value={caretakerName}
 							onChange={e => setCaretakerName(e.target.value)}
 							required
+							fullWidth
+						/>
+					</div>
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+						<Input
+							label="ละติจูด (Latitude)"
+							placeholder="เช่น 19.910"
+							value={latitudeInput}
+							onChange={e => setLatitudeInput(e.target.value)}
+							type="text"
+							fullWidth
+						/>
+						<Input
+							label="ลองจิจูด (Longitude)"
+							placeholder="เช่น 99.841"
+							value={longitudeInput}
+							onChange={e => setLongitudeInput(e.target.value)}
+							type="text"
 							fullWidth
 						/>
 					</div>
