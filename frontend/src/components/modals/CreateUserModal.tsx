@@ -17,8 +17,12 @@ interface GeneratedCredentials {
 
 const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUserCreated }) => {
   const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
   const [roles, setRoles] = useState<UserRole[]>([])
   const [isActive, setIsActive] = useState(true)
+  const [credentialMode, setCredentialMode] = useState<'auto' | 'manual'>('auto')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [generatedCredentials, setGeneratedCredentials] = useState<GeneratedCredentials | null>(null)
@@ -46,24 +50,56 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
       return
     }
 
+    // Validation for manual mode
+    if (credentialMode === 'manual') {
+      if (!username.trim()) {
+        setError('Username is required in manual mode')
+        return
+      }
+      if (!password.trim()) {
+        setError('Password is required in manual mode')
+        return
+      }
+      if (password.length < 6) {
+        setError('Password must be at least 6 characters')
+        return
+      }
+    }
+
     setLoading(true)
 
     try {
-      const response = await api.post<{
-        user: any
-        credentials?: GeneratedCredentials
-      }>('/users', {
+      const payload: any = {
         name: name.trim(),
         roles,
         isActive,
-        autoGenerate: true,
-      })
-
-      if (response.credentials) {
-        setGeneratedCredentials(response.credentials)
+        autoGenerate: credentialMode === 'auto',
       }
 
-      // Don't close modal yet - show credentials first
+      // Add optional email
+      if (email.trim()) {
+        payload.email = email.trim()
+      }
+
+      // Add manual credentials if in manual mode
+      if (credentialMode === 'manual') {
+        payload.username = username.trim()
+        payload.password = password.trim()
+      }
+
+      const response = await api.post<{
+        user: any
+        credentials?: GeneratedCredentials
+      }>('/users', payload)
+
+      if (credentialMode === 'auto' && response.credentials) {
+        setGeneratedCredentials(response.credentials)
+      } else {
+        // Manual mode - close immediately
+        onUserCreated()
+        resetForm()
+        onClose()
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to create user')
     } finally {
@@ -89,8 +125,12 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
 
   const resetForm = () => {
     setName('')
+    setEmail('')
     setRoles([])
     setIsActive(true)
+    setCredentialMode('auto')
+    setUsername('')
+    setPassword('')
     setError('')
     setGeneratedCredentials(null)
     setCopiedField(null)
@@ -154,6 +194,20 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
                 />
               </div>
 
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email (Optional)
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="user@example.com"
+                />
+              </div>
+
               {/* Roles */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -179,10 +233,99 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
                     </label>
                   ))}
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Username will be generated based on the first selected role
-                </p>
+                {credentialMode === 'auto' && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Username will be generated based on the first selected role
+                  </p>
+                )}
               </div>
+
+              {/* Credential Mode */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Credential Mode <span className="text-red-500">*</span>
+                </label>
+                <div className="space-y-3">
+                  <label className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-all ${
+                    credentialMode === 'auto'
+                      ? 'border-indigo-500 bg-indigo-50'
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="credentialMode"
+                      value="auto"
+                      checked={credentialMode === 'auto'}
+                      onChange={() => setCredentialMode('auto')}
+                      className="mt-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900">Auto-generate credentials</span>
+                      <p className="text-xs text-gray-500 mt-1">
+                        System will generate username and password automatically
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-all ${
+                    credentialMode === 'manual'
+                      ? 'border-indigo-500 bg-indigo-50'
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="credentialMode"
+                      value="manual"
+                      checked={credentialMode === 'manual'}
+                      onChange={() => setCredentialMode('manual')}
+                      className="mt-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-gray-900">Manual entry</span>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Enter custom username and password
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Manual Credentials Fields */}
+              {credentialMode === 'manual' && (
+                <div className="space-y-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Username <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      placeholder="Enter username"
+                      required={credentialMode === 'manual'}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Password <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      placeholder="Enter password (min 6 characters)"
+                      required={credentialMode === 'manual'}
+                      minLength={6}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Minimum 6 characters
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Active Status */}
               <div>
@@ -203,8 +346,10 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
               {/* Info Box */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm text-blue-800">
-                  <strong>Note:</strong> Username and password will be automatically generated.
-                  The user will be required to change their credentials on first login.
+                  <strong>Note:</strong>{' '}
+                  {credentialMode === 'auto'
+                    ? 'Username and password will be automatically generated. The user will be required to change their credentials on first login.'
+                    : 'The user can log in immediately with the credentials you provide.'}
                 </p>
               </div>
 

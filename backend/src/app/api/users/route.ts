@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     requireRole(user, ['Admin'])
 
     const body = await request.json()
-    const { name, roles, isActive, autoGenerate = true } = body
+    const { name, email, roles, isActive, autoGenerate = true } = body
 
     // Validation
     if (!name) {
@@ -53,6 +53,19 @@ export async function POST(request: NextRequest) {
         { error: 'At least one role is required' },
         { status: 400 }
       )
+    }
+
+    // Validate email if provided
+    if (email) {
+      const existingEmail = await prisma.user.findFirst({
+        where: { email }
+      })
+      if (existingEmail) {
+        return NextResponse.json(
+          { error: 'Email already exists' },
+          { status: 409 }
+        )
+      }
     }
 
     // Auto-generate credentials based on first role
@@ -95,18 +108,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create user with flags requiring first login changes
+    // Create user with flags based on credential mode
     const newUser = await prisma.user.create({
       data: {
         username,
-        email: null, // Will be set on first login
+        email: email || null, // Use provided email or null
         password,
         name,
         roles: roles || [],
         isActive: isActive !== undefined ? isActive : true,
-        mustChangePassword: true,
-        mustChangeUsername: true,
-        mustChangeEmail: true,
+        // Only require changes for auto-generated credentials
+        mustChangePassword: autoGenerate,
+        mustChangeUsername: autoGenerate,
+        mustChangeEmail: autoGenerate && !email, // Don't require email change if already provided
       },
       select: {
         id: true,
