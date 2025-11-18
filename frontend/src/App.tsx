@@ -8,7 +8,6 @@ import { UserRole, User, CuppingSessionType } from './types';
 import { MOCK_DATA } from './constants';
 import { DataContext } from './hooks/useDataContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { getAllFarmRequests, initializeFarmRequests } from './services/farmRequestService';
 import { getAllSoilAnalyses, initializeSoilAnalyses } from './services/soilAnalysisService';
 import { getAllWeatherRecords, initializeWeatherRecords } from './services/weatherService';
 import { getAllCustomers, getAllSaleOrders, getAllInvoices, getAllPricingHistory, initializeCustomers, initializeSaleOrders, initializeInvoices, initializePricingHistory } from './services/salesService';
@@ -60,7 +59,6 @@ const ProtectedRoutes: React.FC = () => {
   // Load data from localStorage on mount
   useEffect(() => {
     const loadDataFromStorage = () => {
-      const storedFarmRequests = getAllFarmRequests();
       const storedFarms = getAllFarms();
       const storedSoilAnalyses = getAllSoilAnalyses();
       const storedWeatherRecords = getAllWeatherRecords();
@@ -73,7 +71,6 @@ const ProtectedRoutes: React.FC = () => {
 
       setData(prev => ({
         ...prev,
-        farmRequests: storedFarmRequests.length > 0 ? storedFarmRequests : prev.farmRequests,
         farms: storedFarms.length > 0 ? storedFarms : prev.farms,
         soilAnalyses: storedSoilAnalyses.length > 0 ? storedSoilAnalyses : prev.soilAnalyses,
         weatherRecords: storedWeatherRecords.length > 0 ? storedWeatherRecords : prev.weatherRecords,
@@ -144,9 +141,6 @@ const ProtectedRoutes: React.FC = () => {
         }
     }
 
-    // Calculate pending farm requests count
-    const pendingFarmRequestsCount = data.farmRequests.filter(r => r.status === 'Pending').length;
-
     return [
       // Farmer Section
       { name: 'Farmer Dashboard', href: '/farmer-dashboard', icon: Coffee, roles: [UserRole.Farmer, UserRole.Admin] },
@@ -171,11 +165,11 @@ const ProtectedRoutes: React.FC = () => {
       // Traceability & Admin
       { name: 'Traceability Hub', href: '/traceability', icon: Search, roles: [UserRole.Admin, UserRole.Processor] },
       { name: 'User Management', href: '/users', icon: Users, roles: [UserRole.Admin] },
-      { name: 'Farm Management', href: '/farm-management', icon: MapPin, roles: [UserRole.Admin], badge: pendingFarmRequestsCount },
+      { name: 'Farm Management', href: '/farm-management', icon: MapPin, roles: [UserRole.Admin] },
       { name: 'Activity Types', href: '/activity-types', icon: Tag, roles: [UserRole.Admin] },
       { name: 'Process Types', href: '/process-types', icon: Coffee, roles: [UserRole.Admin] },
     ];
-  }, [currentUser, data.cuppingSessions, data.farmRequests]);
+  }, [currentUser, data.cuppingSessions]);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -225,7 +219,6 @@ const App: React.FC = () => {
 
   // Initialize localStorage on app mount
   useEffect(() => {
-    initializeFarmRequests(MOCK_DATA.farmRequests);
     initializeFarms(MOCK_DATA.farms);
     initializeSoilAnalyses(MOCK_DATA.soilAnalyses);
     initializeWeatherRecords(MOCK_DATA.weatherRecords);
