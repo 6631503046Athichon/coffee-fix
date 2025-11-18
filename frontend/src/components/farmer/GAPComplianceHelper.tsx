@@ -153,7 +153,7 @@ const GAPComplianceHelper: React.FC = () => {
             <PageHeader
                 title="GAP Compliance Helper"
                 description="Log and report agricultural activities for certification."
-                icon={FileText}
+                icon={<FileText className="h-7 w-7 text-green-600" />}
             />
 
                 {/* Log New Activity Card */}

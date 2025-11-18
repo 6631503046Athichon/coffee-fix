@@ -190,6 +190,8 @@ const ProtectedRoutes: React.FC = () => {
           <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-3 sm:p-4 md:p-6 lg:p-8 pt-16 lg:pt-4">
             <Routes>
               <Route path="/" element={<Navigate to="/farmer-dashboard" />} />
+              <Route path="/farmer" element={<Navigate to="/farmer-dashboard" replace />} />
+              <Route path="/dashboard" element={<Navigate to="/farmer-dashboard" replace />} />
               <Route path="/processor" element={<ProcessorWorkbench currentUser={currentUser!} />} />
               <Route path="/roaster" element={<RoasterWorkbench currentUser={currentUser!} />} />
               <Route path="/cupping" element={<CuppingHub />} />
