@@ -39,10 +39,6 @@ export function generateSoilAnalysisId(existingIds: string[]): string {
   return generateNextId(existingIds, 'SA', 3);
 }
 
-export function generateFarmRequestId(existingIds: string[]): string {
-  return generateNextId(existingIds, 'FR', 3);
-}
-
 export function generateGAPLogId(existingIds: string[]): string {
   return generateNextId(existingIds, 'GAP', 3);
 }
