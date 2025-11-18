@@ -1,7 +1,8 @@
 
 import * as React from 'react';
 import { useDataContext } from '../../hooks/useDataContext';
-import { GAPLogEntry } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
+import { GAPLogEntry, UserRole } from '../../types';
 import { PlusCircle, Filter, FileText, Printer, X, CheckCircle, Edit, Trash2 } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
 import Select from '../common/Select';
@@ -15,6 +16,7 @@ import { generateGAPLogId } from '../../utils/idGenerator';
 
 const GAPComplianceHelper: React.FC = () => {
     const { data, setData } = useDataContext();
+    const { currentUser } = useAuth();
 
     // Get active activity types
     const activeActivityTypes = data.activityTypes.filter(t => t.isActive);
@@ -37,10 +39,18 @@ const GAPComplianceHelper: React.FC = () => {
     const reportContentRef = React.useRef<HTMLDivElement>(null);
     const formRef = React.useRef<HTMLDivElement>(null);
 
+    // Get user's farms only (admins see all)
+    const userFarms = React.useMemo(() => {
+        if (!currentUser) return [];
+        const isAdmin = currentUser.roles?.includes(UserRole.Admin);
+        if (isAdmin) return data.farms;
+        return data.farms.filter(f => f.ownerId === currentUser.id);
+    }, [data.farms, currentUser]);
+
     const uniquePlots = React.useMemo(() => {
-        const plots = new Set(data.farms.map(f => f.location));
+        const plots = new Set(userFarms.map(f => f.location));
         return ['All', ...Array.from(plots).sort()];
-    }, [data.farms]);
+    }, [userFarms]);
 
     const handleLogSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -115,12 +125,20 @@ const GAPComplianceHelper: React.FC = () => {
     };
     
     const filteredLogs = React.useMemo(() => {
+        if (!currentUser) return [];
+
+        // Get user's farm locations
+        const userFarmLocations = new Set(userFarms.map(f => f.location));
+        const isAdmin = currentUser.roles?.includes(UserRole.Admin);
+
         return data.gapLogs.filter(log => {
+            // Filter by user's farms (admins see all)
+            const userMatch = isAdmin || userFarmLocations.has(log.farmPlotLocation);
             const plotMatch = plotFilter === 'All' || log.farmPlotLocation === plotFilter;
             const activityMatch = activityFilter === 'All' || log.activityType === activityFilter;
-            return plotMatch && activityMatch;
+            return userMatch && plotMatch && activityMatch;
         });
-    }, [data.gapLogs, plotFilter, activityFilter]);
+    }, [data.gapLogs, plotFilter, activityFilter, currentUser, userFarms]);
     
     const reportData = React.useMemo(() => {
         // fix: Explicitly type the initial value for the reduce function to ensure
@@ -153,7 +171,7 @@ const GAPComplianceHelper: React.FC = () => {
             <PageHeader
                 title="GAP Compliance Helper"
                 description="Log and report agricultural activities for certification."
-                icon={FileText}
+                icon={<FileText className="h-7 w-7 text-green-600" />}
             />
 
                 {/* Log New Activity Card */}
