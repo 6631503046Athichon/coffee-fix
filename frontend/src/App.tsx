@@ -20,7 +20,6 @@ import Login from './components/auth/Login';
 import ForgotPassword from './components/auth/ForgotPassword';
 import ResetPassword from './components/auth/ResetPassword';
 import { FirstLoginSetup } from './components/auth/FirstLoginSetup';
-import Dashboard from './components/Dashboard';
 import ProcessorWorkbench from './components/processor/ProcessorWorkbench';
 import CuppingHub from './components/cupper/CuppingHub';
 import TraceabilityPage from './components/TraceabilityPage';
@@ -149,9 +148,6 @@ const ProtectedRoutes: React.FC = () => {
     const pendingFarmRequestsCount = data.farmRequests.filter(r => r.status === 'Pending').length;
 
     return [
-      // Main Dashboard
-      { name: 'Dashboard', href: '/dashboard', icon: BarChart, roles: [UserRole.Farmer, UserRole.Processor, UserRole.Roaster, UserRole.Admin, UserRole.HeadJudge] },
-
       // Farmer Section
       { name: 'Farmer Dashboard', href: '/farmer-dashboard', icon: Coffee, roles: [UserRole.Farmer, UserRole.Admin] },
       { name: 'Farm Management', href: '/farmer-farms', icon: MapPin, roles: [UserRole.Farmer, UserRole.Admin] },
@@ -193,8 +189,7 @@ const ProtectedRoutes: React.FC = () => {
           <Header currentUserRoles={currentUser?.roles || [UserRole.Farmer]} onRoleChange={() => {}} />
           <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-3 sm:p-4 md:p-6 lg:p-8 pt-16 lg:pt-4">
             <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" />} />
-              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/" element={<Navigate to="/farmer-dashboard" />} />
               <Route path="/processor" element={<ProcessorWorkbench currentUser={currentUser!} />} />
               <Route path="/roaster" element={<RoasterWorkbench currentUser={currentUser!} />} />
               <Route path="/cupping" element={<CuppingHub />} />
