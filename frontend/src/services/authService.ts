@@ -84,21 +84,27 @@ export const authService = {
     const storedUser = localStorage.getItem(STORAGE_KEY);
     if (storedUser) {
       try {
-        return JSON.parse(storedUser);
+        const user = JSON.parse(storedUser);
+        console.debug('Found user in localStorage:', user.username || user.email);
+        return user;
       } catch {
+        console.debug('Failed to parse stored user, clearing localStorage');
         localStorage.removeItem(STORAGE_KEY);
       }
     }
 
     // If no stored user, try to get from backend (validates session)
+    console.debug('No stored user, checking backend session...');
     try {
       const response = await api.get<{ user: User }>('/auth/me');
       if (response.user) {
+        console.debug('Got user from backend:', response.user.username || response.user.email);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(response.user));
         return response.user;
       }
     } catch (error) {
       // Not authenticated
+      console.debug('Backend session check failed:', error instanceof Error ? error.message : 'Unknown error');
       return null;
     }
 
