@@ -24,6 +24,15 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
     const [yearFilter, setYearFilter] = useState<string>('All');
     const [plotFilter, setPlotFilter] = useState<string>('All');
 
+    // Guard clause for null currentUser
+    if (!currentUser) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <p className="text-gray-500">Loading user data...</p>
+            </div>
+        );
+    }
+
     // Edit Modal State
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingLot, setEditingLot] = useState<HarvestLot | null>(null);
@@ -138,7 +147,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
             <PageHeader
                 title="Data Hub"
                 description="Master table of all harvest data"
-                icon={Database}
+                icon={<Database className="h-7 w-7 text-blue-600" />}
             />
 
             {/* Filters and Actions Bar */}
@@ -192,7 +201,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                         <tbody className="bg-white divide-y divide-gray-100">
                             {filteredLots.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center">
+                                    <td colSpan={8} className="px-6 py-12 text-center">
                                         <Database className="h-16 w-16 text-gray-300 mx-auto mb-4" />
                                         <p className="text-gray-500 text-lg font-medium">No harvest data found</p>
                                         <p className="text-gray-400 text-sm">Try adjusting your filters</p>
@@ -269,7 +278,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
 
             {/* Edit Modal */}
             <Modal
-                isOpen={isEditModalOpen && !!editingLot}
+                isOpen={isEditModalOpen}
                 onClose={closeEditModal}
                 title="Edit Harvest Lot"
                 maxWidth="2xl"
