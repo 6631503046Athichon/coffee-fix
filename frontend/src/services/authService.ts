@@ -3,7 +3,7 @@ import { User } from '../types';
 import { api } from './api';
 
 interface LoginCredentials {
-  email: string;
+  identifier: string;  // Can be either email or username
   password: string;
 }
 
@@ -26,7 +26,11 @@ export const authService = {
   // Login user via backend API
   login: async (credentials: LoginCredentials): Promise<User> => {
     try {
-      const response = await api.post<AuthResponse>('/auth/login', credentials);
+      // Backend expects "email" field, but we use "identifier" for clarity
+      const response = await api.post<AuthResponse>('/auth/login', {
+        email: credentials.identifier,  // Map identifier to email for backend
+        password: credentials.password,
+      });
 
       // Store user data in localStorage
       localStorage.setItem(STORAGE_KEY, JSON.stringify(response.user));

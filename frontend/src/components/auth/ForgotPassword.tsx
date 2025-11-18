@@ -45,7 +45,7 @@ const ForgotPassword: React.FC = () => {
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Forgot Password?</h2>
             <p className="text-gray-600">
-              Please enter your email address and we'll send you a password reset link.
+              Please enter your email or username and we'll send you a password reset link.
             </p>
           </div>
 
@@ -81,18 +81,18 @@ const ForgotPassword: React.FC = () => {
 
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                  Email Address
+                  Email or Username
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                   <input
                     id="email"
-                    type="email"
+                    type="text"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition-colors"
-                    placeholder="Enter your email address"
+                    placeholder="Enter your email or username"
                   />
                 </div>
               </div>
