@@ -7,7 +7,10 @@
       "Bash(curl:*)",
       "Bash(nul)",
       "Bash(npm run dev:*)",
-      "Bash(ping:*)"
+      "Bash(ping:*)",
+      "Bash(npx prisma db push:*)",
+      "Bash(D:codeProject-fixcoffee-fixbackendnode_modules.binprisma db push)",
+      "Bash(cmd /c \"cd /d D:\\code\\Project-fix\\coffee-fix\\backend && npx prisma db push\")"
     ],
     "deny": [],
     "ask": []
