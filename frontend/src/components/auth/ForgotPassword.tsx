@@ -9,16 +9,29 @@ const ForgotPassword: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [devToken, setDevToken] = useState<string>('');
+  const [devResetUrl, setDevResetUrl] = useState<string>('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess(false);
     setIsLoading(true);
+    setDevToken('');
+    setDevResetUrl('');
 
     try {
-      const response = await api.post<{ message: string }>('/auth/forgot-password', { email });
+      const response = await api.post<{ 
+        message: string; 
+        devToken?: string; 
+        devResetUrl?: string;
+      }>('/auth/forgot-password', { email });
       setSuccess(true);
+      // Store dev token and URL for development mode
+      if (response.devToken && response.devResetUrl) {
+        setDevToken(response.devToken);
+        setDevResetUrl(response.devResetUrl);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send reset email');
     } finally {
@@ -54,12 +67,35 @@ const ForgotPassword: React.FC = () => {
               <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
                 <div className="flex items-start">
                   <Mail className="h-5 w-5 text-green-600 mt-0.5 mr-3" />
-                  <div>
+                  <div className="flex-1">
                     <h3 className="text-green-800 font-semibold mb-1">Email Sent Successfully!</h3>
-                    <p className="text-green-700 text-sm">
+                    <p className="text-green-700 text-sm mb-3">
                       If an account with that email exists, we've sent a password reset link.
                       Please check your email (including spam folder).
                     </p>
+                    {/* Development mode: Show reset link directly */}
+                    {devToken && devResetUrl && (
+                      <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-blue-800 text-xs font-semibold mb-2">🔧 Development Mode - Reset Link:</p>
+                        <a
+                          href={devResetUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block text-blue-600 hover:text-blue-700 text-xs break-all underline mb-2"
+                        >
+                          {devResetUrl}
+                        </a>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(devResetUrl);
+                            alert('Reset URL copied to clipboard!');
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-700 underline"
+                        >
+                          Copy Link
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
