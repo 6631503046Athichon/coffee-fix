@@ -92,3 +92,21 @@ export async function PUT(
   }
 }
 
+// DELETE /api/harvest-lots/:id
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    await requireAuth(request)
+
+    await prisma.harvestLot.delete({
+      where: { id: params.id },
+    })
+
+    return NextResponse.json({ message: 'Harvest lot deleted successfully' })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
+

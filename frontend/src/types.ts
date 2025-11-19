@@ -229,6 +229,7 @@ export interface User {
   mustChangePassword?: boolean;
   mustChangeUsername?: boolean;
   mustChangeEmail?: boolean;
+  temporaryPassword?: string | null;
   createdAt?: string;
   updatedAt?: string;
   lastLogin?: string;

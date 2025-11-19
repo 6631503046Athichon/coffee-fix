@@ -122,3 +122,47 @@ export async function PUT(
   }
 }
 
+// DELETE /api/soil-analyses/:id
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const user = await requireAuth(request)
+
+    const soilAnalysis = await prisma.soilAnalysis.findUnique({
+      where: { id: params.id },
+      include: {
+        farm: {
+          select: {
+            ownerId: true,
+          },
+        },
+      },
+    })
+
+    if (!soilAnalysis) {
+      return NextResponse.json(
+        { error: 'Soil analysis not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check permission - only farm owner or admin can delete
+    if (!user.roles.includes('Admin') && soilAnalysis.farm.ownerId !== user.id) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
+      )
+    }
+
+    await prisma.soilAnalysis.delete({
+      where: { id: params.id },
+    })
+
+    return NextResponse.json({ message: 'Soil analysis deleted successfully' })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
+

@@ -78,33 +78,22 @@ export const authService = {
     }
   },
 
-  // Get current user from localStorage or backend
+  // Get current user from backend (validates session)
   getCurrentUser: async (): Promise<User | null> => {
-    // First check localStorage
-    const storedUser = localStorage.getItem(STORAGE_KEY);
-    if (storedUser) {
-      try {
-        const user = JSON.parse(storedUser);
-        console.debug('Found user in localStorage:', user.username || user.email);
-        return user;
-      } catch {
-        console.debug('Failed to parse stored user, clearing localStorage');
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    }
-
-    // If no stored user, try to get from backend (validates session)
-    console.debug('No stored user, checking backend session...');
+    // Always check with backend first to validate session
     try {
       const response = await api.get<{ user: User }>('/auth/me');
       if (response.user) {
         console.debug('Got user from backend:', response.user.username || response.user.email);
+        // Update localStorage with fresh user data
         localStorage.setItem(STORAGE_KEY, JSON.stringify(response.user));
         return response.user;
       }
     } catch (error) {
-      // Not authenticated
+      // Not authenticated - clear localStorage
       console.debug('Backend session check failed:', error instanceof Error ? error.message : 'Unknown error');
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem('auth-token');
       return null;
     }
 

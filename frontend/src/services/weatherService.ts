@@ -1,63 +1,65 @@
 import { WeatherRecord } from '../types';
-
-const WEATHER_RECORDS_STORAGE_KEY = 'coffee_lab_weather_records';
-
-/**
- * Initialize weather records in localStorage - always reset to defaults
- */
-export const initializeWeatherRecords = (defaultRecords: WeatherRecord[]) => {
-  // Always set to default records (will be empty array now that mock data is removed)
-  localStorage.setItem(WEATHER_RECORDS_STORAGE_KEY, JSON.stringify(defaultRecords));
-};
+import { api } from './api';
+import {
+  transformWeatherRecordFromBackend,
+  transformWeatherRecordToBackend,
+} from './utils/transformers';
 
 /**
- * Get all weather records from localStorage
+ * Fetch all weather records, optionally filtered by farm ID
  */
-export const getAllWeatherRecords = (): WeatherRecord[] => {
-  const storedRecords = localStorage.getItem(WEATHER_RECORDS_STORAGE_KEY);
-  if (storedRecords) {
-    try {
-      return JSON.parse(storedRecords);
-    } catch (error) {
-      console.error('Error parsing weather records from localStorage:', error);
-      return [];
-    }
+export const getAllWeatherRecords = async (farmId?: string): Promise<WeatherRecord[]> => {
+  try {
+    const params = farmId ? { farmId } : undefined;
+    const response = await api.get<{ weatherRecords: any[] }>('/weather-records', params);
+    return response.weatherRecords.map(transformWeatherRecordFromBackend);
+  } catch (error) {
+    console.error('Failed to fetch weather records:', error);
+    return [];
   }
-  return [];
 };
 
 /**
- * Save all weather records to localStorage
+ * Create a new weather record
  */
-export const saveAllWeatherRecords = (records: WeatherRecord[]) => {
-  localStorage.setItem(WEATHER_RECORDS_STORAGE_KEY, JSON.stringify(records));
-};
-
-/**
- * Add a new weather record
- */
-export const addWeatherRecord = (record: WeatherRecord) => {
-  const allRecords = getAllWeatherRecords();
-  allRecords.unshift(record); // Add to beginning of array
-  saveAllWeatherRecords(allRecords);
-};
-
-/**
- * Update a weather record
- */
-export const updateWeatherRecord = (updatedRecord: WeatherRecord) => {
-  const allRecords = getAllWeatherRecords();
-  const updatedRecords = allRecords.map(record =>
-    record.id === updatedRecord.id ? updatedRecord : record
+export const addWeatherRecord = async (
+  recordData: Partial<WeatherRecord>
+): Promise<WeatherRecord> => {
+  const response = await api.post<{ weatherRecord: any; message: string }>(
+    '/weather-records',
+    transformWeatherRecordToBackend(recordData)
   );
-  saveAllWeatherRecords(updatedRecords);
+  return transformWeatherRecordFromBackend(response.weatherRecord);
+};
+
+/**
+ * Update an existing weather record
+ */
+export const updateWeatherRecord = async (
+  recordId: string,
+  recordData: Partial<WeatherRecord>
+): Promise<WeatherRecord> => {
+  const response = await api.put<{ weatherRecord: any }>(
+    `/weather-records/${recordId}`,
+    transformWeatherRecordToBackend(recordData)
+  );
+  return transformWeatherRecordFromBackend(response.weatherRecord);
 };
 
 /**
  * Delete a weather record
  */
-export const deleteWeatherRecord = (recordId: string) => {
-  const allRecords = getAllWeatherRecords();
-  const filteredRecords = allRecords.filter(record => record.id !== recordId);
-  saveAllWeatherRecords(filteredRecords);
+export const deleteWeatherRecord = async (recordId: string): Promise<void> => {
+  await api.delete(`/weather-records/${recordId}`);
+};
+
+// Legacy localStorage functions for backward compatibility
+const WEATHER_RECORDS_STORAGE_KEY = 'coffee_lab_weather_records';
+
+export const initializeWeatherRecords = (defaultRecords: WeatherRecord[]) => {
+  localStorage.setItem(WEATHER_RECORDS_STORAGE_KEY, JSON.stringify(defaultRecords));
+};
+
+const saveAllWeatherRecords = (records: WeatherRecord[]) => {
+  localStorage.setItem(WEATHER_RECORDS_STORAGE_KEY, JSON.stringify(records));
 };

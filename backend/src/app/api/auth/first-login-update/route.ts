@@ -114,6 +114,7 @@ export async function POST(request: NextRequest) {
       const hashedPassword = await bcrypt.hash(newPassword, 10)
       updateData.password = hashedPassword
       updateData.mustChangePassword = false
+      updateData.temporaryPassword = null // Clear temp password so admin can't see it anymore
     }
 
     // Ensure all required changes are made

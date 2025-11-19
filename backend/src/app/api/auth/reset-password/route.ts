@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
         data: {
           password: hashedPassword,
           mustChangePassword: false,
+          temporaryPassword: null, // Clear temp password so admin can't see it anymore
         },
       })
 

@@ -1,63 +1,65 @@
 import { SoilAnalysis } from '../types';
-
-const SOIL_ANALYSES_STORAGE_KEY = 'coffee_lab_soil_analyses';
-
-/**
- * Initialize soil analyses in localStorage - always reset to defaults
- */
-export const initializeSoilAnalyses = (defaultAnalyses: SoilAnalysis[]) => {
-  // Always set to default analyses (will be empty array now that mock data is removed)
-  localStorage.setItem(SOIL_ANALYSES_STORAGE_KEY, JSON.stringify(defaultAnalyses));
-};
+import { api } from './api';
+import {
+  transformSoilAnalysisFromBackend,
+  transformSoilAnalysisToBackend,
+} from './utils/transformers';
 
 /**
- * Get all soil analyses from localStorage
+ * Fetch all soil analyses, optionally filtered by farm ID
  */
-export const getAllSoilAnalyses = (): SoilAnalysis[] => {
-  const storedAnalyses = localStorage.getItem(SOIL_ANALYSES_STORAGE_KEY);
-  if (storedAnalyses) {
-    try {
-      return JSON.parse(storedAnalyses);
-    } catch (error) {
-      console.error('Error parsing soil analyses from localStorage:', error);
-      return [];
-    }
+export const getAllSoilAnalyses = async (farmId?: string): Promise<SoilAnalysis[]> => {
+  try {
+    const params = farmId ? { farmId } : undefined;
+    const response = await api.get<{ soilAnalyses: any[] }>('/soil-analyses', params);
+    return response.soilAnalyses.map(transformSoilAnalysisFromBackend);
+  } catch (error) {
+    console.error('Failed to fetch soil analyses:', error);
+    return [];
   }
-  return [];
 };
 
 /**
- * Save all soil analyses to localStorage
+ * Create a new soil analysis
  */
-export const saveAllSoilAnalyses = (analyses: SoilAnalysis[]) => {
-  localStorage.setItem(SOIL_ANALYSES_STORAGE_KEY, JSON.stringify(analyses));
-};
-
-/**
- * Add a new soil analysis
- */
-export const addSoilAnalysis = (analysis: SoilAnalysis) => {
-  const allAnalyses = getAllSoilAnalyses();
-  allAnalyses.unshift(analysis); // Add to beginning of array
-  saveAllSoilAnalyses(allAnalyses);
-};
-
-/**
- * Update a soil analysis
- */
-export const updateSoilAnalysis = (updatedAnalysis: SoilAnalysis) => {
-  const allAnalyses = getAllSoilAnalyses();
-  const updatedAnalyses = allAnalyses.map(analysis =>
-    analysis.id === updatedAnalysis.id ? updatedAnalysis : analysis
+export const addSoilAnalysis = async (
+  analysisData: Partial<SoilAnalysis>
+): Promise<SoilAnalysis> => {
+  const response = await api.post<{ soilAnalysis: any; message: string }>(
+    '/soil-analyses',
+    transformSoilAnalysisToBackend(analysisData)
   );
-  saveAllSoilAnalyses(updatedAnalyses);
+  return transformSoilAnalysisFromBackend(response.soilAnalysis);
+};
+
+/**
+ * Update an existing soil analysis
+ */
+export const updateSoilAnalysis = async (
+  analysisId: string,
+  analysisData: Partial<SoilAnalysis>
+): Promise<SoilAnalysis> => {
+  const response = await api.put<{ soilAnalysis: any }>(
+    `/soil-analyses/${analysisId}`,
+    transformSoilAnalysisToBackend(analysisData)
+  );
+  return transformSoilAnalysisFromBackend(response.soilAnalysis);
 };
 
 /**
  * Delete a soil analysis
  */
-export const deleteSoilAnalysis = (analysisId: string) => {
-  const allAnalyses = getAllSoilAnalyses();
-  const filteredAnalyses = allAnalyses.filter(analysis => analysis.id !== analysisId);
-  saveAllSoilAnalyses(filteredAnalyses);
+export const deleteSoilAnalysis = async (analysisId: string): Promise<void> => {
+  await api.delete(`/soil-analyses/${analysisId}`);
+};
+
+// Legacy localStorage functions for backward compatibility
+const SOIL_ANALYSES_STORAGE_KEY = 'coffee_lab_soil_analyses';
+
+export const initializeSoilAnalyses = (defaultAnalyses: SoilAnalysis[]) => {
+  localStorage.setItem(SOIL_ANALYSES_STORAGE_KEY, JSON.stringify(defaultAnalyses));
+};
+
+const saveAllSoilAnalyses = (analyses: SoilAnalysis[]) => {
+  localStorage.setItem(SOIL_ANALYSES_STORAGE_KEY, JSON.stringify(analyses));
 };

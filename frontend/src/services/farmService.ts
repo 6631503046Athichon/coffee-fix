@@ -1,5 +1,50 @@
 import { Farm } from '../types';
+import { api } from './api';
+import { transformFarmFromBackend, transformFarmToBackend } from './utils/transformers';
 
+/**
+ * Fetch all farms from the backend API
+ */
+export const getAllFarms = async (): Promise<Farm[]> => {
+  try {
+    const response = await api.get<{ farms: any[] }>('/farms');
+    return response.farms.map(transformFarmFromBackend);
+  } catch (error) {
+    console.error('Failed to fetch farms:', error);
+    return [];
+  }
+};
+
+/**
+ * Create a new farm
+ */
+export const addFarm = async (farmData: Partial<Farm>): Promise<Farm> => {
+  const response = await api.post<{ farm: any; message: string }>(
+    '/farms',
+    transformFarmToBackend(farmData)
+  );
+  return transformFarmFromBackend(response.farm);
+};
+
+/**
+ * Update an existing farm
+ */
+export const updateFarm = async (farmId: string, farmData: Partial<Farm>): Promise<Farm> => {
+  const response = await api.put<{ farm: any }>(
+    `/farms/${farmId}`,
+    transformFarmToBackend(farmData)
+  );
+  return transformFarmFromBackend(response.farm);
+};
+
+/**
+ * Delete a farm
+ */
+export const deleteFarm = async (farmId: string): Promise<void> => {
+  await api.delete(`/farms/${farmId}`);
+};
+
+// Legacy localStorage functions for backward compatibility
 const FARMS_STORAGE_KEY = 'coffee_lab_farms';
 
 const dispatchStorageEvent = () => {
@@ -10,44 +55,6 @@ const dispatchStorageEvent = () => {
 
 export const initializeFarms = (defaultFarms: Farm[]) => {
   if (typeof window === 'undefined') return;
-  // Always set to default farms (will be empty array now that mock data is removed)
   localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(defaultFarms));
   dispatchStorageEvent();
-};
-
-export const getAllFarms = (): Farm[] => {
-  if (typeof window === 'undefined') return [];
-  const stored = localStorage.getItem(FARMS_STORAGE_KEY);
-  if (!stored) return [];
-
-  try {
-    return JSON.parse(stored) as Farm[];
-  } catch (error) {
-    console.error('Failed to parse farms from localStorage:', error);
-    return [];
-  }
-};
-
-const saveAllFarms = (farms: Farm[]) => {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(farms));
-  dispatchStorageEvent();
-};
-
-export const addFarm = (farm: Farm) => {
-  const farms = getAllFarms();
-  farms.push(farm);
-  saveAllFarms(farms);
-};
-
-export const updateFarm = (updatedFarm: Farm) => {
-  const farms = getAllFarms();
-  const next = farms.map(f => (f.id === updatedFarm.id ? updatedFarm : f));
-  saveAllFarms(next);
-};
-
-export const deleteFarm = (farmId: string) => {
-  const farms = getAllFarms();
-  const next = farms.filter(f => f.id !== farmId);
-  saveAllFarms(next);
 };
