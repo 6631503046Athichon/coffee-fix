@@ -3,13 +3,11 @@ import { WeatherRecord } from '../types';
 const WEATHER_RECORDS_STORAGE_KEY = 'coffee_lab_weather_records';
 
 /**
- * Initialize weather records in localStorage if they don't exist
+ * Initialize weather records in localStorage - always reset to defaults
  */
 export const initializeWeatherRecords = (defaultRecords: WeatherRecord[]) => {
-  const storedRecords = localStorage.getItem(WEATHER_RECORDS_STORAGE_KEY);
-  if (!storedRecords) {
-    localStorage.setItem(WEATHER_RECORDS_STORAGE_KEY, JSON.stringify(defaultRecords));
-  }
+  // Always set to default records (will be empty array now that mock data is removed)
+  localStorage.setItem(WEATHER_RECORDS_STORAGE_KEY, JSON.stringify(defaultRecords));
 };
 
 /**

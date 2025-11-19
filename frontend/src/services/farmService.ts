@@ -10,10 +10,9 @@ const dispatchStorageEvent = () => {
 
 export const initializeFarms = (defaultFarms: Farm[]) => {
   if (typeof window === 'undefined') return;
-  const stored = localStorage.getItem(FARMS_STORAGE_KEY);
-  if (!stored) {
-    localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(defaultFarms));
-  }
+  // Always set to default farms (will be empty array now that mock data is removed)
+  localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(defaultFarms));
+  dispatchStorageEvent();
 };
 
 export const getAllFarms = (): Farm[] => {
