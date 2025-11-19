@@ -59,7 +59,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
     const filteredLots = useMemo(() => {
         return data.harvestLots.filter(lot => {
             // Filter by current user (farmers see only their own data, admins see all)
-            const isAdmin = currentUser.role === UserRole.Admin;
+            const isAdmin = currentUser.roles?.includes(UserRole.Admin) || false;
             const userMatch = isAdmin || lot.farmerName === currentUser.name;
 
             const lotYear = new Date(lot.harvestDate).getFullYear().toString();

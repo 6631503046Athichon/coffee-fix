@@ -22,13 +22,22 @@ export async function GET(request: NextRequest) {
     }
 
     // Farmers can only see their own farms' GAP logs
+    // Admins can see all GAP logs
     if (user.roles.includes('Farmer') && !user.roles.includes('Admin')) {
       const farms = await prisma.farm.findMany({
         where: { ownerId: user.id },
         select: { id: true },
       })
-      where.farmId = { in: farms.map(f => f.id) }
+      const farmIds = farms.map(f => f.id)
+      // Include logs with no farmId (legacy logs) only if user has farms
+      if (farmIds.length > 0) {
+        where.farmId = { in: farmIds }
+      } else {
+        // If user has no farms, only show logs with no farmId
+        where.farmId = null
+      }
     }
+    // Admins see all logs (no filter applied)
 
     const gapLogs = await prisma.gAPLogEntry.findMany({
       where,
