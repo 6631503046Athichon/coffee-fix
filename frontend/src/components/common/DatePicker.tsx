@@ -147,36 +147,44 @@ const DatePicker: React.FC<DatePickerProps> = ({
 
             {/* Calendar Dropdown */}
             {isOpen && (
-                <div className="absolute z-[10000] mt-2 bg-white rounded-2xl shadow-2xl border-2 border-gray-200 p-4 w-80">
+                <div className="absolute z-[10000] mt-2 bg-white rounded-xl shadow-xl border border-gray-200 p-4 w-[320px]">
                     {/* Month Navigation */}
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between mb-3">
                         <button
                             type="button"
-                            onClick={goToPreviousMonth}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                goToPreviousMonth();
+                            }}
+                            className="p-1.5 hover:bg-gray-100 rounded transition-colors cursor-pointer"
                         >
-                            <ChevronLeft className="h-5 w-5 text-gray-600" />
+                            <ChevronLeft className="h-4 w-4 text-gray-600" />
                         </button>
 
-                        <div className="text-center">
-                            <div className="text-lg font-bold text-gray-900">
+                        <div className="text-center flex-1">
+                            <div className="text-base font-semibold text-gray-900">
                                 {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
                             </div>
                         </div>
 
                         <button
                             type="button"
-                            onClick={goToNextMonth}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                goToNextMonth();
+                            }}
+                            className="p-1.5 hover:bg-gray-100 rounded transition-colors cursor-pointer"
                         >
-                            <ChevronRight className="h-5 w-5 text-gray-600" />
+                            <ChevronRight className="h-4 w-4 text-gray-600" />
                         </button>
                     </div>
 
                     {/* Day Names */}
                     <div className="grid grid-cols-7 gap-1 mb-2">
                         {dayNames.map(day => (
-                            <div key={day} className="text-center text-xs font-bold text-gray-600 py-2">
+                            <div key={day} className="text-center text-xs font-semibold text-gray-600 py-1.5">
                                 {day}
                             </div>
                         ))}
@@ -186,7 +194,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
                     <div className="grid grid-cols-7 gap-1">
                         {days.map((day, index) => {
                             if (day === null) {
-                                return <div key={`empty-${index}`} className="aspect-square" />;
+                                return <div key={`empty-${index}`} className="aspect-square min-h-[36px]" />;
                             }
 
                             const isTodayDay = isToday(day);
@@ -196,13 +204,17 @@ const DatePicker: React.FC<DatePickerProps> = ({
                                 <button
                                     key={day}
                                     type="button"
-                                    onClick={() => handleDateClick(day)}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleDateClick(day);
+                                    }}
                                     className={`
-                                        aspect-square flex items-center justify-center rounded-lg text-sm font-semibold transition-all duration-200
+                                        aspect-square flex items-center justify-center rounded-lg text-sm font-medium transition-all duration-200 min-w-[36px] min-h-[36px] w-full
                                         ${isSelectedDay
-                                            ? 'bg-blue-600 text-white shadow-lg scale-105'
+                                            ? 'bg-blue-600 text-white shadow-md'
                                             : isTodayDay
-                                                ? 'bg-blue-50 text-blue-600 border-2 border-blue-600'
+                                                ? 'bg-blue-50 text-blue-600 border border-blue-600'
                                                 : 'hover:bg-gray-100 text-gray-700'
                                         }
                                     `}
@@ -214,18 +226,26 @@ const DatePicker: React.FC<DatePickerProps> = ({
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
                         <button
                             type="button"
-                            onClick={clearDate}
-                            className="text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                clearDate();
+                            }}
+                            className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors px-3 py-1.5 rounded hover:bg-gray-50"
                         >
                             Clear
                         </button>
                         <button
                             type="button"
-                            onClick={goToToday}
-                            className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                goToToday();
+                            }}
+                            className="px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
                         >
                             Today
                         </button>
