@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FlaskConical, Microscope, X, CheckCircle, Edit3, Trash2 } from 'lucide-react';
-import { Button, Input } from '../common';
+import { Button, Input, Modal } from '../common';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Farm, SoilAnalysis, UserRole } from '../../types';
@@ -54,9 +54,11 @@ const createEmptySoilForm = (defaults: Partial<SoilFormState> = {}): SoilFormSta
 
 interface FarmSoilPanelProps {
   farm: Farm | null;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
-const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm }) => {
+const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onClose }) => {
   const { data, setData } = useDataContext();
   const { currentUser } = useAuth();
 
@@ -241,14 +243,17 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm }) => {
     setSoilToast({ type: 'success', message: 'ลบผลวิเคราะห์แล้ว' });
   };
 
-  return (
-    <section className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-6">
-      <header className="flex flex-col gap-2">
-        <p className="text-sm font-semibold text-emerald-600 uppercase tracking-wide">Soil Insights</p>
-        <h2 className="text-2xl font-bold text-gray-900">ข้อมูลดินของฟาร์ม</h2>
-        <p className="text-sm text-gray-600">เลือกการ์ดฟาร์มด้านบนเพื่อจัดการแบบฟอร์มผลวิเคราะห์และดูประวัติทั้งหมด</p>
-      </header>
+  // If not open, don't render anything
+  if (!isOpen) return null;
 
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose || (() => {})}
+      title="ข้อมูลดินของฟาร์ม"
+      maxWidth="4xl"
+    >
+      <div className="space-y-6">
       {!farm ? (
         <div className="rounded-2xl border border-dashed border-gray-300 p-12 text-center text-gray-500">
           เลือกฟาร์มจากรายการเพื่อเริ่มบันทึกผลวิเคราะห์ดิน
@@ -457,7 +462,8 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm }) => {
           </div>
         </div>
       )}
-    </section>
+      </div>
+    </Modal>
   );
 };
 

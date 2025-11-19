@@ -10,7 +10,38 @@ export async function GET(request: NextRequest) {
     const user = await requireAuth(request)
     requireRole(user, ['Admin'])
 
+    // Get query parameters for filtering
+    const searchParams = request.nextUrl.searchParams
+    const search = searchParams.get('search')
+    const role = searchParams.get('role')
+    const status = searchParams.get('status')
+
+    // Build where clause
+    const where: any = {}
+
+    // Search by name, email, or username
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { username: { contains: search, mode: 'insensitive' } },
+      ]
+    }
+
+    // Filter by role
+    if (role) {
+      where.roles = { has: role }
+    }
+
+    // Filter by active status
+    if (status === 'active') {
+      where.isActive = true
+    } else if (status === 'inactive') {
+      where.isActive = false
+    }
+
     const users = await prisma.user.findMany({
+      where,
       select: {
         id: true,
         username: true,
@@ -21,6 +52,8 @@ export async function GET(request: NextRequest) {
         isSuperAdmin: true,
         createdAt: true,
         lastLogin: true,
+        temporaryPassword: true,
+        mustChangePassword: true,
       },
       orderBy: { createdAt: 'desc' },
     })
@@ -121,6 +154,7 @@ export async function POST(request: NextRequest) {
         mustChangePassword: autoGenerate,
         mustChangeUsername: autoGenerate,
         mustChangeEmail: autoGenerate && !email, // Don't require email change if already provided
+        temporaryPassword: plainPassword || null, // Store for admin view until user changes it
       },
       select: {
         id: true,

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { HarvestLot, Farm, CropYear, UserRole, SCA_ATTRIBUTES } from '../../types';
-import { ChevronRight, PlusCircle, ArrowUp, ArrowDown, BarChart, Weight, Wind, Coffee, Award } from 'lucide-react';
+import { BarChart, Weight, Wind, Award, MapPin, Leaf, TrendingUp, Clock, ArrowRight } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer } from 'recharts';
 import Select from '../common/Select';
@@ -16,7 +16,6 @@ import { StatCard } from '../common/StatCard';
 import { generateHarvestLotId } from '../../utils/idGenerator';
 import { toFixed2 } from '../../utils/formatters';
 
-type SortableKeys = keyof HarvestLot;
 
 // Coffee varieties list
 const COFFEE_VARIETIES = [
@@ -41,9 +40,53 @@ const COFFEE_VARIETIES = [
 
 // Sensory Radar Chart Component for Quality Feedback
 const SensoryRadarChart: React.FC<{ avgScores: { [attribute: string]: number } | null }> = ({ avgScores }) => {
+  const chartRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    // Fix rotated text labels after chart renders
+    const fixRotatedText = () => {
+      if (!chartRef.current) return;
+      
+      const svg = chartRef.current.querySelector('svg');
+      if (!svg) return;
+
+      // Find all text elements in polar radius axis
+      const textElements = svg.querySelectorAll('.recharts-polar-radius-axis text, .recharts-polar-radius-axis tspan');
+      textElements.forEach((textEl) => {
+        const svgText = textEl as SVGTextElement;
+        const x = parseFloat(svgText.getAttribute('x') || '0');
+        const y = parseFloat(svgText.getAttribute('y') || '0');
+        
+        // Force rotate to 0 degrees at the text position
+        svgText.setAttribute('transform', `rotate(0 ${x} ${y})`);
+        svgText.setAttribute('text-anchor', 'middle');
+        svgText.setAttribute('dominant-baseline', 'middle');
+        
+        // Override inline styles
+        svgText.style.transform = 'rotate(0deg)';
+        svgText.style.textAnchor = 'middle';
+        svgText.style.dominantBaseline = 'middle';
+      });
+    };
+
+    // Run multiple times to ensure it works
+    const timeout1 = setTimeout(fixRotatedText, 100);
+    const timeout2 = setTimeout(fixRotatedText, 300);
+    const timeout3 = setTimeout(fixRotatedText, 500);
+    
+    window.addEventListener('resize', fixRotatedText);
+    
+    return () => {
+      clearTimeout(timeout1);
+      clearTimeout(timeout2);
+      clearTimeout(timeout3);
+      window.removeEventListener('resize', fixRotatedText);
+    };
+  }, [avgScores]);
+
   if (!avgScores) {
     return (
-      <div className="flex items-center justify-center h-[300px] text-gray-500 text-sm">
+      <div className="flex items-center justify-center h-[250px] text-gray-500 text-sm">
         Sensory details not available
       </div>
     );
@@ -56,28 +99,44 @@ const SensoryRadarChart: React.FC<{ avgScores: { [attribute: string]: number } |
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <RadarChart cx="50%" cy="50%" outerRadius="75%" data={chartData}>
-        <PolarGrid stroke="#e5e7eb" />
-        <PolarAngleAxis
-          dataKey="attribute"
-          tick={{ fill: '#6b7280', fontSize: 11, fontWeight: 500 }}
-        />
-        <PolarRadiusAxis
-          angle={30}
-          domain={[6, 10]}
-          tickCount={5}
-          tick={{ fill: '#9ca3af', fontSize: 10 }}
-        />
-        <Radar
-          name="Score"
-          dataKey="score"
-          stroke="#6366f1"
-          fill="#818cf8"
-          fillOpacity={0.6}
-        />
-      </RadarChart>
-    </ResponsiveContainer>
+    <div ref={chartRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <ResponsiveContainer width="100%" height={250}>
+        <RadarChart cx="50%" cy="50%" outerRadius="70%" data={chartData}>
+          <PolarGrid stroke="#e5e7eb" />
+          <PolarAngleAxis
+            dataKey="attribute"
+            tick={{ fill: '#4b5563', fontSize: 10, fontWeight: 600 }}
+          />
+          <PolarRadiusAxis
+            angle={30}
+            domain={[6, 10]}
+            tickCount={5}
+            tick={{ fill: '#9ca3af', fontSize: 9 }}
+            tickFormatter={(value) => value}
+          />
+          <Radar
+            name="Score"
+            dataKey="score"
+            stroke="#6366f1"
+            fill="#818cf8"
+            fillOpacity={0.5}
+            strokeWidth={2}
+          />
+        </RadarChart>
+      </ResponsiveContainer>
+      <style>{`
+        .recharts-polar-radius-axis text,
+        .recharts-polar-radius-axis tspan {
+          transform: rotate(0deg) !important;
+          text-anchor: middle !important;
+          dominant-baseline: middle !important;
+        }
+        .recharts-polar-radius-axis .recharts-text {
+          transform: rotate(0deg) !important;
+          text-anchor: middle !important;
+        }
+      `}</style>
+    </div>
   );
 };
 
@@ -86,57 +145,6 @@ const FarmerDashboard: React.FC = () => {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
-  // Harvest Lot Form States
-  const [selectedFarmId, setSelectedFarmId] = useState('');
-  const [cherryVariety, setCherryVariety] = useState('');
-  const [weightKg, setWeightKg] = useState('');
-  const [harvestDate, setHarvestDate] = useState(new Date().toISOString().substring(0, 10));
-  const [cropYearId, setCropYearId] = useState('');
-  const [showLotSuccess, setShowLotSuccess] = useState(false);
-  
-  // Table State
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Ready for Processing' | 'Processing'>('All');
-  const [sortColumn, setSortColumn] = useState<SortableKeys>('id');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-
-  const handleRowClick = (lotId: string) => {
-    navigate(`/farmer-dashboard/${lotId}`);
-  };
-
-  const handleLotSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const selectedFarm = data.farms.find(f => f.id === selectedFarmId);
-    if (!selectedFarm) return alert("Please select a valid farm.");
-
-    const newLot: HarvestLot = {
-      id: generateHarvestLotId(data.harvestLots.map(l => l.id)),
-      farmerName: selectedFarm.farmerName,
-      cherryVariety,
-      weightKg: parseFloat(weightKg),
-      farmPlotLocation: selectedFarm.location,
-      harvestDate,
-      status: 'Ready for Processing',
-      cropYearId: cropYearId || undefined,
-    };
-    setData(prevData => ({ ...prevData, harvestLots: [newLot, ...prevData.harvestLots] }));
-    setSelectedFarmId('');
-    setCherryVariety('');
-    setWeightKg('');
-    setHarvestDate(new Date().toISOString().substring(0, 10));
-    setCropYearId('');
-    setShowLotSuccess(true);
-    setTimeout(() => setShowLotSuccess(false), 3000);
-  };
-
-  const handleSort = (column: SortableKeys) => {
-    if (sortColumn === column) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortColumn(column);
-      setSortDirection('asc');
-    }
-  };
-  
   // Only lots belonging to current user (name-based for now)
   const isAdmin = currentUser?.roles?.includes(UserRole.Admin) || false;
 
@@ -182,20 +190,37 @@ const FarmerDashboard: React.FC = () => {
         return null;
     }).filter(Boolean) as { lotId: string; variety: string; score: number; grade: string; processType: string; harvestDate: string; greenBeanLotId: string; avgScores: { [attribute: string]: number } | null; }[];
 
-    return scoredLots.sort((a, b) => b.score - a.score).slice(0, 3);
+    const sortedLots = scoredLots.sort((a, b) => b.score - a.score).slice(0, 3);
+
+    // Mock data for demonstration if no real data exists
+    if (sortedLots.length === 0) {
+        return [{
+            lotId: 'HL001',
+            variety: 'Gesha',
+            score: 87.5,
+            grade: 'Specialty',
+            processType: 'Washed',
+            harvestDate: '2024-01-15',
+            greenBeanLotId: 'GBL001',
+            avgScores: {
+                'Fragrance/Aroma': 8.5,
+                'Flavor': 8.7,
+                'Aftertaste': 8.6,
+                'Acidity': 8.4,
+                'Body': 8.3,
+                'Uniformity': 8.5,
+                'Balance': 8.6,
+                'Clean Cup': 8.8,
+                'Sweetness': 8.5,
+                'Overall': 8.6
+            }
+        }];
+    }
+
+    return sortedLots;
 
   }, [data, myHarvestLots]);
 
-  const sortedAndFilteredLots = useMemo(() => {
-    const filtered = myHarvestLots.filter(lot => statusFilter === 'All' || lot.status === statusFilter);
-    return filtered.sort((a, b) => {
-        const aValue = a[sortColumn];
-        const bValue = b[sortColumn];
-        if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
-        if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-        return 0;
-    });
-  }, [myHarvestLots, statusFilter, sortColumn, sortDirection]);
 
   const stats = useMemo(() => ({
     totalLots: myHarvestLots.length,
@@ -267,16 +292,29 @@ const FarmerDashboard: React.FC = () => {
     return { max, min };
   }, [isAdmin, myHarvestLots, data.harvestLots, data.processingBatches, data.parchmentLots, data.greenBeanLots, data.cuppingSessions]);
 
-  const filterStatuses: Array<'All' | 'Ready for Processing' | 'Processing'> = ['All', 'Ready for Processing', 'Processing'];
+  // Farm summary statistics
+  const farmStats = useMemo(() => {
+    const totalFarms = availableFarms.length;
+    const uniqueVarieties = new Set<string>();
+    availableFarms.forEach(farm => {
+      farm.varieties?.forEach(v => uniqueVarieties.add(v));
+    });
+    const totalVarieties = uniqueVarieties.size;
+    const farmsWithGPS = availableFarms.filter(f => f.latitude && f.longitude).length;
+    
+    return {
+      totalFarms,
+      totalVarieties,
+      farmsWithGPS,
+    };
+  }, [availableFarms]);
 
-  const SortableHeader: React.FC<{ column: SortableKeys; label: string }> = ({ column, label }) => (
-    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-      <button onClick={() => handleSort(column)} className="flex items-center gap-1 hover:text-gray-700">
-        {label}
-        {sortColumn === column && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}
-      </button>
-    </th>
-  );
+  // Recent Harvest Lots (last 5, sorted by date)
+  const recentHarvestLots = useMemo(() => {
+    return myHarvestLots
+      .sort((a, b) => new Date(b.harvestDate).getTime() - new Date(a.harvestDate).getTime())
+      .slice(0, 5);
+  }, [myHarvestLots]);
 
   return (
     <div className="space-y-8">
@@ -285,6 +323,7 @@ const FarmerDashboard: React.FC = () => {
           description="Your command center for farm and harvest management."
         />
 
+        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatCard icon={BarChart} title="Total Harvest Lots" value={stats.totalLots} borderColor="border-l-blue-500" iconBg="bg-blue-100" iconColor="text-blue-600"/>
             <StatCard icon={Weight} title="Total Weight (kg)" value={stats.totalWeight.toLocaleString()} borderColor="border-l-green-500" iconBg="bg-green-100" iconColor="text-green-600"/>
@@ -305,222 +344,191 @@ const FarmerDashboard: React.FC = () => {
               iconColor="text-rose-600"
             />
         </div>
-        
-        {qualityFeedbackData.length > 0 && (
-            <div className="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 border-b border-gray-200">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-blue-100 rounded-lg">
-                            <Award className="text-blue-600 h-6 w-6" />
-                        </div>
-                        <h2 className="text-2xl font-bold text-gray-900">Quality Feedback</h2>
-                    </div>
-                    <p className="text-gray-600">Top-performing lots with cupping scores - click to view traceability</p>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-                    {qualityFeedbackData.map((item) => (
-                        <div
-                            key={item.lotId}
-                            onClick={() => navigate(`/traceability/${item.greenBeanLotId}`)}
-                            className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-xl hover:border-indigo-300 cursor-pointer transition-all duration-300 group"
-                        >
-                            {/* Header: Lot ID & Variety */}
-                            <div className="flex items-center justify-between mb-4">
-                                <div>
-                                    <h3 className="text-lg font-bold text-gray-900">{item.lotId}</h3>
-                                    <p className="text-sm text-gray-600">{item.variety}</p>
-                                </div>
-                                <div className="p-2 bg-indigo-50 rounded-lg group-hover:bg-indigo-100 transition-colors">
-                                    <Award className="h-5 w-5 text-indigo-600" />
-                                </div>
-                            </div>
 
-                            {/* Radar Chart */}
-                            <div className="mb-4">
-                                <SensoryRadarChart avgScores={item.avgScores} />
-                            </div>
-
-                            {/* Footer: Score & Metadata */}
-                            <div className="border-t border-gray-100 pt-4 space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm font-medium text-gray-600">Total Score</span>
-                                    <span className="text-2xl font-bold text-indigo-600">{toFixed2(item.score)}</span>
-                                </div>
-                                <div className="flex items-center justify-between text-xs text-gray-500">
-                                    <span>Grade: <span className="font-semibold text-gray-700">{item.grade}</span></span>
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
-                                        {item.processType}
-                                    </span>
-                                </div>
-                                <div className="flex items-center justify-between text-xs text-gray-500">
-                                    <span>Harvest: {item.harvestDate}</span>
-                                    <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-indigo-500 group-hover:translate-x-1 transition-all" />
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+        {/* Farm Summary & Recent Harvest Lots */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Farm Summary */}
+          <div className="bg-white shadow-sm rounded-lg border border-gray-200 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <MapPin className="h-5 w-5 text-emerald-600" />
+              <h2 className="text-xl font-bold text-gray-900">Farm Summary</h2>
             </div>
-        )}
-
-      <div className="grid grid-cols-1 gap-8">
-        <div className="bg-white shadow-sm rounded-lg p-8 border border-gray-200">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <Coffee className="h-5 w-5 text-green-600" />
-            </div>
-            Register New Harvest Lot
-          </h2>
-          <form onSubmit={handleLotSubmit} className="space-y-5">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Select Farm</label>
-                <Select<Farm>
-                  value={selectedFarmId}
-                  onChange={(v) => setSelectedFarmId((v as string) || '')}
-                  options={availableFarms}
-                  getValue={(f) => f.id}
-                  getLabel={(f) => `${f.farmerName} - ${f.location}`}
-                  placeholder="Select a farm..."
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Cherry Variety</label>
-                    <Select
-                      value={cherryVariety}
-                      onChange={(v) => setCherryVariety((v as string) || '')}
-                      options={COFFEE_VARIETIES}
-                      placeholder="Select variety..."
-                    />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-100">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-emerald-700">Total Farms</span>
+                  <MapPin className="h-5 w-5 text-emerald-600" />
                 </div>
-                <Input
-                  label="Weight (kg)"
-                  type="number"
-                  id="weightKg"
-                  value={weightKg}
-                  onChange={e => setWeightKg(e.target.value)}
-                  required
-                  placeholder="0"
-                />
+                <p className="text-2xl font-bold text-emerald-900">{farmStats.totalFarms}</p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <DatePicker
-                    value={harvestDate}
-                    onChange={setHarvestDate}
-                    label="Harvest Date"
-                    required
-                  />
+              <div className="bg-lime-50 rounded-lg p-4 border border-lime-100">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-lime-700">Varieties Planted</span>
+                  <Leaf className="h-5 w-5 text-lime-600" />
                 </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Crop Year (Optional)</label>
-                  <Select<CropYear>
-                    value={cropYearId}
-                    onChange={(v) => setCropYearId((v as string) || '')}
-                    options={data.cropYears}
-                    getValue={(cy) => cy.id}
-                    getLabel={(cy) => cy.description ? `${cy.year} — ${cy.description}` : cy.year}
-                    placeholder="Select crop year..."
-                  />
+                <p className="text-2xl font-bold text-lime-900">{farmStats.totalVarieties}</p>
+              </div>
+              <div className="bg-sky-50 rounded-lg p-4 border border-sky-100">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-sky-700">Farms with GPS</span>
+                  <TrendingUp className="h-5 w-5 text-sky-600" />
                 </div>
+                <p className="text-2xl font-bold text-sky-900">{farmStats.farmsWithGPS}</p>
               </div>
-              <div className="flex items-end justify-between h-12 pt-2">
-                  {showLotSuccess && (
-                    <Alert variant="success" className="flex-1 mr-4">
-                      Harvest lot registered!
-                    </Alert>
-                  )}
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    icon={<PlusCircle className="h-4 w-4" />}
-                    className="ml-auto"
-                  >
-                    Submit Lot
-                  </Button>
-              </div>
-          </form>
-        </div>
-      </div>
-
-      <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
-        <div className="bg-gray-50 p-6 border-b border-gray-200">
-          <div className="flex flex-wrap justify-between items-center gap-4">
-            <h3 className="text-2xl font-bold text-gray-900">Active Harvest Lots</h3>
-            <div className="flex items-center space-x-3">
-              <span className="text-sm font-semibold text-gray-700">Filter:</span>
-              {filterStatuses.map(status => (
-                <button
-                  key={status}
-                  onClick={() => setStatusFilter(status)}
-                  className={`px-4 py-2 text-xs font-semibold rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    statusFilter === status
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
-                  }`}
-                >
-                  {status}
-                </button>
-              ))}
             </div>
           </div>
-        </div>
-        <div className="space-y-4 p-6 bg-gray-50">
-          {sortedAndFilteredLots.length === 0 ? (
-            <div className="text-center py-12">
-              <Coffee className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 text-lg font-medium">No harvest lots found</p>
-              <p className="text-gray-400 text-sm">Try adjusting your filters or add a new harvest lot</p>
-            </div>
-          ) : (
-            sortedAndFilteredLots.map((lot: HarvestLot) => (
-              <div
-                key={lot.id}
-                onClick={() => handleRowClick(lot.id)}
-                className="bg-white border border-gray-200 rounded-lg p-5 hover:shadow-md hover:border-gray-300 cursor-pointer transition-all group focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <div className="flex items-start justify-between gap-6">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-4">
-                      <h4 className="text-xl font-bold text-gray-900">{lot.id}</h4>
-                      <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                        lot.status === 'Processing'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-green-100 text-green-800'
-                      }`}>
-                        {lot.status}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                        <p className="text-gray-500 text-xs uppercase font-semibold mb-1 tracking-wide">Farmer</p>
-                        <p className="text-gray-900 font-medium text-sm">{lot.farmerName}</p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                        <p className="text-gray-500 text-xs uppercase font-semibold mb-1 tracking-wide">Variety</p>
-                        <p className="text-gray-900 font-medium text-sm">{lot.cherryVariety}</p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                        <p className="text-gray-500 text-xs uppercase font-semibold mb-1 tracking-wide">Weight</p>
-                        <p className="text-gray-900 font-medium text-sm">{lot.weightKg} kg</p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                        <p className="text-gray-500 text-xs uppercase font-semibold mb-1 tracking-wide">Harvest Date</p>
-                        <p className="text-gray-900 font-medium text-sm">{lot.harvestDate}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex-shrink-0">
-                    <div className="p-2 bg-gray-50 rounded-lg group-hover:bg-indigo-50 transition-colors">
-                      <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" />
-                    </div>
-                  </div>
-                </div>
+
+          {/* Recent Harvest Lots */}
+          <div className="bg-white shadow-sm rounded-lg border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <Clock className="h-5 w-5 text-blue-600" />
+                <h2 className="text-xl font-bold text-gray-900">Recent Harvest Lots</h2>
               </div>
-            ))
-          )}
+              {recentHarvestLots.length > 0 && (
+                <button
+                  onClick={() => navigate('/harvest-lots')}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  View All →
+                </button>
+              )}
+            </div>
+            {recentHarvestLots.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500 text-sm">No harvest lots yet</p>
+                <button
+                  onClick={() => navigate('/harvest-lots')}
+                  className="mt-3 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  Add your first harvest lot →
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recentHarvestLots.map((lot) => (
+                  <div
+                    key={lot.id}
+                    onClick={() => navigate(`/farmer-dashboard/${lot.id}`)}
+                    className="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-all group"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-gray-900">{lot.id}</span>
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                          lot.status === 'Processing'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-green-100 text-green-800'
+                        }`}>
+                          {lot.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-gray-600">
+                        <span>{lot.cherryVariety}</span>
+                        <span>•</span>
+                        <span>{lot.weightKg} kg</span>
+                        <span>•</span>
+                        <span>{lot.harvestDate}</span>
+                      </div>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+        
+        <div className="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 border-b border-gray-200">
+                <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                        <Award className="text-blue-600 h-6 w-6" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-900">Quality Feedback</h2>
+                </div>
+                <p className="text-gray-600">Top-performing lots with cupping scores - click to view traceability</p>
+            </div>
+            
+            {/* Table with Spider Charts */}
+            <div className="overflow-x-auto p-6">
+                <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                        <tr>
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                                Lot ID
+                            </th>
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                                Variety
+                            </th>
+                            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider w-64">
+                                Spider Chart
+                            </th>
+                            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                                Total Score
+                            </th>
+                            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                                Grade
+                            </th>
+                            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                                Process Type
+                            </th>
+                            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                                Harvest Date
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {qualityFeedbackData.length === 0 ? (
+                            <tr>
+                                <td colSpan={7} className="px-6 py-12 text-center">
+                                    <Award className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                                    <p className="text-gray-500 text-lg font-medium">No quality feedback data available</p>
+                                    <p className="text-gray-400 text-sm">Quality feedback will appear here once cupping scores are available</p>
+                                </td>
+                            </tr>
+                        ) : (
+                            qualityFeedbackData.map((item) => (
+                                <tr
+                                    key={item.lotId}
+                                    onClick={() => navigate(`/traceability/${item.greenBeanLotId}`)}
+                                    className="hover:bg-indigo-50 cursor-pointer transition-colors"
+                                >
+                                    <td className="px-4 py-5 whitespace-nowrap">
+                                        <div className="text-sm font-bold text-gray-900">{item.lotId}</div>
+                                    </td>
+                                    <td className="px-4 py-5 whitespace-nowrap">
+                                        <div className="text-sm font-medium text-gray-700">{item.variety}</div>
+                                    </td>
+                                    <td className="px-4 py-5">
+                                        <div className="w-full h-[250px] flex items-center justify-center">
+                                            <SensoryRadarChart avgScores={item.avgScores} />
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-5 whitespace-nowrap text-center">
+                                        <div className="text-2xl font-bold text-indigo-600">{toFixed2(item.score)}</div>
+                                    </td>
+                                    <td className="px-4 py-5 whitespace-nowrap text-center">
+                                        <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                            {item.grade}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-5 whitespace-nowrap text-center">
+                                        <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                            {item.processType}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-5 whitespace-nowrap">
+                                        <div className="text-sm text-gray-600">{item.harvestDate}</div>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
     </div>
   );
 };
