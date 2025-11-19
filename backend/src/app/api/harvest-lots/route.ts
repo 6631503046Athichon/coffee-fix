@@ -76,25 +76,20 @@ export async function POST(request: NextRequest) {
     // Validate cropYearId if provided
     let validCropYearId = null
     if (cropYearId && typeof cropYearId === 'string' && cropYearId.trim() !== '') {
-      // Validate UUID format (basic check)
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-      if (!uuidRegex.test(cropYearId.trim())) {
-        return NextResponse.json(
-          { error: 'Invalid crop year ID format' },
-          { status: 400 }
-        )
-      }
+      const trimmedId = cropYearId.trim()
       
+      // Try to find crop year by ID (UUID)
       const cropYear = await prisma.cropYear.findUnique({
-        where: { id: cropYearId.trim() },
+        where: { id: trimmedId },
       })
+      
       if (!cropYear) {
         return NextResponse.json(
           { error: 'Crop year not found' },
           { status: 400 }
         )
       }
-      validCropYearId = cropYearId.trim()
+      validCropYearId = trimmedId
     }
 
     const harvestLot = await prisma.harvestLot.create({
