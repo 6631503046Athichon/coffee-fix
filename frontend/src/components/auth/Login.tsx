@@ -72,7 +72,7 @@ const Login: React.FC = () => {
                   value={formData.identifier}
                   onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
                   className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition-colors shadow-sm hover:border-gray-400"
-                  placeholder="username or email@.com"
+                  placeholder="username or @email.com"
                 />
               </div>
 
