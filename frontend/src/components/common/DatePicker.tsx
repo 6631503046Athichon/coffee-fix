@@ -40,7 +40,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
         if (selectedDate) {
             setCurrentMonth(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
         }
-    }, []);
+    }, [value]); // Update when value changes
 
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
