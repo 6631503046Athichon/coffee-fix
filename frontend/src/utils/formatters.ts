@@ -66,3 +66,19 @@ export function formatDateTime(date: Date | string): string {
     minute: '2-digit',
   }).format(dateObj);
 }
+
+export function formatDateDisplay(
+  isoDate?: string,
+  options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' },
+): string {
+  if (!isoDate) {
+    return '';
+  }
+
+  const parsed = new Date(isoDate);
+  if (Number.isNaN(parsed.getTime())) {
+    return isoDate;
+  }
+
+  return parsed.toLocaleDateString(undefined, options);
+}
