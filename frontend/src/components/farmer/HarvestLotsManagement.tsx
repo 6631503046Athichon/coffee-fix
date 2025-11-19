@@ -87,14 +87,9 @@ const HarvestLotsManagement: React.FC = () => {
   }, [data.farms, currentUser]);
 
   const handleOpenAddModal = () => {
-    // For now, use first available farm or create a dummy farm object
-    const farm = availableFarms.length > 0 ? availableFarms[0] : null;
-    if (farm) {
-      setSelectedFarm(farm);
-      setIsAddModalOpen(true);
-    } else {
-      alert('Please create a farm first before adding harvest lots.');
-    }
+    // Don't pre-select a farm - let user choose in modal
+    setSelectedFarm(null);
+    setIsAddModalOpen(true);
   };
 
   return (
@@ -241,16 +236,14 @@ const HarvestLotsManagement: React.FC = () => {
       </div>
 
       {/* Add Harvest Lot Modal */}
-      {selectedFarm && (
-        <HarvestLotModal
-          isOpen={isAddModalOpen}
-          onClose={() => {
-            setIsAddModalOpen(false);
-            setSelectedFarm(null);
-          }}
-          farm={selectedFarm}
-        />
-      )}
+      <HarvestLotModal
+        isOpen={isAddModalOpen}
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setSelectedFarm(null);
+        }}
+        farm={undefined}
+      />
     </div>
   );
 };
