@@ -84,7 +84,7 @@ const Select = <T,>({
       </button>
 
       {open && !disabled && (
-        <div className="absolute z-20 mt-2 w-full bg-white border rounded-lg shadow-lg max-h-60 overflow-auto">
+        <div className="absolute z-[10000] mt-2 w-full bg-white border rounded-lg shadow-lg max-h-60 overflow-auto">
           {normalized.length === 0 ? (
             <div className="px-3 py-2 text-sm text-gray-500">No options</div>
           ) : (

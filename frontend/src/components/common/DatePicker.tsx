@@ -147,7 +147,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
 
             {/* Calendar Dropdown */}
             {isOpen && (
-                <div className="absolute z-50 mt-2 bg-white rounded-2xl shadow-2xl border-2 border-gray-200 p-4 w-80">
+                <div className="absolute z-[10000] mt-2 bg-white rounded-2xl shadow-2xl border-2 border-gray-200 p-4 w-80">
                     {/* Month Navigation */}
                     <div className="flex items-center justify-between mb-4">
                         <button
