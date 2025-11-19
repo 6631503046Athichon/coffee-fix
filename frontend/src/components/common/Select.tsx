@@ -15,6 +15,7 @@ export type SelectProps<T = Option | string | number> = {
   disabled?: boolean;
   getValue?: (item: T) => string | number;
   getLabel?: (item: T) => string;
+  colorTheme?: 'blue' | 'emerald';
 };
 
 /**
@@ -31,6 +32,7 @@ const Select = <T,>({
   disabled = false,
   getValue,
   getLabel,
+  colorTheme = 'blue',
 }: SelectProps<T>) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -69,7 +71,9 @@ const Select = <T,>({
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setOpen((v) => !v)}
-        className={`w-full text-left px-3 py-2 border rounded-lg bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between`}
+        className={`w-full text-left px-3 py-2 border rounded-lg bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between ${
+          colorTheme === 'emerald' ? 'focus:ring-emerald-500 focus:border-emerald-500' : 'focus:ring-blue-500 focus:border-blue-500'
+        }`}
       >
         <span className={selected ? 'text-gray-900' : 'text-gray-400'}>
           {selected ? selected.label : placeholder}
@@ -91,7 +95,11 @@ const Select = <T,>({
                 disabled={!!opt.disabled}
                 onClick={() => handleSelect(opt.value)}
                 className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
-                  value === opt.value ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
+                  value === opt.value 
+                    ? colorTheme === 'emerald' 
+                      ? 'bg-emerald-50 text-emerald-700' 
+                      : 'bg-blue-50 text-blue-700'
+                    : 'text-gray-700'
                 } ${opt.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {opt.label}

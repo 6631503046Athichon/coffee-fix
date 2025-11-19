@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
-import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, BarChart, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Microscope, Wind, Tag } from 'lucide-react';
+import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, BarChart, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package } from 'lucide-react';
 
 import { UserRole, User, CuppingSessionType } from './types';
 import { MOCK_DATA } from './constants';
@@ -25,20 +25,52 @@ import TraceabilityPage from './components/TraceabilityPage';
 import CompetitionDashboard from './components/competition/CompetitionDashboard';
 import FarmerDashboard from './components/farmer/FarmerDashboard';
 import HarvestLotDetail from './components/farmer/HarvestLotDetail';
+import HarvestLotsManagement from './components/farmer/HarvestLotsManagement';
 import QualityInsights from './components/QualityInsights';
 import CuppingSessionDetail from './components/cupper/CuppingSessionDetail';
 import FarmerDataHub from './components/farmer/FarmerDataHub';
 import GAPComplianceHelper from './components/farmer/GAPComplianceHelper';
-import SoilAnalysisManager from './components/farmer/SoilAnalysisManager';
-import WeatherMonitoring from './components/farmer/WeatherMonitoring';
 import CupperScoringSheet from './components/cupper/CupperScoringSheet';
 import TraceabilityHub from './components/TraceabilityHub';
 import UserManagement from './components/UserManagement';
-import AdminFarmManagement from './components/admin/FarmManagement';
 import FarmerFarmManagement from './components/farmer/FarmManagement';
 import ActivityTypeManagement from './components/admin/ActivityTypeManagement';
 import ProcessTypeManagement from './components/admin/ProcessTypeManagement';
 import RoasterWorkbench from './components/roaster/RoasterWorkbench';
+
+// Root Redirect Component - redirects to login if not authenticated
+const RootRedirect: React.FC = () => {
+  const { isAuthenticated, currentUser } = useAuth();
+  const [isLoading, setIsLoading] = React.useState(true);
+  
+  // Wait for auth check to complete
+  React.useEffect(() => {
+    // Small delay to allow AuthContext to finish loading
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, [currentUser]);
+  
+  if (isLoading) {
+    // Show loading state while checking authentication
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (isAuthenticated) {
+    return <Navigate to="/farmer-dashboard" replace />;
+  }
+  
+  return <Navigate to="/login" replace />;
+};
 
 // First Login Setup Wrapper
 const FirstLoginSetupWrapper: React.FC = () => {
@@ -144,11 +176,10 @@ const ProtectedRoutes: React.FC = () => {
     return [
       // Farmer Section
       { name: 'Farmer Dashboard', href: '/farmer-dashboard', icon: Coffee, roles: [UserRole.Farmer, UserRole.Admin] },
+      { name: 'Harvest Lots', href: '/harvest-lots', icon: Package, roles: [UserRole.Farmer, UserRole.Admin] },
       { name: 'Farm Management', href: '/farmer-farms', icon: MapPin, roles: [UserRole.Farmer, UserRole.Admin] },
       { name: 'Data Hub', href: '/farmer-data-hub', icon: Database, roles: [UserRole.Farmer, UserRole.Admin] },
       { name: 'GAP Helper', href: '/gap-compliance', icon: ClipboardCheck, roles: [UserRole.Farmer, UserRole.Admin] },
-      { name: 'Soil Analysis', href: '/soil-analysis', icon: Microscope, roles: [UserRole.Farmer, UserRole.Processor, UserRole.Admin] },
-      { name: 'Weather Monitoring', href: '/weather-monitoring', icon: Wind, roles: [UserRole.Farmer, UserRole.Admin] },
 
       // Processor Section
       { name: 'Processor Workbench', href: '/processor', icon: Droplets, roles: [UserRole.Processor, UserRole.Admin] },
@@ -165,7 +196,6 @@ const ProtectedRoutes: React.FC = () => {
       // Traceability & Admin
       { name: 'Traceability Hub', href: '/traceability', icon: Search, roles: [UserRole.Admin, UserRole.Processor] },
       { name: 'User Management', href: '/users', icon: Users, roles: [UserRole.Admin] },
-      { name: 'Farm Management', href: '/farm-management', icon: MapPin, roles: [UserRole.Admin] },
       { name: 'Activity Types', href: '/activity-types', icon: Tag, roles: [UserRole.Admin] },
       { name: 'Process Types', href: '/process-types', icon: Coffee, roles: [UserRole.Admin] },
     ];
@@ -183,7 +213,6 @@ const ProtectedRoutes: React.FC = () => {
           <Header currentUserRoles={currentUser?.roles || [UserRole.Farmer]} onRoleChange={() => {}} />
           <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-3 sm:p-4 md:p-6 lg:p-8 pt-16 lg:pt-4">
             <Routes>
-              <Route path="/" element={<Navigate to="/farmer-dashboard" />} />
               <Route path="/farmer" element={<Navigate to="/farmer-dashboard" replace />} />
               <Route path="/dashboard" element={<Navigate to="/farmer-dashboard" replace />} />
               <Route path="/processor" element={<ProcessorWorkbench currentUser={currentUser!} />} />
@@ -195,16 +224,14 @@ const ProtectedRoutes: React.FC = () => {
               <Route path="/competition/:id" element={<CompetitionDashboard currentUserRoles={currentUser?.roles || [UserRole.Farmer]} />} />
               <Route path="/traceability" element={<TraceabilityHub />} />
               <Route path="/users" element={<UserManagement />} />
-              <Route path="/farm-management" element={<AdminFarmManagement />} />
               <Route path="/farmer-farms" element={<FarmerFarmManagement />} />
               <Route path="/activity-types" element={<ActivityTypeManagement />} />
               <Route path="/process-types" element={<ProcessTypeManagement />} />
               <Route path="/farmer-dashboard" element={<FarmerDashboard />} />
               <Route path="/farmer-dashboard/:lotId" element={<HarvestLotDetail />} />
+              <Route path="/harvest-lots" element={<HarvestLotsManagement />} />
               <Route path="/farmer-data-hub" element={<FarmerDataHub currentUser={currentUser!} />} />
               <Route path="/gap-compliance" element={<GAPComplianceHelper />} />
-              <Route path="/soil-analysis" element={<SoilAnalysisManager currentUser={currentUser!} />} />
-              <Route path="/weather-monitoring" element={<WeatherMonitoring />} />
             </Routes>
           </main>
         </div>
@@ -219,12 +246,26 @@ const App: React.FC = () => {
 
   // Initialize localStorage on app mount
   useEffect(() => {
-    initializeFarms(MOCK_DATA.farms);
-    initializeSoilAnalyses(MOCK_DATA.soilAnalyses);
-    initializeWeatherRecords(MOCK_DATA.weatherRecords);
+    // Only initialize if localStorage is empty (first time load)
+    // This prevents overwriting existing data
+    const existingFarms = getAllFarms();
+    if (existingFarms.length === 0) {
+      initializeFarms(MOCK_DATA.farms);
+    }
+    
+    const existingSoilAnalyses = getAllSoilAnalyses();
+    if (existingSoilAnalyses.length === 0) {
+      initializeSoilAnalyses(MOCK_DATA.soilAnalyses);
+    }
+    
+    const existingWeatherRecords = getAllWeatherRecords();
+    if (existingWeatherRecords.length === 0) {
+      initializeWeatherRecords(MOCK_DATA.weatherRecords);
+    }
+    
     initializeActivityTypes(MOCK_DATA.activityTypes);
-  // Force: reset to exactly the three defaults on each refresh (per request)
-  resetProcessTypes(MOCK_DATA.processTypes);
+    // Force: reset to exactly the three defaults on each refresh (per request)
+    resetProcessTypes(MOCK_DATA.processTypes);
     initializeCustomers(MOCK_DATA.customers);
     initializeSaleOrders(MOCK_DATA.saleOrders);
     initializeInvoices(MOCK_DATA.invoices);
@@ -247,6 +288,8 @@ const App: React.FC = () => {
             </DataContext.Provider>
           }
         />
+        {/* Root route - redirect to login if not authenticated */}
+        <Route path="/" element={<RootRedirect />} />
         {/* Protected Routes - requires authentication */}
         <Route path="/*" element={<ProtectedRoutes />} />
         {/* 404 Fallback */}

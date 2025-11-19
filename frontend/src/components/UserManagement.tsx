@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
-import { Users as UsersIcon, AlertCircle, UserPlus, Edit, Trash2, Shield } from 'lucide-react';
+import { Users as UsersIcon, AlertCircle, UserPlus, Edit, Trash2, Shield, Search, Key, X, Filter } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import CreateUserModal from './modals/CreateUserModal';
@@ -13,22 +13,40 @@ const UserManagement: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>('');
 
+    // Search and filter states
+    const [searchTerm, setSearchTerm] = useState('');
+    const [roleFilter, setRoleFilter] = useState<string>('');
+    const [statusFilter, setStatusFilter] = useState<string>('');
+
     // Modal states
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showTransferModal, setShowTransferModal] = useState(false);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
+    const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null);
+    const [newPassword, setNewPassword] = useState<string>('');
 
-    // Load users from backend on component mount
+    // Load users from backend on component mount and when filters change
     useEffect(() => {
         fetchUsers();
-    }, []);
+    }, [searchTerm, roleFilter, statusFilter]);
 
     const fetchUsers = async () => {
         try {
             setLoading(true);
             setError('');
-            const response = await api.get<{ users: User[] }>('/users');
+
+            // Build query params
+            const params: Record<string, string> = {};
+            if (searchTerm) params.search = searchTerm;
+            if (roleFilter) params.role = roleFilter;
+            if (statusFilter) params.status = statusFilter;
+
+            const queryString = Object.keys(params).length > 0
+                ? '?' + new URLSearchParams(params).toString()
+                : '';
+
+            const response = await api.get<{ users: User[] }>(`/users${queryString}`);
             setUsers(response.users || []);
         } catch (err) {
             console.error('Error fetching users:', err);
@@ -37,6 +55,28 @@ const UserManagement: React.FC = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleResetPassword = async () => {
+        if (!resetPasswordUser) return;
+
+        // Generate a random password
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
+        const generatedPassword = Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+
+        try {
+            await api.put(`/users/${resetPasswordUser.id}`, { password: generatedPassword });
+            setNewPassword(generatedPassword);
+        } catch (err: any) {
+            alert(err.response?.data?.error || 'Failed to reset password');
+            setResetPasswordUser(null);
+        }
+    };
+
+    const clearFilters = () => {
+        setSearchTerm('');
+        setRoleFilter('');
+        setStatusFilter('');
     };
 
     const handleEditUser = (user: User) => {
@@ -127,6 +167,57 @@ const UserManagement: React.FC = () => {
                 </div>
             </div>
 
+            {/* Search and Filter Section */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200 mb-6">
+                <div className="flex flex-col md:flex-row gap-4">
+                    <div className="flex-1 relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Search by name, email, or username..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                    </div>
+                    <div className="flex gap-3">
+                        <select
+                            value={roleFilter}
+                            onChange={(e) => setRoleFilter(e.target.value)}
+                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                            <option value="">All Roles</option>
+                            {Object.values(UserRole).map(role => (
+                                <option key={role} value={role}>{role}</option>
+                            ))}
+                        </select>
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                            <option value="">All Status</option>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                        {(searchTerm || roleFilter || statusFilter) && (
+                            <button
+                                onClick={clearFilters}
+                                className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
+                            >
+                                <X className="h-4 w-4" />
+                                Clear
+                            </button>
+                        )}
+                    </div>
+                </div>
+                {(searchTerm || roleFilter || statusFilter) && (
+                    <div className="mt-3 text-sm text-gray-500">
+                        Found {users.length} user{users.length !== 1 ? 's' : ''}
+                    </div>
+                )}
+            </div>
+
             {error && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-lg">
                     <div className="flex items-start">
@@ -147,6 +238,7 @@ const UserManagement: React.FC = () => {
                                 <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Name</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Username</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Email</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Password</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Roles</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Actions</th>
@@ -155,7 +247,7 @@ const UserManagement: React.FC = () => {
                         <tbody className="bg-white divide-y divide-gray-200">
                             {users.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-12 text-center">
+                                    <td colSpan={7} className="px-6 py-12 text-center">
                                         <UsersIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                                         <p className="text-gray-500 font-medium">No users found</p>
                                         <p className="text-sm text-gray-400 mt-1">
@@ -179,6 +271,27 @@ const UserManagement: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="text-sm text-gray-500">{user.email || 'N/A'}</div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {user.temporaryPassword ? (
+                                                <div className="flex items-center gap-2">
+                                                    <code className="text-xs font-mono bg-amber-50 text-amber-800 px-2 py-1 rounded border border-amber-200">
+                                                        {user.temporaryPassword}
+                                                    </code>
+                                                    <button
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(user.temporaryPassword!);
+                                                            alert('Password copied!');
+                                                        }}
+                                                        className="text-xs text-amber-600 hover:text-amber-800"
+                                                        title="Copy password"
+                                                    >
+                                                        Copy
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <span className="text-sm text-gray-400">*****</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-wrap gap-1">
@@ -211,6 +324,16 @@ const UserManagement: React.FC = () => {
                                                     title="Edit user"
                                                 >
                                                     <Edit className="h-4 w-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setResetPasswordUser(user);
+                                                        setNewPassword('');
+                                                    }}
+                                                    className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                                    title="Reset password"
+                                                >
+                                                    <Key className="h-4 w-4" />
                                                 </button>
                                                 <button
                                                     onClick={() => handleDeleteUser(user)}
@@ -253,6 +376,82 @@ const UserManagement: React.FC = () => {
                 onClose={() => setShowTransferModal(false)}
                 onTransferComplete={fetchUsers}
             />
+
+            {/* Reset Password Modal */}
+            {resetPasswordUser && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex min-h-screen items-center justify-center p-4">
+                        <div className="fixed inset-0 bg-black/50" onClick={() => setResetPasswordUser(null)} />
+                        <div className="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+                            <h3 className="text-lg font-bold text-gray-900 mb-4">
+                                Reset Password for {resetPasswordUser.name}
+                            </h3>
+
+                            {!newPassword ? (
+                                <div className="space-y-4">
+                                    <p className="text-sm text-gray-600">
+                                        This will generate a new password for <strong>{resetPasswordUser.username}</strong>.
+                                        The user will be required to change it on next login.
+                                    </p>
+                                    <div className="flex justify-end gap-3">
+                                        <button
+                                            onClick={() => setResetPasswordUser(null)}
+                                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handleResetPassword}
+                                            className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700"
+                                        >
+                                            Reset Password
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                        <p className="text-sm font-semibold text-green-800 mb-2">
+                                            Password reset successfully!
+                                        </p>
+                                        <div className="bg-white border border-green-300 rounded p-3">
+                                            <p className="text-xs text-gray-500 mb-1">New Password:</p>
+                                            <div className="flex items-center gap-2">
+                                                <code className="flex-1 text-sm font-mono bg-gray-100 px-2 py-1 rounded">
+                                                    {newPassword}
+                                                </code>
+                                                <button
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(newPassword);
+                                                        alert('Password copied!');
+                                                    }}
+                                                    className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                                                >
+                                                    Copy
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-amber-700 mt-2">
+                                            ⚠️ Save this password! It won't be shown again.
+                                        </p>
+                                    </div>
+                                    <div className="flex justify-end">
+                                        <button
+                                            onClick={() => {
+                                                setResetPasswordUser(null);
+                                                setNewPassword('');
+                                            }}
+                                            className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                                        >
+                                            Done
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
