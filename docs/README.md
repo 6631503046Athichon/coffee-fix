@@ -15,8 +15,11 @@ how to install
 
 6 goodluck ,have fun ,Enjoy code
 
-Presentation Layer: Frontend (Next.js + Tailwind CSS)
-
-Application Layer: API Layer (Next.js API routes with Prisma ORM)
-  
-Data Layer: PostgreSQL database  
+() Presentation Layer: Built with React, TypeScript, 
+Vite, React Router, and Tailwind CSS. 
+() Application Layer: Implements business logic and API 
+routes using Next.js API routes and Prisma ORM for efficient 
+communication between the frontend and backend. 
+() Data Layer: Uses PostgreSQL for structured data 
+storage, ensuring data consistency, relationship mapping, and 
+secure access control.
