@@ -85,14 +85,15 @@ export async function POST(request: NextRequest) {
 
     // Set HTTP-only cookie
     // For cross-domain (frontend and backend on different domains), use 'none' with secure
-    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL || process.env.RAILWAY_ENVIRONMENT
+    const isProduction = process.env.NODE_ENV === 'production' || !!process.env.VERCEL || !!process.env.RAILWAY_ENVIRONMENT
     const origin = request.headers.get('origin') || ''
-    const isCrossDomain = origin && !origin.includes('localhost')
+    const isCrossDomain = !!(origin && !origin.includes('localhost'))
+    const shouldUseSecure = isProduction || isCrossDomain
     
     response.cookies.set('auth-token', token, {
       httpOnly: true,
-      secure: isProduction || isCrossDomain, // Must be true for sameSite: 'none' or cross-domain
-      sameSite: (isProduction || isCrossDomain) ? 'none' : 'lax', // 'none' for cross-domain, 'lax' for same domain
+      secure: shouldUseSecure, // Must be true for sameSite: 'none' or cross-domain
+      sameSite: shouldUseSecure ? 'none' : 'lax', // 'none' for cross-domain, 'lax' for same domain
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: '/',
     })
