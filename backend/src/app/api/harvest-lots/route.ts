@@ -73,6 +73,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate cropYearId if provided
+    let validCropYearId = null
+    if (cropYearId && cropYearId.trim() !== '') {
+      const cropYear = await prisma.cropYear.findUnique({
+        where: { id: cropYearId },
+      })
+      if (!cropYear) {
+        return NextResponse.json(
+          { error: 'Invalid crop year ID' },
+          { status: 400 }
+        )
+      }
+      validCropYearId = cropYearId
+    }
+
     const harvestLot = await prisma.harvestLot.create({
       data: {
         farmerName,
@@ -81,7 +96,7 @@ export async function POST(request: NextRequest) {
         farmPlotLocation,
         harvestDate: new Date(harvestDate),
         status: status || 'ReadyForProcessing',
-        cropYearId: cropYearId || null,
+        cropYearId: validCropYearId,
         farmId: farmId || null,
       },
       include: {

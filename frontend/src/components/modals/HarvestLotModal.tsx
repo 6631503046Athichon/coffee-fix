@@ -136,7 +136,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         weightKg: parseFloat(weightKg),
         harvestDate,
         status: 'Ready for Processing',
-        cropYearId: cropYearId || undefined,
+        cropYearId: cropYearId && cropYearId.trim() !== '' ? cropYearId : undefined,
       };
 
       const savedLot = await addHarvestLot(lotData);
@@ -155,9 +155,10 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
 
       // Don't close modal automatically - let user close manually or add another lot
       // onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to add harvest lot:', error);
-      alert('Failed to register harvest lot. Please try again.');
+      const errorMessage = error?.message || error?.error || 'Failed to register harvest lot. Please try again.';
+      alert(errorMessage);
       setIsSubmitting(false);
     }
   };

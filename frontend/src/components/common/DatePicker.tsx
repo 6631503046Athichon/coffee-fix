@@ -137,12 +137,12 @@ const DatePicker: React.FC<DatePickerProps> = ({
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between px-4 py-2.5 border-2 border-gray-300 rounded-xl bg-white hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 shadow-sm"
+                className="w-full flex items-center justify-between px-4 py-2.5 border-2 border-gray-300 rounded-xl bg-white hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 shadow-sm min-w-0"
             >
-                <span className={`text-sm font-medium ${value ? 'text-gray-900' : 'text-gray-500'}`}>
+                <span className={`text-sm font-medium truncate flex-1 text-left mr-2 ${value ? 'text-gray-900' : 'text-gray-500'}`}>
                     {value ? formatDisplayDate(selectedDate) : placeholder}
                 </span>
-                <Calendar className="h-5 w-5 text-gray-400" />
+                <Calendar className="h-5 w-5 text-gray-400 flex-shrink-0" />
             </button>
 
             {/* Calendar Dropdown */}

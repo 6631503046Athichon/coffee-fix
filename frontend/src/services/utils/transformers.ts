@@ -162,7 +162,7 @@ export const transformHarvestLotToBackend = (lotData: any) => ({
   farmPlotLocation: lotData.farmPlotLocation || '',
   harvestDate: lotData.harvestDate,
   status: (HARVEST_STATUS_REVERSE_MAP[lotData.status as keyof typeof HARVEST_STATUS_REVERSE_MAP] || lotData.status) || 'ReadyForProcessing',
-  cropYearId: lotData.cropYearId || null,
+  cropYearId: (lotData.cropYearId && lotData.cropYearId.trim() !== '') ? lotData.cropYearId : null,
   farmId: lotData.farmId || null,
 });
 
