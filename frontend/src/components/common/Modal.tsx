@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 export interface ModalProps {
@@ -33,14 +34,31 @@ export const Modal: React.FC<ModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  return (
+  // Check if document.body exists (for SSR)
+  if (typeof document === 'undefined' || !document.body) {
+    return null;
+  }
+
+  const modalContent = (
     <div
-      className={`fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 ${overlayClassName}`}
+      className={`fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 ${overlayClassName}`}
       onClick={onClose}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
+        margin: 0,
+        padding: 0,
+      }}
     >
       <div
         className={`bg-white rounded-3xl p-8 shadow-2xl w-full ${maxWidthClasses[maxWidth]} max-h-[90vh] overflow-y-auto ${className}`}
         onClick={(e) => e.stopPropagation()}
+        style={{ margin: '1rem' }}
       >
         {(title || showCloseButton) && (
           <div className="flex items-center justify-between mb-6">
@@ -62,6 +80,8 @@ export const Modal: React.FC<ModalProps> = ({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 };
 
 export default Modal;
