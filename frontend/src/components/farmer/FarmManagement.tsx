@@ -138,11 +138,12 @@ const FarmManagement: React.FC = () => {
 					|| farm.id.toLowerCase().includes(lowerSearch);
 				const matchesVariety = varietyFilter === 'All'
 					|| (farm.varieties ?? []).some(variety => variety === varietyFilter);
-				const matchesStatus = !farm.archived;
+				// Admin sees all farms including archived, farmers only see non-archived
+				const matchesStatus = isAdminView ? true : !farm.archived;
 				return matchesSearch && matchesVariety && matchesStatus;
 			})
 			.sort((a, b) => toTimestamp(b) - toTimestamp(a));
-	}, [scopedFarms, trimmedSearch, varietyFilter]);
+	}, [scopedFarms, trimmedSearch, varietyFilter, isAdminView]);
 
 	useEffect(() => {
 		if (!selectedFarmId) return;

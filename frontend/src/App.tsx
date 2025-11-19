@@ -14,6 +14,8 @@ import { getAllCustomers, getAllSaleOrders, getAllInvoices, getAllPricingHistory
 import { getAllActivityTypes, initializeActivityTypes } from './services/activityTypeService';
 import { getAllProcessTypes, initializeProcessTypes, resetProcessTypes } from './services/processTypeService';
 import { getAllFarms, initializeFarms } from './services/farmService';
+import { getAllHarvestLots } from './services/harvestLotService';
+import { getAllGAPLogs } from './services/gapLogService';
 import { Sidebar, Header } from './components/layout';
 import Login from './components/auth/Login';
 import ForgotPassword from './components/auth/ForgotPassword';
@@ -88,51 +90,64 @@ const ProtectedRoutes: React.FC = () => {
   const { isAuthenticated, currentUser } = useAuth();
   const [data, setData] = useState(MOCK_DATA);
 
-  // Load data from localStorage on mount
+  // Load data from backend API on mount
   useEffect(() => {
-    const loadDataFromStorage = () => {
-      const storedFarms = getAllFarms();
-      const storedSoilAnalyses = getAllSoilAnalyses();
-      const storedWeatherRecords = getAllWeatherRecords();
-      const storedActivityTypes = getAllActivityTypes();
-      const storedProcessTypes = getAllProcessTypes();
-      const storedCustomers = getAllCustomers();
-      const storedSaleOrders = getAllSaleOrders();
-      const storedInvoices = getAllInvoices();
-      const storedPricingHistory = getAllPricingHistory();
+    const loadDataFromBackend = async () => {
+      try {
+        // Load all data from backend API
+        const [storedFarms, storedSoilAnalyses, storedWeatherRecords, storedHarvestLots, storedGAPLogs, storedActivityTypes, storedProcessTypes, storedCustomers, storedSaleOrders, storedInvoices, storedPricingHistory] = await Promise.all([
+          getAllFarms(),
+          getAllSoilAnalyses(),
+          getAllWeatherRecords(),
+          getAllHarvestLots(),
+          getAllGAPLogs(),
+          getAllActivityTypes(),
+          getAllProcessTypes(),
+          getAllCustomers(),
+          getAllSaleOrders(),
+          getAllInvoices(),
+          getAllPricingHistory(),
+        ]);
 
-      setData(prev => ({
-        ...prev,
-        farms: storedFarms.length > 0 ? storedFarms : prev.farms,
-        soilAnalyses: storedSoilAnalyses.length > 0 ? storedSoilAnalyses : prev.soilAnalyses,
-        weatherRecords: storedWeatherRecords.length > 0 ? storedWeatherRecords : prev.weatherRecords,
-        activityTypes: storedActivityTypes.length > 0 ? storedActivityTypes : prev.activityTypes,
-        processTypes: storedProcessTypes.length > 0 ? storedProcessTypes : prev.processTypes,
-        customers: storedCustomers.length > 0 ? storedCustomers : prev.customers,
-        saleOrders: storedSaleOrders.length > 0 ? storedSaleOrders : prev.saleOrders,
-        invoices: storedInvoices.length > 0 ? storedInvoices : prev.invoices,
-        pricingHistory: storedPricingHistory.length > 0 ? storedPricingHistory : prev.pricingHistory,
-      }));
+        setData(prev => ({
+          ...prev,
+          farms: storedFarms.length > 0 ? storedFarms : prev.farms,
+          soilAnalyses: storedSoilAnalyses.length > 0 ? storedSoilAnalyses : prev.soilAnalyses,
+          weatherRecords: storedWeatherRecords.length > 0 ? storedWeatherRecords : prev.weatherRecords,
+          harvestLots: storedHarvestLots.length > 0 ? storedHarvestLots : prev.harvestLots,
+          gapLogs: storedGAPLogs.length > 0 ? storedGAPLogs : prev.gapLogs,
+          activityTypes: storedActivityTypes.length > 0 ? storedActivityTypes : prev.activityTypes,
+          processTypes: storedProcessTypes.length > 0 ? storedProcessTypes : prev.processTypes,
+          customers: storedCustomers.length > 0 ? storedCustomers : prev.customers,
+          saleOrders: storedSaleOrders.length > 0 ? storedSaleOrders : prev.saleOrders,
+          invoices: storedInvoices.length > 0 ? storedInvoices : prev.invoices,
+          pricingHistory: storedPricingHistory.length > 0 ? storedPricingHistory : prev.pricingHistory,
+        }));
+      } catch (error) {
+        console.error('Failed to load data from backend:', error);
+        // Fallback to MOCK_DATA if API fails
+      }
     };
 
     // Initial load
-    loadDataFromStorage();
+    loadDataFromBackend();
 
-    // Listen for localStorage changes from other components
+    // Listen for localStorage changes from other components (for activity types and process types that still use localStorage)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key && (
         e.key === 'coffee_lab_process_types' ||
-        e.key === 'coffee_lab_activity_types' ||
-        e.key === 'coffee_lab_users' ||
-        e.key === 'coffee_lab_farms'
+        e.key === 'coffee_lab_activity_types'
       )) {
-        loadDataFromStorage();
+        // Reload only activity types and process types from localStorage
+        // Other data will be reloaded from backend on next mount
+        loadDataFromBackend();
       }
     };
 
     // Custom event for same-window localStorage changes
     const handleCustomStorageUpdate = () => {
-      loadDataFromStorage();
+      // Reload data from backend when localStorage is updated
+      loadDataFromBackend();
     };
 
     window.addEventListener('storage', handleStorageChange);
