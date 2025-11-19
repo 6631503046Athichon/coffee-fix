@@ -163,19 +163,59 @@ async function main() {
     console.log('✅ Created process type:', processType.name)
   }
 
-  // Create default crop year
-  const currentYear = new Date().getFullYear()
-  const cropYear = await prisma.cropYear.upsert({
-    where: { year: `${currentYear}/${currentYear + 1}` },
-    update: {},
-    create: {
-      year: `${currentYear}/${currentYear + 1}`,
-      startDate: new Date(`${currentYear}-10-01`),
-      endDate: new Date(`${currentYear + 1}-09-30`),
-      description: `Crop year ${currentYear}/${currentYear + 1}`,
-    },
-  })
-  console.log('✅ Created crop year:', cropYear.year)
+  // Create crop years automatically based on current date
+  // Coffee crop year typically runs from October to September
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const currentMonth = now.getMonth() + 1 // 1-12
+  
+  // Determine the active crop year based on current date
+  // If month >= 10 (October), we're in the new crop year
+  // If month < 10, we're still in the previous crop year
+  let activeCropYearStart: number
+  if (currentMonth >= 10) {
+    activeCropYearStart = currentYear
+  } else {
+    activeCropYearStart = currentYear - 1
+  }
+  
+  // Create crop years: previous 2 years, current year, and next 2 years
+  const cropYearsToCreate = []
+  for (let i = -2; i <= 2; i++) {
+    const yearStart = activeCropYearStart + i
+    const yearEnd = yearStart + 1
+    const yearString = `${yearStart}/${yearEnd}`
+    
+    cropYearsToCreate.push({
+      year: yearString,
+      startDate: new Date(`${yearStart}-10-01`),
+      endDate: new Date(`${yearEnd}-09-30`),
+      description: i === 0 
+        ? `Current crop year ${yearString}` 
+        : i < 0 
+          ? `Previous crop year ${yearString}`
+          : `Next crop year ${yearString}`,
+    })
+  }
+
+  for (const cy of cropYearsToCreate) {
+    const cropYear = await prisma.cropYear.upsert({
+      where: { year: cy.year },
+      update: {
+        // Update dates in case they changed (shouldn't happen, but just in case)
+        startDate: cy.startDate,
+        endDate: cy.endDate,
+        description: cy.description,
+      },
+      create: {
+        year: cy.year,
+        startDate: cy.startDate,
+        endDate: cy.endDate,
+        description: cy.description,
+      },
+    })
+    console.log('✅ Created/Updated crop year:', cropYear.year, `(${cy.description})`)
+  }
 
   console.log('🎉 Seed completed!')
 }
