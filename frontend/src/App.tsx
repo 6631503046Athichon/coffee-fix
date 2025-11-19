@@ -124,7 +124,7 @@ const ProtectedRoutes: React.FC = () => {
           saleOrders: storedSaleOrders.length > 0 ? storedSaleOrders : prev.saleOrders,
           invoices: storedInvoices.length > 0 ? storedInvoices : prev.invoices,
           pricingHistory: storedPricingHistory.length > 0 ? storedPricingHistory : prev.pricingHistory,
-          cropYears: storedCropYears.length > 0 ? storedCropYears : prev.cropYears,
+          cropYears: storedCropYears, // Always use backend data, even if empty
         }));
       } catch (error) {
         console.error('Failed to load data from backend:', error);

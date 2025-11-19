@@ -128,6 +128,30 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
     setIsSubmitting(true);
 
     try {
+      // Validate cropYearId if provided
+      let validCropYearId: string | undefined = undefined;
+      if (cropYearId && cropYearId.trim() !== '') {
+        // Check if the selected cropYearId exists in data.cropYears
+        const cropYearExists = data.cropYears.some(cy => cy.id === cropYearId);
+        if (!cropYearExists) {
+          console.error('Selected crop year not found in available crop years:', cropYearId);
+          console.log('Available crop years:', data.cropYears.map(cy => ({ id: cy.id, year: cy.year })));
+          console.log('Total crop years loaded:', data.cropYears.length);
+          alert(`Selected crop year not found. Please select a valid crop year.`);
+          setIsSubmitting(false);
+          return;
+        }
+        // Validate UUID format (basic check)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(cropYearId)) {
+          console.error('Invalid crop year ID format (not a UUID):', cropYearId);
+          alert(`Invalid crop year ID format. Please select a valid crop year.`);
+          setIsSubmitting(false);
+          return;
+        }
+        validCropYearId = cropYearId;
+      }
+
       const lotData: Partial<HarvestLot> = {
         farmId: selectedFarm.id,
         farmerName: selectedFarm.farmerName,
@@ -136,9 +160,10 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         weightKg: parseFloat(weightKg),
         harvestDate,
         status: 'Ready for Processing',
-        cropYearId: cropYearId && cropYearId.trim() !== '' ? cropYearId : undefined,
+        cropYearId: validCropYearId,
       };
 
+      console.log('Submitting harvest lot with cropYearId:', validCropYearId);
       const savedLot = await addHarvestLot(lotData);
       
       setData(prev => ({
