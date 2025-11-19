@@ -7,6 +7,7 @@ import { ChevronRight, ArrowUp, ArrowDown, Coffee, PlusCircle } from 'lucide-rea
 import { PageHeader } from '../common/PageHeader';
 import { Button } from '../common/Button';
 import HarvestLotModal from '../modals/HarvestLotModal';
+import { formatHarvestLotId } from '../../utils/formatHarvestLotId';
 
 type SortableKeys = keyof HarvestLot;
 
@@ -195,7 +196,7 @@ const HarvestLotsManagement: React.FC = () => {
                 <div className="flex items-start justify-between gap-6">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-4">
-                      <h4 className="text-xl font-bold text-gray-900">{lot.id}</h4>
+                      <h4 className="text-xl font-bold text-gray-900">{formatHarvestLotId(lot.id, 'short', lot.harvestDate)}</h4>
                       <span className={`px-3 py-1 text-xs font-medium rounded-full ${
                         lot.status === 'Processing'
                           ? 'bg-blue-100 text-blue-800'
