@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import prisma from '@/lib/prisma'
 import { verifyToken } from '@/lib/auth'
 import bcrypt from 'bcryptjs'
 
@@ -152,7 +152,6 @@ export async function POST(request: NextRequest) {
         email: updatedUser.email,
         username: updatedUser.username,
         roles: updatedUser.roles,
-        farmId: updatedUser.farmId,
         isActive: updatedUser.isActive,
         isSuperAdmin: updatedUser.isSuperAdmin,
         mustChangePassword: updatedUser.mustChangePassword,

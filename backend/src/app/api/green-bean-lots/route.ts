@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
         initialWeightKg: parseFloat(initialWeightKg),
         currentWeightKg: currentWeightKg ? parseFloat(currentWeightKg) : parseFloat(initialWeightKg),
         availabilityStatus: availabilityStatus || 'Available',
-        externalSource: externalSource ? JSON.stringify(externalSource) : null,
+        externalSource: externalSource ? JSON.stringify(externalSource) : undefined,
       },
       include: {
         parchmentLot: {

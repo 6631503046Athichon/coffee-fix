@@ -4,7 +4,7 @@ import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Farm, SoilAnalysis, UserRole } from '../../types';
 import { Button, Input, Modal, StatCard } from '../common';
-import { addFarm, updateFarm } from '../../services/farmService';
+import { addFarm, updateFarm, deleteFarm } from '../../services/farmService';
 import { generateFarmId, generateSoilAnalysisId } from '../../utils/idGenerator';
 
 const COFFEE_VARIETIES = [
@@ -102,6 +102,8 @@ const FarmManagement: React.FC = () => {
 	const [editingSoilId, setEditingSoilId] = useState<string | null>(null);
 	const [soilFormError, setSoilFormError] = useState<string | null>(null);
 	const [soilToast, setSoilToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+	const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+	const [farmToDelete, setFarmToDelete] = useState<Farm | null>(null);
 
 	const isAdminView = currentUser?.roles?.includes(UserRole.Admin) ?? false;
 
@@ -578,6 +580,63 @@ const FarmManagement: React.FC = () => {
 		setSoilToast({ type: 'success', message: 'ลบผลวิเคราะห์แล้ว' });
 	};
 
+	// ตรวจสอบข้อมูลที่เกี่ยวข้องกับฟาร์ม
+	const checkFarmRelatedData = (farm: Farm) => {
+		const relatedData = {
+			harvestLots: data.harvestLots.filter(
+				lot => lot.farmPlotLocation === farm.location || lot.farmPlotLocation.includes(farm.location)
+			),
+			soilAnalyses: data.soilAnalyses.filter(analysis => analysis.farmId === farm.id),
+			weatherRecords: data.weatherRecords.filter(record => record.farmId === farm.id),
+			gapLogs: data.gapLogs.filter(
+				log => log.farmId === farm.id || log.farmPlotLocation === farm.location || log.farmPlotLocation.includes(farm.location)
+			),
+		};
+
+		const hasRelatedData = 
+			relatedData.harvestLots.length > 0 ||
+			relatedData.soilAnalyses.length > 0 ||
+			relatedData.weatherRecords.length > 0 ||
+			relatedData.gapLogs.length > 0;
+
+		return { relatedData, hasRelatedData };
+	};
+
+	const handleOpenDeleteModal = (farm: Farm) => {
+		setFarmToDelete(farm);
+		setIsDeleteModalOpen(true);
+		setMenuOpenId(null);
+	};
+
+	const handleCloseDeleteModal = () => {
+		setIsDeleteModalOpen(false);
+		setFarmToDelete(null);
+	};
+
+	const handleConfirmDelete = () => {
+		if (!farmToDelete) return;
+
+		const { relatedData, hasRelatedData } = checkFarmRelatedData(farmToDelete);
+
+		if (hasRelatedData) {
+			setToast({
+				type: 'error',
+				message: `ไม่สามารถลบฟาร์มได้ เนื่องจากมีข้อมูลที่เกี่ยวข้องอยู่ กรุณาลบข้อมูลต่อไปนี้ก่อน: ${relatedData.harvestLots.length > 0 ? `Harvest Lots (${relatedData.harvestLots.length})` : ''}${relatedData.soilAnalyses.length > 0 ? `, Soil Analyses (${relatedData.soilAnalyses.length})` : ''}${relatedData.weatherRecords.length > 0 ? `, Weather Records (${relatedData.weatherRecords.length})` : ''}${relatedData.gapLogs.length > 0 ? `, GAP Logs (${relatedData.gapLogs.length})` : ''}`,
+			});
+			handleCloseDeleteModal();
+			return;
+		}
+
+		// ลบฟาร์ม
+		deleteFarm(farmToDelete.id);
+		setData(prev => ({
+			...prev,
+			farms: prev.farms.filter(f => f.id !== farmToDelete.id),
+		}));
+		setToast({ type: 'success', message: 'ลบฟาร์มเรียบร้อยแล้ว' });
+		handleCloseDeleteModal();
+	};
+
 	const isEditing = Boolean(editingFarmId);
 	const toastColors = !toast
 		? ''
@@ -762,6 +821,16 @@ const FarmManagement: React.FC = () => {
 												>
 													{farm.archived ? <RotateCcw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
 													{farm.archived ? 'นำกลับมาแสดง' : 'เก็บ'}
+												</button>
+												<button
+													type="button"
+													onClick={() => {
+														setMenuOpenId(null);
+														handleOpenDeleteModal(farm);
+													}}
+													className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+												>
+													<Trash2 className="h-4 w-4" /> ลบฟาร์ม
 												</button>
 											</div>
 										)}
@@ -1170,6 +1239,105 @@ const FarmManagement: React.FC = () => {
 				) : (
 					<p className="text-sm text-gray-500">เลือกฟาร์มจากรายการเพื่อจัดการข้อมูลดิน</p>
 				)}
+			</Modal>
+
+			{/* Delete Confirmation Modal */}
+			<Modal
+				isOpen={isDeleteModalOpen}
+				onClose={handleCloseDeleteModal}
+				title="ยืนยันการลบฟาร์ม"
+				maxWidth="2xl"
+			>
+				{farmToDelete && (() => {
+					const { relatedData, hasRelatedData } = checkFarmRelatedData(farmToDelete);
+					return (
+						<div className="space-y-6">
+							<div className="bg-red-50 border border-red-200 rounded-xl p-4">
+								<div className="flex items-start gap-3">
+									<Trash2 className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+									<div>
+										<p className="text-sm font-semibold text-red-800 mb-1">คุณกำลังจะลบฟาร์มนี้</p>
+										<p className="text-sm text-red-700">
+											<strong>{farmToDelete.name ?? farmToDelete.location}</strong> ({farmToDelete.id})
+										</p>
+									</div>
+								</div>
+							</div>
+
+							{hasRelatedData ? (
+								<div className="space-y-4">
+									<div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+										<p className="text-sm font-semibold text-amber-800 mb-2">
+											ไม่สามารถลบฟาร์มได้ เนื่องจากมีข้อมูลที่เกี่ยวข้องอยู่
+										</p>
+										<p className="text-sm text-amber-700 mb-3">
+											กรุณาลบข้อมูลต่อไปนี้ก่อนที่จะลบฟาร์ม:
+										</p>
+										<ul className="space-y-2 text-sm text-amber-800">
+											{relatedData.harvestLots.length > 0 && (
+												<li className="flex items-center gap-2">
+													<span className="w-2 h-2 bg-amber-500 rounded-full"></span>
+													<span>
+														<strong>Harvest Lots:</strong> {relatedData.harvestLots.length} รายการ
+													</span>
+												</li>
+											)}
+											{relatedData.soilAnalyses.length > 0 && (
+												<li className="flex items-center gap-2">
+													<span className="w-2 h-2 bg-amber-500 rounded-full"></span>
+													<span>
+														<strong>Soil Analyses:</strong> {relatedData.soilAnalyses.length} รายการ
+													</span>
+												</li>
+											)}
+											{relatedData.weatherRecords.length > 0 && (
+												<li className="flex items-center gap-2">
+													<span className="w-2 h-2 bg-amber-500 rounded-full"></span>
+													<span>
+														<strong>Weather Records:</strong> {relatedData.weatherRecords.length} รายการ
+													</span>
+												</li>
+											)}
+											{relatedData.gapLogs.length > 0 && (
+												<li className="flex items-center gap-2">
+													<span className="w-2 h-2 bg-amber-500 rounded-full"></span>
+													<span>
+														<strong>GAP Logs:</strong> {relatedData.gapLogs.length} รายการ
+													</span>
+												</li>
+											)}
+										</ul>
+									</div>
+									<div className="flex justify-end">
+										<Button type="button" variant="outline" onClick={handleCloseDeleteModal}>
+											ปิด
+										</Button>
+									</div>
+								</div>
+							) : (
+								<div className="space-y-4">
+									<p className="text-sm text-gray-700">
+										คุณแน่ใจหรือไม่ว่าต้องการลบฟาร์มนี้? การกระทำนี้ไม่สามารถยกเลิกได้
+									</p>
+									<div className="flex justify-end gap-3">
+										<Button type="button" variant="outline" onClick={handleCloseDeleteModal}>
+											ยกเลิก
+										</Button>
+										<Button
+											type="button"
+											variant="primary"
+											onClick={handleConfirmDelete}
+											className="bg-red-600 hover:bg-red-700 text-white"
+										>
+											<Trash2 className="h-4 w-4 mr-2" />
+											ลบฟาร์ม
+										</Button>
+									</div>
+								</div>
+							)}
+						</div>
+					);
+				})()}
 			</Modal>
 		</div>
 	);

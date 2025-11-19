@@ -71,7 +71,6 @@ export async function POST(request: NextRequest) {
         email: user.email,
         username: user.username,
         roles: user.roles,
-        farmId: user.farmId,
         isActive: user.isActive,
         isSuperAdmin: user.isSuperAdmin,
         mustChangePassword: user.mustChangePassword,

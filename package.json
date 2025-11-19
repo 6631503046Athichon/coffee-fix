@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "postinstall": "cd backend && npm install",
     "dev": "cd backend && npm run dev",
-    "build": "cd backend && npm run build",
+    "build": "cd backend && npm install && npm run build",
     "start": "cd backend && npm start",
     "db:generate": "cd backend && npm run db:generate",
     "db:migrate": "cd backend && npm run db:migrate",
