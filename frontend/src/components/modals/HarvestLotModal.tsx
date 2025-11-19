@@ -216,7 +216,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Register New Harvest Lot"
-      maxWidth="auto"
+      maxWidth="2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Farm Selection - Only show if no initial farm provided */}
