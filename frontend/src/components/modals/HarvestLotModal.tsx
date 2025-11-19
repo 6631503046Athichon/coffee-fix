@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { HarvestLot, Farm, CropYear } from '../../types';
@@ -62,6 +62,17 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate that farm has varieties and one is selected
+    if (!farm.varieties || farm.varieties.length === 0) {
+      alert('This farm has no varieties. Please add varieties to the farm first.');
+      return;
+    }
+
+    if (!cherryVariety) {
+      alert('Please select a cherry variety.');
+      return;
+    }
+
     const newLot: HarvestLot = {
       id: generateHarvestLotId(data.harvestLots.map(l => l.id)),
       farmId: farm.id,
@@ -83,12 +94,21 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
   const inputClass = "block w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500 transition-all bg-white hover:border-gray-400 placeholder-gray-400 text-sm";
   const labelClass = "block text-sm font-medium text-gray-700 mb-1.5";
 
+  // Filter varieties to show only those planted in this farm
+  const availableVarieties = useMemo(() => {
+    if (!farm.varieties || farm.varieties.length === 0) {
+      return [];
+    }
+    // Return only varieties that are in the farm's varieties list
+    return COFFEE_VARIETIES.filter(variety => farm.varieties?.includes(variety));
+  }, [farm.varieties]);
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Register New Harvest Lot"
-      maxWidth="xl"
+      maxWidth="2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Farm Info Banner */}
@@ -107,18 +127,26 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
           </div>
         </div>
 
-        {/* Variety - Full Width */}
-        <div>
-          <label className={labelClass}>Cherry Variety *</label>
-          <Select
-            value={cherryVariety}
-            onChange={(v) => setCherryVariety((v as string) || '')}
-            options={COFFEE_VARIETIES}
-            placeholder="Select variety..."
-            colorTheme="emerald"
-            fullWidth
-          />
-        </div>
+        {/* Variety - Full Width - Only show if farm has varieties */}
+        {availableVarieties.length > 0 ? (
+          <div>
+            <label className={labelClass}>Cherry Variety *</label>
+            <Select
+              value={cherryVariety}
+              onChange={(v) => setCherryVariety((v as string) || '')}
+              options={availableVarieties}
+              placeholder="Select variety..."
+              colorTheme="emerald"
+              fullWidth
+            />
+          </div>
+        ) : (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <p className="text-sm text-amber-800">
+              This farm has no varieties recorded. Please add varieties to the farm first before registering harvest lots.
+            </p>
+          </div>
+        )}
 
         {/* Weight & Harvest Date */}
         <div className="grid grid-cols-2 gap-4">
@@ -164,7 +192,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
           <Button variant="secondary" onClick={onClose} type="button">
             Cancel
           </Button>
-          <Button variant="primary" type="submit">
+          <Button variant="primary" type="submit" disabled={availableVarieties.length === 0}>
             Register Lot
           </Button>
         </div>

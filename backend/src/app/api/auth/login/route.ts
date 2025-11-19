@@ -84,10 +84,12 @@ export async function POST(request: NextRequest) {
     })
 
     // Set HTTP-only cookie
+    // For cross-domain (frontend and backend on different domains), use 'none' with secure
+    const isProduction = process.env.NODE_ENV === 'production'
     response.cookies.set('auth-token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: isProduction, // Must be true for sameSite: 'none'
+      sameSite: isProduction ? 'none' : 'lax', // 'none' for cross-domain, 'lax' for same domain
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: '/',
     })

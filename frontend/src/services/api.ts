@@ -32,6 +32,14 @@ async function request<T>(
   })
 
   if (!response.ok) {
+    // Handle 401 Unauthorized - token expired or invalid
+    if (response.status === 401) {
+      // Clear invalid token
+      localStorage.removeItem('auth-token')
+      // Try to clear cookie by making a logout request (if possible)
+      // Redirect to login will be handled by AuthContext
+    }
+    
     const error = await response.json().catch(() => ({ error: 'Request failed' }))
     throw new Error(error.error || `HTTP error! status: ${response.status}`)
   }
