@@ -11,6 +11,7 @@ import { Input } from '../common/Input';
 import { PageHeader } from '../common/PageHeader';
 import { Badge } from '../common/Badge';
 import { exportToCSV } from '../../utils/exportCSV';
+import { formatHarvestLotId } from '../../utils/formatHarvestLotId';
 
 // Removed inline CustomFilterDropdown in favor of shared Select
 
@@ -219,7 +220,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                                         className="hover:bg-gray-50 transition-colors cursor-pointer"
                                     >
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                                            {lot.id}
+                                            {formatHarvestLotId(lot.id, 'short', lot.harvestDate)}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                                             {lot.farmerName}

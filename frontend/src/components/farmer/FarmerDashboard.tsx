@@ -15,6 +15,7 @@ import { Alert } from '../common/Alert';
 import { StatCard } from '../common/StatCard';
 import { generateHarvestLotId } from '../../utils/idGenerator';
 import { toFixed2 } from '../../utils/formatters';
+import { formatHarvestLotId } from '../../utils/formatHarvestLotId';
 
 
 // Coffee varieties list
@@ -414,7 +415,7 @@ const FarmerDashboard: React.FC = () => {
                   >
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-gray-900">{lot.id}</span>
+                        <span className="font-semibold text-gray-900">{formatHarvestLotId(lot.id, 'short', lot.harvestDate)}</span>
                         <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
                           lot.status === 'Processing'
                             ? 'bg-blue-100 text-blue-800'
@@ -495,7 +496,12 @@ const FarmerDashboard: React.FC = () => {
                                     className="hover:bg-indigo-50 cursor-pointer transition-colors"
                                 >
                                     <td className="px-4 py-5 whitespace-nowrap">
-                                        <div className="text-sm font-bold text-gray-900">{item.lotId}</div>
+                                        <div className="text-sm font-bold text-gray-900">
+                                          {(() => {
+                                            const lot = data.harvestLots.find(l => l.id === item.lotId);
+                                            return lot ? formatHarvestLotId(item.lotId, 'short', lot.harvestDate) : item.lotId;
+                                          })()}
+                                        </div>
                                     </td>
                                     <td className="px-4 py-5 whitespace-nowrap">
                                         <div className="text-sm font-medium text-gray-700">{item.variety}</div>
