@@ -11,10 +11,25 @@ export function middleware(request: NextRequest) {
     'http://localhost:3000',
     'http://localhost:5174',
     process.env.FRONTEND_URL,
+    'https://coffee-fix.vercel.app',
+    'https://coffee-fix-production.vercel.app',
+    'https://*.vercel.app',
+    'https://*.railway.app',
   ].filter(Boolean) as string[]
+  
+  // Check if origin matches wildcard pattern
+  const isOriginAllowed = (origin: string | null): boolean => {
+    if (!origin) return false
+    if (allowedOrigins.includes(origin)) return true
+    // Check wildcard patterns
+    if (origin.includes('.vercel.app') || origin.includes('.railway.app')) {
+      return true
+    }
+    return false
+  }
 
   // Use origin if it's in allowed list, otherwise use the first allowed origin or origin from request
-  const allowedOrigin = origin && allowedOrigins.includes(origin) 
+  const allowedOrigin = origin && isOriginAllowed(origin)
     ? origin 
     : (allowedOrigins[0] || origin || '*')
 
