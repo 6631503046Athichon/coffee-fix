@@ -6,7 +6,17 @@ import { api } from '../../services/api';
 const ResetPassword: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
+  
+  // Get token from URL params, with fallback to window.location.hash
+  let token = searchParams.get('token');
+  if (!token) {
+    // Fallback: try to extract token from hash URL
+    const hash = window.location.hash;
+    const hashMatch = hash.match(/[?&]token=([^&]+)/);
+    if (hashMatch) {
+      token = hashMatch[1];
+    }
+  }
 
   const [formData, setFormData] = useState({
     password: '',
