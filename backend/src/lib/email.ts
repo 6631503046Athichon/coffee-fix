@@ -31,25 +31,14 @@ function getGmailTransporter() {
 }
 
 /**
- * Get Brevo SMTP transporter
+ * Get Brevo API key
  */
-function getBrevoTransporter() {
-  const user = process.env.BREVO_SMTP_USER
-  const pass = process.env.BREVO_SMTP_PASSWORD
-
-  if (!user || !pass) {
-    throw new Error('Brevo configuration missing. Please set BREVO_SMTP_USER and BREVO_SMTP_PASSWORD in .env')
+function getBrevoApiKey(): string {
+  const apiKey = process.env.BREVO_API_KEY
+  if (!apiKey) {
+    throw new Error('Brevo API key not configured. Please set BREVO_API_KEY in .env')
   }
-
-  return nodemailer.createTransport({
-    host: 'smtp-relay.brevo.com',
-    port: 587,
-    secure: false,
-    auth: {
-      user,
-      pass,
-    },
-  })
+  return apiKey
 }
 
 /**
@@ -119,29 +108,47 @@ async function sendWithGmail(options: EmailOptions): Promise<void> {
 }
 
 /**
- * Send email using Brevo SMTP
+ * Send email using Brevo API
  */
 async function sendWithBrevo(options: EmailOptions): Promise<void> {
-  const transporter = getBrevoTransporter()
+  const apiKey = getBrevoApiKey()
   const fromName = process.env.EMAIL_FROM_NAME || 'Coffee Lab Platform'
-  const fromEmail = process.env.BREVO_FROM_EMAIL || process.env.BREVO_SMTP_USER
+  const fromEmail = process.env.BREVO_FROM_EMAIL || 'noreply@coffee-lab.com'
 
-  console.log('[EMAIL] Sending via Brevo SMTP:', {
+  console.log('[EMAIL] Sending via Brevo API:', {
     from: fromEmail,
     to: options.to,
     subject: options.subject,
   })
 
-  const info = await transporter.sendMail({
-    from: `"${fromName}" <${fromEmail}>`,
-    to: options.to,
-    subject: options.subject,
-    html: options.html,
-    text: options.text || options.html.replace(/<[^>]*>/g, ''),
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'api-key': apiKey,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sender: {
+        name: fromName,
+        email: fromEmail,
+      },
+      to: [{ email: options.to }],
+      subject: options.subject,
+      htmlContent: options.html,
+      textContent: options.text || options.html.replace(/<[^>]*>/g, ''),
+    }),
   })
 
-  console.log('[SUCCESS] Email sent via Brevo:', {
-    messageId: info.messageId,
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(`Brevo API error: ${error.message || response.statusText}`)
+  }
+
+  const result = await response.json()
+
+  console.log('[SUCCESS] Email sent via Brevo API:', {
+    messageId: result.messageId,
     to: options.to,
     subject: options.subject,
   })
