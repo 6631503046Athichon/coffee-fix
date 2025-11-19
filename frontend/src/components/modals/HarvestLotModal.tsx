@@ -9,6 +9,7 @@ import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
 import { Input } from '../common/Input';
 import { generateHarvestLotId } from '../../utils/idGenerator';
+import { addHarvestLot } from '../../services/harvestLotService';
 
 // Coffee varieties list
 const COFFEE_VARIETIES = [
@@ -48,6 +49,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
   const [weightKg, setWeightKg] = useState('');
   const [harvestDate, setHarvestDate] = useState(new Date().toISOString().substring(0, 10));
   const [cropYearId, setCropYearId] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Reset form when modal opens
   useEffect(() => {
@@ -59,8 +61,14 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
     }
   }, [isOpen, farm]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+
+    // Prevent double submission
+    if (isSubmitting) {
+      return;
+    }
 
     // Validate that farm has varieties and one is selected
     if (!farm.varieties || farm.varieties.length === 0) {
@@ -73,22 +81,44 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
       return;
     }
 
-    const newLot: HarvestLot = {
-      id: generateHarvestLotId(data.harvestLots.map(l => l.id)),
-      farmId: farm.id,
-      cherryVariety,
-      weightKg: parseFloat(weightKg),
-      harvestDate,
-      status: 'Ready for Processing',
-      cropYearId: cropYearId || undefined,
-    };
+    if (!weightKg || parseFloat(weightKg) <= 0) {
+      alert('Please enter a valid weight.');
+      return;
+    }
 
-    setData(prev => ({
-      ...prev,
-      harvestLots: [newLot, ...prev.harvestLots],
-    }));
+    setIsSubmitting(true);
 
-    onClose();
+    try {
+      const lotData: Partial<HarvestLot> = {
+        farmId: farm.id,
+        cherryVariety,
+        weightKg: parseFloat(weightKg),
+        harvestDate,
+        status: 'Ready for Processing',
+        cropYearId: cropYearId || undefined,
+      };
+
+      const savedLot = await addHarvestLot(lotData);
+      
+      setData(prev => ({
+        ...prev,
+        harvestLots: [savedLot, ...prev.harvestLots],
+      }));
+
+      // Reset form
+      setCherryVariety(farm.varieties?.[0] || '');
+      setWeightKg('');
+      setHarvestDate(new Date().toISOString().substring(0, 10));
+      setCropYearId('');
+      setIsSubmitting(false);
+
+      // Don't close modal automatically - let user close manually or add another lot
+      // onClose();
+    } catch (error) {
+      console.error('Failed to add harvest lot:', error);
+      alert('Failed to register harvest lot. Please try again.');
+      setIsSubmitting(false);
+    }
   };
 
   const inputClass = "block w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500 transition-all bg-white hover:border-gray-400 placeholder-gray-400 text-sm";
@@ -99,8 +129,8 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
     if (!farm.varieties || farm.varieties.length === 0) {
       return [];
     }
-    // Return only varieties that are in the farm's varieties list
-    return COFFEE_VARIETIES.filter(variety => farm.varieties?.includes(variety));
+    // Return only varieties that are in the farm's varieties list (including custom varieties)
+    return farm.varieties;
   }, [farm.varieties]);
 
   return (
@@ -108,7 +138,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Register New Harvest Lot"
-      maxWidth="2xl"
+      maxWidth="auto"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Farm Info Banner */}
@@ -149,7 +179,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         )}
 
         {/* Weight & Harvest Date */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Input
               label="Weight (kg) *"
@@ -192,8 +222,8 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
           <Button variant="secondary" onClick={onClose} type="button">
             Cancel
           </Button>
-          <Button variant="primary" type="submit" disabled={availableVarieties.length === 0}>
-            Register Lot
+          <Button variant="primary" type="submit" disabled={availableVarieties.length === 0 || isSubmitting}>
+            {isSubmitting ? 'Registering...' : 'Register Lot'}
           </Button>
         </div>
       </form>
