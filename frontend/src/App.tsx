@@ -259,25 +259,11 @@ const App: React.FC = () => {
   const [data] = useState(MOCK_DATA);
   const contextValue = useMemo(() => ({ data, setData: () => {} }), [data]);
 
-  // Initialize localStorage on app mount
+  // Initialize localStorage on app mount (only for non-API data)
   useEffect(() => {
-    // Only initialize if localStorage is empty (first time load)
-    // This prevents overwriting existing data
-    const existingFarms = getAllFarms();
-    if (existingFarms.length === 0) {
-      initializeFarms(MOCK_DATA.farms);
-    }
-    
-    const existingSoilAnalyses = getAllSoilAnalyses();
-    if (existingSoilAnalyses.length === 0) {
-      initializeSoilAnalyses(MOCK_DATA.soilAnalyses);
-    }
-    
-    const existingWeatherRecords = getAllWeatherRecords();
-    if (existingWeatherRecords.length === 0) {
-      initializeWeatherRecords(MOCK_DATA.weatherRecords);
-    }
-    
+    // Only initialize localStorage for data that doesn't come from API
+    // API data (farms, soil analyses, weather records, harvest lots, GAP logs) 
+    // will be loaded in ProtectedRoutes component
     initializeActivityTypes(MOCK_DATA.activityTypes);
     // Force: reset to exactly the three defaults on each refresh (per request)
     resetProcessTypes(MOCK_DATA.processTypes);

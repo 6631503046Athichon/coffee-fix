@@ -146,65 +146,65 @@ const WeatherMonitoring: React.FC = () => {
     return '';
   }, [temperatureMin, temperatureMax]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const selectedFarm = data.farms.find(f => f.id === selectedFarmId);
     if (!selectedFarm) return alert("Please select a valid farm.");
 
-    if (editingRecord) {
-      // Update existing record
-      const updatedRecord: WeatherRecord = {
-        ...editingRecord,
-        farmId: selectedFarmId,
-        farmPlotLocation: selectedFarm.location,
-        recordDate,
-        temperatureMin: parseFloat(temperatureMin),
-        temperatureMax: parseFloat(temperatureMax),
-        temperatureAvg: temperatureAvg ? parseFloat(temperatureAvg) : (parseFloat(temperatureMin) + parseFloat(temperatureMax)) / 2,
-        rainfall: parseFloat(rainfall),
-        humidity: parseFloat(humidity),
-        notes: notes || undefined,
-      };
-      updateWeatherRecord(updatedRecord);
-      setData(prev => ({
-        ...prev,
-        weatherRecords: prev.weatherRecords.map(r => r.id === editingRecord.id ? updatedRecord : r)
-      }));
-      setEditingRecord(null);
-    } else {
-      // Create new record
-      const newIdNumber = Math.max(...data.weatherRecords.map(r => parseInt(r.id.replace('WR', '')) || 0), 0) + 1;
-      const newId = `WR${String(newIdNumber).padStart(3, '0')}`;
+    try {
+      if (editingRecord) {
+        // Update existing record
+        const recordData: Partial<WeatherRecord> = {
+          farmId: selectedFarmId,
+          farmPlotLocation: selectedFarm.location,
+          recordDate,
+          temperatureMin: parseFloat(temperatureMin),
+          temperatureMax: parseFloat(temperatureMax),
+          temperatureAvg: temperatureAvg ? parseFloat(temperatureAvg) : (parseFloat(temperatureMin) + parseFloat(temperatureMax)) / 2,
+          rainfall: parseFloat(rainfall),
+          humidity: parseFloat(humidity),
+          notes: notes || undefined,
+        };
+        const updatedRecord = await updateWeatherRecord(editingRecord.id, recordData);
+        setData(prev => ({
+          ...prev,
+          weatherRecords: prev.weatherRecords.map(r => r.id === editingRecord.id ? updatedRecord : r)
+        }));
+        setEditingRecord(null);
+      } else {
+        // Create new record
+        const recordData: Partial<WeatherRecord> = {
+          farmId: selectedFarmId,
+          farmPlotLocation: selectedFarm.location,
+          recordDate,
+          temperatureMin: parseFloat(temperatureMin),
+          temperatureMax: parseFloat(temperatureMax),
+          temperatureAvg: temperatureAvg ? parseFloat(temperatureAvg) : (parseFloat(temperatureMin) + parseFloat(temperatureMax)) / 2,
+          rainfall: parseFloat(rainfall),
+          humidity: parseFloat(humidity),
+          source: 'Manual',
+          recordedBy: currentUser?.id,
+          notes: notes || undefined,
+        };
 
-      const newRecord: WeatherRecord = {
-        id: newId,
-        farmId: selectedFarmId,
-        farmPlotLocation: selectedFarm.location,
-        recordDate,
-        temperatureMin: parseFloat(temperatureMin),
-        temperatureMax: parseFloat(temperatureMax),
-        temperatureAvg: temperatureAvg ? parseFloat(temperatureAvg) : (parseFloat(temperatureMin) + parseFloat(temperatureMax)) / 2,
-        rainfall: parseFloat(rainfall),
-        humidity: parseFloat(humidity),
-        source: 'Manual',
-        recordedBy: currentUser?.id,
-        notes: notes || undefined,
-      };
+        const newRecord = await addWeatherRecord(recordData);
+        setData(prev => ({ ...prev, weatherRecords: [newRecord, ...prev.weatherRecords] }));
+      }
 
-      addWeatherRecord(newRecord);
-      setData(prev => ({ ...prev, weatherRecords: [newRecord, ...prev.weatherRecords] }));
+      // Reset form
+      setSelectedFarmId('');
+      setRecordDate(new Date().toISOString().substring(0, 10));
+      setTemperatureMin('');
+      setTemperatureMax('');
+      setRainfall('');
+      setHumidity('70');
+      setNotes('');
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (error) {
+      console.error('Failed to save weather record:', error);
+      alert('Failed to save weather record. Please try again.');
     }
-
-    // Reset form
-    setSelectedFarmId('');
-    setRecordDate(new Date().toISOString().substring(0, 10));
-    setTemperatureMin('');
-    setTemperatureMax('');
-    setRainfall('');
-    setHumidity('70');
-    setNotes('');
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
   };
 
   const handleEdit = (record: WeatherRecord) => {

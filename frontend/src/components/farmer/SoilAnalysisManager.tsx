@@ -11,6 +11,7 @@ import { Input } from '../common/Input';
 import { PageHeader } from '../common/PageHeader';
 import { Alert } from '../common/Alert';
 import { generateSoilAnalysisId } from '../../utils/idGenerator';
+import { addSoilAnalysis, updateSoilAnalysis } from '../../services/soilAnalysisService';
 
 // Removed custom farm dropdown in favor of shared Select component
 
@@ -68,59 +69,60 @@ const SoilAnalysisManager: React.FC<SoilAnalysisManagerProps> = ({ currentUser }
     }, [data.farms]);
     
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // Build the soil analysis object
-        const analysisData: Omit<SoilAnalysis, 'id'> = {
-            farmId,
-            farmPlotLocation,
-            testDate,
-            labName: labName || undefined,
-            certificateNumber: certificateNumber || undefined,
-            pH: parseFloat(pH),
-            phosphorus: parseFloat(phosphorus),
-            potassium: parseFloat(potassium),
-            nitrogen: parseFloat(nitrogen),
-            calcium: parseFloat(calcium),
-            magnesium: parseFloat(magnesium),
-            organicMatter: organicMatter ? parseFloat(organicMatter) : undefined,
-            sulfur: sulfur ? parseFloat(sulfur) : undefined,
-            zinc: zinc ? parseFloat(zinc) : undefined,
-            iron: iron ? parseFloat(iron) : undefined,
-            manganese: manganese ? parseFloat(manganese) : undefined,
-            copper: copper ? parseFloat(copper) : undefined,
-            boron: boron ? parseFloat(boron) : undefined,
-            notes: notes || undefined,
-            recommendations: recommendations || undefined,
-            createdBy: currentUser.id,
-            createdByRole: currentUser.roles[0], // Use primary role
-        };
-
-        if (editingAnalysis) {
-            // Update existing analysis
-            setData(prev => ({
-                ...prev,
-                soilAnalyses: prev.soilAnalyses.map(analysis =>
-                    analysis.id === editingAnalysis.id
-                        ? { ...analysisData, id: editingAnalysis.id }
-                        : analysis
-                )
-            }));
-            setEditingAnalysis(null);
-        } else {
-            // Create new analysis
-            const newAnalysis: SoilAnalysis = {
-                id: generateSoilAnalysisId(data.soilAnalyses.map(a => a.id)),
-                ...analysisData
+        try {
+            // Build the soil analysis object
+            const analysisData: Partial<SoilAnalysis> = {
+                farmId,
+                farmPlotLocation,
+                testDate,
+                labName: labName || undefined,
+                certificateNumber: certificateNumber || undefined,
+                pH: parseFloat(pH),
+                phosphorus: parseFloat(phosphorus),
+                potassium: parseFloat(potassium),
+                nitrogen: parseFloat(nitrogen),
+                calcium: parseFloat(calcium),
+                magnesium: parseFloat(magnesium),
+                organicMatter: organicMatter ? parseFloat(organicMatter) : undefined,
+                sulfur: sulfur ? parseFloat(sulfur) : undefined,
+                zinc: zinc ? parseFloat(zinc) : undefined,
+                iron: iron ? parseFloat(iron) : undefined,
+                manganese: manganese ? parseFloat(manganese) : undefined,
+                copper: copper ? parseFloat(copper) : undefined,
+                boron: boron ? parseFloat(boron) : undefined,
+                notes: notes || undefined,
+                recommendations: recommendations || undefined,
+                createdBy: currentUser.id,
+                createdByRole: currentUser.roles[0], // Use primary role
             };
-            setData(prev => ({ ...prev, soilAnalyses: [newAnalysis, ...prev.soilAnalyses] }));
-        }
 
-        // Reset form
-        resetForm();
-        setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 3000);
+            if (editingAnalysis) {
+                // Update existing analysis
+                const updatedAnalysis = await updateSoilAnalysis(editingAnalysis.id, analysisData);
+                setData(prev => ({
+                    ...prev,
+                    soilAnalyses: prev.soilAnalyses.map(analysis =>
+                        analysis.id === editingAnalysis.id ? updatedAnalysis : analysis
+                    )
+                }));
+                setEditingAnalysis(null);
+            } else {
+                // Create new analysis
+                const newAnalysis = await addSoilAnalysis(analysisData);
+                setData(prev => ({ ...prev, soilAnalyses: [newAnalysis, ...prev.soilAnalyses] }));
+            }
+
+            // Reset form
+            resetForm();
+            setShowSuccess(true);
+            setTimeout(() => setShowSuccess(false), 3000);
+        } catch (error) {
+            console.error('Failed to save soil analysis:', error);
+            alert('Failed to save soil analysis. Please try again.');
+        }
     };
 
     const resetForm = () => {

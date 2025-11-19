@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Farm, SoilAnalysis, UserRole } from '../../types';
 import { generateSoilAnalysisId } from '../../utils/idGenerator';
 import { formatDateDisplay } from '../../utils/formatters';
+import { addSoilAnalysis, updateSoilAnalysis } from '../../services/soilAnalysisService';
 
 export type SoilFormState = {
   farmPlotLocation: string;
@@ -100,7 +101,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
     setSoilForm(createEmptySoilForm({ farmPlotLocation: farm?.location ?? '' }));
   };
 
-  const handleSoilSubmit = (event: React.FormEvent) => {
+  const handleSoilSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!farm) {
       return;
@@ -164,43 +165,55 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
       parsedOptional[field.key] = parsed;
     }
 
-    const payload: SoilAnalysis = {
-      id: editingSoilId ?? generateSoilAnalysisId(data.soilAnalyses.map(a => a.id)),
-      farmId: farm.id,
-      farmPlotLocation: trimmedPlot,
-      testDate: soilForm.testDate,
-      labName: soilForm.labName.trim() || undefined,
-      certificateNumber: soilForm.certificateNumber.trim() || undefined,
-      pH: parsedRequired.pH,
-      phosphorus: parsedRequired.phosphorus,
-      potassium: parsedRequired.potassium,
-      nitrogen: parsedRequired.nitrogen,
-      calcium: parsedRequired.calcium,
-      magnesium: parsedRequired.magnesium,
-      organicMatter: parsedOptional.organicMatter,
-      sulfur: parsedOptional.sulfur,
-      zinc: parsedOptional.zinc,
-      iron: parsedOptional.iron,
-      manganese: parsedOptional.manganese,
-      copper: parsedOptional.copper,
-      boron: parsedOptional.boron,
-      recommendations: soilForm.recommendations.trim() || undefined,
-      notes: soilForm.notes.trim() || undefined,
-      createdBy: currentUser?.id ?? 'system',
-      createdByRole: currentUser?.roles?.[0] ?? UserRole.Farmer,
-    };
+    try {
+      const analysisData: Partial<SoilAnalysis> = {
+        farmId: farm.id,
+        farmPlotLocation: trimmedPlot,
+        testDate: soilForm.testDate,
+        labName: soilForm.labName.trim() || undefined,
+        certificateNumber: soilForm.certificateNumber.trim() || undefined,
+        pH: parsedRequired.pH,
+        phosphorus: parsedRequired.phosphorus,
+        potassium: parsedRequired.potassium,
+        nitrogen: parsedRequired.nitrogen,
+        calcium: parsedRequired.calcium,
+        magnesium: parsedRequired.magnesium,
+        organicMatter: parsedOptional.organicMatter,
+        sulfur: parsedOptional.sulfur,
+        zinc: parsedOptional.zinc,
+        iron: parsedOptional.iron,
+        manganese: parsedOptional.manganese,
+        copper: parsedOptional.copper,
+        boron: parsedOptional.boron,
+        recommendations: soilForm.recommendations.trim() || undefined,
+        notes: soilForm.notes.trim() || undefined,
+        createdBy: currentUser?.id ?? 'system',
+        createdByRole: currentUser?.roles?.[0] ?? UserRole.Farmer,
+      };
 
-    setData(prev => ({
-      ...prev,
-      soilAnalyses: editingSoilId
-        ? prev.soilAnalyses.map(analysis => (analysis.id === editingSoilId ? payload : analysis))
-        : [payload, ...prev.soilAnalyses],
-    }));
+      if (editingSoilId) {
+        const updatedAnalysis = await updateSoilAnalysis(editingSoilId, analysisData);
+        setData(prev => ({
+          ...prev,
+          soilAnalyses: prev.soilAnalyses.map(analysis => (analysis.id === editingSoilId ? updatedAnalysis : analysis))
+        }));
+        setSoilToast({ type: 'success', message: 'อัปเดตผลวิเคราะห์ดินเรียบร้อยแล้ว' });
+      } else {
+        const newAnalysis = await addSoilAnalysis(analysisData);
+        setData(prev => ({
+          ...prev,
+          soilAnalyses: [newAnalysis, ...prev.soilAnalyses],
+        }));
+        setSoilToast({ type: 'success', message: 'บันทึกผลวิเคราะห์ดินใหม่แล้ว' });
+      }
 
-    setSoilToast({ type: 'success', message: editingSoilId ? 'อัปเดตผลวิเคราะห์ดินเรียบร้อยแล้ว' : 'บันทึกผลวิเคราะห์ดินใหม่แล้ว' });
-    setEditingSoilId(null);
-    setSoilFormError(null);
-    setSoilForm(createEmptySoilForm({ farmPlotLocation: farm.location }));
+      setEditingSoilId(null);
+      setSoilFormError(null);
+      setSoilForm(createEmptySoilForm({ farmPlotLocation: farm.location }));
+    } catch (error) {
+      console.error('Failed to save soil analysis:', error);
+      setSoilFormError('ไม่สามารถบันทึกผลวิเคราะห์ดินได้ กรุณาลองอีกครั้ง');
+    }
   };
 
   const handleSoilEdit = (analysis: SoilAnalysis) => {
