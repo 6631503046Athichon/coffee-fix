@@ -34,7 +34,6 @@ import WeatherMonitoring from './components/farmer/WeatherMonitoring';
 import CupperScoringSheet from './components/cupper/CupperScoringSheet';
 import TraceabilityHub from './components/TraceabilityHub';
 import UserManagement from './components/UserManagement';
-import AdminFarmManagement from './components/admin/FarmManagement';
 import FarmerFarmManagement from './components/farmer/FarmManagement';
 import ActivityTypeManagement from './components/admin/ActivityTypeManagement';
 import ProcessTypeManagement from './components/admin/ProcessTypeManagement';
@@ -165,7 +164,6 @@ const ProtectedRoutes: React.FC = () => {
       // Traceability & Admin
       { name: 'Traceability Hub', href: '/traceability', icon: Search, roles: [UserRole.Admin, UserRole.Processor] },
       { name: 'User Management', href: '/users', icon: Users, roles: [UserRole.Admin] },
-      { name: 'Farm Management', href: '/farm-management', icon: MapPin, roles: [UserRole.Admin] },
       { name: 'Activity Types', href: '/activity-types', icon: Tag, roles: [UserRole.Admin] },
       { name: 'Process Types', href: '/process-types', icon: Coffee, roles: [UserRole.Admin] },
     ];
@@ -195,7 +193,6 @@ const ProtectedRoutes: React.FC = () => {
               <Route path="/competition/:id" element={<CompetitionDashboard currentUserRoles={currentUser?.roles || [UserRole.Farmer]} />} />
               <Route path="/traceability" element={<TraceabilityHub />} />
               <Route path="/users" element={<UserManagement />} />
-              <Route path="/farm-management" element={<AdminFarmManagement />} />
               <Route path="/farmer-farms" element={<FarmerFarmManagement />} />
               <Route path="/activity-types" element={<ActivityTypeManagement />} />
               <Route path="/process-types" element={<ProcessTypeManagement />} />
