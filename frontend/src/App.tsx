@@ -231,11 +231,11 @@ const App: React.FC = () => {
   return (
     <AuthProvider>
       <Routes>
+        {/* Public Routes - no authentication required */}
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/first-login-setup" element={<FirstLoginSetupWrapper />} />
-  {/* Public Route - no login required */}
         <Route
           path="/traceability/:lotId"
           element={
@@ -244,6 +244,7 @@ const App: React.FC = () => {
             </DataContext.Provider>
           }
         />
+        {/* Protected Routes - requires authentication */}
         <Route path="/*" element={<ProtectedRoutes />} />
         {/* 404 Fallback */}
         <Route path="*" element={
