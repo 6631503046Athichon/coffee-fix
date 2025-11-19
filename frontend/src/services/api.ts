@@ -34,14 +34,25 @@ async function request<T>(
   if (!response.ok) {
     // Handle 401 Unauthorized - token expired or invalid
     if (response.status === 401) {
-      // Clear invalid token
-      localStorage.removeItem('auth-token')
-      // Try to clear cookie by making a logout request (if possible)
-      // Redirect to login will be handled by AuthContext
+      // For login endpoint, don't clear token (user is trying to login)
+      const isLoginEndpoint = endpoint.includes('/auth/login')
+      if (!isLoginEndpoint) {
+        // Clear invalid token for other endpoints
+        localStorage.removeItem('auth-token')
+      }
     }
     
-    const error = await response.json().catch(() => ({ error: 'Request failed' }))
-    throw new Error(error.error || `HTTP error! status: ${response.status}`)
+    // Try to parse error response
+    let errorMessage = `HTTP error! status: ${response.status}`
+    try {
+      const error = await response.json()
+      errorMessage = error.error || error.message || errorMessage
+    } catch {
+      // If response is not JSON, use status text
+      errorMessage = response.statusText || errorMessage
+    }
+    
+    throw new Error(errorMessage)
   }
 
   return response.json()
