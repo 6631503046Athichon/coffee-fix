@@ -76,7 +76,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { farmName, location, latitude, longitude, altitude } = body
+    const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, archived } = body
 
     const updateData: any = {}
     if (farmName !== undefined) updateData.farmName = farmName
@@ -84,6 +84,13 @@ export async function PUT(
     if (latitude !== undefined) updateData.latitude = latitude ? parseFloat(latitude) : null
     if (longitude !== undefined) updateData.longitude = longitude ? parseFloat(longitude) : null
     if (altitude !== undefined) updateData.altitude = altitude
+    if (sizeHectares !== undefined) updateData.sizeHectares = sizeHectares ? parseFloat(sizeHectares) : null
+    if (varieties !== undefined) updateData.varieties = varieties
+    if (caretakerName !== undefined) updateData.caretakerName = caretakerName || null
+    if (archived !== undefined) {
+      updateData.archived = archived
+      updateData.archivedAt = archived ? new Date() : null
+    }
 
     const updatedFarm = await prisma.farm.update({
       where: { id: params.id },

@@ -115,6 +115,7 @@ model User {
   mustChangePassword  Boolean   @default(true)
   mustChangeUsername  Boolean   @default(false)
   mustChangeEmail     Boolean   @default(false)
+  temporaryPassword   String?   // Stores generated password for admin view until user changes it
 
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -154,20 +155,26 @@ model Farm {
   latitude            Float?
   longitude           Float?
   altitude            String?
-  
+  sizeHectares        Float?
+  varieties           String[]
+  caretakerName       String?
+  archived            Boolean   @default(false)
+  archivedAt          DateTime?
+
   ownerId             String
   owner               User      @relation("FarmOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  
+
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
-  
+
   // Relations
   harvestLots         HarvestLot[]
   gapLogs             GAPLogEntry[]
   soilAnalyses        SoilAnalysis[]
   weatherRecords      WeatherRecord[]
-  
+
   @@index([ownerId])
+  @@index([archived])
 }
 
 model FarmRequest {
