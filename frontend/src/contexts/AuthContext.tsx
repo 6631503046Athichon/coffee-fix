@@ -24,10 +24,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (user) {
           setCurrentUser(user);
           setIsAuthenticated(true);
+        } else {
+          // Clear invalid state
+          setCurrentUser(null);
+          setIsAuthenticated(false);
         }
       } catch (error) {
-        // User not authenticated - this is fine
-        console.debug('User not authenticated');
+        // User not authenticated - clear state
+        console.debug('User not authenticated:', error);
+        setCurrentUser(null);
+        setIsAuthenticated(false);
       }
     };
 
