@@ -31,6 +31,28 @@ function getGmailTransporter() {
 }
 
 /**
+ * Get Brevo SMTP transporter
+ */
+function getBrevoTransporter() {
+  const user = process.env.BREVO_SMTP_USER
+  const pass = process.env.BREVO_SMTP_PASSWORD
+
+  if (!user || !pass) {
+    throw new Error('Brevo configuration missing. Please set BREVO_SMTP_USER and BREVO_SMTP_PASSWORD in .env')
+  }
+
+  return nodemailer.createTransport({
+    host: 'smtp-relay.brevo.com',
+    port: 587,
+    secure: false,
+    auth: {
+      user,
+      pass,
+    },
+  })
+}
+
+/**
  * Get Resend client instance
  */
 function getResendClient(): Resend | null {
@@ -56,6 +78,8 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
   try {
     if (emailService === 'gmail') {
       await sendWithGmail(options)
+    } else if (emailService === 'brevo') {
+      await sendWithBrevo(options)
     } else {
       await sendWithResend(options)
     }
@@ -88,6 +112,35 @@ async function sendWithGmail(options: EmailOptions): Promise<void> {
   })
 
   console.log('[SUCCESS] Email sent via Gmail:', {
+    messageId: info.messageId,
+    to: options.to,
+    subject: options.subject,
+  })
+}
+
+/**
+ * Send email using Brevo SMTP
+ */
+async function sendWithBrevo(options: EmailOptions): Promise<void> {
+  const transporter = getBrevoTransporter()
+  const fromName = process.env.EMAIL_FROM_NAME || 'Coffee Lab Platform'
+  const fromEmail = process.env.BREVO_FROM_EMAIL || process.env.BREVO_SMTP_USER
+
+  console.log('[EMAIL] Sending via Brevo SMTP:', {
+    from: fromEmail,
+    to: options.to,
+    subject: options.subject,
+  })
+
+  const info = await transporter.sendMail({
+    from: `"${fromName}" <${fromEmail}>`,
+    to: options.to,
+    subject: options.subject,
+    html: options.html,
+    text: options.text || options.html.replace(/<[^>]*>/g, ''),
+  })
+
+  console.log('[SUCCESS] Email sent via Brevo:', {
     messageId: info.messageId,
     to: options.to,
     subject: options.subject,
