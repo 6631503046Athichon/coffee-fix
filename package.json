@@ -6,7 +6,7 @@
     "postinstall": "cd backend && npm install",
     "dev": "cd backend && npm run dev",
     "build": "cd backend && npm install && npx prisma generate && npm run build",
-    "start": "cd backend && npx prisma migrate deploy && npx prisma db seed && npm start",
+    "start": "cd backend && npx prisma db push && npx prisma db seed && npm start",
     "db:generate": "cd backend && npm run db:generate",
     "db:migrate": "cd backend && npm run db:migrate",
     "db:seed": "cd backend && npm run db:seed"
