@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       { 
         processType: {
           ...processType,
-          colorScheme: JSON.parse(processType.colorScheme),
+          colorScheme: typeof processType.colorScheme === 'string' ? JSON.parse(processType.colorScheme) : processType.colorScheme,
         },
         message: 'Process type created successfully' 
       },

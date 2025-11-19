@@ -87,7 +87,7 @@ export async function GET(
       scoresBySample[score.sampleId].push({
         judgeId: score.judgeId,
         judgeName: score.judgeName,
-        scores: JSON.parse(score.scores),
+        scores: typeof score.scores === 'string' ? JSON.parse(score.scores) : score.scores,
         notes: score.notes,
         totalScore: score.totalScore,
       })
