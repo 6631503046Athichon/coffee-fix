@@ -1301,7 +1301,10 @@ const FarmManagement: React.FC = () => {
 							<Button
 								type="button"
 								variant="outline"
-								onClick={handleGeocodeLocation}
+								onClick={(e) => {
+									e.stopPropagation();
+									handleGeocodeLocation();
+								}}
 								disabled={isGeocoding || !farmLocation.trim()}
 								icon={isGeocoding ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
 							>
@@ -1310,7 +1313,10 @@ const FarmManagement: React.FC = () => {
 							<Button
 								type="button"
 								variant="outline"
-								onClick={handleGetCurrentLocation}
+								onClick={(e) => {
+									e.stopPropagation();
+									handleGetCurrentLocation();
+								}}
 								disabled={isGettingLocation}
 								icon={isGettingLocation ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Compass className="h-4 w-4" />}
 							>
