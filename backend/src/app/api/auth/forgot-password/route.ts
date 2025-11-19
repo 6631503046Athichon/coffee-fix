@@ -93,7 +93,8 @@ export async function POST(request: NextRequest) {
 
     if (isDevelopment) {
       response.devToken = resetToken
-      response.devResetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`
+      // Use hash router format: /#/reset-password?token=...
+      response.devResetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/#/reset-password?token=${resetToken}`
       console.log('[DEV] Password reset token for testing:', resetToken)
       console.log('[DEV] Reset URL:', response.devResetUrl)
     }

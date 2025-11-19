@@ -215,7 +215,8 @@ export async function sendWelcomeEmail(email: string, name: string, temporaryPas
  */
 export async function sendPasswordResetEmail(email: string, resetToken: string, userName?: string): Promise<void> {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
-  const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`
+  // Use hash router format: /#/reset-password?token=...
+  const resetUrl = `${frontendUrl}/#/reset-password?token=${resetToken}`
   const subject = 'Password Reset - Coffee Lab Platform'
   const html = `
     <!DOCTYPE html>
