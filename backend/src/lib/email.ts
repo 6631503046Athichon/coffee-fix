@@ -241,7 +241,7 @@ export async function sendPasswordResetEmail(email: string, resetToken: string, 
           <p>We received a request to reset your password for your Coffee Lab Platform account.</p>
           <p>Click the button below to reset your password:</p>
           <p style="text-align: center;">
-            <a href="${resetUrl}" class="button">Reset Password</a>
+            <a href="${resetUrl}" style="display: inline-block; background-color: #6366f1; color: #ffffff !important; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin: 20px 0; font-weight: bold;">Reset Password</a>
           </p>
           <p>Or copy and paste this link into your browser:</p>
           <p style="word-break: break-all; color: #6366f1;">${resetUrl}</p>
