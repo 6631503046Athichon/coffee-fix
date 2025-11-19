@@ -16,6 +16,7 @@ import { getAllProcessTypes, initializeProcessTypes, resetProcessTypes } from '.
 import { getAllFarms, initializeFarms } from './services/farmService';
 import { getAllHarvestLots } from './services/harvestLotService';
 import { getAllGAPLogs } from './services/gapLogService';
+import { getAllCropYears } from './services/cropYearService';
 import { Sidebar, Header } from './components/layout';
 import Login from './components/auth/Login';
 import ForgotPassword from './components/auth/ForgotPassword';
@@ -95,7 +96,7 @@ const ProtectedRoutes: React.FC = () => {
     const loadDataFromBackend = async () => {
       try {
         // Load all data from backend API
-        const [storedFarms, storedSoilAnalyses, storedWeatherRecords, storedHarvestLots, storedGAPLogs, storedActivityTypes, storedProcessTypes, storedCustomers, storedSaleOrders, storedInvoices, storedPricingHistory] = await Promise.all([
+        const [storedFarms, storedSoilAnalyses, storedWeatherRecords, storedHarvestLots, storedGAPLogs, storedActivityTypes, storedProcessTypes, storedCustomers, storedSaleOrders, storedInvoices, storedPricingHistory, storedCropYears] = await Promise.all([
           getAllFarms(),
           getAllSoilAnalyses(),
           getAllWeatherRecords(),
@@ -107,6 +108,7 @@ const ProtectedRoutes: React.FC = () => {
           getAllSaleOrders(),
           getAllInvoices(),
           getAllPricingHistory(),
+          getAllCropYears(),
         ]);
 
         setData(prev => ({
@@ -122,6 +124,7 @@ const ProtectedRoutes: React.FC = () => {
           saleOrders: storedSaleOrders.length > 0 ? storedSaleOrders : prev.saleOrders,
           invoices: storedInvoices.length > 0 ? storedInvoices : prev.invoices,
           pricingHistory: storedPricingHistory.length > 0 ? storedPricingHistory : prev.pricingHistory,
+          cropYears: storedCropYears.length > 0 ? storedCropYears : prev.cropYears,
         }));
       } catch (error) {
         console.error('Failed to load data from backend:', error);
