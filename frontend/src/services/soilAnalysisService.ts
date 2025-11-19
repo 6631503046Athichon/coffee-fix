@@ -3,13 +3,11 @@ import { SoilAnalysis } from '../types';
 const SOIL_ANALYSES_STORAGE_KEY = 'coffee_lab_soil_analyses';
 
 /**
- * Initialize soil analyses in localStorage if they don't exist
+ * Initialize soil analyses in localStorage - always reset to defaults
  */
 export const initializeSoilAnalyses = (defaultAnalyses: SoilAnalysis[]) => {
-  const storedAnalyses = localStorage.getItem(SOIL_ANALYSES_STORAGE_KEY);
-  if (!storedAnalyses) {
-    localStorage.setItem(SOIL_ANALYSES_STORAGE_KEY, JSON.stringify(defaultAnalyses));
-  }
+  // Always set to default analyses (will be empty array now that mock data is removed)
+  localStorage.setItem(SOIL_ANALYSES_STORAGE_KEY, JSON.stringify(defaultAnalyses));
 };
 
 /**
