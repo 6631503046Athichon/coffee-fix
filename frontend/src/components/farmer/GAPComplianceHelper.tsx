@@ -13,6 +13,7 @@ import { PageHeader } from '../common/PageHeader';
 import { Badge } from '../common/Badge';
 import { Alert } from '../common/Alert';
 import { generateGAPLogId } from '../../utils/idGenerator';
+import { addGAPLog, updateGAPLog } from '../../services/gapLogService';
 
 const GAPComplianceHelper: React.FC = () => {
     const { data, setData } = useDataContext();
@@ -113,7 +114,7 @@ const GAPComplianceHelper: React.FC = () => {
         ];
     }, [sortedAccessibleFarms, data.gapLogs, canViewLog, buildFarmLabel]);
 
-    const handleLogSubmit = (e: React.FormEvent) => {
+    const handleLogSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         if (!selectedFarmId) {
@@ -129,50 +130,52 @@ const GAPComplianceHelper: React.FC = () => {
 
         const farmLabel = buildFarmLabel(selectedFarm);
         
-        if (editingLog) {
-            // Update existing log
-            setData(prev => ({
-                ...prev,
-                gapLogs: prev.gapLogs.map(log =>
-                    log.id === editingLog.id
-                        ? {
-                            ...log,
-                            farmId: selectedFarm.id,
-                            farmPlotLocation: farmLabel,
-                            activityType,
-                            date,
-                            productUsed,
-                            quantity,
-                            notes,
-                        }
-                        : log
-                )
-            }));
-            setEditingLog(null);
-        } else {
-            // Create new log
-            const newLog: GAPLogEntry = {
-                id: generateGAPLogId(data.gapLogs.map(log => log.id)),
-                farmId: selectedFarm.id,
-                farmPlotLocation: farmLabel,
-                activityType,
-                date,
-                productUsed,
-                quantity,
-                notes
-            };
-            setData(prev => ({ ...prev, gapLogs: [newLog, ...prev.gapLogs] }));
+        try {
+            if (editingLog) {
+                // Update existing log
+                const logData: Partial<GAPLogEntry> = {
+                    farmId: selectedFarm.id,
+                    farmPlotLocation: farmLabel,
+                    activityType,
+                    date,
+                    productUsed,
+                    quantity,
+                    notes,
+                };
+                const updatedLog = await updateGAPLog(editingLog.id, logData);
+                setData(prev => ({
+                    ...prev,
+                    gapLogs: prev.gapLogs.map(log => log.id === editingLog.id ? updatedLog : log)
+                }));
+                setEditingLog(null);
+            } else {
+                // Create new log
+                const logData: Partial<GAPLogEntry> = {
+                    farmId: selectedFarm.id,
+                    farmPlotLocation: farmLabel,
+                    activityType,
+                    date,
+                    productUsed,
+                    quantity,
+                    notes
+                };
+                const newLog = await addGAPLog(logData);
+                setData(prev => ({ ...prev, gapLogs: [newLog, ...prev.gapLogs] }));
+            }
+            
+            // Reset form
+            setSelectedFarmId('');
+            setActivityType(defaultActivityType);
+            setDate(new Date().toISOString().substring(0, 10));
+            setProductUsed('');
+            setQuantity('');
+            setNotes('');
+            setShowSuccess(true);
+            setTimeout(() => setShowSuccess(false), 3000);
+        } catch (error) {
+            console.error('Failed to save GAP log:', error);
+            alert('Failed to save GAP log. Please try again.');
         }
-        
-        // Reset form
-        setSelectedFarmId('');
-        setActivityType(defaultActivityType);
-        setDate(new Date().toISOString().substring(0, 10));
-        setProductUsed('');
-        setQuantity('');
-        setNotes('');
-        setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 3000);
     };
 
     const handleEdit = (log: GAPLogEntry) => {

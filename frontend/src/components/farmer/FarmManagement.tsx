@@ -1040,7 +1040,7 @@ const FarmManagement: React.FC = () => {
 						farms={filteredFarms}
 						selectedFarmId={selectedFarmId}
 						onFarmClick={(farm) => setSelectedFarmId(farm.id)}
-						height="600px"
+						height="800px"
 					/>
 				</div>
 			) : (
