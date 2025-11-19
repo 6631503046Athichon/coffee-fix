@@ -78,18 +78,42 @@ export async function POST(request: NextRequest) {
     if (cropYearId && typeof cropYearId === 'string' && cropYearId.trim() !== '') {
       const trimmedId = cropYearId.trim()
       
-      // Try to find crop year by ID (UUID)
-      const cropYear = await prisma.cropYear.findUnique({
-        where: { id: trimmedId },
-      })
+      // Debug: Log the cropYearId being searched
+      console.log('Looking for crop year with ID:', trimmedId)
       
-      if (!cropYear) {
-        return NextResponse.json(
-          { error: 'Crop year not found' },
-          { status: 400 }
-        )
+      try {
+        // Try to find crop year by ID (UUID)
+        // Prisma will validate UUID format automatically
+        const cropYear = await prisma.cropYear.findUnique({
+          where: { id: trimmedId },
+        })
+        
+        if (!cropYear) {
+          // Debug: List all available crop years
+          const allCropYears = await prisma.cropYear.findMany({
+            select: { id: true, year: true },
+          })
+          console.log('Available crop years:', allCropYears)
+          console.log('Requested crop year ID:', trimmedId)
+          
+          return NextResponse.json(
+            { error: 'Crop year not found', details: `Crop year with ID "${trimmedId}" does not exist in database` },
+            { status: 400 }
+          )
+        }
+        validCropYearId = trimmedId
+      } catch (prismaError: any) {
+        // Handle Prisma validation errors (e.g., invalid UUID format)
+        console.error('Prisma error when querying crop year:', prismaError)
+        if (prismaError.code === 'P2023' || prismaError.message?.includes('Invalid')) {
+          return NextResponse.json(
+            { error: 'Invalid crop year ID format', details: `The crop year ID "${trimmedId}" is not a valid UUID format` },
+            { status: 400 }
+          )
+        }
+        // Re-throw if it's a different error
+        throw prismaError
       }
-      validCropYearId = trimmedId
     }
 
     const harvestLot = await prisma.harvestLot.create({
