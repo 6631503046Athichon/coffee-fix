@@ -67,8 +67,10 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
   try {
     if (emailService === 'gmail') {
       await sendWithGmail(options)
+    } else if (emailService === 'mailjet') {
+      await sendWithMailjet(options)
     } else if (emailService === 'brevo') {
-      await sendWithBrevo(options)
+      await sendWithMailjet(options) // Use Mailjet instead of broken Brevo
     } else {
       await sendWithResend(options)
     }
@@ -108,36 +110,36 @@ async function sendWithGmail(options: EmailOptions): Promise<void> {
 }
 
 /**
- * Get Brevo SMTP transporter
+ * Get Mailjet SMTP transporter
  */
-function getBrevoTransporter() {
-  const user = process.env.BREVO_SMTP_USER
-  const pass = process.env.BREVO_SMTP_PASSWORD
+function getMailjetTransporter() {
+  const apiKey = process.env.MAILJET_API_KEY
+  const secretKey = process.env.MAILJET_SECRET_KEY
 
-  if (!user || !pass) {
-    throw new Error('Brevo SMTP configuration missing. Please set BREVO_SMTP_USER and BREVO_SMTP_PASSWORD in .env')
+  if (!apiKey || !secretKey) {
+    throw new Error('Mailjet configuration missing. Please set MAILJET_API_KEY and MAILJET_SECRET_KEY in .env')
   }
 
   return nodemailer.createTransport({
-    host: 'smtp-relay.brevo.com',
-    port: 465,
-    secure: true,
+    host: 'in-v3.mailjet.com',
+    port: 587,
+    secure: false,
     auth: {
-      user,
-      pass,
+      user: apiKey,
+      pass: secretKey,
     },
   })
 }
 
 /**
- * Send email using Brevo SMTP (no IP restriction)
+ * Send email using Mailjet SMTP
  */
-async function sendWithBrevo(options: EmailOptions): Promise<void> {
-  const transporter = getBrevoTransporter()
+async function sendWithMailjet(options: EmailOptions): Promise<void> {
+  const transporter = getMailjetTransporter()
   const fromName = process.env.EMAIL_FROM_NAME || 'Coffee Lab Platform'
-  const fromEmail = process.env.BREVO_FROM_EMAIL || 'noreply@coffee-lab.com'
+  const fromEmail = process.env.MAILJET_FROM_EMAIL || process.env.BREVO_FROM_EMAIL || 'noreply@coffee-lab.com'
 
-  console.log('[EMAIL] Sending via Brevo SMTP:', {
+  console.log('[EMAIL] Sending via Mailjet SMTP:', {
     from: fromEmail,
     to: options.to,
     subject: options.subject,
@@ -151,7 +153,7 @@ async function sendWithBrevo(options: EmailOptions): Promise<void> {
     text: options.text || options.html.replace(/<[^>]*>/g, ''),
   })
 
-  console.log('[SUCCESS] Email sent via Brevo SMTP:', {
+  console.log('[SUCCESS] Email sent via Mailjet:', {
     messageId: info.messageId,
     to: options.to,
     subject: options.subject,
