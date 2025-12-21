@@ -80,7 +80,15 @@ export const authService = {
 
   // Get current user from backend (validates session)
   getCurrentUser: async (): Promise<User | null> => {
-    // Always check with backend first to validate session
+    // First check if we have a token - if not, don't even try API
+    const token = localStorage.getItem('auth-token');
+    const storedUser = localStorage.getItem(STORAGE_KEY);
+
+    if (!token || !storedUser) {
+      return null;
+    }
+
+    // Try to validate with backend
     try {
       const response = await api.get<{ user: User }>('/auth/me');
       if (response.user) {
@@ -90,11 +98,24 @@ export const authService = {
         return response.user;
       }
     } catch (error) {
-      // Not authenticated - clear localStorage
+      // Backend validation failed - but if we have stored user, use it
+      // This allows offline/temporary disconnection scenarios
       console.debug('Backend session check failed:', error instanceof Error ? error.message : 'Unknown error');
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem('auth-token');
-      return null;
+
+      // Only clear if it's a 401 (unauthorized) - otherwise keep user logged in
+      const errorMessage = error instanceof Error ? error.message : '';
+      if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem('auth-token');
+        return null;
+      }
+
+      // For network errors, return stored user
+      try {
+        return JSON.parse(storedUser) as User;
+      } catch {
+        return null;
+      }
     }
 
     return null;
