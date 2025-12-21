@@ -1,6 +1,6 @@
 
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, BarChart, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package } from 'lucide-react';
 
@@ -91,49 +91,60 @@ const ProtectedRoutes: React.FC = () => {
   const { isAuthenticated, currentUser } = useAuth();
   const [data, setData] = useState(MOCK_DATA);
 
+  // Load data from backend API
+  const loadDataFromBackend = async () => {
+    try {
+      // Load all data from backend API
+      const [storedFarms, storedSoilAnalyses, storedWeatherRecords, storedHarvestLots, storedGAPLogs, storedActivityTypes, storedProcessTypes, storedCustomers, storedSaleOrders, storedInvoices, storedPricingHistory, storedCropYears] = await Promise.all([
+        getAllFarms(),
+        getAllSoilAnalyses(),
+        getAllWeatherRecords(),
+        getAllHarvestLots(),
+        getAllGAPLogs(),
+        getAllActivityTypes(),
+        getAllProcessTypes(),
+        getAllCustomers(),
+        getAllSaleOrders(),
+        getAllInvoices(),
+        getAllPricingHistory(),
+        getAllCropYears(),
+      ]);
+
+      setData(prev => ({
+        ...prev,
+        farms: storedFarms.length > 0 ? storedFarms : prev.farms,
+        soilAnalyses: storedSoilAnalyses.length > 0 ? storedSoilAnalyses : prev.soilAnalyses,
+        weatherRecords: storedWeatherRecords.length > 0 ? storedWeatherRecords : prev.weatherRecords,
+        harvestLots: storedHarvestLots.length > 0 ? storedHarvestLots : prev.harvestLots,
+        gapLogs: storedGAPLogs.length > 0 ? storedGAPLogs : prev.gapLogs,
+        activityTypes: storedActivityTypes.length > 0 ? storedActivityTypes : prev.activityTypes,
+        processTypes: storedProcessTypes.length > 0 ? storedProcessTypes : prev.processTypes,
+        customers: storedCustomers.length > 0 ? storedCustomers : prev.customers,
+        saleOrders: storedSaleOrders.length > 0 ? storedSaleOrders : prev.saleOrders,
+        invoices: storedInvoices.length > 0 ? storedInvoices : prev.invoices,
+        pricingHistory: storedPricingHistory.length > 0 ? storedPricingHistory : prev.pricingHistory,
+        cropYears: storedCropYears, // Always use backend data, even if empty
+      }));
+    } catch (error) {
+      console.error('Failed to load data from backend:', error);
+      // Fallback to MOCK_DATA if API fails
+    }
+  };
+
+  // Refresh data function - can be called from any component
+  const refreshData = useCallback(async () => {
+    await loadDataFromBackend();
+  }, []);
+
   // Load data from backend API on mount
   useEffect(() => {
-    const loadDataFromBackend = async () => {
-      try {
-        // Load all data from backend API
-        const [storedFarms, storedSoilAnalyses, storedWeatherRecords, storedHarvestLots, storedGAPLogs, storedActivityTypes, storedProcessTypes, storedCustomers, storedSaleOrders, storedInvoices, storedPricingHistory, storedCropYears] = await Promise.all([
-          getAllFarms(),
-          getAllSoilAnalyses(),
-          getAllWeatherRecords(),
-          getAllHarvestLots(),
-          getAllGAPLogs(),
-          getAllActivityTypes(),
-          getAllProcessTypes(),
-          getAllCustomers(),
-          getAllSaleOrders(),
-          getAllInvoices(),
-          getAllPricingHistory(),
-          getAllCropYears(),
-        ]);
-
-        setData(prev => ({
-          ...prev,
-          farms: storedFarms.length > 0 ? storedFarms : prev.farms,
-          soilAnalyses: storedSoilAnalyses.length > 0 ? storedSoilAnalyses : prev.soilAnalyses,
-          weatherRecords: storedWeatherRecords.length > 0 ? storedWeatherRecords : prev.weatherRecords,
-          harvestLots: storedHarvestLots.length > 0 ? storedHarvestLots : prev.harvestLots,
-          gapLogs: storedGAPLogs.length > 0 ? storedGAPLogs : prev.gapLogs,
-          activityTypes: storedActivityTypes.length > 0 ? storedActivityTypes : prev.activityTypes,
-          processTypes: storedProcessTypes.length > 0 ? storedProcessTypes : prev.processTypes,
-          customers: storedCustomers.length > 0 ? storedCustomers : prev.customers,
-          saleOrders: storedSaleOrders.length > 0 ? storedSaleOrders : prev.saleOrders,
-          invoices: storedInvoices.length > 0 ? storedInvoices : prev.invoices,
-          pricingHistory: storedPricingHistory.length > 0 ? storedPricingHistory : prev.pricingHistory,
-          cropYears: storedCropYears, // Always use backend data, even if empty
-        }));
-      } catch (error) {
-        console.error('Failed to load data from backend:', error);
-        // Fallback to MOCK_DATA if API fails
-      }
-    };
-
     // Initial load
     loadDataFromBackend();
+
+    // Auto-refresh every 30 seconds
+    const refreshInterval = setInterval(() => {
+      loadDataFromBackend();
+    }, 30000);
 
     // Listen for localStorage changes from other components (for activity types and process types that still use localStorage)
     const handleStorageChange = (e: StorageEvent) => {
@@ -153,16 +164,24 @@ const ProtectedRoutes: React.FC = () => {
       loadDataFromBackend();
     };
 
+    // Custom event for data refresh
+    const handleDataRefresh = () => {
+      loadDataFromBackend();
+    };
+
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('localStorageUpdate', handleCustomStorageUpdate);
+    window.addEventListener('dataRefresh', handleDataRefresh);
 
     return () => {
+      clearInterval(refreshInterval);
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('localStorageUpdate', handleCustomStorageUpdate);
+      window.removeEventListener('dataRefresh', handleDataRefresh);
     };
   }, []);
 
-  const contextValue = useMemo(() => ({ data, setData }), [data, setData]);
+  const contextValue = useMemo(() => ({ data, setData, refreshData }), [data, setData]);
 
   const navItems = useMemo(() => {
     let competitionAdminHref = '/cupping'; // Default to hub
