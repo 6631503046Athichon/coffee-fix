@@ -31,14 +31,25 @@ function getGmailTransporter() {
 }
 
 /**
- * Get Brevo API key
+ * Get Brevo SMTP transporter
  */
-function getBrevoApiKey(): string {
-  const apiKey = process.env.BREVO_API_KEY
-  if (!apiKey) {
-    throw new Error('Brevo API key not configured. Please set BREVO_API_KEY in .env')
+function getBrevoTransporter() {
+  const smtpPassword = process.env.BREVO_SMTP_PASSWORD
+  const smtpUser = process.env.BREVO_SMTP_USER
+
+  if (!smtpPassword || !smtpUser) {
+    throw new Error('Brevo SMTP not configured. Please set BREVO_SMTP_USER and BREVO_SMTP_PASSWORD in .env')
   }
-  return apiKey
+
+  return nodemailer.createTransport({
+    host: 'smtp-relay.brevo.com',
+    port: 587,
+    secure: false,
+    auth: {
+      user: smtpUser,
+      pass: smtpPassword,
+    },
+  })
 }
 
 /**
@@ -70,7 +81,7 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
     } else if (emailService === 'mailjet') {
       await sendWithMailjet(options)
     } else if (emailService === 'brevo') {
-      await sendWithMailjet(options) // Use Mailjet instead of broken Brevo
+      await sendWithBrevo(options)
     } else {
       await sendWithResend(options)
     }
@@ -103,6 +114,39 @@ async function sendWithGmail(options: EmailOptions): Promise<void> {
   })
 
   console.log('[SUCCESS] Email sent via Gmail:', {
+    messageId: info.messageId,
+    to: options.to,
+    subject: options.subject,
+  })
+}
+
+/**
+ * Send email using Brevo SMTP
+ */
+async function sendWithBrevo(options: EmailOptions): Promise<void> {
+  const transporter = getBrevoTransporter()
+  const fromName = process.env.EMAIL_FROM_NAME || 'Coffee Lab Platform'
+  const fromEmail = process.env.BREVO_FROM_EMAIL
+
+  if (!fromEmail) {
+    throw new Error('BREVO_FROM_EMAIL not configured')
+  }
+
+  console.log('[EMAIL] Sending via Brevo SMTP:', {
+    from: fromEmail,
+    to: options.to,
+    subject: options.subject,
+  })
+
+  const info = await transporter.sendMail({
+    from: `"${fromName}" <${fromEmail}>`,
+    to: options.to,
+    subject: options.subject,
+    html: options.html,
+    text: options.text || options.html.replace(/<[^>]*>/g, ''),
+  })
+
+  console.log('[SUCCESS] Email sent via Brevo:', {
     messageId: info.messageId,
     to: options.to,
     subject: options.subject,
