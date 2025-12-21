@@ -108,47 +108,51 @@ async function sendWithGmail(options: EmailOptions): Promise<void> {
 }
 
 /**
- * Send email using Brevo API
+ * Get Brevo SMTP transporter
+ */
+function getBrevoTransporter() {
+  const user = process.env.BREVO_SMTP_USER
+  const pass = process.env.BREVO_SMTP_PASSWORD
+
+  if (!user || !pass) {
+    throw new Error('Brevo SMTP configuration missing. Please set BREVO_SMTP_USER and BREVO_SMTP_PASSWORD in .env')
+  }
+
+  return nodemailer.createTransport({
+    host: 'smtp-relay.brevo.com',
+    port: 587,
+    secure: false,
+    auth: {
+      user,
+      pass,
+    },
+  })
+}
+
+/**
+ * Send email using Brevo SMTP (no IP restriction)
  */
 async function sendWithBrevo(options: EmailOptions): Promise<void> {
-  const apiKey = getBrevoApiKey()
+  const transporter = getBrevoTransporter()
   const fromName = process.env.EMAIL_FROM_NAME || 'Coffee Lab Platform'
   const fromEmail = process.env.BREVO_FROM_EMAIL || 'noreply@coffee-lab.com'
 
-  console.log('[EMAIL] Sending via Brevo API:', {
+  console.log('[EMAIL] Sending via Brevo SMTP:', {
     from: fromEmail,
     to: options.to,
     subject: options.subject,
   })
 
-  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-    method: 'POST',
-    headers: {
-      'accept': 'application/json',
-      'api-key': apiKey,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      sender: {
-        name: fromName,
-        email: fromEmail,
-      },
-      to: [{ email: options.to }],
-      subject: options.subject,
-      htmlContent: options.html,
-      textContent: options.text || options.html.replace(/<[^>]*>/g, ''),
-    }),
+  const info = await transporter.sendMail({
+    from: `"${fromName}" <${fromEmail}>`,
+    to: options.to,
+    subject: options.subject,
+    html: options.html,
+    text: options.text || options.html.replace(/<[^>]*>/g, ''),
   })
 
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(`Brevo API error: ${error.message || response.statusText}`)
-  }
-
-  const result = await response.json()
-
-  console.log('[SUCCESS] Email sent via Brevo API:', {
-    messageId: result.messageId,
+  console.log('[SUCCESS] Email sent via Brevo SMTP:', {
+    messageId: info.messageId,
     to: options.to,
     subject: options.subject,
   })
