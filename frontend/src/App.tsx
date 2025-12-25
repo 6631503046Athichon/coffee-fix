@@ -40,6 +40,7 @@ import FarmerFarmManagement from './components/farmer/FarmManagement';
 import ActivityTypeManagement from './components/admin/ActivityTypeManagement';
 import ProcessTypeManagement from './components/admin/ProcessTypeManagement';
 import RoasterWorkbench from './components/roaster/RoasterWorkbench';
+import CoffeeVarietiesManager from './components/CoffeeVarietiesManager';
 
 // Root Redirect Component - redirects to login if not authenticated
 const RootRedirect: React.FC = () => {
@@ -235,6 +236,7 @@ const ProtectedRoutes: React.FC = () => {
       { name: 'User Management', href: '/users', icon: Users, roles: [UserRole.Admin] },
       { name: 'Activity Types', href: '/activity-types', icon: Tag, roles: [UserRole.Admin] },
       { name: 'Process Types', href: '/process-types', icon: Coffee, roles: [UserRole.Admin] },
+      { name: 'Coffee Varieties', href: '/coffee-varieties', icon: Coffee, roles: [UserRole.Admin] },
     ];
   }, [currentUser, data.cuppingSessions]);
 
@@ -264,6 +266,7 @@ const ProtectedRoutes: React.FC = () => {
               <Route path="/farmer-farms" element={<FarmerFarmManagement />} />
               <Route path="/activity-types" element={<ActivityTypeManagement />} />
               <Route path="/process-types" element={<ProcessTypeManagement />} />
+              <Route path="/coffee-varieties" element={<CoffeeVarietiesManager />} />
               <Route path="/farmer-dashboard" element={<FarmerDashboard />} />
               <Route path="/farmer-dashboard/:lotId" element={<HarvestLotDetail />} />
               <Route path="/harvest-lots" element={<HarvestLotsManagement />} />

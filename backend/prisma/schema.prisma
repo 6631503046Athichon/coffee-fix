@@ -419,6 +419,23 @@ model ProcessType {
   @@index([isActive])
 }
 
+model CoffeeVariety {
+  id                  String    @id @default(uuid())
+  name                String    @unique  // e.g., "Typica", "Bourbon", "Gesha"
+  species             String    // e.g., "Arabica", "Robusta", "Liberica"
+  origin              String?   // e.g., "Ethiopia", "Yemen"
+  description         String?
+  characteristics     String?   // Flavor profile description
+  altitude            String?   // Recommended altitude range e.g., "1200-1800m"
+  isActive            Boolean   @default(true)
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([species])
+  @@index([isActive])
+}
+
 model GAPLogEntry {
   id                  String        @id @default(uuid())
   farmId              String?
