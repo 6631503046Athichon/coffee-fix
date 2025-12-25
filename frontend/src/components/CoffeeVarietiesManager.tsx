@@ -364,7 +364,7 @@ const CoffeeVarietiesManager: React.FC = () => {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-semibold text-gray-900">
@@ -438,10 +438,14 @@ const CoffeeVarietiesManager: React.FC = () => {
                 </label>
                 <textarea
                   value={formData.characteristics}
-                  onChange={(e) => setFormData({ ...formData, characteristics: e.target.value })}
-                  rows={2}
+                  onChange={(e) => {
+                    setFormData({ ...formData, characteristics: e.target.value });
+                    e.target.style.height = 'auto';
+                    e.target.style.height = e.target.scrollHeight + 'px';
+                  }}
+                  rows={3}
                   placeholder="e.g., Floral, fruity, with notes of jasmine and bergamot"
-                  className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-green-100 focus:border-green-500 transition-all"
+                  className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-green-100 focus:border-green-500 transition-all resize-none overflow-hidden min-h-[80px]"
                 />
               </div>
 
@@ -451,10 +455,14 @@ const CoffeeVarietiesManager: React.FC = () => {
                 </label>
                 <textarea
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows={2}
+                  onChange={(e) => {
+                    setFormData({ ...formData, description: e.target.value });
+                    e.target.style.height = 'auto';
+                    e.target.style.height = e.target.scrollHeight + 'px';
+                  }}
+                  rows={3}
                   placeholder="General description of this variety"
-                  className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-green-100 focus:border-green-500 transition-all"
+                  className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-green-100 focus:border-green-500 transition-all resize-none overflow-hidden min-h-[80px]"
                 />
               </div>
 
