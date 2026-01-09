@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, handleApiError } from '@/lib/middleware'
 
+// This route uses request headers/cookies via requireAuth, so it must be dynamic.
+export const dynamic = 'force-dynamic'
+
 // Open-Meteo API - Free, no API key required
 const OPEN_METEO_API = 'https://api.open-meteo.com/v1/forecast'
 
