@@ -44,10 +44,10 @@ import CoffeeVarietiesManager from './components/CoffeeVarietiesManager';
 
 // Root Redirect Component - redirects to login if not authenticated
 const RootRedirect: React.FC = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
     
   
-  if (isLoading) {
+  if (isAuthLoading) {
     // Show loading state while checking authentication
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -79,11 +79,11 @@ const FirstLoginSetupWrapper: React.FC = () => {
 
 // Protected routes component
 const ProtectedRoutes: React.FC = () => {
-  const { isAuthenticated, isLoading, currentUser } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading, currentUser } = useAuth();
   const [data, setData] = useState(MOCK_DATA);
 
   // Load data from backend API
-  const loadDataFromBackend = async () => {
+  const loadDataFromBackend = useCallback(async () => {
     try {
       // Load all data from backend API
       const [storedFarms, storedSoilAnalyses, storedWeatherRecords, storedHarvestLots, storedGAPLogs, storedActivityTypes, storedProcessTypes, storedCustomers, storedSaleOrders, storedInvoices, storedPricingHistory, storedCropYears] = await Promise.all([
@@ -120,15 +120,20 @@ const ProtectedRoutes: React.FC = () => {
       console.error('Failed to load data from backend:', error);
       // Fallback to MOCK_DATA if API fails
     }
-  };
+  }, []);
 
   // Refresh data function - can be called from any component
   const refreshData = useCallback(async () => {
     await loadDataFromBackend();
-  }, []);
+  }, [loadDataFromBackend]);
 
   // Load data from backend API on mount
   useEffect(() => {
+    if (!isAuthenticated || isAuthLoading) {
+      // Do not load data if not authenticated or still loading auth
+      return;
+    }
+
     // Initial load
     loadDataFromBackend();
 
@@ -170,7 +175,7 @@ const ProtectedRoutes: React.FC = () => {
       window.removeEventListener('localStorageUpdate', handleCustomStorageUpdate);
       window.removeEventListener('dataRefresh', handleDataRefresh);
     };
-  }, []);
+  }, [isAuthenticated, isAuthLoading, loadDataFromBackend]);
 
   const contextValue = useMemo(() => ({ data, setData, refreshData }), [data, setData]);
 
@@ -230,7 +235,7 @@ const ProtectedRoutes: React.FC = () => {
     ];
   }, [currentUser, data.cuppingSessions]);
 
-  if (isLoading) {
+  if (isAuthLoading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
@@ -251,7 +256,7 @@ const ProtectedRoutes: React.FC = () => {
       <div className="flex h-screen bg-gray-50 text-gray-800">
         <Sidebar navItems={navItems} currentUserRoles={currentUser?.roles || [UserRole.Farmer]} />
         <div className="flex-1 flex flex-col overflow-hidden w-full lg:w-auto">
-          <Header currentUserRoles={currentUser?.roles || [UserRole.Farmer]} onRoleChange={() => {}} />
+          <Header currentUserRoles={currentUser?.roles || [UserRole.Farmer]} />
           <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-3 sm:p-4 md:p-6 lg:p-8 pt-16 lg:pt-4">
             <Routes>
               <Route path="/farmer" element={<Navigate to="/farmer-dashboard" replace />} />

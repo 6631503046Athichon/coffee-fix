@@ -1,22 +1,108 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, ChevronDown, LogOut, Coffee, Bell } from 'lucide-react';
+import { User, LogOut, Bell } from 'lucide-react';
 import { UserRole } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import {
+  fetchNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  NotificationItem,
+} from '../../services/notificationService';
 
 interface HeaderProps {
   currentUserRoles: UserRole[]; // Changed to support multiple roles
-  onRoleChange: (role: UserRole) => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ currentUserRoles, onRoleChange }) => {
+const Header: React.FC<HeaderProps> = ({ currentUserRoles }) => {
   const navigate = useNavigate();
   const { logout, currentUser } = useAuth();
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement | null>(null);
+
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
+
+  const refreshNotifications = async () => {
+    if (!currentUser?.id) return;
+    setIsLoadingNotifications(true);
+    setNotificationsError(null);
+    try {
+      const res = await fetchNotifications(currentUser.id);
+      setNotifications(res.notifications);
+      setUnreadCount(res.unreadCount);
+    } catch (err) {
+      setNotificationsError(err instanceof Error ? err.message : 'Failed to load notifications');
+    } finally {
+      setIsLoadingNotifications(false);
+    }
+  };
 
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  useEffect(() => {
+    // Initial load
+    refreshNotifications();
+
+    // Poll periodically (lightweight)
+    const id = window.setInterval(() => {
+      refreshNotifications();
+    }, 30000);
+
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    const onClickOutside = (e: MouseEvent) => {
+      if (!notificationsOpen) return;
+      if (!notificationsRef.current) return;
+      if (!notificationsRef.current.contains(e.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [notificationsOpen]);
+
+  const handleOpenNotifications = async () => {
+    const next = !notificationsOpen;
+    setNotificationsOpen(next);
+    if (next) {
+      await refreshNotifications();
+    }
+  };
+
+  const handleNotificationClick = (n: NotificationItem) => {
+    if (!currentUser?.id) return;
+
+    markNotificationRead(currentUser.id, n.id);
+    setUnreadCount((c) => Math.max(0, c - 1));
+
+    if (n.href) {
+      navigate(n.href);
+    }
+
+    setNotificationsOpen(false);
+  };
+
+  const handleMarkAllRead = () => {
+    if (!currentUser?.id) return;
+    markAllNotificationsRead(currentUser.id, notifications);
+    setUnreadCount(0);
+  };
+
+  const formatTime = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString();
   };
 
   const getRoleBadgeColor = (role: UserRole) => {
@@ -73,11 +159,62 @@ const Header: React.FC<HeaderProps> = ({ currentUserRoles, onRoleChange }) => {
 
       {/* Right Section - Actions */}
       <div className="flex items-center space-x-3">
-        {/* Notification Button */}
-        <button className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Notifications">
+        {/* Notification Button & Dropdown */}
+        <div className="relative" ref={notificationsRef}>
+          <button
+            onClick={handleOpenNotifications}
+            className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+            aria-label="Notifications"
+          >
           <Bell className="h-5 w-5" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                {unreadCount}
+              </span>
+            )}
         </button>
+
+          {notificationsOpen && (
+            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
+              <div className="px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+                <h3 className="text-md font-bold text-gray-800">Notifications</h3>
+                {notifications.length > 0 && (
+                  <button
+                    onClick={handleMarkAllRead}
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                  >
+                    Mark all as read
+                  </button>
+                )}
+              </div>
+
+              <div className="max-h-96 overflow-y-auto">
+                {isLoadingNotifications ? (
+                  <div className="p-8 text-center text-sm text-gray-500">Loading...</div>
+                ) : notificationsError ? (
+                  <div className="p-4 text-center text-sm text-red-600">{notificationsError}</div>
+                ) : notifications.length === 0 ? (
+                  <div className="p-8 text-center text-sm text-gray-500">No notifications yet.</div>
+                ) : (
+                  <ul>
+                    {notifications.map((n) => (
+                      <li key={n.id}>
+                        <button
+                          onClick={() => handleNotificationClick(n)}
+                          className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                        >
+                          <p className="font-bold text-sm text-gray-800">{n.title}</p>
+                          <p className="text-sm text-gray-600">{n.message}</p>
+                          <p className="text-xs text-gray-400 mt-1">{formatTime(n.createdAt)}</p>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Logout Button */}
         <button
