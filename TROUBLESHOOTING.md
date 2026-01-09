@@ -74,11 +74,31 @@
 ### 3. ⚠️ Warning: "VITE_GEMINI_API_KEY environment variable not set"
 
 **สาเหตุ:**
-- ยังมีโค้ดที่อ้างอิง geminiService (ควรลบออกแล้ว)
+- ยังไม่ได้ตั้งค่า Gemini API key ใน `.env.local`
 
 **วิธีแก้:**
-- Warning นี้ไม่เป็นปัญหา - ระบบจะใช้ mock data แทน
-- หรือ hard refresh browser (Ctrl+Shift+R)
+1. สร้างไฟล์ `frontend/.env.local` (ถ้ายังไม่มี):
+   ```bash
+   cd frontend
+   # Windows
+   Copy-Item .env.local.example .env.local
+   # Mac/Linux
+   cp .env.local.example .env.local
+   ```
+
+2. แก้ไข `.env.local` และใส่ Gemini API key:
+   ```env
+   VITE_GEMINI_API_KEY="your-actual-gemini-api-key"
+   ```
+
+3. Get API key จาก: https://aistudio.google.com/app/apikey
+
+4. Restart frontend server:
+   ```bash
+   npm run dev
+   ```
+
+**หมายเหตุ:** ถ้าไม่มี API key ระบบจะใช้ mock data แทน (ไม่เป็นปัญหา แต่ AI features จะไม่ทำงาน)
 
 ---
 
