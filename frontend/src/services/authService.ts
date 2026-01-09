@@ -80,45 +80,41 @@ export const authService = {
 
   // Get current user from backend (validates session)
   getCurrentUser: async (): Promise<User | null> => {
-    // First check if we have a token - if not, don't even try API
-    const token = localStorage.getItem('auth-token');
+    // Token is stored in httpOnly cookie by backend, so we cannot rely on localStorage token.
+    // Always try backend first. Fallback to stored user only for network/temporary issues.
     const storedUser = localStorage.getItem(STORAGE_KEY);
 
-    if (!token || !storedUser) {
-      return null;
-    }
-
-    // Try to validate with backend
     try {
       const response = await api.get<{ user: User }>('/auth/me');
+
       if (response.user) {
-        console.debug('Got user from backend:', response.user.username || response.user.email);
         // Update localStorage with fresh user data
         localStorage.setItem(STORAGE_KEY, JSON.stringify(response.user));
         return response.user;
       }
-    } catch (error) {
-      // Backend validation failed - but if we have stored user, use it
-      // This allows offline/temporary disconnection scenarios
-      console.debug('Backend session check failed:', error instanceof Error ? error.message : 'Unknown error');
 
-      // Only clear if it's a 401 (unauthorized) - otherwise keep user logged in
+      return null;
+    } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '';
+
+      // If not authenticated, clear local state
       if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem('auth-token');
         return null;
       }
 
-      // For network errors, return stored user
-      try {
-        return JSON.parse(storedUser) as User;
-      } catch {
-        return null;
+      // For network errors, return stored user (prevents refresh kicking user to login)
+      if (storedUser) {
+        try {
+          return JSON.parse(storedUser) as User;
+        } catch {
+          return null;
+        }
       }
-    }
 
-    return null;
+      return null;
+    }
   },
 
   // Check if user is authenticated

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
+// This route depends on auth cookies/headers, so it must be dynamic.
+export const dynamic = 'force-dynamic'
+
 // GET /api/farms - List all farms
 export async function GET(request: NextRequest) {
   try {
