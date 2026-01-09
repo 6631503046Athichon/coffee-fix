@@ -100,6 +100,12 @@ export async function POST(request: NextRequest) {
 
     return response
   } catch (error) {
+    // Log full error for debugging 500 errors
+    console.error('[LOGIN] Error:', error)
+    if (error instanceof Error) {
+      console.error('[LOGIN] Error message:', error.message)
+      console.error('[LOGIN] Error stack:', error.stack)
+    }
     return handleApiError(error)
   }
 }
