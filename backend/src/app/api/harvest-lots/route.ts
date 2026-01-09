@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
+// This route depends on auth cookies/headers, so it must be dynamic.
+export const dynamic = 'force-dynamic'
+
 // GET /api/harvest-lots - List all harvest lots
 export async function GET(request: NextRequest) {
   try {
@@ -79,8 +82,6 @@ export async function POST(request: NextRequest) {
       const trimmedId = cropYearId.trim()
       
       // Debug: Log the cropYearId being searched
-      console.log('Looking for crop year with ID:', trimmedId)
-      
       try {
         // Try to find crop year by ID (UUID)
         // Prisma will validate UUID format automatically
@@ -89,12 +90,6 @@ export async function POST(request: NextRequest) {
         })
         
         if (!cropYear) {
-          // Debug: List all available crop years
-          const allCropYears = await prisma.cropYear.findMany({
-            select: { id: true, year: true },
-          })
-          console.log('Available crop years:', allCropYears)
-          console.log('Requested crop year ID:', trimmedId)
           
           return NextResponse.json(
             { error: 'Crop year not found', details: `Crop year with ID "${trimmedId}" does not exist in database` },
@@ -104,7 +99,6 @@ export async function POST(request: NextRequest) {
         validCropYearId = trimmedId
       } catch (prismaError: any) {
         // Handle Prisma validation errors (e.g., invalid UUID format)
-        console.error('Prisma error when querying crop year:', prismaError)
         if (prismaError.code === 'P2023' || prismaError.message?.includes('Invalid')) {
           return NextResponse.json(
             { error: 'Invalid crop year ID format', details: `The crop year ID "${trimmedId}" is not a valid UUID format` },

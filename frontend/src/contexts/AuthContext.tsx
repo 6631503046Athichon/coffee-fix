@@ -5,7 +5,7 @@ import { authService } from '../services/authService';
 interface AuthContextType {
   currentUser: User | null;
   isAuthenticated: boolean;
-  isLoading: boolean;
+  isAuthLoading: boolean; // Renamed for clarity
   login: (identifier: string, password: string) => Promise<User>;
   logout: () => void;
   setUser: (user: User) => void;
@@ -13,15 +13,25 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Renamed isLoading to isAuthLoading for clarity to distinguish from data loading
+interface AuthContextType {
+  currentUser: User | null;
+  isAuthenticated: boolean;
+  isAuthLoading: boolean; // Renamed from isLoading
+  login: (identifier: string, password: string) => Promise<User>;
+  logout: () => Promise<void>; // Changed to async
+  setUser: (user: User) => void;
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
 
   // Check if user is already logged in on mount
   useEffect(() => {
     const loadUser = async () => {
-      setIsLoading(true);
+      setIsAuthLoading(true);
       try {
         const user = await authService.getCurrentUser();
         if (user) {
@@ -38,7 +48,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCurrentUser(null);
         setIsAuthenticated(false);
       } finally {
-        setIsLoading(false);
+        setIsAuthLoading(false);
       }
     };
 
@@ -66,7 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const value = {
     currentUser,
     isAuthenticated,
-    isLoading,
+    isAuthLoading,
     login,
     logout,
     setUser,
