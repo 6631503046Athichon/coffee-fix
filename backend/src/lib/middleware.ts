@@ -89,7 +89,16 @@ export function successResponse(data: any, status: number = 200): NextResponse {
  * Handle API errors
  */
 export function handleApiError(error: any): NextResponse {
+  // Avoid noisy logs for expected auth failures
+  const isExpectedAuthError =
+    error?.message === 'Unauthorized' ||
+    error?.message === 'Invalid or expired token' ||
+    error?.message === 'Insufficient permissions' ||
+    error?.message === 'User not found or inactive'
+
+  if (!isExpectedAuthError) {
   console.error('API Error:', error)
+  }
 
   // Prisma errors
   if (error.code === 'P2002') {
