@@ -97,8 +97,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Weather code descriptions
-export const WEATHER_CODES: Record<number, string> = {
+// Internal weather code descriptions (no export)
+const WEATHER_CODES: Record<number, string> = {
   0: 'Clear sky',
   1: 'Mainly clear',
   2: 'Partly cloudy',
