@@ -35,22 +35,23 @@
    NODE_ENV="development"
    ```
 
-4. Generate Prisma Client:
+4. Generate Prisma Client (รันใน `backend/` directory):
    ```bash
+   cd backend
    npm run db:generate
    ```
 
-5. Push schema to database:
+5. Push schema to database (รันใน `backend/` directory):
    ```bash
    npm run db:push
    ```
 
-6. Seed database:
+6. Seed database (รันใน `backend/` directory):
    ```bash
    npm run db:seed
    ```
 
-7. Restart backend server:
+7. Restart backend server (รันใน `backend/` directory):
    ```bash
    npm run dev
    ```
@@ -147,7 +148,7 @@ npm run db:generate
 
 **วิธีแก้:**
 ```bash
-cd backend
+cd backend  # ต้องอยู่ใน backend directory
 npm run db:seed
 ```
 
