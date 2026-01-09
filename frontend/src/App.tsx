@@ -44,25 +44,15 @@ import CoffeeVarietiesManager from './components/CoffeeVarietiesManager';
 
 // Root Redirect Component - redirects to login if not authenticated
 const RootRedirect: React.FC = () => {
-  const { isAuthenticated, currentUser } = useAuth();
-  const [isLoading, setIsLoading] = React.useState(true);
-  
-  // Wait for auth check to complete
-  React.useEffect(() => {
-    // Small delay to allow AuthContext to finish loading
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 100);
+  const { isAuthenticated, isLoading } = useAuth();
     
-    return () => clearTimeout(timer);
-  }, [currentUser]);
   
   if (isLoading) {
     // Show loading state while checking authentication
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>
@@ -89,7 +79,7 @@ const FirstLoginSetupWrapper: React.FC = () => {
 
 // Protected routes component
 const ProtectedRoutes: React.FC = () => {
-  const { isAuthenticated, currentUser } = useAuth();
+  const { isAuthenticated, isLoading, currentUser } = useAuth();
   const [data, setData] = useState(MOCK_DATA);
 
   // Load data from backend API
@@ -239,6 +229,18 @@ const ProtectedRoutes: React.FC = () => {
       { name: 'Coffee Varieties', href: '/coffee-varieties', icon: Coffee, roles: [UserRole.Admin] },
     ];
   }, [currentUser, data.cuppingSessions]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
