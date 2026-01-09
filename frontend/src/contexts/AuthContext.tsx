@@ -5,6 +5,7 @@ import { authService } from '../services/authService';
 interface AuthContextType {
   currentUser: User | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   login: (identifier: string, password: string) => Promise<User>;
   logout: () => void;
   setUser: (user: User) => void;
@@ -15,10 +16,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Check if user is already logged in on mount
   useEffect(() => {
     const loadUser = async () => {
+      setIsLoading(true);
       try {
         const user = await authService.getCurrentUser();
         if (user) {
@@ -34,6 +37,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.debug('User not authenticated:', error);
         setCurrentUser(null);
         setIsAuthenticated(false);
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -61,6 +66,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const value = {
     currentUser,
     isAuthenticated,
+    isLoading,
     login,
     logout,
     setUser,
