@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 // fix: Removed non-existent CuppingSessionStatus from import.
 import { UserRole, JudgeScore, SCA_ATTRIBUTES, CuppingSample, CuppingSession } from '../../types';
-// AI service removed - using manual notes instead
+import { synthesizeCuppingNotes } from '../../services/geminiService';
 import { Bot, Loader2, Edit, Save, Lock, Trophy, Clock, ClipboardList, ShieldCheck, Check, AlertTriangle, PlayCircle, Flag } from 'lucide-react';
 
 const ScoreCell: React.FC<{ score: number }> = ({ score }) => {
@@ -42,9 +42,7 @@ const CompetitionDashboard: React.FC<{ currentUserRoles: UserRole[] }> = ({ curr
 
     setSynthesizing(prev => ({ ...prev, [sampleId]: true }));
     try {
-      // AI service removed - generate notes from judge scores manually
-      const notesText = scores.map(s => s.notes).filter(Boolean).join(' ');
-      const result = notesText || 'No notes available from judges.';
+      const result = await synthesizeCuppingNotes(scores);
       setFinalNotes(prev => ({ ...prev, [sampleId]: result }));
     } catch (error) {
       console.error(error);
