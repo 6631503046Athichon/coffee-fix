@@ -3,9 +3,21 @@
 
 Write-Host "Starting deployment with migration..." -ForegroundColor Cyan
 
+# Stop processes that may lock Prisma engine on Windows
+Write-Host "Stopping node/next processes that may lock Prisma engine..." -ForegroundColor Yellow
+Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process next -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+# Clean Prisma generated client to avoid EPERM rename issues
+Write-Host "Cleaning Prisma generated client cache..." -ForegroundColor Yellow
+$prismaClientPath = Join-Path $PSScriptRoot "node_modules\.prisma\client"
+if (Test-Path $prismaClientPath) {
+    Remove-Item $prismaClientPath -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 # Step 1: Generate Prisma Client
 Write-Host "Generating Prisma Client..." -ForegroundColor Yellow
-npx prisma generate
+npx --no-install prisma generate
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Failed to generate Prisma Client" -ForegroundColor Red
     exit 1
@@ -13,7 +25,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # Step 2: Deploy migrations
 Write-Host "Deploying migrations..." -ForegroundColor Yellow
-npx prisma migrate deploy
+npx --no-install prisma migrate deploy
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Failed to deploy migrations" -ForegroundColor Red
     exit 1
