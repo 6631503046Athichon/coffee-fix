@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useDataContext } from '../hooks/useDataContext';
 import { SCA_ATTRIBUTES, CuppingSession, ComprehensiveQualityReport } from '../types';
-// AI service removed - using manual insights instead
+import { getQualityInsights, QualityInsight, generateComprehensiveReport } from '../services/geminiService';
 import { Lightbulb, Loader2, AlertTriangle, Wand2, BarChart2, CheckSquare, Wind, Bot, TrendingUp, Trophy, FileText, User, Droplets, Flame } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import Select from './common/Select';
@@ -36,18 +36,8 @@ const QualityInsights: React.FC = () => {
         if (!session) { setError("Please select a valid cupping session."); return; }
         setIsLoading(true); setError(null); setInsights(null);
         try {
-            // Mock insights based on session data
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate processing
-            const mockInsights = {
-                keyDescriptors: ['Balanced', 'Complex', 'Clean'],
-                performanceSummary: `This cupping session shows ${session.samples.length} samples with consistent quality. The ${selectedAttribute} attribute demonstrates good overall performance.`,
-                roasterRecommendations: [
-                    'Consider medium roast profile for best flavor development',
-                    'Monitor roast time to preserve delicate notes',
-                    'Test different roast levels to find optimal profile'
-                ]
-            };
-            setInsights(mockInsights);
+            const result = await getQualityInsights(session, selectedAttribute);
+            setInsights(result);
         } catch (err: any) { setError(err.message || "An unknown error occurred."); } 
         finally { setIsLoading(false); }
     };
@@ -57,16 +47,8 @@ const QualityInsights: React.FC = () => {
         setReportError(null);
         setReport(null);
         try {
-            // Mock comprehensive report
-            await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate processing
-            const mockReport: ComprehensiveQualityReport = {
-                year: new Date().getFullYear().toString(),
-                summary: 'Quality analysis report based on available cupping sessions and lot data.',
-                topPerformers: [],
-                trends: [],
-                recommendations: ['Continue monitoring quality metrics', 'Maintain consistent processing standards']
-            };
-            setReport(mockReport);
+            const result = await generateComprehensiveReport(data);
+            setReport(result);
         } catch (err: any) {
             setReportError(err.message || "An unknown error occurred.");
         } finally {
