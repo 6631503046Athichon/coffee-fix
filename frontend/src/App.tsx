@@ -2,14 +2,14 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
-import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, BarChart, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package } from 'lucide-react';
+import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package } from 'lucide-react';
 
-import { UserRole, User, CuppingSessionType } from './types';
+import { UserRole, CuppingSessionType } from './types';
 import { MOCK_DATA } from './constants';
 import { DataContext } from './hooks/useDataContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { getAllSoilAnalyses, initializeSoilAnalyses } from './services/soilAnalysisService';
-import { getAllWeatherRecords, initializeWeatherRecords } from './services/weatherService';
+import { getAllSoilAnalyses } from './services/soilAnalysisService';
+import { getAllWeatherRecords } from './services/weatherService';
 import { getAllCustomers, getAllSaleOrders, getAllInvoices, getAllPricingHistory, initializeCustomers, initializeSaleOrders, initializeInvoices, initializePricingHistory } from './services/salesService';
 import { getAllActivityTypes, initializeActivityTypes } from './services/activityTypeService';
 import { getAllProcessTypes, initializeProcessTypes, resetProcessTypes } from './services/processTypeService';
@@ -37,6 +37,7 @@ import CupperScoringSheet from './components/cupper/CupperScoringSheet';
 import TraceabilityHub from './components/TraceabilityHub';
 import UserManagement from './components/UserManagement';
 import FarmerFarmManagement from './components/farmer/FarmManagement';
+import AddFarmPage from './components/farmer/AddFarmPage';
 import ActivityTypeManagement from './components/admin/ActivityTypeManagement';
 import ProcessTypeManagement from './components/admin/ProcessTypeManagement';
 import RoasterWorkbench from './components/roaster/RoasterWorkbench';
@@ -218,7 +219,7 @@ const ProtectedRoutes: React.FC = () => {
       { name: 'Processor Workbench', href: '/processor', icon: Droplets, roles: [UserRole.Processor, UserRole.Admin] },
 
       // Quality & Cupping Section
-      { name: 'Cupping Lab', href: '/cupping', icon: FlaskConical, roles: [UserRole.Processor, UserRole.Roaster, UserRole.HeadJudge, UserRole.Admin] },
+      { name: 'Cupping Lab', href: '/cupping', icon: FlaskConical, roles: [UserRole.Processor, UserRole.Roaster, UserRole.HeadJudge] },
       { name: 'Scoring Sheet', href: '/scoring', icon: Edit, roles: [UserRole.Cupper, UserRole.Admin] },
       { name: 'Competition Admin', href: competitionAdminHref, icon: Trophy, roles: [UserRole.HeadJudge, UserRole.Cupper, UserRole.Admin] },
       { name: 'Quality Insights', href: '/insights', icon: Lightbulb, roles: [UserRole.Roaster, UserRole.Processor, UserRole.Admin] },
@@ -271,6 +272,8 @@ const ProtectedRoutes: React.FC = () => {
               <Route path="/traceability" element={<TraceabilityHub />} />
               <Route path="/users" element={<UserManagement />} />
               <Route path="/farmer-farms" element={<FarmerFarmManagement />} />
+              <Route path="/farmer-farms/add" element={<AddFarmPage />} />
+              <Route path="/farmer-farms/edit/:farmId" element={<AddFarmPage />} />
               <Route path="/activity-types" element={<ActivityTypeManagement />} />
               <Route path="/process-types" element={<ProcessTypeManagement />} />
               <Route path="/coffee-varieties" element={<CoffeeVarietiesManager />} />
