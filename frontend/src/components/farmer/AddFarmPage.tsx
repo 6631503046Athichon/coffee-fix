@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { PlusCircle, Save, MapPin, Compass, X, RefreshCw, ArrowLeft } from 'lucide-react';
+import { PlusCircle, Save, MapPin, Compass, X, RefreshCw, ArrowLeft, Sprout, User, Ruler, Coffee, Leaf, Info } from 'lucide-react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Farm } from '../../types';
@@ -324,47 +324,77 @@ const AddFarmPage: React.FC = () => {
 
 	return (
 		<div className="space-y-6">
-			<div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
-				<div className="flex items-center gap-4 mb-6">
+			{/* Header Section */}
+			<div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-2xl p-6 shadow-sm border border-emerald-200">
+				<div className="flex items-center gap-4 mb-4">
 					<Button
 						type="button"
 						variant="outline"
 						onClick={() => navigate('/farmer-farms')}
 						icon={<ArrowLeft className="h-4 w-4" />}
+						className="bg-white hover:bg-gray-50"
 					>
 						Back to Farms
 					</Button>
-					<div className="flex-1">
-						<h1 className="text-3xl font-bold text-gray-900">{pageTitle}</h1>
-						<p className="text-gray-600">Fill in the farm information below</p>
+					<div className="flex-1 flex items-center gap-3">
+						<div className="p-3 bg-emerald-100 rounded-xl">
+							<Sprout className="h-6 w-6 text-emerald-600" />
+						</div>
+						<div>
+							<h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+								{pageTitle}
+							</h1>
+							<p className="text-gray-600 mt-1">Fill in the farm information below</p>
+						</div>
 					</div>
 				</div>
 
 				{toast && (
-					<div className={`flex items-center justify-between px-4 py-3 border rounded-xl mb-6 ${toastColors}`}>
+					<div className={`flex items-center justify-between px-4 py-3 border rounded-xl ${toastColors} transition-all duration-300`}>
 						<span className="font-semibold">{toast.message}</span>
-						<button className="p-1 rounded-full hover:bg-black/5" onClick={() => setToast(null)} aria-label="Close message">
+						<button className="p-1 rounded-full hover:bg-black/5 transition-colors" onClick={() => setToast(null)} aria-label="Close message">
 							<X className="h-4 w-4" />
 						</button>
 					</div>
 				)}
+			</div>
 
-				<form onSubmit={handleSaveFarm} className="space-y-6">
-					<Input
-						label="Farm Name"
-						placeholder="e.g., Finca La Esperanza (optional)"
-						value={farmName}
-						onChange={e => setFarmName(e.target.value)}
-						fullWidth
-					/>
-					<Input
-						label="Location"
-						placeholder="Province / Coordinates / Planting Zone"
-						value={farmLocation}
-						onChange={e => setFarmLocation(e.target.value)}
-						required
-						fullWidth
-					/>
+			<form onSubmit={handleSaveFarm} className="space-y-6">
+				{/* Basic Information Section */}
+				<div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+					<div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
+						<div className="p-2 bg-emerald-50 rounded-lg">
+							<MapPin className="h-5 w-5 text-emerald-600" />
+						</div>
+						<h2 className="text-xl font-bold text-gray-900">Basic Information</h2>
+					</div>
+					<div className="space-y-4">
+						<Input
+							label="Farm Name"
+							placeholder="e.g., Finca La Esperanza (optional)"
+							value={farmName}
+							onChange={e => setFarmName(e.target.value)}
+							fullWidth
+						/>
+						<Input
+							label="Location"
+							placeholder="Province / Coordinates / Planting Zone"
+							value={farmLocation}
+							onChange={e => setFarmLocation(e.target.value)}
+							required
+							fullWidth
+						/>
+					</div>
+				</div>
+
+				{/* People Section */}
+				<div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+					<div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
+						<div className="p-2 bg-blue-50 rounded-lg">
+							<User className="h-5 w-5 text-blue-600" />
+						</div>
+						<h2 className="text-xl font-bold text-gray-900">People</h2>
+					</div>
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 						<Input
 							label="Farm Owner Name"
@@ -383,7 +413,17 @@ const AddFarmPage: React.FC = () => {
 							fullWidth
 						/>
 					</div>
-					<div className="space-y-3">
+				</div>
+
+				{/* Location Details Section */}
+				<div className="bg-white rounded-2xl p-6 shadow-sm border-2 border-sky-200">
+					<div className="flex items-center gap-3 mb-6 pb-4 border-b border-sky-100">
+						<div className="p-2 bg-sky-50 rounded-lg">
+							<Compass className="h-5 w-5 text-sky-600" />
+						</div>
+						<h2 className="text-xl font-bold text-gray-900">Location Details</h2>
+					</div>
+					<div className="space-y-4">
 						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 							<Input
 								label="Latitude"
@@ -402,31 +442,50 @@ const AddFarmPage: React.FC = () => {
 								fullWidth
 							/>
 						</div>
-						<div className="flex flex-wrap gap-2">
-							<Button
-								type="button"
-								variant="outline"
-								onClick={handleGeocodeLocation}
-								disabled={isGeocoding || !farmLocation.trim()}
-								icon={isGeocoding ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
-							>
-								{isGeocoding ? 'Finding...' : 'Find GPS from Location'}
-							</Button>
-							<Button
-								type="button"
-								variant="outline"
-								onClick={handleGetCurrentLocation}
-								disabled={isGettingLocation}
-								icon={isGettingLocation ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Compass className="h-4 w-4" />}
-							>
-								{isGettingLocation ? 'Getting...' : 'Use Current Location'}
-							</Button>
+						
+						{/* GPS Tools Card */}
+						<div className="bg-sky-50 border border-sky-200 rounded-xl p-4 space-y-3">
+							<div className="flex flex-wrap gap-2">
+								<Button
+									type="button"
+									variant="outline"
+									onClick={handleGeocodeLocation}
+									disabled={isGeocoding || !farmLocation.trim()}
+									icon={isGeocoding ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
+									className="bg-white hover:bg-sky-50 border-sky-300 text-sky-700 hover:text-sky-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+								>
+									{isGeocoding ? 'Finding...' : 'Find GPS from Location'}
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									onClick={handleGetCurrentLocation}
+									disabled={isGettingLocation}
+									icon={isGettingLocation ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Compass className="h-4 w-4" />}
+									className="bg-white hover:bg-sky-50 border-sky-300 text-sky-700 hover:text-sky-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+								>
+									{isGettingLocation ? 'Getting...' : 'Use Current Location'}
+								</Button>
+							</div>
+							<div className="flex items-start gap-2 bg-white rounded-lg p-3 border border-sky-200">
+								<Info className="h-4 w-4 text-sky-600 mt-0.5 flex-shrink-0" />
+								<p className="text-xs text-gray-600 leading-relaxed">
+									<strong className="text-sky-700">Tip:</strong> Enter your farm location above, then click "Find GPS from Location" to automatically get coordinates, or use "Use Current Location" if you're at the farm.
+								</p>
+							</div>
 						</div>
-						<p className="text-xs text-gray-500">
-							💡 Tip: Enter your farm location above, then click "Find GPS from Location" to automatically get coordinates, or use "Use Current Location" if you're at the farm.
-						</p>
 					</div>
-					<div className="w-1/2">
+				</div>
+
+				{/* Farm Details Section */}
+				<div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+					<div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
+						<div className="p-2 bg-amber-50 rounded-lg">
+							<Ruler className="h-5 w-5 text-amber-600" />
+						</div>
+						<h2 className="text-xl font-bold text-gray-900">Farm Size</h2>
+					</div>
+					<div className="max-w-md">
 						<Input
 							label="Area Size (Hectares)"
 							placeholder="e.g., 15"
@@ -436,54 +495,75 @@ const AddFarmPage: React.FC = () => {
 							fullWidth
 						/>
 					</div>
+				</div>
+
+				{/* Coffee Varieties Section */}
+				<div className="bg-white rounded-2xl p-6 shadow-sm border-2 border-emerald-200">
+					<div className="flex items-center gap-3 mb-6 pb-4 border-b border-emerald-100">
+						<div className="p-2 bg-emerald-50 rounded-lg">
+							<Coffee className="h-5 w-5 text-emerald-600" />
+						</div>
+						<div className="flex-1">
+							<h2 className="text-xl font-bold text-gray-900">Coffee Varieties</h2>
+							<p className="text-xs text-gray-500 mt-1">Select or add at least one variety *</p>
+						</div>
+					</div>
 					<div className="space-y-4">
-						<div>
-							<label className="block text-sm font-semibold text-gray-700 mb-2">Planted Varieties *</label>
-							<div className="flex flex-col gap-3 md:flex-row md:items-end">
-								<div className="flex-1">
-									<Select
-										value={null}
-										onChange={(v) => {
-											const variety = v as string;
-											if (variety && !selectedVarieties.includes(variety)) {
-												toggleVariety(variety);
-											}
-										}}
-										options={COFFEE_VARIETIES.filter(v => !selectedVarieties.includes(v))}
-										placeholder="Select variety..."
-										colorTheme="emerald"
-									/>
-								</div>
-								<div className="flex-1">
-									<Input
-										placeholder="Or type another variety name"
-										value={customVariety}
-										onChange={e => setCustomVariety(e.target.value)}
-										onKeyDown={(e) => {
-											if (e.key === 'Enter') {
-												e.preventDefault();
-												handleCustomVarietyAdd();
-											}
-										}}
-										fullWidth
-									/>
-								</div>
-								<Button type="button" variant="secondary" onClick={handleCustomVarietyAdd} className="md:w-auto whitespace-nowrap">
-									Add
-								</Button>
+						<div className="flex flex-col gap-3 md:flex-row md:items-end">
+							<div className="flex-1">
+								<Select
+									value={null}
+									onChange={(v) => {
+										const variety = v as string;
+										if (variety && !selectedVarieties.includes(variety)) {
+											toggleVariety(variety);
+										}
+									}}
+									options={COFFEE_VARIETIES.filter(v => !selectedVarieties.includes(v))}
+									placeholder="Select variety..."
+									colorTheme="emerald"
+								/>
 							</div>
+							<div className="flex-1">
+								<Input
+									placeholder="Or type another variety name"
+									value={customVariety}
+									onChange={e => setCustomVariety(e.target.value)}
+									onKeyDown={(e) => {
+										if (e.key === 'Enter') {
+											e.preventDefault();
+											handleCustomVarietyAdd();
+										}
+									}}
+									fullWidth
+								/>
+							</div>
+							<Button 
+								type="button" 
+								variant="secondary" 
+								onClick={handleCustomVarietyAdd} 
+								className="md:w-auto whitespace-nowrap bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 transition-all"
+							>
+								Add
+							</Button>
 						</div>
 						{selectedVarieties.length > 0 && (
-							<div>
-								<p className="text-xs font-semibold text-gray-500 mb-2">Selected Varieties ({selectedVarieties.length})</p>
+							<div className="pt-4 border-t border-gray-100">
+								<p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+									<Leaf className="h-4 w-4 text-emerald-600" />
+									Selected Varieties ({selectedVarieties.length})
+								</p>
 								<div className="flex flex-wrap gap-2">
 									{selectedVarieties.map(variety => (
-										<span key={variety} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-sm text-emerald-700 font-medium">
+										<span 
+											key={variety} 
+											className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-sm text-emerald-700 font-medium hover:bg-emerald-100 transition-all animate-in fade-in duration-200"
+										>
 											{variety}
 											<button
 												type="button"
 												onClick={() => removeVariety(variety)}
-												className="text-emerald-500 hover:text-emerald-700 transition-colors"
+												className="text-emerald-500 hover:text-emerald-700 transition-colors rounded-full hover:bg-emerald-200 p-0.5"
 												aria-label={`Remove variety ${variety}`}
 											>
 												<X className="h-3.5 w-3.5" />
@@ -494,23 +574,38 @@ const AddFarmPage: React.FC = () => {
 							</div>
 						)}
 					</div>
+				</div>
 
-					{formError && (
-						<div className="px-4 py-3 border border-red-200 bg-red-50 rounded-xl text-red-700 text-sm">
-							{formError}
-						</div>
-					)}
+				{/* Error Message */}
+				{formError && (
+					<div className="px-4 py-3 border border-red-200 bg-red-50 rounded-xl text-red-700 text-sm flex items-start gap-2 animate-in fade-in duration-200">
+						<X className="h-4 w-4 mt-0.5 flex-shrink-0" />
+						<span>{formError}</span>
+					</div>
+				)}
 
-					<div className="flex justify-end gap-3 pt-4 border-t">
-						<Button type="button" variant="outline" onClick={() => navigate('/farmer-farms')}>
+				{/* Form Actions */}
+				<div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+					<div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+						<Button 
+							type="button" 
+							variant="outline" 
+							onClick={() => navigate('/farmer-farms')}
+							className="px-6 hover:bg-gray-50 transition-all"
+						>
 							Cancel
 						</Button>
-						<Button type="submit" variant="primary" icon={submitIcon}>
+						<Button 
+							type="submit" 
+							variant="primary" 
+							icon={submitIcon}
+							className="px-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md hover:shadow-lg transition-all"
+						>
 							{submitLabel}
 						</Button>
 					</div>
-				</form>
-			</div>
+				</div>
+			</form>
 		</div>
 	);
 };
