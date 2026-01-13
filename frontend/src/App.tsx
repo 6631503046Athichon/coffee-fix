@@ -43,9 +43,18 @@ import ProcessTypeManagement from './components/admin/ProcessTypeManagement';
 import RoasterWorkbench from './components/roaster/RoasterWorkbench';
 import CoffeeVarietiesManager from './components/CoffeeVarietiesManager';
 
+// Helper function to get dashboard path by role
+const getDashboardPathByRole = (roles: UserRole[]): string => {
+  if (roles.includes(UserRole.Processor)) return '/processor';
+  if (roles.includes(UserRole.Roaster)) return '/roaster';
+  if (roles.includes(UserRole.Cupper) || roles.includes(UserRole.HeadJudge)) return '/cupping';
+  if (roles.includes(UserRole.Farmer) || roles.includes(UserRole.Admin)) return '/farmer-dashboard';
+  return '/farmer-dashboard'; // default
+};
+
 // Root Redirect Component - redirects to login if not authenticated
 const RootRedirect: React.FC = () => {
-  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { isAuthenticated, isAuthLoading } = useAuth();
     
   
   if (isAuthLoading) {
@@ -80,7 +89,7 @@ const FirstLoginSetupWrapper: React.FC = () => {
 
 // Protected routes component
 const ProtectedRoutes: React.FC = () => {
-  const { isAuthenticated, isLoading: isAuthLoading, currentUser } = useAuth();
+  const { isAuthenticated, isAuthLoading, currentUser } = useAuth();
   const [data, setData] = useState(MOCK_DATA);
 
   // Load data from backend API
