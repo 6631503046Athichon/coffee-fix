@@ -21,6 +21,9 @@ async function request<T>(
   // Get auth token from cookie or localStorage
   const token = getAuthToken()
 
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:24',message:'Making request',data:{url,endpoint,hasToken:!!token,hasAuthHeader:!!token,cookies:typeof document!=='undefined'?document.cookie:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
   const response = await fetch(url, {
     ...fetchOptions,
     headers: {
@@ -30,15 +33,28 @@ async function request<T>(
     },
     credentials: 'include', // Include cookies
   })
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:33',message:'Response received',data:{status:response.status,statusText:response.statusText,ok:response.ok,endpoint},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+  // #endregion
 
   if (!response.ok) {
     // Handle 401 Unauthorized - token expired or invalid
     if (response.status === 401) {
       // For login endpoint, don't clear token (user is trying to login)
       const isLoginEndpoint = endpoint.includes('/auth/login')
+      const isAuthMeEndpoint = endpoint.includes('/auth/me')
+      
       if (!isLoginEndpoint) {
         // Clear invalid token for other endpoints
         localStorage.removeItem('auth-token')
+      }
+      
+      // For /auth/me, 401 is expected when user is not logged in
+      // Don't log it as an error to reduce console noise
+      if (isAuthMeEndpoint) {
+        // Silently handle - user is simply not authenticated
+        const errorMessage = 'Unauthorized'
+        throw new Error(errorMessage)
       }
     }
     
@@ -59,17 +75,19 @@ async function request<T>(
 }
 
 function getAuthToken(): string | null {
-  // Try to get from cookie (if available in browser)
-  if (typeof document !== 'undefined') {
-    const cookies = document.cookie.split(';')
-    const authCookie = cookies.find(c => c.trim().startsWith('auth-token='))
-    if (authCookie) {
-      return authCookie.split('=')[1]
-    }
-  }
+  // httpOnly cookies cannot be read from JavaScript, so we rely on localStorage token
+  // The cookie is still sent automatically by the browser for same-origin requests
+  // But for cross-origin (localhost:5173 -> localhost:3001), we need Authorization header
+  const token = localStorage.getItem('auth-token')
   
-  // Fallback to localStorage (for compatibility)
-  return localStorage.getItem('auth-token')
+  // #region agent log
+  if (typeof document !== 'undefined') {
+    const cookies = document.cookie;
+    fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:77',message:'getAuthToken called',data:{hasToken:!!token,tokenLength:token?.length||0,hasCookies:!!cookies,cookieLength:cookies.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'G'})}).catch(()=>{});
+  }
+  // #endregion
+  
+  return token
 }
 
 export const api = {
