@@ -1,7 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { PlusCircle, Sprout, MapPin, Leaf, Coffee, Search, ShieldCheck, Layers3, Compass, X, MoreVertical, Edit3, Microscope, Trash2, Cloud, Map as MapIcon } from 'lucide-react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';

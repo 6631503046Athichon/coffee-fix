@@ -80,12 +80,32 @@ export const authService = {
 
   // Get current user from backend (validates session)
   getCurrentUser: async (): Promise<User | null> => {
+    // #region agent log
+    const storedUser = localStorage.getItem(STORAGE_KEY);
+    const cookies = typeof document !== 'undefined' ? document.cookie : null;
+    fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'authService.ts:82',message:'getCurrentUser called',data:{hasStoredUser:!!storedUser,cookies:cookies?.substring(0,200)||null},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
     // Token is stored in httpOnly cookie by backend, so we cannot rely on localStorage token.
     // Always try backend first. Fallback to stored user only for network/temporary issues.
-    const storedUser = localStorage.getItem(STORAGE_KEY);
+    
+    // If we have a stored user, use it as fallback while checking backend
+    // This prevents the "flash" of logout on refresh
+    const storedUserParsed = storedUser ? (() => {
+      try {
+        return JSON.parse(storedUser) as User;
+      } catch {
+        return null;
+      }
+    })() : null;
 
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'authService.ts:95',message:'Calling /auth/me API',data:{endpoint:'/auth/me',hasStoredUser:!!storedUserParsed},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
       const response = await api.get<{ user: User }>('/auth/me');
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'authService.ts:98',message:'/auth/me success',data:{hasUser:!!response.user,userId:response.user?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
 
       if (response.user) {
         // Update localStorage with fresh user data
@@ -96,21 +116,36 @@ export const authService = {
       return null;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '';
+      const isNetworkError = errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError') || errorMessage.includes('network');
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'authService.ts:110',message:'/auth/me error',data:{errorMessage,is401:errorMessage.includes('401')||errorMessage.includes('Unauthorized'),isNetworkError},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
 
-      // If not authenticated, clear local state
+      // If not authenticated (401), check if we have stored user
+      // Don't clear immediately - might be a temporary issue or cookie not sent
       if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+        // If we have a stored user, return it as fallback
+        // This prevents logout on refresh when cookie isn't sent but user was logged in
+        if (storedUserParsed) {
+          // #region agent log
+          fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'authService.ts:127',message:'401 but returning stored user as fallback',data:{hasStoredUser:!!storedUserParsed,userId:storedUserParsed?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
+          // #endregion
+          return storedUserParsed;
+        }
+        // Only clear if we don't have stored user (truly not logged in)
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem('auth-token');
         return null;
       }
 
-      // For network errors, return stored user (prevents refresh kicking user to login)
-      if (storedUser) {
-        try {
-          return JSON.parse(storedUser) as User;
-        } catch {
-          return null;
-        }
+      // For network errors (not 401), return stored user (prevents refresh kicking user to login)
+      if (isNetworkError && storedUserParsed) {
+        return storedUserParsed;
+      }
+
+      // For other errors, try stored user as last resort
+      if (storedUserParsed) {
+        return storedUserParsed;
       }
 
       return null;
