@@ -84,18 +84,25 @@ export async function POST(request: NextRequest) {
     })
 
     // Set HTTP-only cookie
-    // For cross-domain (frontend and backend on different domains), use 'none' with secure
+    // For localhost with different ports, we need to handle it specially
     const isProduction = process.env.NODE_ENV === 'production' || !!process.env.VERCEL || !!process.env.RAILWAY_ENVIRONMENT
     const origin = request.headers.get('origin') || ''
+    // Check if frontend and backend are on different ports (localhost:5173 vs localhost:3001)
+    const isLocalhostDifferentPort = origin.includes('localhost') && !origin.includes(':3001')
     const isCrossDomain = !!(origin && !origin.includes('localhost'))
-    const shouldUseSecure = isProduction || isCrossDomain
+    
+    // For localhost with different ports, use 'lax' with secure: false
+    // For production cross-domain, use 'none' with secure: true
+    const shouldUseSecure = isProduction || (isCrossDomain && !isLocalhostDifferentPort)
+    const sameSiteValue = (isProduction || isCrossDomain) && !isLocalhostDifferentPort ? 'none' : 'lax'
     
     response.cookies.set('auth-token', token, {
       httpOnly: true,
-      secure: shouldUseSecure, // Must be true for sameSite: 'none' or cross-domain
-      sameSite: shouldUseSecure ? 'none' : 'lax', // 'none' for cross-domain, 'lax' for same domain
+      secure: shouldUseSecure, // false for localhost, true for production
+      sameSite: sameSiteValue, // 'lax' for localhost, 'none' for cross-domain production
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: '/',
+      // Don't set domain for localhost - let browser handle it
     })
 
     return response

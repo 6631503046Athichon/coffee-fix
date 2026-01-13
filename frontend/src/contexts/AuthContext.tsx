@@ -32,8 +32,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const loadUser = async () => {
       setIsAuthLoading(true);
+      // #region agent log
+      const storedUser = localStorage.getItem('coffee_lab_user');
+      const cookies = typeof document !== 'undefined' ? document.cookie : null;
+      fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:32',message:'loadUser called on mount',data:{hasStoredUser:!!storedUser,cookies:cookies?.substring(0,200)||null},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
       try {
         const user = await authService.getCurrentUser();
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:36',message:'getCurrentUser result',data:{hasUser:!!user,userId:user?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
         if (user) {
           setCurrentUser(user);
           setIsAuthenticated(true);
@@ -43,6 +51,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setIsAuthenticated(false);
         }
       } catch (error) {
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AuthContext.tsx:45',message:'getCurrentUser error',data:{errorMessage:error instanceof Error?error.message:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
         // User not authenticated - clear state
         console.debug('User not authenticated:', error);
         setCurrentUser(null);

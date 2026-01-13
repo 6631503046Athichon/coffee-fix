@@ -51,22 +51,39 @@ export function verifyToken(token: string): JWTPayload {
  * Extract token from Authorization header or cookie
  */
 export function extractToken(request: Request): string | null {
+  // #region agent log
+  const authHeader = request.headers.get('authorization');
+  const cookieHeader = request.headers.get('cookie');
+  fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth.ts:53',message:'extractToken entry',data:{hasAuthHeader:!!authHeader,hasCookieHeader:!!cookieHeader,cookieHeaderLength:cookieHeader?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+  // #endregion
   // Try Authorization header first
-  const authHeader = request.headers.get('authorization')
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    return authHeader.substring(7)
+    const token = authHeader.substring(7);
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth.ts:57',message:'Token from Authorization header',data:{tokenLength:token.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    return token;
   }
 
   // Try cookie
-  const cookieHeader = request.headers.get('cookie')
   if (cookieHeader) {
     const cookies = cookieHeader.split(';').map(c => c.trim())
     const authCookie = cookies.find(c => c.startsWith('auth-token='))
     if (authCookie) {
-      return authCookie.substring('auth-token='.length)
+      const token = authCookie.substring('auth-token='.length);
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth.ts:66',message:'Token from cookie',data:{tokenLength:token.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      return token;
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth.ts:70',message:'No auth-token cookie found',data:{cookieCount:cookies.length,cookieNames:cookies.map(c=>c.split('=')[0]).join(',')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
   }
 
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'auth.ts:75',message:'No token found',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+  // #endregion
   return null
 }
 
