@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
 import { User, UserRole } from '../types';
 import { Users as UsersIcon, AlertCircle, UserPlus, Edit, Trash2, Shield, Search, Key, X, Filter } from 'lucide-react';
 import { api } from '../services/api';
@@ -13,10 +14,21 @@ const UserManagement: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>('');
 
+    // Check if user has Admin role
+    const isAdmin = currentUser?.roles?.includes(UserRole.Admin) ?? false;
+
     // Search and filter states
     const [searchTerm, setSearchTerm] = useState('');
     const [roleFilter, setRoleFilter] = useState<string>('');
     const [statusFilter, setStatusFilter] = useState<string>('');
+
+    // Redirect if not admin (additional check in component)
+    useEffect(() => {
+        if (currentUser && !isAdmin) {
+            // This should not happen if ProtectedRoute works, but adding as safety
+            window.location.href = '/farmer-dashboard';
+        }
+    }, [currentUser, isAdmin]);
 
     // Modal states
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -414,7 +426,7 @@ const UserManagement: React.FC = () => {
                                         <p className="text-sm font-semibold text-green-800 mb-2">
                                             Password reset successfully!
                                         </p>
-                                        <div className="bg-white border border-green-300 rounded p-3">
+                                        <div className="bg-white rounded p-3">
                                             <p className="text-xs text-gray-500 mb-1">New Password:</p>
                                             <div className="flex items-center gap-2">
                                                 <code className="flex-1 text-sm font-mono bg-gray-100 px-2 py-1 rounded">

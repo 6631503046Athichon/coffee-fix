@@ -1,12 +1,16 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useDataContext } from '../../hooks/useDataContext';
-import { ProcessingBatch, ProcessingBatchStatus, ParchmentLot, GreenBeanLot, HarvestLot, User, UserRole, CuppingSessionType, CuppingSession, JudgeScore, CuppingSample, SCA_SENSORY_ATTRIBUTES, SCA_CUP_ATTRIBUTES, PricingHistory } from '../../types';
-import { Coffee, Wind, PackageCheck, Sprout, ChevronsRight, CheckCircle, Archive, PlayCircle, TestTube, Plus, Trash2, LayoutGrid, List, AlertCircle, History, Save, Search, ArrowUp, ArrowDown, ChevronDown, Check, Microscope, Star, TrendingUp, Box, Droplet, Scale, Calendar, Package, Activity, DollarSign, FileText } from 'lucide-react';
+import { ProcessingBatch, ProcessingBatchStatus, ParchmentLot, GreenBeanLot, HarvestLot, User, UserRole, CuppingSessionType, CuppingSession, JudgeScore, CuppingSample, SCA_SENSORY_ATTRIBUTES, SCA_CUP_ATTRIBUTES, PricingHistory, Customer } from '../../types';
+import { Coffee, Wind, PackageCheck, Sprout, ChevronsRight, CheckCircle, Archive, PlayCircle, TestTube, Plus, Trash2, LayoutGrid, List, AlertCircle, History, Save, Search, ArrowUp, ArrowDown, ChevronDown, Check, Microscope, Star, TrendingUp, Box, Droplet, Scale, Calendar, Package, Activity, DollarSign, FileText, X } from 'lucide-react';
 import { addPricingHistory } from '../../services/salesService';
+import { getAllCustomers } from '../../services/customerService';
+import { addProcessingBatch, updateProcessingBatch } from '../../services/processingBatchService';
+import { updateHarvestLot } from '../../services/harvestLotService';
 import DatePicker from '../common/DatePicker';
 import { fetchWeatherAveragesForRange } from '../../services/weatherApiService';
 import InvoiceReceipt from './InvoiceReceipt';
+import Select from '../common/Select';
 
 type ViewMode = 'kanban' | 'table';
 type SortDirection = 'asc' | 'desc';
@@ -263,7 +267,7 @@ const ModalPortal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return ReactDOM.createPortal(children, document.body);
 };
 
-const KanbanCard: React.FC<{ batch: ProcessingBatch; onDragStart: (e: React.DragEvent<HTMLDivElement>, batchId: string) => void }> = ({ batch, onDragStart }) => {
+const KanbanCard: React.FC<{ batch: ProcessingBatch; onDragStart: (e: React.DragEvent<HTMLDivElement>, batchId: string) => void; onDragEnd: (e: React.DragEvent<HTMLDivElement>) => void }> = ({ batch, onDragStart, onDragEnd }) => {
   const processColors = {
     'Washed': { borderColor: 'border-l-blue-500', iconBg: 'bg-blue-100', iconColor: 'text-blue-600', badgeColor: 'text-blue-700 bg-blue-50 border-blue-200' },
     'Natural': { borderColor: 'border-l-amber-500', iconBg: 'bg-amber-100', iconColor: 'text-amber-600', badgeColor: 'text-amber-700 bg-amber-50 border-amber-200' },
@@ -275,6 +279,7 @@ const KanbanCard: React.FC<{ batch: ProcessingBatch; onDragStart: (e: React.Drag
     <div
       draggable
       onDragStart={(e) => onDragStart(e, batch.id)}
+      onDragEnd={onDragEnd}
       className={`bg-white border-l-4 ${colors.borderColor} rounded-lg p-4 border border-gray-200 shadow-sm hover:shadow-md cursor-grab active:cursor-grabbing transition-shadow duration-200 mb-3`}
     >
       {/* Card Header */}
@@ -339,7 +344,7 @@ const KanbanCard: React.FC<{ batch: ProcessingBatch; onDragStart: (e: React.Drag
   );
 };
 
-const KanbanColumn: React.FC<{ title: string; status: ProcessingBatchStatus; batches: ProcessingBatch[]; icon: React.ReactNode; color: string; onDrop: (e: React.DragEvent<HTMLDivElement>, status: ProcessingBatchStatus) => void; onDragOver: (e: React.DragEvent<HTMLDivElement>) => void; onDragStart: (e: React.DragEvent<HTMLDivElement>, batchId: string) => void }> = ({ title, status, batches, icon, color, onDrop, onDragOver, onDragStart }) => {
+const KanbanColumn: React.FC<{ title: string; status: ProcessingBatchStatus; batches: ProcessingBatch[]; icon: React.ReactNode; color: string; onDrop: (e: React.DragEvent<HTMLDivElement>, status: ProcessingBatchStatus) => void; onDragOver: (e: React.DragEvent<HTMLDivElement>) => void; onDragStart: (e: React.DragEvent<HTMLDivElement>, batchId: string) => void; onDragEnd: (e: React.DragEvent<HTMLDivElement>) => void }> = ({ title, status, batches, icon, color, onDrop, onDragOver, onDragStart, onDragEnd }) => {
   const columnStyles = {
     'border-amber-400': { iconBg: 'bg-amber-500', iconColor: 'text-white', countColor: 'text-amber-600' },
     'border-blue-400': { iconBg: 'bg-blue-500', iconColor: 'text-white', countColor: 'text-blue-600' },
@@ -373,7 +378,7 @@ const KanbanColumn: React.FC<{ title: string; status: ProcessingBatchStatus; bat
           </div>
         ) : (
           batches.map(batch => (
-            <KanbanCard key={batch.id} batch={batch} onDragStart={onDragStart} />
+            <KanbanCard key={batch.id} batch={batch} onDragStart={onDragStart} onDragEnd={onDragEnd} />
           ))
         )}
       </div>
@@ -398,11 +403,20 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
   const [selectedGreenBean, setSelectedGreenBean] = useState<GreenBeanLot | null>(null);
   const [selectedGreenBeanForHistory, setSelectedGreenBeanForHistory] = useState<GreenBeanLot | null>(null);
   const [scoringLot, setScoringLot] = useState<GreenBeanLot | null>(null);
+  
+  // Form States
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // Customer Management State
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customersLoading, setCustomersLoading] = useState(false);
 
   // Withdraw Stock Modal State
   const [withdrawalType, setWithdrawalType] = useState<'Sale' | 'Roasting Stock' | 'Sample' | 'Export' | 'Other'>('Sample');
   const [withdrawalSalePrice, setWithdrawalSalePrice] = useState('');
   const [withdrawalCurrency, setWithdrawalCurrency] = useState('THB');
+  const [withdrawalCustomerId, setWithdrawalCustomerId] = useState<string>('');
   const [withdrawalCustomerName, setWithdrawalCustomerName] = useState('');
   const [withdrawalDeliveryAddress, setWithdrawalDeliveryAddress] = useState('');
 
@@ -471,6 +485,51 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
     }
     return 'Washed'; // Default fallback
   });
+
+  // Load customers on component mount
+  useEffect(() => {
+    const loadCustomers = async () => {
+      try {
+        setCustomersLoading(true);
+        const customersList = await getAllCustomers();
+        setCustomers(customersList);
+      } catch (error) {
+        console.error('Failed to load customers:', error);
+        // Fallback to empty array - user can still type customer name manually
+        setCustomers([]);
+      } finally {
+        setCustomersLoading(false);
+      }
+    };
+    
+    // Only load customers if user has access (Admin or Roaster)
+    if (currentUser.role === UserRole.Admin || currentUser.role === UserRole.Roaster) {
+      loadCustomers();
+    }
+  }, [currentUser.role]);
+
+  // Customer options for dropdown
+  const customerOptions = useMemo(() => {
+    return customers.map(customer => ({
+      value: customer.id,
+      label: `${customer.name} (${customer.type})`,
+    }));
+  }, [customers]);
+
+  // Handle customer selection - auto-fill name and address
+  const handleCustomerSelect = (customerId: string) => {
+    setWithdrawalCustomerId(customerId);
+    const selectedCustomer = customers.find(c => c.id === customerId);
+    if (selectedCustomer) {
+      setWithdrawalCustomerName(selectedCustomer.name);
+      if (selectedCustomer.address) {
+        setWithdrawalDeliveryAddress(selectedCustomer.address);
+      }
+    } else {
+      setWithdrawalCustomerName('');
+      setWithdrawalDeliveryAddress('');
+    }
+  };
 
   // Update selectedProcessType when processTypeOptions changes (ensures it's always valid)
   useEffect(() => {
@@ -559,13 +618,67 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
   }, [sensoryScores, cupScores, defects]);
 
 
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, batchId: string) => e.dataTransfer.setData('batchId', batchId);
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => e.preventDefault();
+  const [draggedBatchId, setDraggedBatchId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>, newStatus: ProcessingBatchStatus) => {
+  // Prevent clicks during drag operation
+  useEffect(() => {
+    if (isDragging) {
+      const handleClick = (e: MouseEvent) => {
+        // Prevent clicks during drag to avoid interrupting the drag operation
+        e.preventDefault();
+        e.stopPropagation();
+      };
+      document.addEventListener('click', handleClick, true);
+      return () => {
+        document.removeEventListener('click', handleClick, true);
+      };
+    }
+  }, [isDragging]);
+
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, batchId: string) => {
+    e.dataTransfer.setData('batchId', batchId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedBatchId(batchId);
+    setIsDragging(true);
+    // Set drag image to be invisible to prevent visual glitches
+    const dragImage = document.createElement('div');
+    dragImage.style.position = 'absolute';
+    dragImage.style.top = '-9999px';
+    document.body.appendChild(dragImage);
+    e.dataTransfer.setDragImage(dragImage, 0, 0);
+    setTimeout(() => document.body.removeChild(dragImage), 0);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
+    // Reset dragged batch ID and dragging state when drag ends
+    setDraggedBatchId(null);
+    setIsDragging(false);
+    // If drop was not successful (no drop event fired), the card will naturally return to its original position
+    // This is the expected browser behavior, so we don't need to do anything special here
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>, newStatus: ProcessingBatchStatus) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
     const batchId = e.dataTransfer.getData('batchId');
     const batch = data.processingBatches.find(b => b.id === batchId);
-    if (!batch || batch.status === newStatus) return;
+    if (!batch || batch.status === newStatus) {
+      setDraggedBatchId(null);
+      setIsDragging(false);
+      return;
+    }
+
+    // Reset dragged batch ID and dragging state
+    setDraggedBatchId(null);
+    setIsDragging(false);
 
     // If moving to Completed, open modal to log parchment data
     if (newStatus === ProcessingBatchStatus.Completed) {
@@ -573,8 +686,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
       return;
     }
 
-    // Otherwise, simply update status
-    setData(prev => ({ ...prev, processingBatches: prev.processingBatches.map(b => b.id === batchId ? { ...b, status: newStatus } : b) }));
+    // Otherwise, update status via API and local state
+    try {
+      const updatedBatch = await updateProcessingBatch(batchId, { status: newStatus });
+      setData(prev => ({ 
+        ...prev, 
+        processingBatches: prev.processingBatches.map(b => b.id === batchId ? updatedBatch : b) 
+      }));
+    } catch (error: any) {
+      console.error('Failed to update processing batch status:', error);
+      // Revert on error - batch will stay in original position
+      // Optionally show error toast to user
+    }
   };
 
   const handleSaveScore = () => {
@@ -737,7 +860,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
     setWithdrawalType(withdrawal.withdrawalType);
     setWithdrawalSalePrice(withdrawal.salePrice?.toString() || '');
     setWithdrawalCurrency(withdrawal.currency || 'THB');
+    // Try to find customer by name
+    const matchingCustomer = customers.find(c => c.name === withdrawal.customerName);
+    setWithdrawalCustomerId(matchingCustomer?.id || '');
     setWithdrawalCustomerName(withdrawal.customerName || '');
+    setWithdrawalDeliveryAddress(withdrawal.deliveryAddress || '');
     setModal('editWithdrawal');
   };
 
@@ -792,53 +919,102 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
     setWithdrawalDeliveryAddress('');
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
+    // Prevent double submission
+    if (isSubmitting) {
+      return;
+    }
+    
+    setFormError(null);
     const formData = new FormData(e.currentTarget);
 
     switch (modal) {
       case 'startProcessing':
-        if (!selectedHarvestLot) return;
+        if (!selectedHarvestLot) {
+          setFormError('Please select a harvest lot');
+          return;
+        }
+        
         const processType = formData.get('processType') as string;
+        if (!processType || processType.trim() === '') {
+          setFormError('Please select a process type');
+          return;
+        }
+        
         const processNotes = (formData.get('processNotes') as string) || undefined;
-        setData(prev => {
-          const newBatchId = `PB${String(prev.processingBatches.length + 1).padStart(3, '0')}`;
-          const newBatch: ProcessingBatch = {
-            id: newBatchId,
+        
+        setIsSubmitting(true);
+        try {
+          // Create processing batch via API (backend will update harvest lot status automatically)
+          const newBatch = await addProcessingBatch({
             harvestLotId: selectedHarvestLot.id,
             status: ProcessingBatchStatus.ToProcess,
             processType,
             processNotes,
-            cropYearId: cropYearId || undefined
-          };
-          const updatedHarvestLots = prev.harvestLots.map((lot): HarvestLot => lot.id === selectedHarvestLot.id ? { ...lot, status: 'Processing' } : lot);
-          return { ...prev, processingBatches: [newBatch, ...prev.processingBatches], harvestLots: updatedHarvestLots };
-        });
+            cropYearId: cropYearId || undefined,
+          });
+
+          // Update local state with the batch from backend
+          setData(prev => {
+            // Update harvest lot status to 'Processing'
+            const updatedHarvestLots = prev.harvestLots.map((lot): HarvestLot => 
+              lot.id === selectedHarvestLot.id ? { ...lot, status: 'Processing' } : lot
+            );
+            return { 
+              ...prev, 
+              processingBatches: [newBatch, ...prev.processingBatches], 
+              harvestLots: updatedHarvestLots 
+            };
+          });
+          
+          // Close modal and reset form on success
+          setModal(null);
+          setSelectedHarvestLot(null);
+          setCropYearId('');
+          setFormError(null);
+        } catch (error: any) {
+          console.error('Failed to create processing batch:', error);
+          setFormError(error?.message || 'Failed to create processing batch. Please try again.');
+        } finally {
+          setIsSubmitting(false);
+        }
         break;
 
       case 'completeBatch':
-        if (!selectedBatch) return;
+        if (!selectedBatch) {
+          setFormError('Please select a batch');
+          return;
+        }
+        
+        setIsSubmitting(true);
+        setFormError(null);
+        
         const parchmentWeightKg = parseFloat(formData.get('parchmentWeightKg') as string);
         const moistureContent = parseFloat(formData.get('moistureContent') as string);
 
         if (isNaN(parchmentWeightKg) || parchmentWeightKg <= 0) {
-          alert("Please enter a valid parchment weight in kg (greater than 0).");
+          setFormError("Please enter a valid parchment weight in kg (greater than 0).");
+          setIsSubmitting(false);
           return;
         }
         if (isNaN(moistureContent) || moistureContent < 0 || moistureContent > 100) {
-          alert("Please enter a valid coffee moisture between 0 and 100%.");
+          setFormError("Please enter a valid coffee moisture between 0 and 100%.");
+          setIsSubmitting(false);
           return;
         }
 
         if (new Date(dryingEndDate) < new Date(dryingStartDate)) {
-          alert("Validation Error: Drying End Date cannot be before Drying Start Date.");
+          setFormError("Drying End Date cannot be before Drying Start Date.");
+          setIsSubmitting(false);
           return;
         }
 
         const details = { parchmentWeightKg, moistureContent, dryingStartDate, dryingEndDate, baggingDate: dryingEndDate };
 
-        // Enrich with weather averages if farm coordinates are available
-        (async () => {
+        try {
+          // Enrich with weather averages if farm coordinates are available
           let avgTempC: number | null = null;
           let avgHumidityPct: number | null = null;
 
@@ -867,7 +1043,17 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
             const newParchmentLot: ParchmentLot = { id: newParchmentId, processingBatchId: selectedBatch!.id, harvestLotId: selectedBatch!.harvestLotId, initialWeightKg: parchmentWeightKg, currentWeightKg: parchmentWeightKg, moistureContent, processType: selectedBatch!.processType, status: 'Awaiting Hulling' };
             return { ...prev, processingBatches: updatedBatches, parchmentLots: [newParchmentLot, ...prev.parchmentLots] };
           });
-        })();
+          
+          // Close modal on success
+          setModal(null);
+          setSelectedBatch(null);
+          setFormError(null);
+        } catch (error: any) {
+          console.error('Failed to complete batch:', error);
+          setFormError(error?.message || 'Failed to complete batch. Please try again.');
+        } finally {
+          setIsSubmitting(false);
+        }
         break;
 
       case 'hullAndGrade':
@@ -987,6 +1173,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
         setWithdrawalType('Sample');
         setWithdrawalSalePrice('');
         setWithdrawalCurrency('THB');
+        setWithdrawalCustomerId('');
         setWithdrawalCustomerName('');
         setWithdrawalDeliveryAddress('');
         break;
@@ -1138,7 +1325,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
               <Coffee className="h-20 w-20 opacity-30" />
             </div>
             <p className="text-lg font-semibold text-gray-600">No harvest lots available</p>
-            <p className="text-sm text-gray-500 mt-1">New lots will appear here when ready</p>
+            <p className="text-sm text-gray-500 mt-1">Harvest lots with status "Ready for Processing" will appear here</p>
+            <p className="text-xs text-gray-400 mt-2">To create a batch, farmers need to register harvest lots first</p>
           </div>
         )}
       </div>
@@ -1147,7 +1335,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
           { title: 'To Process', status: ProcessingBatchStatus.ToProcess, icon: <Coffee className="h-6 w-6 text-white" />, color: 'border-amber-400' },
           { title: 'Completed', status: ProcessingBatchStatus.Completed, icon: <PackageCheck className="h-6 w-6 text-white" />, color: 'border-green-400' },
         ].map(col => (
-          <KanbanColumn key={col.status} {...col} batches={data.processingBatches.filter(b => b.status === col.status)} onDrop={handleDrop} onDragOver={handleDragOver} onDragStart={handleDragStart} />
+          <KanbanColumn key={col.status} {...col} batches={data.processingBatches.filter(b => b.status === col.status)} onDrop={handleDrop} onDragOver={handleDragOver} onDragStart={handleDragStart} onDragEnd={handleDragEnd} />
         ))}
       </div>
       <style>{`
@@ -1472,8 +1660,27 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
       </div>
 
       {modal && <ModalPortal><div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
+        <div className={`bg-white rounded-2xl shadow-2xl w-full ${modal === 'completeBatch' ? 'max-w-4xl' : 'max-w-2xl'} max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col`}>
           <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-y-auto p-8">
+            {/* Error Display */}
+            {formError && (
+              <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-red-800">Error</p>
+                  <p className="text-xs text-red-700 mt-1">{formError}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFormError(null)}
+                  className="text-red-600 hover:text-red-800"
+                  aria-label="Dismiss error"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+            
             {modal === 'startProcessing' && selectedHarvestLot && <>
               <div className="flex items-center gap-4 mb-8">
                 <div className="p-4 bg-blue-100 rounded-xl shadow-md">
@@ -1530,56 +1737,99 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                     name="processNotes"
                     rows={2}
                     placeholder="e.g., Ferment 24h in sealed tank, raised-bed drying, frequent turning"
-                    className="w-full border border-gray-300 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all resize-y"
+                    className="w-full border-2 border-gray-300 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all resize-y"
                   />
                   <p className="mt-1 text-xs text-gray-500">Use this to capture special steps or parameters for this batch.</p>
                 </div>
               </div>
             </>}
             {modal === 'completeBatch' && selectedBatch && <>
-              <h2 className="text-2xl font-bold mb-4">Log Parchment Data for Batch #{selectedBatch.id}</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium">Parchment Weight (kg)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    name="parchmentWeightKg"
-                    placeholder="e.g., 85.0"
-                    required
-                    className="mt-1 block w-full rounded-md border border-gray-300 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
+              {/* Modal Header */}
+              <div className="flex items-center gap-4 mb-8">
+                <div className="p-4 bg-green-600 rounded-2xl shadow-lg">
+                  <PackageCheck className="h-10 w-10 text-white" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium">Coffee Moisture (%)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="100"
-                    name="moistureContent"
-                    placeholder="e.g., 12.0"
-                    required
-                    className="mt-1 block w-full rounded-md border border-gray-300 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">Measured on parchment at end of drying (workers input).</p>
+                  <h2 className="text-3xl font-bold text-gray-900">Log Parchment Data</h2>
+                  <p className="text-base text-gray-600 mt-1">Batch #{selectedBatch.id}</p>
                 </div>
-                <div>
-                  <DatePicker
-                    value={dryingStartDate}
-                    onChange={setDryingStartDate}
-                    label="Drying Start Date"
-                    required
-                  />
+              </div>
+
+              {/* Batch Info Card */}
+              <div className="bg-gray-50 rounded-2xl p-6 mb-8 border border-gray-200 shadow-sm">
+                <div className="grid grid-cols-3 gap-6">
+                  <div className="text-center">
+                    <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">Harvest Lot</p>
+                    <p className="text-xl font-bold text-gray-900">{selectedBatch.harvestLotId}</p>
+                  </div>
+                  <div className="text-center border-l-2 border-gray-300">
+                    <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">Process Type</p>
+                    <p className="text-xl font-bold text-gray-900">{selectedBatch.processType}</p>
+                  </div>
+                  <div className="text-center border-l-2 border-gray-300">
+                    <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">Status</p>
+                    <p className="text-xl font-bold text-amber-600">{selectedBatch.status}</p>
+                  </div>
                 </div>
-                <div>
-                  <DatePicker
-                    value={dryingEndDate}
-                    onChange={setDryingEndDate}
-                    label="Drying End Date"
-                    required
-                  />
+              </div>
+
+              {/* Form Fields */}
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-base font-bold text-gray-700 mb-3">
+                      <div className="flex items-center gap-2">
+                        <Scale className="h-5 w-5 text-green-600" />
+                        Parchment Weight (kg)
+                      </div>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      name="parchmentWeightKg"
+                      placeholder="e.g., 85.0"
+                      required
+                      className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-base focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 shadow-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-base font-bold text-gray-700 mb-3">
+                      <div className="flex items-center gap-2">
+                        <Droplet className="h-5 w-5 text-blue-600" />
+                        Coffee Moisture (%)
+                      </div>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      name="moistureContent"
+                      placeholder="e.g., 12.0"
+                      required
+                      className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
+                    />
+                    <p className="mt-2 text-xs text-gray-500">Measured on parchment at end of drying (workers input).</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <DatePicker
+                      value={dryingStartDate}
+                      onChange={setDryingStartDate}
+                      label="Drying Start Date"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <DatePicker
+                      value={dryingEndDate}
+                      onChange={setDryingEndDate}
+                      label="Drying End Date"
+                      required
+                    />
+                  </div>
                 </div>
               </div>
             </>}
@@ -1791,17 +2041,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                     Withdrawal Type
                   </div>
                 </label>
-                <select
+                <Select
                   value={withdrawalType}
-                  onChange={(e) => setWithdrawalType(e.target.value as typeof withdrawalType)}
-                  className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-base font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm transition-all bg-white"
-                >
-                  <option value="Sale">Sale</option>
-                  <option value="Roasting Stock">Roasting Stock</option>
-                  <option value="Sample">Sample</option>
-                  <option value="Export">Export</option>
-                  <option value="Other">Other</option>
-                </select>
+                  onChange={(v) => setWithdrawalType(v as typeof withdrawalType)}
+                  options={['Sale', 'Roasting Stock', 'Sample', 'Export', 'Other']}
+                  placeholder="Select withdrawal type..."
+                  colorTheme="blue"
+                />
               </div>
 
               {/* Conditional Sale Fields */}
@@ -1814,15 +2060,44 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Customer Name (Optional)
+                        Customer (Optional)
                       </label>
-                      <input
-                        type="text"
-                        value={withdrawalCustomerName}
-                        onChange={(e) => setWithdrawalCustomerName(e.target.value)}
-                        placeholder="e.g., Roaster ABC"
-                        className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
+                      {customers.length > 0 ? (
+                        <div className="space-y-2">
+                          <Select
+                            value={withdrawalCustomerId}
+                            onChange={(v) => handleCustomerSelect(v as string)}
+                            options={customerOptions}
+                            placeholder="Select customer or type name below..."
+                            colorTheme="blue"
+                          />
+                          <input
+                            type="text"
+                            value={withdrawalCustomerName}
+                            onChange={(e) => {
+                              setWithdrawalCustomerName(e.target.value);
+                              setWithdrawalCustomerId(''); // Clear selection when typing manually
+                            }}
+                            placeholder="Or type customer name manually..."
+                            className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                      ) : (
+                        <input
+                          type="text"
+                          value={withdrawalCustomerName}
+                          onChange={(e) => setWithdrawalCustomerName(e.target.value)}
+                          placeholder="e.g., Roaster ABC"
+                          className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      )}
+                      {customers.length === 0 && !customersLoading && (currentUser.role === UserRole.Admin || currentUser.role === UserRole.Roaster) && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          <a href="/customers" target="_blank" className="text-blue-600 hover:underline">
+                            Create customers
+                          </a> to use dropdown selection
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -1935,17 +2210,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                       Withdrawal Type
                     </div>
                   </label>
-                  <select
+                  <Select
                     value={withdrawalType}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setWithdrawalType(e.target.value as typeof withdrawalType)}
-                    className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-base font-medium focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm transition-all bg-white"
-                  >
-                    <option value="Sale">Sale</option>
-                    <option value="Roasting Stock">Roasting Stock</option>
-                    <option value="Sample">Sample</option>
-                    <option value="Export">Export</option>
-                    <option value="Other">Other</option>
-                  </select>
+                    onChange={(v) => setWithdrawalType(v as typeof withdrawalType)}
+                    options={['Sale', 'Roasting Stock', 'Sample', 'Export', 'Other']}
+                    placeholder="Select withdrawal type..."
+                    colorTheme="blue"
+                  />
                 </div>
 
                 {/* Conditional Sale Fields */}
@@ -1958,15 +2229,37 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          Customer Name (Optional)
+                          Customer (Optional)
                         </label>
-                        <input
-                          type="text"
-                          value={withdrawalCustomerName}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWithdrawalCustomerName(e.target.value)}
-                          placeholder="e.g., Roaster ABC"
-                          className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
+                        {customers.length > 0 ? (
+                          <div className="space-y-2">
+                            <Select
+                              value={withdrawalCustomerId}
+                              onChange={(v) => handleCustomerSelect(v as string)}
+                              options={customerOptions}
+                              placeholder="Select customer or type name below..."
+                              colorTheme="blue"
+                            />
+                            <input
+                              type="text"
+                              value={withdrawalCustomerName}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                setWithdrawalCustomerName(e.target.value);
+                                setWithdrawalCustomerId(''); // Clear selection when typing manually
+                              }}
+                              placeholder="Or type customer name manually..."
+                              className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                          </div>
+                        ) : (
+                          <input
+                            type="text"
+                            value={withdrawalCustomerName}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWithdrawalCustomerName(e.target.value)}
+                            placeholder="e.g., Roaster ABC"
+                            className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        )}
                       </div>
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -2024,11 +2317,27 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
               </>;
             })()}
             <div className="mt-8 flex justify-end space-x-3">
-              <button type="button" onClick={() => setModal(null)} className="px-6 py-2.5 border border-gray-300 rounded-xl shadow-sm text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all">Cancel</button>
-              <button type="submit" className="inline-flex items-center justify-center gap-2 px-6 py-2.5 border border-transparent shadow-lg text-sm font-semibold rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed transition-all"
-                disabled={modal === 'hullAndGrade' && (Math.abs(gradedWeightSum - (parseFloat(totalGreenWeight) || 0)) > 0.01 || (parseFloat(totalGreenWeight) || 0) <= 0)}>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setModal(null);
+                  setFormError(null);
+                  setSelectedHarvestLot(null);
+                  setSelectedBatch(null);
+                  setCropYearId('');
+                }} 
+                className="px-6 py-2.5 border border-gray-300 rounded-xl shadow-sm text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
+                disabled={isSubmitting}
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                className="inline-flex items-center justify-center gap-2 px-6 py-2.5 border border-transparent shadow-lg text-sm font-semibold rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed transition-all"
+                disabled={isSubmitting || (modal === 'hullAndGrade' && (Math.abs(gradedWeightSum - (parseFloat(totalGreenWeight) || 0)) > 0.01 || (parseFloat(totalGreenWeight) || 0) <= 0))}
+              >
                 <Save className="h-4 w-4" />
-                Save
+                {isSubmitting ? 'Saving...' : 'Save'}
               </button>
             </div>
           </form>

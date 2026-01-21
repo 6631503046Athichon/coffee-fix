@@ -4,24 +4,27 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package } from 'lucide-react';
 
-import { UserRole, CuppingSessionType } from './types';
+import { UserRole, CuppingSessionType, Customer } from './types';
 import { MOCK_DATA } from './constants';
 import { DataContext } from './hooks/useDataContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { getAllSoilAnalyses } from './services/soilAnalysisService';
 import { getAllWeatherRecords } from './services/weatherService';
-import { getAllCustomers, getAllSaleOrders, getAllInvoices, getAllPricingHistory, initializeCustomers, initializeSaleOrders, initializeInvoices, initializePricingHistory } from './services/salesService';
+import { getAllCustomers as getAllCustomersFromBackend } from './services/customerService';
+import { getAllSaleOrders, getAllInvoices, getAllPricingHistory, initializeCustomers, initializeSaleOrders, initializeInvoices, initializePricingHistory } from './services/salesService';
 import { getAllActivityTypes, initializeActivityTypes } from './services/activityTypeService';
 import { getAllProcessTypes, initializeProcessTypes, resetProcessTypes } from './services/processTypeService';
 import { getAllFarms, initializeFarms } from './services/farmService';
 import { getAllHarvestLots } from './services/harvestLotService';
 import { getAllGAPLogs } from './services/gapLogService';
 import { getAllCropYears } from './services/cropYearService';
+import { getAllProcessingBatches } from './services/processingBatchService';
 import { Sidebar, Header } from './components/layout';
 import Login from './components/auth/Login';
 import ForgotPassword from './components/auth/ForgotPassword';
 import ResetPassword from './components/auth/ResetPassword';
 import { FirstLoginSetup } from './components/auth/FirstLoginSetup';
+import ProtectedRoute from './components/common/ProtectedRoute';
 import ProcessorWorkbench from './components/processor/ProcessorWorkbench';
 import CuppingHub from './components/cupper/CuppingHub';
 import TraceabilityPage from './components/TraceabilityPage';
@@ -42,6 +45,7 @@ import ActivityTypeManagement from './components/admin/ActivityTypeManagement';
 import ProcessTypeManagement from './components/admin/ProcessTypeManagement';
 import RoasterWorkbench from './components/roaster/RoasterWorkbench';
 import CoffeeVarietiesManager from './components/CoffeeVarietiesManager';
+import CustomerManagement from './components/CustomerManagement';
 
 // Helper function to get dashboard path by role
 const getDashboardPathByRole = (roles: UserRole[]): string => {
@@ -96,7 +100,18 @@ const ProtectedRoutes: React.FC = () => {
   const loadDataFromBackend = useCallback(async () => {
     try {
       // Load all data from backend API
-      const [storedFarms, storedSoilAnalyses, storedWeatherRecords, storedHarvestLots, storedGAPLogs, storedActivityTypes, storedProcessTypes, storedCustomers, storedSaleOrders, storedInvoices, storedPricingHistory, storedCropYears] = await Promise.all([
+      // Try to get customers from backend, fallback to localStorage if backend fails
+      let storedCustomers: Customer[] = [];
+      try {
+        storedCustomers = await getAllCustomersFromBackend();
+      } catch (err) {
+        console.warn('Failed to load customers from backend, using localStorage:', err);
+        // Fallback to localStorage
+        const { getAllCustomers: getAllCustomersFromStorage } = await import('./services/salesService');
+        storedCustomers = getAllCustomersFromStorage();
+      }
+      
+      const [storedFarms, storedSoilAnalyses, storedWeatherRecords, storedHarvestLots, storedGAPLogs, storedActivityTypes, storedProcessTypes, storedSaleOrders, storedInvoices, storedPricingHistory, storedCropYears, storedProcessingBatches] = await Promise.all([
         getAllFarms(),
         getAllSoilAnalyses(),
         getAllWeatherRecords(),
@@ -104,11 +119,11 @@ const ProtectedRoutes: React.FC = () => {
         getAllGAPLogs(),
         getAllActivityTypes(),
         getAllProcessTypes(),
-        getAllCustomers(),
         getAllSaleOrders(),
         getAllInvoices(),
         getAllPricingHistory(),
         getAllCropYears(),
+        getAllProcessingBatches(),
       ]);
 
       setData(prev => ({
@@ -125,6 +140,7 @@ const ProtectedRoutes: React.FC = () => {
         invoices: storedInvoices.length > 0 ? storedInvoices : prev.invoices,
         pricingHistory: storedPricingHistory.length > 0 ? storedPricingHistory : prev.pricingHistory,
         cropYears: storedCropYears, // Always use backend data, even if empty
+        processingBatches: storedProcessingBatches.length > 0 ? storedProcessingBatches : prev.processingBatches,
       }));
     } catch (error) {
       console.error('Failed to load data from backend:', error);
@@ -228,7 +244,7 @@ const ProtectedRoutes: React.FC = () => {
       { name: 'Processor Workbench', href: '/processor', icon: Droplets, roles: [UserRole.Processor, UserRole.Admin] },
 
       // Quality & Cupping Section
-      { name: 'Cupping Lab', href: '/cupping', icon: FlaskConical, roles: [UserRole.Processor, UserRole.Roaster, UserRole.HeadJudge] },
+      { name: 'Cupping Lab', href: '/cupping', icon: FlaskConical, roles: [UserRole.Processor, UserRole.Roaster, UserRole.HeadJudge, UserRole.Admin] },
       { name: 'Scoring Sheet', href: '/scoring', icon: Edit, roles: [UserRole.Cupper, UserRole.Admin] },
       { name: 'Competition Admin', href: competitionAdminHref, icon: Trophy, roles: [UserRole.HeadJudge, UserRole.Cupper, UserRole.Admin] },
       { name: 'Quality Insights', href: '/insights', icon: Lightbulb, roles: [UserRole.Roaster, UserRole.Processor, UserRole.Admin] },
@@ -239,6 +255,7 @@ const ProtectedRoutes: React.FC = () => {
       // Traceability & Admin
       { name: 'Traceability Hub', href: '/traceability', icon: Search, roles: [UserRole.Admin, UserRole.Processor] },
       { name: 'User Management', href: '/users', icon: Users, roles: [UserRole.Admin] },
+      { name: 'Customer Management', href: '/customers', icon: Users, roles: [UserRole.Admin, UserRole.Roaster] },
       { name: 'Activity Types', href: '/activity-types', icon: Tag, roles: [UserRole.Admin] },
       { name: 'Process Types', href: '/process-types', icon: Coffee, roles: [UserRole.Admin] },
       { name: 'Coffee Varieties', href: '/coffee-varieties', icon: Coffee, roles: [UserRole.Admin] },
@@ -272,20 +289,21 @@ const ProtectedRoutes: React.FC = () => {
               <Route path="/farmer" element={<Navigate to="/farmer-dashboard" replace />} />
               <Route path="/dashboard" element={<Navigate to="/farmer-dashboard" replace />} />
               <Route path="/processor" element={<ProcessorWorkbench currentUser={currentUser!} />} />
-              <Route path="/roaster" element={<RoasterWorkbench currentUser={currentUser!} />} />
+              <Route path="/roaster" element={<ProtectedRoute allowedRoles={[UserRole.Roaster, UserRole.Admin]}><RoasterWorkbench currentUser={currentUser!} /></ProtectedRoute>} />
               <Route path="/cupping" element={<CuppingHub />} />
               <Route path="/cupping/:id" element={<CuppingSessionDetail currentUser={currentUser!} />} />
               <Route path="/scoring" element={<CupperScoringSheet currentUser={currentUser!} />} />
               <Route path="/insights" element={<QualityInsights />} />
               <Route path="/competition/:id" element={<CompetitionDashboard currentUserRoles={currentUser?.roles || [UserRole.Farmer]} />} />
-              <Route path="/traceability" element={<TraceabilityHub />} />
-              <Route path="/users" element={<UserManagement />} />
+              <Route path="/traceability" element={<ProtectedRoute allowedRoles={[UserRole.Admin, UserRole.Processor]}><TraceabilityHub /></ProtectedRoute>} />
+              <Route path="/users" element={<ProtectedRoute allowedRoles={[UserRole.Admin]}><UserManagement /></ProtectedRoute>} />
+              <Route path="/customers" element={<ProtectedRoute allowedRoles={[UserRole.Admin, UserRole.Roaster]}><CustomerManagement /></ProtectedRoute>} />
               <Route path="/farmer-farms" element={<FarmerFarmManagement />} />
               <Route path="/farmer-farms/add" element={<AddFarmPage />} />
               <Route path="/farmer-farms/edit/:farmId" element={<AddFarmPage />} />
-              <Route path="/activity-types" element={<ActivityTypeManagement />} />
-              <Route path="/process-types" element={<ProcessTypeManagement />} />
-              <Route path="/coffee-varieties" element={<CoffeeVarietiesManager />} />
+              <Route path="/activity-types" element={<ProtectedRoute allowedRoles={[UserRole.Admin]}><ActivityTypeManagement /></ProtectedRoute>} />
+              <Route path="/process-types" element={<ProtectedRoute allowedRoles={[UserRole.Admin]}><ProcessTypeManagement /></ProtectedRoute>} />
+              <Route path="/coffee-varieties" element={<ProtectedRoute allowedRoles={[UserRole.Admin]}><CoffeeVarietiesManager /></ProtectedRoute>} />
               <Route path="/farmer-dashboard" element={<FarmerDashboard />} />
               <Route path="/farmer-dashboard/:lotId" element={<HarvestLotDetail />} />
               <Route path="/harvest-lots" element={<HarvestLotsManagement />} />

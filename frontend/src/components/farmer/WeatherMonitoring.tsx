@@ -132,6 +132,9 @@ const WeatherMonitoring: React.FC = () => {
 
   // API states
   const [isFetchingWeather, setIsFetchingWeather] = useState(false);
+  const [weatherApiError, setWeatherApiError] = useState<string | null>(null);
+  const [simulateFailure, setSimulateFailure] = useState(false);
+  const [simulateTimeout, setSimulateTimeout] = useState(false);
 
   // Filter states
   const [farmFilter, setFarmFilter] = useState('All');
@@ -243,21 +246,39 @@ const WeatherMonitoring: React.FC = () => {
     }
   };
 
+  // Update simulation flags in localStorage
+  useEffect(() => {
+    if (simulateFailure) {
+      localStorage.setItem('weatherApiSimulateFailure', 'true');
+      localStorage.removeItem('weatherApiSimulateTimeout');
+    } else if (simulateTimeout) {
+      localStorage.setItem('weatherApiSimulateTimeout', 'true');
+      localStorage.removeItem('weatherApiSimulateFailure');
+    } else {
+      localStorage.removeItem('weatherApiSimulateFailure');
+      localStorage.removeItem('weatherApiSimulateTimeout');
+    }
+  }, [simulateFailure, simulateTimeout]);
+
   const handleFetchWeatherData = async () => {
     if (!selectedFarmId) {
-      alert('Please select a farm first');
+      setWeatherApiError('Please select a farm first');
       return;
     }
 
     const selectedFarm = data.farms.find(f => f.id === selectedFarmId);
-    if (!selectedFarm) return;
+    if (!selectedFarm) {
+      setWeatherApiError('Farm not found');
+      return;
+    }
 
     if (!selectedFarm.latitude || !selectedFarm.longitude) {
-      alert('This farm does not have GPS coordinates configured. Please add latitude and longitude to use weather API.');
+      setWeatherApiError('This farm does not have GPS coordinates configured. Please add latitude and longitude to use weather API.');
       return;
     }
 
     setIsFetchingWeather(true);
+    setWeatherApiError(null);
 
     try {
       const weatherData = await fetchWeatherData(selectedFarm.latitude, selectedFarm.longitude);
@@ -270,12 +291,11 @@ const WeatherMonitoring: React.FC = () => {
         setHumidity(weatherData.humidity.toString());
         setRecordDate(weatherData.recordDate);
         setNotes('Data fetched from Open-Meteo API (free weather data)');
-
-        alert('Weather data fetched successfully! Review the data and submit the form.');
+        setWeatherApiError(null);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch weather data';
-      alert(errorMessage);
+      setWeatherApiError(errorMessage);
     } finally {
       setIsFetchingWeather(false);
     }
@@ -395,17 +415,18 @@ const WeatherMonitoring: React.FC = () => {
 
         {/* API Fetch Section */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Download className="h-5 w-5 text-blue-600" />
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Download className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-900">Fetch Weather Data from API</p>
+                  <p className="text-xs text-gray-600">Auto-fill weather data using Open-Meteo (free, no API key required)</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-bold text-gray-900">Fetch Weather Data from API</p>
-                <p className="text-xs text-gray-600">Auto-fill weather data using Open-Meteo (free, no API key required)</p>
-              </div>
-            </div>
-            <button
+              <button
                 type="button"
                 onClick={handleFetchWeatherData}
                 disabled={isFetchingWeather || !selectedFarmId}
@@ -423,6 +444,75 @@ const WeatherMonitoring: React.FC = () => {
                   </>
                 )}
               </button>
+            </div>
+
+            {/* Error Display */}
+            {weatherApiError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                <X className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-red-800">API Error</p>
+                  <p className="text-xs text-red-700 mt-1">{weatherApiError}</p>
+                  <p className="text-xs text-red-600 mt-2">You can still enter weather data manually in the form below.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWeatherApiError(null)}
+                  className="text-red-600 hover:text-red-800"
+                  aria-label="Dismiss error"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Simulation Controls (Development/Testing) */}
+            {(process.env.NODE_ENV === 'development' || localStorage.getItem('enableWeatherApiSimulation') === 'true') && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-xs font-semibold text-amber-900 mb-2">🧪 Testing Mode: Simulate API Failures</p>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={simulateFailure}
+                      onChange={(e) => {
+                        setSimulateFailure(e.target.checked);
+                        setSimulateTimeout(false);
+                      }}
+                      className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className="text-xs text-amber-800">Simulate API Failure</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={simulateTimeout}
+                      onChange={(e) => {
+                        setSimulateTimeout(e.target.checked);
+                        setSimulateFailure(false);
+                      }}
+                      className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className="text-xs text-amber-800">Simulate Timeout</span>
+                  </label>
+                  {(simulateFailure || simulateTimeout) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSimulateFailure(false);
+                        setSimulateTimeout(false);
+                      }}
+                      className="text-xs text-amber-700 hover:text-amber-900 underline"
+                    >
+                      Clear Simulation
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-amber-700 mt-2">
+                  When enabled, clicking "Fetch Data" will simulate the selected failure scenario to test error handling.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
