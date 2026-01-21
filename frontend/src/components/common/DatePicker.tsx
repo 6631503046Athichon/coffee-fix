@@ -21,6 +21,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
     const [isOpen, setIsOpen] = useState(false);
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const calendarRef = useRef<HTMLDivElement>(null);
 
     // Parse value to Date object
     const selectedDate = value ? new Date(value + 'T00:00:00') : null;
@@ -147,7 +148,14 @@ const DatePicker: React.FC<DatePickerProps> = ({
 
             {/* Calendar Dropdown */}
             {isOpen && (
-                <div className="absolute z-[10000] mt-2 bg-white rounded-lg shadow-lg border border-gray-200 p-3 w-[280px]">
+                <div 
+                    ref={calendarRef}
+                    className="absolute z-[10000] mt-2 bg-white rounded-lg shadow-lg border border-gray-200 p-3 w-[280px]">
+                    {/* Auto scroll into view when opened */}
+                    {(() => {
+                        setTimeout(() => calendarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+                        return null;
+                    })()}
                     {/* Month Navigation */}
                     <div className="flex items-center justify-between mb-2">
                         <button

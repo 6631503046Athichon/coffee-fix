@@ -273,6 +273,76 @@ export const generateComprehensiveReport = async (appData: AppData): Promise<Com
     }
 };
 
+/**
+ * Generate AI-powered soil recommendations based on soil analysis data
+ */
+export const generateSoilRecommendations = async (soilData: {
+  pH: number;
+  phosphorus: number;
+  potassium: number;
+  nitrogen: number;
+  calcium: number;
+  magnesium: number;
+  organicMatter?: number;
+  sulfur?: number;
+  zinc?: number;
+  iron?: number;
+  manganese?: number;
+  copper?: number;
+  boron?: number;
+  location?: string;
+  variety?: string;
+}): Promise<string> => {
+  const prompt = `You are an agricultural soil science expert specializing in coffee cultivation. Analyze the following soil analysis data and provide specific, actionable recommendations for improving soil health and coffee crop productivity.
+
+Soil Analysis Data:
+- Location: ${soilData.location || 'Coffee farm'}
+- pH: ${soilData.pH}
+- Phosphorus (P): ${soilData.phosphorus} ppm
+- Potassium (K): ${soilData.potassium} ppm
+- Nitrogen (N): ${soilData.nitrogen}%
+- Calcium (Ca): ${soilData.calcium} ppm
+- Magnesium (Mg): ${soilData.magnesium} ppm
+${soilData.organicMatter ? `- Organic Matter: ${soilData.organicMatter}%` : ''}
+${soilData.sulfur ? `- Sulfur (S): ${soilData.sulfur} ppm` : ''}
+${soilData.zinc ? `- Zinc (Zn): ${soilData.zinc} ppm` : ''}
+${soilData.iron ? `- Iron (Fe): ${soilData.iron} ppm` : ''}
+${soilData.manganese ? `- Manganese (Mn): ${soilData.manganese} ppm` : ''}
+${soilData.copper ? `- Copper (Cu): ${soilData.copper} ppm` : ''}
+${soilData.boron ? `- Boron (B): ${soilData.boron} ppm` : ''}
+${soilData.variety ? `- Coffee Variety: ${soilData.variety}` : ''}
+
+Based on this analysis, provide:
+1. Assessment of current soil health status
+2. Specific nutrient deficiencies or excesses identified
+3. Actionable recommendations for soil amendment (fertilizers, organic matter, pH adjustment, etc.)
+4. Best practices for maintaining optimal soil conditions for coffee cultivation
+
+Format your response as clear, practical recommendations that a farmer can implement.`;
+
+  if (!API_KEY) {
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    return `Mock AI Recommendations: Based on your soil analysis (pH: ${soilData.pH}), your soil appears to be in ${soilData.pH < 6.0 ? 'acidic' : soilData.pH > 7.0 ? 'alkaline' : 'optimal'} range. For optimal coffee cultivation, maintain pH between 6.0-6.5. Consider adding ${soilData.phosphorus < 30 ? 'phosphorus-rich fertilizers' : 'balanced NPK fertilizer'} and ${soilData.organicMatter && soilData.organicMatter < 3 ? 'organic matter (compost or manure)' : 'maintain current organic matter levels'}. Monitor nutrient levels regularly and adjust fertilization based on crop growth stages.`;
+  }
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        temperature: 0.7,
+        topP: 1,
+        topK: 32,
+      }
+    });
+
+    return response.text;
+  } catch (error) {
+    console.error("Error calling Gemini API for soil recommendations:", error);
+    throw new Error("Failed to generate AI recommendations. Please try again.");
+  }
+};
+
 export const getPlatformTrends = async (appData: AppData): Promise<PlatformInsight> => {
     const analysisData = appData.greenBeanLots.map(gbl => {
         const parchmentLot = appData.parchmentLots.find(p => p.id === gbl.parchmentLotId);

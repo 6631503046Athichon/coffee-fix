@@ -33,7 +33,22 @@ const ForgotPassword: React.FC = () => {
         setDevResetUrl(response.devResetUrl);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send reset email');
+      let errorMessage = 'Failed to send reset email';
+      
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        
+        // Provide more helpful error messages
+        if (errorMessage.includes('Backend server is not available') || 
+            errorMessage.includes('Cannot connect') ||
+            errorMessage.includes('timeout')) {
+          errorMessage = 'Unable to connect to the server. Please ensure the backend server is running.';
+        } else if (errorMessage.includes('404') || errorMessage.includes('Not Found')) {
+          errorMessage = 'Email not found. Please check the email address and try again.';
+        }
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }

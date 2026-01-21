@@ -21,57 +21,81 @@ async function request<T>(
   // Get auth token from cookie or localStorage
   const token = getAuthToken()
 
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:24',message:'Making request',data:{url,endpoint,hasToken:!!token,hasAuthHeader:!!token,cookies:typeof document!=='undefined'?document.cookie:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
-  const response = await fetch(url, {
-    ...fetchOptions,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...fetchOptions.headers,
-    },
-    credentials: 'include', // Include cookies
-  })
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:33',message:'Response received',data:{status:response.status,statusText:response.statusText,ok:response.ok,endpoint},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
+  // Create AbortController for timeout
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
-  if (!response.ok) {
-    // Handle 401 Unauthorized - token expired or invalid
-    if (response.status === 401) {
-      // For login endpoint, don't clear token (user is trying to login)
-      const isLoginEndpoint = endpoint.includes('/auth/login')
-      const isAuthMeEndpoint = endpoint.includes('/auth/me')
-      
-      if (!isLoginEndpoint) {
-        // Clear invalid token for other endpoints
-        localStorage.removeItem('auth-token')
+  try {
+    const response = await fetch(url, {
+      ...fetchOptions,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...fetchOptions.headers,
+      },
+      credentials: 'include', // Include cookies
+    })
+    
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      // Handle 401 Unauthorized - token expired or invalid
+      if (response.status === 401) {
+        // For login endpoint, don't clear token (user is trying to login)
+        const isLoginEndpoint = endpoint.includes('/auth/login')
+        const isAuthMeEndpoint = endpoint.includes('/auth/me')
+        
+        if (!isLoginEndpoint) {
+          // Clear invalid token for other endpoints
+          localStorage.removeItem('auth-token')
+        }
+        
+        // For /auth/me, 401 is expected when user is not logged in
+        // Don't log it as an error to reduce console noise
+        if (isAuthMeEndpoint) {
+          // Silently handle - user is simply not authenticated
+          const errorMessage = 'Unauthorized'
+          throw new Error(errorMessage)
+        }
       }
       
-      // For /auth/me, 401 is expected when user is not logged in
-      // Don't log it as an error to reduce console noise
-      if (isAuthMeEndpoint) {
-        // Silently handle - user is simply not authenticated
-        const errorMessage = 'Unauthorized'
-        throw new Error(errorMessage)
+      // Try to parse error response
+      let errorMessage = `HTTP error! status: ${response.status}`
+      try {
+        const error = await response.json()
+        errorMessage = error.error || error.message || errorMessage
+      } catch {
+        // If response is not JSON, use status text
+        errorMessage = response.statusText || errorMessage
+      }
+      
+      throw new Error(errorMessage)
+    }
+
+    return response.json()
+  } catch (error) {
+    clearTimeout(timeoutId)
+    
+    // Handle different types of errors
+    if (error instanceof Error) {
+      // Timeout error
+      if (error.name === 'AbortError') {
+        throw new Error('Connection timeout: Backend server is not responding. Please ensure the backend server is running on port 3001.')
+      }
+      
+      // Network errors (ERR_EMPTY_RESPONSE, Failed to fetch, etc.)
+      const errorMessage = error.message.toLowerCase()
+      if (errorMessage.includes('failed to fetch') || 
+          errorMessage.includes('networkerror') ||
+          errorMessage.includes('empty_response') ||
+          errorMessage.includes('network error')) {
+        throw new Error('Cannot connect to backend server. Please ensure the backend server is running on port 3001.')
       }
     }
     
-    // Try to parse error response
-    let errorMessage = `HTTP error! status: ${response.status}`
-    try {
-      const error = await response.json()
-      errorMessage = error.error || error.message || errorMessage
-    } catch {
-      // If response is not JSON, use status text
-      errorMessage = response.statusText || errorMessage
-    }
-    
-    throw new Error(errorMessage)
+    throw error
   }
-
-  return response.json()
 }
 
 function getAuthToken(): string | null {
@@ -79,14 +103,6 @@ function getAuthToken(): string | null {
   // The cookie is still sent automatically by the browser for same-origin requests
   // But for cross-origin (localhost:5173 -> localhost:3001), we need Authorization header
   const token = localStorage.getItem('auth-token')
-  
-  // #region agent log
-  if (typeof document !== 'undefined') {
-    const cookies = document.cookie;
-    fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api.ts:77',message:'getAuthToken called',data:{hasToken:!!token,tokenLength:token?.length||0,hasCookies:!!cookies,cookieLength:cookies.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'G'})}).catch(()=>{});
-  }
-  // #endregion
-  
   return token
 }
 

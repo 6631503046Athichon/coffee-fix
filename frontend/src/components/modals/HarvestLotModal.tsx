@@ -34,12 +34,14 @@ interface HarvestLotModalProps {
   isOpen: boolean;
   onClose: () => void;
   farm?: Farm; // Optional - can be selected in modal
+  onSuccess?: (message: string) => void; // Callback to notify parent component of success
 }
 
 export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
   isOpen,
   onClose,
   farm: initialFarm,
+  onSuccess,
 }) => {
   const { data, setData } = useDataContext();
   const { currentUser } = useAuth();
@@ -72,6 +74,14 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
   const [harvestDate, setHarvestDate] = useState(new Date().toISOString().substring(0, 10));
   const [cropYearId, setCropYearId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [formErrors, setFormErrors] = useState<{
+    farm?: string;
+    variety?: string;
+    weight?: string;
+    harvestDate?: string;
+    general?: string;
+  }>({});
 
   // Reset form when modal opens or farm changes
   useEffect(() => {
@@ -81,6 +91,9 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
       } else if (farmsWithVarieties.length > 0 && !selectedFarmId) {
         setSelectedFarmId(farmsWithVarieties[0].id);
       }
+      // Clear errors and success message when modal opens
+      setFormErrors({});
+      setSuccessMessage(null);
     }
   }, [isOpen, initialFarm, farmsWithVarieties, selectedFarmId]);
 
@@ -103,25 +116,56 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
       return;
     }
 
+    // Clear previous errors
+    setFormErrors({});
+
     // Validate farm selection
     if (!selectedFarm) {
-      alert('Please select a farm.');
+      setFormErrors({ farm: 'Please select a farm.' });
       return;
     }
 
     // Validate that farm has varieties and one is selected
     if (!selectedFarm.varieties || selectedFarm.varieties.length === 0) {
-      alert('This farm has no varieties. Please add varieties to the farm first.');
+      setFormErrors({ farm: 'This farm has no varieties. Please add varieties to the farm first.' });
       return;
     }
 
     if (!cherryVariety) {
-      alert('Please select a cherry variety.');
+      setFormErrors({ variety: 'Please select a cherry variety.' });
       return;
     }
 
-    if (!weightKg || parseFloat(weightKg) <= 0) {
-      alert('Please enter a valid weight.');
+    // Validate weight
+    const weightValue = weightKg.trim();
+    if (!weightValue) {
+      setFormErrors({ weight: 'Please enter a weight.' });
+      return;
+    }
+
+    const parsedWeight = parseFloat(weightValue);
+    if (isNaN(parsedWeight) || parsedWeight <= 0) {
+      setFormErrors({ weight: 'Please enter a valid weight greater than 0.' });
+      return;
+    }
+
+    if (parsedWeight > 100000) {
+      setFormErrors({ weight: 'Weight seems too large. Please check your input.' });
+      return;
+    }
+
+    // Validate harvest date
+    if (!harvestDate) {
+      setFormErrors({ harvestDate: 'Please select a harvest date.' });
+      return;
+    }
+
+    const selectedDate = new Date(harvestDate);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today
+    
+    if (selectedDate > today) {
+      setFormErrors({ harvestDate: 'Harvest date cannot be in the future.' });
       return;
     }
 
@@ -137,7 +181,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
           console.error('Selected crop year not found in available crop years:', cropYearId);
           console.log('Available crop years:', data.cropYears.map(cy => ({ id: cy.id, year: cy.year })));
           console.log('Total crop years loaded:', data.cropYears.length);
-          alert(`Selected crop year not found. Please select a valid crop year.`);
+          setFormErrors({ general: 'Selected crop year not found. Please select a valid crop year.' });
           setIsSubmitting(false);
           return;
         }
@@ -145,7 +189,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (!uuidRegex.test(cropYearId)) {
           console.error('Invalid crop year ID format (not a UUID):', cropYearId);
-          alert(`Invalid crop year ID format. Please select a valid crop year.`);
+          setFormErrors({ general: 'Invalid crop year ID format. Please select a valid crop year.' });
           setIsSubmitting(false);
           return;
         }
@@ -171,19 +215,32 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         harvestLots: [savedLot, ...prev.harvestLots],
       }));
 
-      // Reset form (keep selected farm)
-      setCherryVariety(selectedFarm.varieties?.[0] || '');
-      setWeightKg('');
-      setHarvestDate(new Date().toISOString().substring(0, 10));
-      setCropYearId('');
-      setIsSubmitting(false);
+      // Show success message
+      const successMsg = `Harvest lot ${savedLot.id || 'created'} registered successfully!`;
+      setSuccessMessage(successMsg);
+      setFormErrors({});
+      
+      // Notify parent component if callback provided
+      if (onSuccess) {
+        onSuccess(successMsg);
+      }
+
+      // Reset form (keep selected farm) after a short delay to show success message
+      setTimeout(() => {
+        setCherryVariety(selectedFarm.varieties?.[0] || '');
+        setWeightKg('');
+        setHarvestDate(new Date().toISOString().substring(0, 10));
+        setCropYearId('');
+        setSuccessMessage(null);
+        setIsSubmitting(false);
+      }, 2000);
 
       // Don't close modal automatically - let user close manually or add another lot
       // onClose();
     } catch (error: any) {
       console.error('Failed to add harvest lot:', error);
       const errorMessage = error?.message || error?.error || 'Failed to register harvest lot. Please try again.';
-      alert(errorMessage);
+      setFormErrors({ general: errorMessage });
       setIsSubmitting(false);
     }
   };
@@ -244,6 +301,22 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
       maxWidth="2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Success Message */}
+        {successMessage && (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-2">
+            <span className="text-green-600 font-semibold">✓</span>
+            <p className="text-sm text-green-800 flex-1">{successMessage}</p>
+          </div>
+        )}
+        
+        {/* General Error Message */}
+        {formErrors.general && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-2">
+            <span className="text-red-600 font-semibold">⚠️</span>
+            <p className="text-sm text-red-800 flex-1">{formErrors.general}</p>
+          </div>
+        )}
+
         {/* Farm Selection - Only show if no initial farm provided */}
         {!initialFarm && (
           farmsWithVarieties.length > 0 ? (
@@ -251,11 +324,17 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
               <label className={labelClass}>Select Farm *</label>
               <Select
                 value={selectedFarmId}
-                onChange={(v) => setSelectedFarmId((v as string) || '')}
+                onChange={(v) => {
+                  setSelectedFarmId((v as string) || '');
+                  setFormErrors(prev => ({ ...prev, farm: undefined }));
+                }}
                 options={farmOptions}
                 placeholder="Select a farm..."
                 colorTheme="emerald"
               />
+              {formErrors.farm && (
+                <p className="mt-1 text-sm text-red-600">{formErrors.farm}</p>
+              )}
             </div>
           ) : (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
@@ -296,11 +375,17 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
             <label className={labelClass}>Cherry Variety *</label>
             <Select
               value={cherryVariety}
-              onChange={(v) => setCherryVariety((v as string) || '')}
+              onChange={(v) => {
+                setCherryVariety((v as string) || '');
+                setFormErrors(prev => ({ ...prev, variety: undefined }));
+              }}
               options={availableVarieties}
               placeholder="Select variety..."
               colorTheme="emerald"
             />
+            {formErrors.variety && (
+              <p className="mt-1 text-sm text-red-600">{formErrors.variety}</p>
+            )}
           </div>
         ) : (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
@@ -318,19 +403,32 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
               type="number"
               id="weightKg"
               value={weightKg}
-              onChange={e => setWeightKg(e.target.value)}
+              onChange={e => {
+                setWeightKg(e.target.value);
+                setFormErrors(prev => ({ ...prev, weight: undefined }));
+              }}
               required
               placeholder="0"
               fullWidth
+              className={formErrors.weight ? 'border-red-500 focus:ring-red-500' : ''}
             />
+            {formErrors.weight && (
+              <p className="mt-1 text-sm text-red-600">{formErrors.weight}</p>
+            )}
           </div>
           <div>
             <DatePicker
               value={harvestDate}
-              onChange={setHarvestDate}
+              onChange={(date) => {
+                setHarvestDate(date);
+                setFormErrors(prev => ({ ...prev, harvestDate: undefined }));
+              }}
               label="Harvest Date *"
               required
             />
+            {formErrors.harvestDate && (
+              <p className="mt-1 text-sm text-red-600">{formErrors.harvestDate}</p>
+            )}
           </div>
         </div>
 

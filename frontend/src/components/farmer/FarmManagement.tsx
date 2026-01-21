@@ -9,7 +9,7 @@ import Select from '../common/Select';
 import { deleteFarm } from '../../services/farmService';
 import { formatDateDisplay } from '../../utils/formatters';
 import FarmSoilPanel from './FarmSoilPanel';
-import WeatherModal from '../modals/WeatherModal';
+import FarmWeatherPanel from './FarmWeatherPanel';
 import HarvestLotModal from '../modals/HarvestLotModal';
 import FarmMapView from '../common/FarmMapView';
 
@@ -405,28 +405,39 @@ const FarmManagement: React.FC = () => {
 											}}
 											className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500 transition-colors"
 											aria-label="Options menu"
+											aria-expanded={menuOpenId === farm.id}
+											aria-haspopup="true"
 										>
 											<MoreVertical className="h-4 w-4" />
 										</button>
 										{menuOpenId === farm.id && (
-											<div onClick={event => event.stopPropagation()} className="absolute right-0 mt-2 w-40 rounded-2xl border border-gray-100 bg-white shadow-lg z-10">
+											<div 
+												onClick={event => event.stopPropagation()} 
+												className="absolute right-0 mt-2 w-40 rounded-2xl border border-gray-100 bg-white shadow-lg z-50"
+												role="menu"
+												aria-orientation="vertical"
+											>
 												<button
 													type="button"
-													onClick={() => {
-													setMenuOpenId(null);
-													handleOpenEditFarm(farm);
-												}}
-													className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+													onClick={(e) => {
+														e.stopPropagation();
+														setMenuOpenId(null);
+														handleOpenEditFarm(farm);
+													}}
+													className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 first:rounded-t-2xl"
+													role="menuitem"
 												>
 													<Edit3 className="h-4 w-4" /> Edit
 												</button>
 												<button
 													type="button"
-													onClick={() => {
+													onClick={(e) => {
+														e.stopPropagation();
 														setMenuOpenId(null);
 														handleOpenDeleteModal(farm);
 													}}
-													className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+													className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 last:rounded-b-2xl"
+													role="menuitem"
 												>
 													<Trash2 className="h-4 w-4" /> Delete Farm
 												</button>
@@ -631,9 +642,9 @@ const FarmManagement: React.FC = () => {
 				/>
 			)}
 
-			{/* Weather Modal */}
+			{/* Weather Panel */}
 			{modalFarm && (
-				<WeatherModal
+				<FarmWeatherPanel
 					isOpen={isWeatherModalOpen}
 					onClose={() => {
 						setIsWeatherModalOpen(false);
@@ -652,6 +663,9 @@ const FarmManagement: React.FC = () => {
 						setModalFarm(null);
 					}}
 					farm={modalFarm}
+					onSuccess={(message) => {
+						setToast({ type: 'success', message });
+					}}
 				/>
 			)}
 		</div>
