@@ -25,11 +25,30 @@ export const getAllSoilAnalyses = async (farmId?: string): Promise<SoilAnalysis[
 export const addSoilAnalysis = async (
   analysisData: Partial<SoilAnalysis>
 ): Promise<SoilAnalysis> => {
-  const response = await api.post<{ soilAnalysis: any; message: string }>(
-    '/soil-analyses',
-    transformSoilAnalysisToBackend(analysisData)
-  );
-  return transformSoilAnalysisFromBackend(response.soilAnalysis);
+  try {
+    const response = await api.post<{ soilAnalysis: any; message: string }>(
+      '/soil-analyses',
+      transformSoilAnalysisToBackend(analysisData)
+    );
+    return transformSoilAnalysisFromBackend(response.soilAnalysis);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Failed to create soil analysis';
+    
+    // Provide user-friendly error messages
+    if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+      throw new Error('Authentication failed. Please log in again and try submitting the form.');
+    }
+    
+    if (errorMessage.includes('timeout') || errorMessage.includes('not responding')) {
+      throw new Error('Connection timeout. Please check your internet connection and try again.');
+    }
+    
+    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('network')) {
+      throw new Error('Cannot connect to server. Please ensure the backend server is running on port 3001.');
+    }
+    
+    throw new Error(errorMessage);
+  }
 };
 
 /**
@@ -39,11 +58,30 @@ export const updateSoilAnalysis = async (
   analysisId: string,
   analysisData: Partial<SoilAnalysis>
 ): Promise<SoilAnalysis> => {
-  const response = await api.put<{ soilAnalysis: any }>(
-    `/soil-analyses/${analysisId}`,
-    transformSoilAnalysisToBackend(analysisData)
-  );
-  return transformSoilAnalysisFromBackend(response.soilAnalysis);
+  try {
+    const response = await api.put<{ soilAnalysis: any }>(
+      `/soil-analyses/${analysisId}`,
+      transformSoilAnalysisToBackend(analysisData)
+    );
+    return transformSoilAnalysisFromBackend(response.soilAnalysis);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Failed to update soil analysis';
+    
+    // Provide user-friendly error messages
+    if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+      throw new Error('Authentication failed. Please log in again and try updating the analysis.');
+    }
+    
+    if (errorMessage.includes('timeout') || errorMessage.includes('not responding')) {
+      throw new Error('Connection timeout. Please check your internet connection and try again.');
+    }
+    
+    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('network')) {
+      throw new Error('Cannot connect to server. Please ensure the backend server is running on port 3001.');
+    }
+    
+    throw new Error(errorMessage);
+  }
 };
 
 /**

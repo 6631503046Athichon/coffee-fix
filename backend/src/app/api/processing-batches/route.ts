@@ -69,30 +69,42 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const processingBatch = await prisma.processingBatch.create({
-      data: {
-        harvestLotId,
-        status: status || 'ToProcess',
-        processType,
-        processNotes: processNotes || null,
-        cropYearId: cropYearId || null,
-      },
-      include: {
-        harvestLot: {
-          select: {
-            id: true,
-            farmerName: true,
-            cherryVariety: true,
-            weightKg: true,
+    // Use transaction to create batch and update harvest lot status atomically
+    const processingBatch = await prisma.$transaction(async (tx) => {
+      // Create processing batch
+      const batch = await tx.processingBatch.create({
+        data: {
+          harvestLotId,
+          status: status || 'ToProcess',
+          processType,
+          processNotes: processNotes || null,
+          cropYearId: cropYearId || null,
+        },
+        include: {
+          harvestLot: {
+            select: {
+              id: true,
+              farmerName: true,
+              cherryVariety: true,
+              weightKg: true,
+            },
+          },
+          cropYear: {
+            select: {
+              id: true,
+              year: true,
+            },
           },
         },
-        cropYear: {
-          select: {
-            id: true,
-            year: true,
-          },
-        },
-      },
+      });
+
+      // Update harvest lot status to 'Processing'
+      await tx.harvestLot.update({
+        where: { id: harvestLotId },
+        data: { status: 'Processing' }, // Prisma enum: HarvestLotStatus.Processing
+      });
+
+      return batch;
     })
 
     return NextResponse.json(

@@ -116,7 +116,7 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
                 type={showCurrentPassword ? 'text' : 'password'}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full px-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-3 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
                 required
               />
               <button
@@ -139,7 +139,7 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
                 type="text"
                 value={newUsername}
                 onChange={(e) => setNewUsername(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
                 placeholder="Choose a unique username"
                 required
               />
@@ -159,7 +159,7 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
                 type="email"
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
                 placeholder="your.email@example.com"
                 required
               />
@@ -178,7 +178,7 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
                     type={showNewPassword ? 'text' : 'password'}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full px-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="w-full px-3 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
                     placeholder="Minimum 8 characters"
                     required
                   />
@@ -201,7 +201,7 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
                     type={showConfirmPassword ? 'text' : 'password'}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full px-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    className="w-full px-3 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
                     placeholder="Re-enter your password"
                     required
                   />

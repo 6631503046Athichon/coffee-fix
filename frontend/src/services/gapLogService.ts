@@ -43,23 +43,46 @@ export const getAllGAPLogs = async (
  * Create a new GAP log entry
  */
 export const addGAPLog = async (logData: Partial<GAPLogEntry>): Promise<GAPLogEntry> => {
-  if (!logData.activityType) {
-    throw new Error('Activity type is required');
+  try {
+    if (!logData.activityType) {
+      throw new Error('Activity type is required');
+    }
+    
+    const activityTypeId = await findActivityTypeId(logData.activityType);
+    
+    const response = await api.post<{ gapLog: any; message: string }>('/gap-logs', {
+      farmId: logData.farmId || null,
+      farmPlotLocation: logData.farmPlotLocation || '',
+      activityTypeId,
+      date: logData.date,
+      productUsed: logData.productUsed || '',
+      quantity: logData.quantity || '',
+      notes: logData.notes || null,
+    });
+    
+    return transformGAPLogFromBackend(response.gapLog);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Failed to create GAP log entry';
+    
+    // Provide user-friendly error messages
+    if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+      throw new Error('Authentication failed. Please log in again and try submitting the form.');
+    }
+    
+    if (errorMessage.includes('timeout') || errorMessage.includes('not responding')) {
+      throw new Error('Connection timeout. Please check your internet connection and try again.');
+    }
+    
+    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('network')) {
+      throw new Error('Cannot connect to server. Please ensure the backend server is running on port 3001.');
+    }
+    
+    if (errorMessage.includes('Activity type')) {
+      throw new Error(errorMessage);
+    }
+    
+    throw new Error(errorMessage);
   }
-  
-  const activityTypeId = await findActivityTypeId(logData.activityType);
-  
-  const response = await api.post<{ gapLog: any; message: string }>('/gap-logs', {
-    farmId: logData.farmId || null,
-    farmPlotLocation: logData.farmPlotLocation || '',
-    activityTypeId,
-    date: logData.date,
-    productUsed: logData.productUsed || '',
-    quantity: logData.quantity || '',
-    notes: logData.notes || null,
-  });
-  
-  return transformGAPLogFromBackend(response.gapLog);
 };
 
 /**
@@ -69,22 +92,41 @@ export const updateGAPLog = async (
   logId: string,
   logData: Partial<GAPLogEntry>
 ): Promise<GAPLogEntry> => {
-  const updatePayload: any = {
-    farmId: logData.farmId,
-    farmPlotLocation: logData.farmPlotLocation,
-    date: logData.date,
-    productUsed: logData.productUsed,
-    quantity: logData.quantity,
-    notes: logData.notes,
-  };
-  
-  // Find activity type ID if activity type name is provided
-  if (logData.activityType) {
-    updatePayload.activityTypeId = await findActivityTypeId(logData.activityType);
+  try {
+    const updatePayload: any = {
+      farmId: logData.farmId,
+      farmPlotLocation: logData.farmPlotLocation,
+      date: logData.date,
+      productUsed: logData.productUsed,
+      quantity: logData.quantity,
+      notes: logData.notes,
+    };
+    
+    // Find activity type ID if activity type name is provided
+    if (logData.activityType) {
+      updatePayload.activityTypeId = await findActivityTypeId(logData.activityType);
+    }
+    
+    const response = await api.put<{ gapLog: any }>(`/gap-logs/${logId}`, updatePayload);
+    return transformGAPLogFromBackend(response.gapLog);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Failed to update GAP log entry';
+    
+    // Provide user-friendly error messages
+    if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+      throw new Error('Authentication failed. Please log in again and try updating the log.');
+    }
+    
+    if (errorMessage.includes('timeout') || errorMessage.includes('not responding')) {
+      throw new Error('Connection timeout. Please check your internet connection and try again.');
+    }
+    
+    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('network')) {
+      throw new Error('Cannot connect to server. Please ensure the backend server is running on port 3001.');
+    }
+    
+    throw new Error(errorMessage);
   }
-  
-  const response = await api.put<{ gapLog: any }>(`/gap-logs/${logId}`, updatePayload);
-  return transformGAPLogFromBackend(response.gapLog);
 };
 
 /**
