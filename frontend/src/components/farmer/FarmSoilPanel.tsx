@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlaskConical, Microscope, X, CheckCircle, Edit3, Trash2 } from 'lucide-react';
+import { FlaskConical, Microscope, X, CheckCircle, Edit3, Trash2, Sparkles, Loader2 } from 'lucide-react';
 import { Button, Input, Modal } from '../common';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -7,6 +7,7 @@ import { Farm, SoilAnalysis, UserRole } from '../../types';
 import { generateSoilAnalysisId } from '../../utils/idGenerator';
 import { formatDateDisplay } from '../../utils/formatters';
 import { addSoilAnalysis, updateSoilAnalysis } from '../../services/soilAnalysisService';
+import { generateSoilRecommendations } from '../../services/geminiService';
 
 export type SoilFormState = {
   farmPlotLocation: string;
@@ -67,6 +68,8 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
   const [editingSoilId, setEditingSoilId] = useState<string | null>(null);
   const [soilFormError, setSoilFormError] = useState<string | null>(null);
   const [soilToast, setSoilToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGeneratingRecommendations, setIsGeneratingRecommendations] = useState(false);
 
   const selectedFarmAnalyses = useMemo(() => {
     if (!farm) {
@@ -101,19 +104,114 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
     setSoilForm(createEmptySoilForm({ farmPlotLocation: farm?.location ?? '' }));
   };
 
+  const handleGenerateRecommendations = async () => {
+    if (!farm) {
+      setSoilFormError('กรุณาเลือกฟาร์มก่อนสร้างคำแนะนำ');
+      return;
+    }
+
+    // Validate required fields first - but allow partial data for better UX
+    const requiredFields = ['pH', 'phosphorus', 'potassium', 'nitrogen', 'calcium', 'magnesium'];
+    const missingFields = requiredFields.filter(field => !soilForm[field as keyof SoilFormState]?.trim());
+    
+    if (missingFields.length > 0) {
+      setSoilFormError(`กรุณากรอกค่าสารอาหารหลักก่อนสร้างคำแนะนำ (ยังขาด: ${missingFields.join(', ')})`);
+      // Scroll to first missing field
+      const firstMissingField = document.querySelector(`input[type="number"][value="${soilForm[missingFields[0] as keyof SoilFormState]}"]`);
+      if (firstMissingField) {
+        (firstMissingField as HTMLElement).focus();
+      }
+      return;
+    }
+
+    // Validate that values are numeric
+    const numericFields = ['pH', 'phosphorus', 'potassium', 'nitrogen', 'calcium', 'magnesium'];
+    const invalidFields: string[] = [];
+    for (const field of numericFields) {
+      const value = soilForm[field as keyof SoilFormState]?.trim();
+      if (value && isNaN(parseFloat(value))) {
+        invalidFields.push(field);
+      }
+    }
+    
+    if (invalidFields.length > 0) {
+      setSoilFormError(`ค่าต่อไปนี้ไม่ถูกต้อง (ต้องเป็นตัวเลข): ${invalidFields.join(', ')}`);
+      return;
+    }
+
+    setIsGeneratingRecommendations(true);
+    setSoilFormError(null);
+    setSoilToast(null);
+
+    try {
+      const recommendations = await generateSoilRecommendations({
+        pH: parseFloat(soilForm.pH),
+        phosphorus: parseFloat(soilForm.phosphorus),
+        potassium: parseFloat(soilForm.potassium),
+        nitrogen: parseFloat(soilForm.nitrogen),
+        calcium: parseFloat(soilForm.calcium),
+        magnesium: parseFloat(soilForm.magnesium),
+        organicMatter: soilForm.organicMatter?.trim() ? parseFloat(soilForm.organicMatter) : undefined,
+        sulfur: soilForm.sulfur?.trim() ? parseFloat(soilForm.sulfur) : undefined,
+        zinc: soilForm.zinc?.trim() ? parseFloat(soilForm.zinc) : undefined,
+        iron: soilForm.iron?.trim() ? parseFloat(soilForm.iron) : undefined,
+        manganese: soilForm.manganese?.trim() ? parseFloat(soilForm.manganese) : undefined,
+        copper: soilForm.copper?.trim() ? parseFloat(soilForm.copper) : undefined,
+        boron: soilForm.boron?.trim() ? parseFloat(soilForm.boron) : undefined,
+        location: farm.location,
+        variety: farm.varieties?.[0],
+      });
+
+      setSoilForm(prev => ({ ...prev, recommendations }));
+      setSoilToast({ type: 'success', message: 'สร้างคำแนะนำจาก AI สำเร็จแล้ว! คำแนะนำถูกเติมลงในช่องคำแนะนำแล้ว' });
+      setSoilFormError(null);
+      
+      // Auto-dismiss success toast after 5 seconds
+      setTimeout(() => {
+        setSoilToast(null);
+      }, 5000);
+      
+      // Scroll to recommendations field to show the result
+      setTimeout(() => {
+        const recommendationsField = document.querySelector('textarea[placeholder*="สร้างคำแนะนำ AI"]');
+        if (recommendationsField) {
+          recommendationsField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+    } catch (error: any) {
+      console.error('Failed to generate recommendations:', error);
+      const errorMessage = error?.message || 'ไม่สามารถสร้างคำแนะนำได้ กรุณาลองอีกครั้ง หรือตรวจสอบการเชื่อมต่ออินเทอร์เน็ต';
+      setSoilFormError(errorMessage);
+      setSoilToast({ type: 'error', message: errorMessage });
+    } finally {
+      setIsGeneratingRecommendations(false);
+    }
+  };
+
   const handleSoilSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    
+    // Prevent double submission
+    if (isSubmitting) {
+      return;
+    }
+
     if (!farm) {
       return;
     }
 
+    setSoilFormError(null);
+    setIsSubmitting(true);
+
     const trimmedPlot = soilForm.farmPlotLocation.trim();
     if (!trimmedPlot) {
       setSoilFormError('กรอกชื่อแปลงหรือโซนปลูก');
+      setIsSubmitting(false);
       return;
     }
     if (!soilForm.testDate) {
       setSoilFormError('เลือกวันที่ตรวจวิเคราะห์ดิน');
+      setIsSubmitting(false);
       return;
     }
 
@@ -131,11 +229,13 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
       const value = soilForm[field.key].trim();
       if (!value) {
         setSoilFormError(`กรอกค่า ${field.label}`);
+        setIsSubmitting(false);
         return;
       }
       const parsed = Number(value);
       if (Number.isNaN(parsed)) {
         setSoilFormError(`${field.label} ต้องเป็นตัวเลข`);
+        setIsSubmitting(false);
         return;
       }
       parsedRequired[field.key] = parsed;
@@ -160,6 +260,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
       const parsed = Number(value);
       if (Number.isNaN(parsed)) {
         setSoilFormError(`${field.label} ต้องเป็นตัวเลข`);
+        setIsSubmitting(false);
         return;
       }
       parsedOptional[field.key] = parsed;
@@ -210,9 +311,18 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
       setEditingSoilId(null);
       setSoilFormError(null);
       setSoilForm(createEmptySoilForm({ farmPlotLocation: farm.location }));
-    } catch (error) {
+      setIsSubmitting(false);
+      
+      // Auto-dismiss success toast after 4 seconds
+      setTimeout(() => {
+        setSoilToast(null);
+      }, 4000);
+    } catch (error: any) {
       console.error('Failed to save soil analysis:', error);
-      setSoilFormError('ไม่สามารถบันทึกผลวิเคราะห์ดินได้ กรุณาลองอีกครั้ง');
+      const errorMessage = error?.message || 'ไม่สามารถบันทึกผลวิเคราะห์ดินได้ กรุณาลองอีกครั้ง';
+      setSoilFormError(errorMessage);
+      setSoilToast({ type: 'error', message: errorMessage });
+      setIsSubmitting(false);
     }
   };
 
@@ -291,14 +401,6 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
             </div>
           </div>
 
-          {soilToast && (
-            <div className={`flex items-center justify-between px-4 py-3 border rounded-xl ${soilToast.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-700'}`}>
-              <span className="font-semibold">{soilToast.message}</span>
-              <button className="p-1 rounded-full hover:bg-black/5" onClick={() => setSoilToast(null)} aria-label="ปิดข้อความ">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          )}
 
           <form onSubmit={handleSoilSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -309,6 +411,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                 onChange={event => handleSoilFieldChange('farmPlotLocation', event.target.value)}
                 required
                 fullWidth
+                disabled={isSubmitting}
               />
               <Input
                 label="วันที่ตรวจ"
@@ -317,6 +420,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                 onChange={event => handleSoilFieldChange('testDate', event.target.value)}
                 required
                 fullWidth
+                disabled={isSubmitting}
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -326,6 +430,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                 value={soilForm.labName}
                 onChange={event => handleSoilFieldChange('labName', event.target.value)}
                 fullWidth
+                disabled={isSubmitting}
               />
               <Input
                 label="เลขที่ใบรับรอง"
@@ -333,47 +438,195 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                 value={soilForm.certificateNumber}
                 onChange={event => handleSoilFieldChange('certificateNumber', event.target.value)}
                 fullWidth
+                disabled={isSubmitting}
               />
             </div>
 
             <div className="border-t border-gray-200 pt-4">
-              <p className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                <FlaskConical className="h-4 w-4 text-emerald-600" />
-                ค่าสารอาหารหลัก (จำเป็น)
-              </p>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                  <FlaskConical className="h-4 w-4 text-emerald-600" />
+                  ค่าสารอาหารหลัก (จำเป็น)
+                </p>
+                <p className="text-xs text-gray-500">
+                  กรอกค่าทั้งหมดเพื่อใช้สร้างคำแนะนำ AI
+                </p>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Input label="pH" type="number" step="0.1" value={soilForm.pH} onChange={event => handleSoilFieldChange('pH', event.target.value)} required fullWidth />
-                <Input label="ฟอสฟอรัส (ppm)" type="number" step="0.1" value={soilForm.phosphorus} onChange={event => handleSoilFieldChange('phosphorus', event.target.value)} required fullWidth />
-                <Input label="โพแทสเซียม (ppm)" type="number" step="0.1" value={soilForm.potassium} onChange={event => handleSoilFieldChange('potassium', event.target.value)} required fullWidth />
-                <Input label="ไนโตรเจน (%)" type="number" step="0.1" value={soilForm.nitrogen} onChange={event => handleSoilFieldChange('nitrogen', event.target.value)} required fullWidth />
-                <Input label="แคลเซียม (ppm)" type="number" step="0.1" value={soilForm.calcium} onChange={event => handleSoilFieldChange('calcium', event.target.value)} required fullWidth />
-                <Input label="แมกนีเซียม (ppm)" type="number" step="0.1" value={soilForm.magnesium} onChange={event => handleSoilFieldChange('magnesium', event.target.value)} required fullWidth />
+                <Input 
+                  label="pH" 
+                  type="number" 
+                  step="0.1" 
+                  value={soilForm.pH} 
+                  onChange={event => handleSoilFieldChange('pH', event.target.value)} 
+                  required 
+                  fullWidth
+                  disabled={isSubmitting}
+                />
+                <Input 
+                  label="ฟอสฟอรัส (ppm)" 
+                  type="number" 
+                  step="0.1" 
+                  value={soilForm.phosphorus} 
+                  onChange={event => handleSoilFieldChange('phosphorus', event.target.value)} 
+                  required 
+                  fullWidth
+                  disabled={isSubmitting}
+                />
+                <Input 
+                  label="โพแทสเซียม (ppm)" 
+                  type="number" 
+                  step="0.1" 
+                  value={soilForm.potassium} 
+                  onChange={event => handleSoilFieldChange('potassium', event.target.value)} 
+                  required 
+                  fullWidth
+                  disabled={isSubmitting}
+                />
+                <Input 
+                  label="ไนโตรเจน (%)" 
+                  type="number" 
+                  step="0.1" 
+                  value={soilForm.nitrogen} 
+                  onChange={event => handleSoilFieldChange('nitrogen', event.target.value)} 
+                  required 
+                  fullWidth
+                  disabled={isSubmitting}
+                />
+                <Input 
+                  label="แคลเซียม (ppm)" 
+                  type="number" 
+                  step="0.1" 
+                  value={soilForm.calcium} 
+                  onChange={event => handleSoilFieldChange('calcium', event.target.value)} 
+                  required 
+                  fullWidth
+                  disabled={isSubmitting}
+                />
+                <Input 
+                  label="แมกนีเซียม (ppm)" 
+                  type="number" 
+                  step="0.1" 
+                  value={soilForm.magnesium} 
+                  onChange={event => handleSoilFieldChange('magnesium', event.target.value)} 
+                  required 
+                  fullWidth
+                  disabled={isSubmitting}
+                />
               </div>
             </div>
 
             <div className="border-t border-gray-200 pt-4">
               <p className="text-sm font-semibold text-gray-800 mb-3">ค่าสารอาหารเพิ่มเติม (ไม่จำเป็น)</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Input label="อินทรีย์วัตถุ (%)" type="number" step="0.1" value={soilForm.organicMatter} onChange={event => handleSoilFieldChange('organicMatter', event.target.value)} fullWidth />
-                <Input label="กำมะถัน (ppm)" type="number" step="0.1" value={soilForm.sulfur} onChange={event => handleSoilFieldChange('sulfur', event.target.value)} fullWidth />
-                <Input label="สังกะสี (ppm)" type="number" step="0.1" value={soilForm.zinc} onChange={event => handleSoilFieldChange('zinc', event.target.value)} fullWidth />
-                <Input label="เหล็ก (ppm)" type="number" step="0.1" value={soilForm.iron} onChange={event => handleSoilFieldChange('iron', event.target.value)} fullWidth />
-                <Input label="แมงกานีส (ppm)" type="number" step="0.1" value={soilForm.manganese} onChange={event => handleSoilFieldChange('manganese', event.target.value)} fullWidth />
-                <Input label="ทองแดง (ppm)" type="number" step="0.1" value={soilForm.copper} onChange={event => handleSoilFieldChange('copper', event.target.value)} fullWidth />
-                <Input label="โบรอน (ppm)" type="number" step="0.1" value={soilForm.boron} onChange={event => handleSoilFieldChange('boron', event.target.value)} fullWidth />
+                <Input 
+                  label="อินทรีย์วัตถุ (%)" 
+                  type="number" 
+                  step="0.1" 
+                  value={soilForm.organicMatter} 
+                  onChange={event => handleSoilFieldChange('organicMatter', event.target.value)} 
+                  fullWidth
+                  disabled={isSubmitting}
+                />
+                <Input 
+                  label="กำมะถัน (ppm)" 
+                  type="number" 
+                  step="0.1" 
+                  value={soilForm.sulfur} 
+                  onChange={event => handleSoilFieldChange('sulfur', event.target.value)} 
+                  fullWidth
+                  disabled={isSubmitting}
+                />
+                <Input 
+                  label="สังกะสี (ppm)" 
+                  type="number" 
+                  step="0.1" 
+                  value={soilForm.zinc} 
+                  onChange={event => handleSoilFieldChange('zinc', event.target.value)} 
+                  fullWidth
+                  disabled={isSubmitting}
+                />
+                <Input 
+                  label="เหล็ก (ppm)" 
+                  type="number" 
+                  step="0.1" 
+                  value={soilForm.iron} 
+                  onChange={event => handleSoilFieldChange('iron', event.target.value)} 
+                  fullWidth
+                  disabled={isSubmitting}
+                />
+                <Input 
+                  label="แมงกานีส (ppm)" 
+                  type="number" 
+                  step="0.1" 
+                  value={soilForm.manganese} 
+                  onChange={event => handleSoilFieldChange('manganese', event.target.value)} 
+                  fullWidth
+                  disabled={isSubmitting}
+                />
+                <Input 
+                  label="ทองแดง (ppm)" 
+                  type="number" 
+                  step="0.1" 
+                  value={soilForm.copper} 
+                  onChange={event => handleSoilFieldChange('copper', event.target.value)} 
+                  fullWidth
+                  disabled={isSubmitting}
+                />
+                <Input 
+                  label="โบรอน (ppm)" 
+                  type="number" 
+                  step="0.1" 
+                  value={soilForm.boron} 
+                  onChange={event => handleSoilFieldChange('boron', event.target.value)} 
+                  fullWidth
+                  disabled={isSubmitting}
+                />
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">คำแนะนำ</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-gray-700">
+                    คำแนะนำ
+                    <span className="text-xs text-gray-500 font-normal ml-2">(สามารถสร้างด้วย AI ได้)</span>
+                  </label>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={handleGenerateRecommendations}
+                    disabled={isGeneratingRecommendations || isSubmitting}
+                    className="text-xs px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
+                    title="สร้างคำแนะนำอัตโนมัติจากข้อมูลดินที่กรอก"
+                  >
+                    {isGeneratingRecommendations ? (
+                      <>
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        กำลังสร้าง...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-3 w-3 mr-1" />
+                        สร้างคำแนะนำ AI
+                      </>
+                    )}
+                  </Button>
+                </div>
                 <textarea
                   value={soilForm.recommendations}
                   onChange={event => handleSoilFieldChange('recommendations', event.target.value)}
                   rows={4}
-                  placeholder="เช่น เพิ่มปุ๋ยอินทรีย์เพื่อรักษาระดับ OM"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="เช่น เพิ่มปุ๋ยอินทรีย์เพื่อรักษาระดับ OM หรือคลิกปุ่ม 'สร้างคำแนะนำ AI' เพื่อสร้างคำแนะนำอัตโนมัติจากข้อมูลดินที่กรอก"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                  disabled={isGeneratingRecommendations}
                 />
+                {isGeneratingRecommendations && (
+                  <p className="mt-1 text-xs text-emerald-600 flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    กำลังสร้างคำแนะนำจาก AI... กรุณารอสักครู่
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">บันทึกเพิ่มเติม</label>
@@ -382,25 +635,80 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                   onChange={event => handleSoilFieldChange('notes', event.target.value)}
                   rows={4}
                   placeholder="รายละเอียดเพิ่มเติมของการตรวจครั้งนี้"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                  disabled={isSubmitting}
                 />
               </div>
             </div>
 
             {soilFormError && (
-              <div className="px-4 py-3 border border-red-200 bg-red-50 rounded-xl text-red-700 text-sm">
-                {soilFormError}
+              <div className="px-4 py-3 border border-red-200 bg-red-50 rounded-xl text-red-700 text-sm flex items-start gap-2">
+                <X className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold mb-1">เกิดข้อผิดพลาด:</p>
+                  <p>{soilFormError}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSoilFormError(null)}
+                  className="text-red-600 hover:text-red-800 flex-shrink-0"
+                  aria-label="ปิดข้อความแจ้งเตือน"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+            
+            {soilToast && (
+              <div className={`px-4 py-3 border rounded-xl text-sm flex items-start gap-2 ${
+                soilToast.type === 'success' 
+                  ? 'border-green-200 bg-green-50 text-green-700' 
+                  : 'border-red-200 bg-red-50 text-red-700'
+              }`}>
+                {soilToast.type === 'success' ? (
+                  <CheckCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                ) : (
+                  <X className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                )}
+                <div className="flex-1">
+                  <p className="font-semibold mb-1">
+                    {soilToast.type === 'success' ? 'สำเร็จ!' : 'เกิดข้อผิดพลาด'}
+                  </p>
+                  <p>{soilToast.message}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSoilToast(null)}
+                  className={`flex-shrink-0 ${
+                    soilToast.type === 'success' 
+                      ? 'text-green-600 hover:text-green-800' 
+                      : 'text-red-600 hover:text-red-800'
+                  }`}
+                  aria-label="ปิดข้อความแจ้งเตือน"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
             )}
 
             <div className="flex justify-end gap-3">
               {editingSoilId && (
-                <Button type="button" variant="outline" onClick={handleSoilCancelEdit}>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={handleSoilCancelEdit}
+                  disabled={isSubmitting}
+                >
                   ยกเลิกการแก้ไข
                 </Button>
               )}
-              <Button type="submit" variant="primary" icon={<CheckCircle className="h-4 w-4" />}>
-                {editingSoilId ? 'บันทึกการแก้ไขผลดิน' : 'บันทึกผลดิน'}
+              <Button 
+                type="submit" 
+                variant="primary" 
+                icon={isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'กำลังบันทึก...' : (editingSoilId ? 'บันทึกการแก้ไขผลดิน' : 'บันทึกผลดิน')}
               </Button>
             </div>
           </form>

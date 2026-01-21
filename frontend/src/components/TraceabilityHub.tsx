@@ -1,48 +1,119 @@
 
-import React, { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../hooks/useDataContext';
-import { Search, ExternalLink, CheckCircle, Archive } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { Search, ExternalLink, CheckCircle, Archive, AlertCircle } from 'lucide-react';
+import { UserRole } from '../types';
 
 const TraceabilityHub: React.FC = () => {
     const { data } = useDataContext();
+    const { currentUser } = useAuth();
+    const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
+    const [error, setError] = useState<string | null>(null);
+
+    // Check if user has access
+    useEffect(() => {
+        if (currentUser) {
+            const hasAccess = currentUser.roles?.some(role => 
+                role === UserRole.Admin || role === UserRole.Processor
+            );
+            if (!hasAccess) {
+                navigate('/farmer-dashboard');
+            }
+        }
+    }, [currentUser, navigate]);
 
     const enrichedLots = useMemo(() => {
-        return data.greenBeanLots.map(gbl => {
-            const parchmentLot = data.parchmentLots.find(p => p.id === gbl.parchmentLotId);
-            const processingBatch = data.processingBatches.find(b => b.id === parchmentLot?.processingBatchId);
-            const harvestLot = data.harvestLots.find(h => h.id === parchmentLot?.harvestLotId);
-            
-            let finalScore: string | number = 'N/A';
-            const scoreInfo = gbl.cuppingScores[0];
-            if (scoreInfo) {
-                const session = data.cuppingSessions.find(s => s.id === scoreInfo.sessionId);
-                const sample = session?.samples.find(s => s.greenBeanLotId === gbl.id);
-                if (session && sample && session.finalResults && session.finalResults[sample.id]) {
-                    finalScore = session.finalResults[sample.id].totalScore.toFixed(2);
-                } else if (scoreInfo.score) { // Fallback to score on GBL if final results not compiled
-                    finalScore = scoreInfo.score.toFixed(2);
-                }
-            }
+        // Ensure data arrays exist and are arrays
+        if (!data?.greenBeanLots || !Array.isArray(data.greenBeanLots)) {
+            return [];
+        }
 
-            return {
-                ...gbl,
-                processType: processingBatch?.processType || 'N/A',
-                variety: harvestLot?.cherryVariety || 'N/A',
-                finalScore,
-            };
-        });
-    }, [data.greenBeanLots, data.parchmentLots, data.processingBatches, data.harvestLots, data.cuppingSessions]);
+        try {
+            return data.greenBeanLots.map(gbl => {
+                if (!gbl) return null;
+                
+                const parchmentLot = data.parchmentLots?.find(p => p?.id === gbl.parchmentLotId);
+                const processingBatch = data.processingBatches?.find(b => b?.id === parchmentLot?.processingBatchId);
+                const harvestLot = data.harvestLots?.find(h => h?.id === parchmentLot?.harvestLotId);
+                
+                let finalScore: string | number = 'N/A';
+                const scoreInfo = gbl.cuppingScores?.[0];
+                if (scoreInfo) {
+                    try {
+                        const session = data.cuppingSessions?.find(s => s?.id === scoreInfo.sessionId);
+                        const sample = session?.samples?.find(s => s?.greenBeanLotId === gbl.id);
+                        if (session && sample && session.finalResults && session.finalResults[sample.id]) {
+                            finalScore = session.finalResults[sample.id].totalScore.toFixed(2);
+                        } else if (scoreInfo.score) { // Fallback to score on GBL if final results not compiled
+                            finalScore = scoreInfo.score.toFixed(2);
+                        }
+                    } catch (error) {
+                        console.error('Error processing cupping score:', error);
+                        // Use fallback score if available
+                        if (scoreInfo.score) {
+                            finalScore = scoreInfo.score.toFixed(2);
+                        }
+                    }
+                }
+
+                return {
+                    ...gbl,
+                    processType: processingBatch?.processType || 'N/A',
+                    variety: harvestLot?.cherryVariety || 'N/A',
+                    finalScore,
+                };
+            }).filter(Boolean); // Remove any null entries
+        } catch (error) {
+            console.error('Error enriching lots:', error);
+            return [];
+        }
+    }, [data?.greenBeanLots, data?.parchmentLots, data?.processingBatches, data?.harvestLots, data?.cuppingSessions]);
 
     const filteredLots = useMemo(() => {
-        return enrichedLots.filter(lot => 
-            lot.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            lot.grade.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            lot.processType.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            lot.variety.toLowerCase().includes(searchTerm.toLowerCase())
-        ).sort((a, b) => a.id.localeCompare(b.id));
+        if (!enrichedLots || enrichedLots.length === 0) {
+            return [];
+        }
+
+        try {
+            const searchLower = searchTerm.toLowerCase();
+            return enrichedLots.filter(lot => {
+                if (!lot) return false;
+                return (
+                    (lot.id?.toLowerCase() || '').includes(searchLower) ||
+                    (lot.grade?.toLowerCase() || '').includes(searchLower) ||
+                    (lot.processType?.toLowerCase() || '').includes(searchLower) ||
+                    (lot.variety?.toLowerCase() || '').includes(searchLower)
+                );
+            }).sort((a, b) => {
+                const aId = a?.id || '';
+                const bId = b?.id || '';
+                return aId.localeCompare(bId);
+            });
+        } catch (error) {
+            console.error('Error filtering lots:', error);
+            return [];
+        }
     }, [enrichedLots, searchTerm]);
+
+    // Show error if data processing failed
+    if (error) {
+        return (
+            <div className="space-y-6">
+                <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+                    <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                        <div>
+                            <h3 className="text-lg font-semibold text-red-800 mb-1">Error Loading Traceability Data</h3>
+                            <p className="text-sm text-red-700">{error}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -84,53 +155,63 @@ const TraceabilityHub: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-100">
-                            {filteredLots.map(lot => (
-                                <tr key={lot.id} className="hover:bg-gray-50 transition-colors duration-200">
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className="text-sm font-bold text-gray-900">{lot.id}</span>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className="text-sm text-gray-700">{lot.variety}</span>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className="text-sm font-medium text-gray-900">{lot.processType}</span>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className="text-sm text-gray-700">{lot.grade}</span>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className="text-sm font-bold text-indigo-600">{lot.finalScore}</span>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${
-                                            lot.availabilityStatus === 'Available'
-                                                ? 'bg-green-100 text-green-700 border-green-200'
-                                                : 'bg-gray-100 text-gray-700 border-gray-200'
-                                        }`}>
-                                            {lot.availabilityStatus === 'Available' ? <CheckCircle className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
-                                            {lot.availabilityStatus}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <Link
-                                            to={`/traceability/${lot.id}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 font-bold text-sm transition-colors duration-200 hover:underline"
-                                        >
-                                            View Page <ExternalLink className="h-4 w-4" />
-                                        </Link>
+                            {filteredLots.length === 0 ? (
+                                <tr>
+                                    <td colSpan={7} className="px-6 py-12 text-center">
+                                        <Search className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                                        <p className="text-sm font-medium text-gray-500">
+                                            {enrichedLots.length === 0 
+                                                ? 'No green bean lots available. Process some batches to create traceability records.'
+                                                : 'No lots match your search criteria.'}
+                                        </p>
                                     </td>
                                 </tr>
-                            ))}
+                            ) : (
+                                filteredLots.map(lot => {
+                                    if (!lot || !lot.id) return null;
+                                    return (
+                                        <tr key={lot.id} className="hover:bg-gray-50 transition-colors duration-200">
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className="text-sm font-bold text-gray-900">{lot.id}</span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className="text-sm text-gray-700">{lot.variety || 'N/A'}</span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className="text-sm font-medium text-gray-900">{lot.processType || 'N/A'}</span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className="text-sm text-gray-700">{lot.grade || 'N/A'}</span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className="text-sm font-bold text-indigo-600">{lot.finalScore || 'N/A'}</span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${
+                                                    lot.availabilityStatus === 'Available'
+                                                        ? 'bg-green-100 text-green-700 border-green-200'
+                                                        : 'bg-gray-100 text-gray-700 border-gray-200'
+                                                }`}>
+                                                    {lot.availabilityStatus === 'Available' ? <CheckCircle className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+                                                    {lot.availabilityStatus || 'Unknown'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <Link
+                                                    to={`/traceability/${lot.id}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 font-bold text-sm transition-colors duration-200 hover:underline"
+                                                >
+                                                    View Page <ExternalLink className="h-4 w-4" />
+                                                </Link>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
                         </tbody>
                     </table>
-                     {filteredLots.length === 0 && (
-                        <div className="text-center p-12 text-gray-500">
-                            <Search className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                            <p className="text-sm font-medium">No lots match your search criteria.</p>
-                        </div>
-                    )}
                 </div>
             </div>
         </div>

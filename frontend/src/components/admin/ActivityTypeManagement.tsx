@@ -156,7 +156,7 @@ const ActivityTypeManagement: React.FC = () => {
 
       {/* Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 border-l-4 border-l-blue-500">
+        <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-l-blue-500 border-gray-200">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-gray-600 mb-2">Total Activity Types</p>
@@ -167,7 +167,7 @@ const ActivityTypeManagement: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 border-l-4 border-l-green-500">
+        <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-l-green-500 border-gray-200">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-gray-600 mb-2">Active Types</p>
@@ -178,7 +178,7 @@ const ActivityTypeManagement: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 border-l-4 border-l-gray-500">
+        <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-l-gray-500 border-gray-200">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-gray-600 mb-2">Inactive Types</p>

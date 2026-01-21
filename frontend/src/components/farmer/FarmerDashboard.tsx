@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { HarvestLot, Farm, CropYear, UserRole, SCA_ATTRIBUTES } from '../../types';
-import { BarChart, Weight, Wind, Award, MapPin, Leaf, TrendingUp, Clock, ArrowRight } from 'lucide-react';
+import { BarChart, Weight, Wind, Award, MapPin, Leaf, TrendingUp, Clock, ArrowRight, Flame, Droplets, FlaskConical } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer } from 'recharts';
 import Select from '../common/Select';
@@ -323,6 +323,64 @@ const FarmerDashboard: React.FC = () => {
           title="Farmer Dashboard"
           description="Your command center for farm and harvest management."
         />
+
+        {/* Quick Access for Admin Users */}
+        {isAdmin && (
+          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border border-purple-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Award className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Admin Quick Access</h3>
+                  <p className="text-sm text-gray-600">Access other workbenches for testing and management</p>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <button
+                onClick={() => navigate('/processor')}
+                className="flex items-center gap-3 p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all text-left group"
+              >
+                <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
+                  <Droplets className="h-5 w-5 text-blue-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-gray-900">Processor Workbench</p>
+                  <p className="text-xs text-gray-500">Manage processing batches</p>
+                </div>
+                <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
+              </button>
+              <button
+                onClick={() => navigate('/roaster')}
+                className="flex items-center gap-3 p-4 bg-white rounded-lg border border-gray-200 hover:border-orange-300 hover:shadow-md transition-all text-left group"
+              >
+                <div className="p-2 bg-orange-100 rounded-lg group-hover:bg-orange-200 transition-colors">
+                  <Flame className="h-5 w-5 text-orange-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-gray-900">Roaster Workbench</p>
+                  <p className="text-xs text-gray-500">Manage roasting operations</p>
+                </div>
+                <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-orange-600 group-hover:translate-x-1 transition-all" />
+              </button>
+              <button
+                onClick={() => navigate('/cupping')}
+                className="flex items-center gap-3 p-4 bg-white rounded-lg border border-gray-200 hover:border-indigo-300 hover:shadow-md transition-all text-left group"
+              >
+                <div className="p-2 bg-indigo-100 rounded-lg group-hover:bg-indigo-200 transition-colors">
+                  <FlaskConical className="h-5 w-5 text-indigo-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-gray-900">Cupping Lab</p>
+                  <p className="text-xs text-gray-500">Manage cupping sessions</p>
+                </div>
+                <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

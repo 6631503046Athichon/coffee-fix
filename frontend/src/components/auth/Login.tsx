@@ -31,7 +31,23 @@ const Login: React.FC = () => {
         navigate('/dashboard');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      let errorMessage = 'Login failed';
+      
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        
+        // Provide more helpful error messages
+        if (errorMessage.includes('Backend server is not available') || 
+            errorMessage.includes('Cannot connect')) {
+          errorMessage = 'Unable to connect to the server. Please ensure the backend server is running.';
+        } else if (errorMessage.includes('Invalid email/username or password')) {
+          errorMessage = 'Invalid email/username or password. Please check your credentials and try again.';
+        } else if (errorMessage.includes('timeout')) {
+          errorMessage = 'Connection timeout. The server is taking too long to respond. Please try again.';
+        }
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -71,7 +87,7 @@ const Login: React.FC = () => {
                   required
                   value={formData.identifier}
                   onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
-                  className="w-full px-4 py-2.5 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition-colors shadow-sm hover:border-gray-400"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition-colors shadow-sm hover:border-gray-400"
                   placeholder="username or @email.com"
                 />
               </div>
@@ -88,7 +104,7 @@ const Login: React.FC = () => {
                     required
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full px-4 py-2.5 pr-12 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition-colors shadow-sm hover:border-gray-400"
+                    className="w-full px-4 py-2.5 pr-12 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition-colors shadow-sm hover:border-gray-400"
                     placeholder="••••••••"
                   />
                   <button
@@ -108,7 +124,7 @@ const Login: React.FC = () => {
 
               {/* Error Message */}
               {error && (
-                <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded-lg text-sm">
+                <div className="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded-lg text-sm">
                   <p className="font-semibold">Error</p>
                   <p>{error}</p>
                 </div>

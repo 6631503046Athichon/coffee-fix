@@ -44,6 +44,7 @@ const AddFarmPage: React.FC = () => {
 	const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 	const [isGeocoding, setIsGeocoding] = useState(false);
 	const [isGettingLocation, setIsGettingLocation] = useState(false);
+	const [isSubmitting, setIsSubmitting] = useState(false);
 
 	const isEditing = Boolean(farmId);
 	const editingFarm = farmId ? data.farms.find(f => f.id === farmId) : null;
@@ -103,25 +104,45 @@ const AddFarmPage: React.FC = () => {
 
 	const handleSaveFarm = async (event: React.FormEvent) => {
 		event.preventDefault();
-		if (!currentUser) {
-			setFormError('Please log in before adding a farm');
+		
+		// Prevent double submission
+		if (isSubmitting) {
 			return;
 		}
+		
+		setFormError(null);
+		setToast(null);
+		
+		// Check authentication first
+		if (!currentUser || !currentUser.id) {
+			setFormError('Please log in before adding a farm. Your session may have expired.');
+			setToast({ type: 'error', message: 'Please log in again' });
+			setTimeout(() => {
+				window.location.href = '/login';
+			}, 2000);
+			return;
+		}
+		
+		setIsSubmitting(true);
 		// Location is always required, but farm name is optional (can be removed when editing)
 		if (!farmLocation.trim()) {
 			setFormError('Please enter location');
+			setIsSubmitting(false);
 			return;
 		}
 		if (!ownerName.trim()) {
 			setFormError('Please enter farm owner name');
+			setIsSubmitting(false);
 			return;
 		}
 		if (!caretakerName.trim()) {
 			setFormError('Please enter caretaker name');
+			setIsSubmitting(false);
 			return;
 		}
 		if (selectedVarieties.length === 0) {
 			setFormError('Please select or add at least 1 coffee variety');
+			setIsSubmitting(false);
 			return;
 		}
 
@@ -134,16 +155,19 @@ const AddFarmPage: React.FC = () => {
 		if (trimmedLat || trimmedLng) {
 			if (!trimmedLat || !trimmedLng) {
 				setFormError('Please enter both latitude and longitude or leave both empty');
+				setIsSubmitting(false);
 				return;
 			}
 			const parsedLat = Number(trimmedLat);
 			const parsedLng = Number(trimmedLng);
 			if (Number.isNaN(parsedLat) || Number.isNaN(parsedLng)) {
 				setFormError('Coordinates must be numbers only');
+				setIsSubmitting(false);
 				return;
 			}
 			if (parsedLat < -90 || parsedLat > 90 || parsedLng < -180 || parsedLng > 180) {
 				setFormError('Latitude must be between -90 and 90, and longitude between -180 and 180');
+				setIsSubmitting(false);
 				return;
 			}
 			latitude = parsedLat;
@@ -153,10 +177,12 @@ const AddFarmPage: React.FC = () => {
 			const parsedSize = Number(trimmedSize);
 			if (Number.isNaN(parsedSize)) {
 				setFormError('Area size must be a number only');
+				setIsSubmitting(false);
 				return;
 			}
 			if (parsedSize <= 0) {
 				setFormError('Area size must be greater than 0 hectares');
+				setIsSubmitting(false);
 				return;
 			}
 			sizeHectares = parsedSize;
@@ -170,6 +196,7 @@ const AddFarmPage: React.FC = () => {
 			const existing = data.farms.find(f => f.id === farmId);
 			if (!existing) {
 				setFormError('Farm data not found for editing');
+				setIsSubmitting(false);
 				return;
 			}
 			const updatedFarm: Farm = {
@@ -192,12 +219,23 @@ const AddFarmPage: React.FC = () => {
 					farms: prev.farms.map(f => f.id === farmId ? savedFarm : f),
 				}));
 				setToast({ type: 'success', message: 'Farm updated successfully!' });
+				setIsSubmitting(false);
 				setTimeout(() => {
 					navigate('/farmer-farms');
 				}, 1000);
-			} catch (error) {
+			} catch (error: any) {
 				console.error('Failed to update farm:', error);
-				setToast({ type: 'error', message: 'Failed to update farm' });
+				const errorMessage = error?.message || 'Failed to update farm. Please try again.';
+				setFormError(errorMessage);
+				setToast({ type: 'error', message: errorMessage });
+				setIsSubmitting(false);
+				
+				// If authentication error, redirect to login after showing error
+				if (errorMessage.includes('Authentication failed') || errorMessage.includes('401')) {
+					setTimeout(() => {
+						window.location.href = '/login';
+					}, 3000);
+				}
 			}
 		} else {
 			const newFarm: Farm = {
@@ -223,12 +261,23 @@ const AddFarmPage: React.FC = () => {
 					farms: [savedFarm, ...prev.farms],
 				}));
 				setToast({ type: 'success', message: 'Farm added successfully!' });
+				setIsSubmitting(false);
 				setTimeout(() => {
 					navigate('/farmer-farms');
 				}, 1000);
-			} catch (error) {
+			} catch (error: any) {
 				console.error('Failed to add farm:', error);
-				setToast({ type: 'error', message: 'Failed to add farm' });
+				const errorMessage = error?.message || 'Failed to add farm. Please check your connection and try again.';
+				setFormError(errorMessage);
+				setToast({ type: 'error', message: errorMessage });
+				setIsSubmitting(false);
+				
+				// If authentication error, redirect to login after showing error
+				if (errorMessage.includes('Authentication failed') || errorMessage.includes('401')) {
+					setTimeout(() => {
+						window.location.href = '/login';
+					}, 3000);
+				}
 			}
 		}
 	};
@@ -591,7 +640,8 @@ const AddFarmPage: React.FC = () => {
 							type="button" 
 							variant="outline" 
 							onClick={() => navigate('/farmer-farms')}
-							className="px-6 hover:bg-gray-50 transition-all"
+							disabled={isSubmitting}
+							className="px-6 hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
 						>
 							Cancel
 						</Button>
@@ -599,9 +649,10 @@ const AddFarmPage: React.FC = () => {
 							type="submit" 
 							variant="primary" 
 							icon={submitIcon}
-							className="px-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md hover:shadow-lg transition-all"
+							disabled={isSubmitting}
+							className="px-6 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
 						>
-							{submitLabel}
+							{isSubmitting ? 'Saving...' : submitLabel}
 						</Button>
 					</div>
 				</div>

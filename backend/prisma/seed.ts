@@ -5,12 +5,23 @@ const prisma = new PrismaClient()
 
 async function main() {
   console.log('🌱 Starting seed...')
+  
+  // Check if we're in development environment
+  const isDevelopment = process.env.NODE_ENV !== 'production' && !process.env.VERCEL && !process.env.RAILWAY_ENVIRONMENT
 
   // Create default admin user
   const adminPassword = await hashPassword('admin123')
   const admin = await prisma.user.upsert({
     where: { email: '6631503046@lamduan.mfu.ac.th' },
-    update: {},
+    update: {
+      password: adminPassword, // Update password if user exists
+      username: 'admin',
+      name: 'Admin User',
+      roles: [UserRole.Admin],
+      isActive: true,
+      isSuperAdmin: true,
+      mustChangePassword: false,
+    },
     create: {
       email: '6631503046@lamduan.mfu.ac.th',
       username: 'admin',
@@ -22,13 +33,21 @@ async function main() {
       mustChangePassword: false,
     },
   })
-  console.log('✅ Created admin user:', admin.email)
+  console.log('✅ Created/Updated admin user:', admin.email)
 
   // Create second admin user for ownership transfer
   const secondAdminPassword = await hashPassword('admin123')
   const secondAdmin = await prisma.user.upsert({
     where: { email: 'admin2@coffee.com' },
-    update: {},
+    update: {
+      password: secondAdminPassword, // Update password if user exists
+      username: 'admin2',
+      name: 'Second Admin',
+      roles: [UserRole.Admin],
+      isActive: true,
+      isSuperAdmin: false,
+      mustChangePassword: false,
+    },
     create: {
       email: 'admin2@coffee.com',
       username: 'admin2',
@@ -40,10 +59,31 @@ async function main() {
       mustChangePassword: false,
     },
   })
-  console.log('✅ Created second admin user:', secondAdmin.email)
+  console.log('✅ Created/Updated second admin user:', secondAdmin.email)
 
   // Create default users from mock data
   const users = [
+    // Test users - ONLY created in development environment
+    ...(isDevelopment ? [
+      {
+        email: 'test@example.com',
+        username: 'testuser',
+        password: await hashPassword('test123456'),
+        name: 'Test User (Admin)',
+        roles: [UserRole.Farmer, UserRole.Admin],
+        isActive: true,
+        mustChangePassword: false, // Allow immediate testing
+      },
+      {
+        email: 'farmer-test@example.com',
+        username: 'farmer-test',
+        password: await hashPassword('test123456'),
+        name: 'Test Farmer',
+        roles: [UserRole.Farmer], // Only Farmer role for access control testing
+        isActive: true,
+        mustChangePassword: false, // Allow immediate testing
+      }
+    ] : []),
     {
       email: 'farmer@coffee.com',
       username: 'farmer1',
@@ -84,14 +124,97 @@ async function main() {
   for (const userData of users) {
     const user = await prisma.user.upsert({
       where: { email: userData.email },
-      update: {},
+      update: {
+        password: userData.password, // Update password if user exists
+        username: userData.username,
+        name: userData.name,
+        roles: userData.roles,
+        isActive: userData.isActive !== undefined ? userData.isActive : true,
+        mustChangePassword: userData.mustChangePassword !== undefined ? userData.mustChangePassword : false,
+      },
       create: {
         ...userData,
-        isActive: true,
-        mustChangePassword: false,
+        // Preserve isActive and mustChangePassword if already set in userData
+        isActive: userData.isActive !== undefined ? userData.isActive : true,
+        mustChangePassword: userData.mustChangePassword !== undefined ? userData.mustChangePassword : false,
       },
     })
-    console.log('✅ Created user:', user.email)
+    console.log('✅ Created/Updated user:', user.email)
+  }
+  
+  if (isDevelopment) {
+    console.log('⚠️  Test user (test@example.com) created for development/testing only')
+  }
+
+  // Create sample farms for testing (only in development)
+  if (isDevelopment) {
+    // Get test users
+    const testUser = await prisma.user.findUnique({
+      where: { email: 'test@example.com' }
+    })
+    const farmerUser = await prisma.user.findUnique({
+      where: { email: 'farmer@coffee.com' }
+    })
+
+    if (testUser) {
+      // Check if farm already exists for test user
+      const existingTestFarm = await prisma.farm.findFirst({
+        where: {
+          ownerId: testUser.id,
+          farmName: 'Test Coffee Farm'
+        }
+      })
+
+      if (!existingTestFarm) {
+        const testFarm = await prisma.farm.create({
+          data: {
+            farmName: 'Test Coffee Farm',
+            location: 'Chiang Mai, Thailand',
+            latitude: 18.7883,
+            longitude: 98.9853,
+            altitude: '1200m',
+            ownerId: testUser.id,
+            caretakerName: 'John Doe',
+            sizeHectares: 5.5,
+            varieties: ['Gesha', 'Caturra', 'Typica'],
+            archived: false,
+          },
+        })
+        console.log('✅ Created test farm:', testFarm.farmName)
+      } else {
+        console.log('ℹ️  Test farm already exists:', existingTestFarm.farmName)
+      }
+    }
+
+    if (farmerUser) {
+      // Check if farm already exists for farmer user
+      const existingFarmerFarm = await prisma.farm.findFirst({
+        where: {
+          ownerId: farmerUser.id,
+          farmName: 'Maria\'s Coffee Estate'
+        }
+      })
+
+      if (!existingFarmerFarm) {
+        const farmerFarm = await prisma.farm.create({
+          data: {
+            farmName: 'Maria\'s Coffee Estate',
+            location: 'Doi Inthanon, Chiang Mai, Thailand',
+            latitude: 18.5883,
+            longitude: 98.4869,
+            altitude: '1500m',
+            ownerId: farmerUser.id,
+            caretakerName: 'Maria Rodriguez',
+            sizeHectares: 12.0,
+            varieties: ['Bourbon', 'SL28', 'SL34'],
+            archived: false,
+          },
+        })
+        console.log('✅ Created farmer farm:', farmerFarm.farmName)
+      } else {
+        console.log('ℹ️  Farmer farm already exists:', existingFarmerFarm.farmName)
+      }
+    }
   }
 
   // Create default activity types

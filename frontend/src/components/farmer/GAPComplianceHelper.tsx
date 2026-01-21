@@ -30,6 +30,8 @@ const GAPComplianceHelper: React.FC = () => {
     const [quantity, setQuantity] = React.useState('');
     const [notes, setNotes] = React.useState('');
     const [showSuccess, setShowSuccess] = React.useState(false);
+    const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [formError, setFormError] = React.useState<string | null>(null);
 
     const [plotFilter, setPlotFilter] = React.useState('All');
     const [activityFilter, setActivityFilter] = React.useState('All');
@@ -117,18 +119,42 @@ const GAPComplianceHelper: React.FC = () => {
     const handleLogSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        // Prevent double submission
+        if (isSubmitting) {
+            return;
+        }
+
+        setFormError(null);
+        setShowSuccess(false);
+
         if (!selectedFarmId) {
-            alert('Please select a farm from Farm Management before logging an activity');
+            setFormError('Please select a farm from Farm Management before logging an activity');
             return;
         }
 
         const selectedFarm = farmMap.get(selectedFarmId);
         if (!selectedFarm) {
-            alert('Selected farm not found');
+            setFormError('Selected farm not found. Please refresh the page and try again.');
+            return;
+        }
+
+        if (!activityType) {
+            setFormError('Please select an activity type');
+            return;
+        }
+
+        if (!productUsed.trim()) {
+            setFormError('Please enter the product or method used');
+            return;
+        }
+
+        if (!quantity.trim()) {
+            setFormError('Please enter the quantity');
             return;
         }
 
         const farmLabel = buildFarmLabel(selectedFarm);
+        setIsSubmitting(true);
         
         try {
             if (editingLog) {
@@ -138,9 +164,9 @@ const GAPComplianceHelper: React.FC = () => {
                     farmPlotLocation: farmLabel,
                     activityType,
                     date,
-                    productUsed,
-                    quantity,
-                    notes,
+                    productUsed: productUsed.trim(),
+                    quantity: quantity.trim(),
+                    notes: notes.trim() || undefined,
                 };
                 const updatedLog = await updateGAPLog(editingLog.id, logData);
                 setData(prev => ({
@@ -155,26 +181,47 @@ const GAPComplianceHelper: React.FC = () => {
                     farmPlotLocation: farmLabel,
                     activityType,
                     date,
-                    productUsed,
-                    quantity,
-                    notes
+                    productUsed: productUsed.trim(),
+                    quantity: quantity.trim(),
+                    notes: notes.trim() || undefined,
                 };
                 const newLog = await addGAPLog(logData);
-                setData(prev => ({ ...prev, gapLogs: [newLog, ...prev.gapLogs] }));
+                
+                // Update state with the new log
+                setData(prev => ({ 
+                    ...prev, 
+                    gapLogs: [newLog, ...prev.gapLogs] 
+                }));
             }
             
-            // Reset form
+            // Reset form only on success
             setSelectedFarmId('');
             setActivityType(defaultActivityType);
             setDate(new Date().toISOString().substring(0, 10));
             setProductUsed('');
             setQuantity('');
             setNotes('');
+            setFormError(null);
             setShowSuccess(true);
             setTimeout(() => setShowSuccess(false), 3000);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to save GAP log:', error);
-            alert('Failed to save GAP log. Please try again.');
+            const errorMessage = error?.message || 'Failed to save GAP log. Please try again.';
+            
+            // Provide user-friendly error messages
+            if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+                setFormError('Authentication failed. Please log in again and try submitting the form.');
+            } else if (errorMessage.includes('timeout') || errorMessage.includes('not responding')) {
+                setFormError('Connection timeout. Please check your internet connection and try again.');
+            } else if (errorMessage.includes('Failed to fetch') || errorMessage.includes('network')) {
+                setFormError('Cannot connect to server. Please ensure the backend server is running on port 3001.');
+            } else if (errorMessage.includes('Activity type')) {
+                setFormError(errorMessage);
+            } else {
+                setFormError(errorMessage);
+            }
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -288,6 +335,13 @@ const GAPComplianceHelper: React.FC = () => {
                     </div>
 
                     <form onSubmit={handleLogSubmit} className="space-y-5">
+                        {/* Error Display */}
+                        {formError && (
+                            <Alert variant="error" className="mb-4">
+                                {formError}
+                            </Alert>
+                        )}
+
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-2">Farm/Plot *</label>
@@ -361,10 +415,11 @@ const GAPComplianceHelper: React.FC = () => {
                             <Button
                                 type="submit"
                                 variant="primary"
-                                icon={editingLog ? <CheckCircle className="h-4 w-4" /> : <PlusCircle className="h-4 w-4" />}
+                                icon={isSubmitting ? undefined : (editingLog ? <CheckCircle className="h-4 w-4" /> : <PlusCircle className="h-4 w-4" />)}
                                 className="ml-auto"
+                                disabled={isSubmitting}
                             >
-                                {editingLog ? 'Update Activity' : 'Save Activity'}
+                                {isSubmitting ? 'Saving...' : (editingLog ? 'Update Activity' : 'Save Activity')}
                             </Button>
                         </div>
                     </form>
