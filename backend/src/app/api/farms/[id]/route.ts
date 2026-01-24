@@ -5,13 +5,14 @@ import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 // GET /api/farms/:id
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const user = await requireAuth(request)
 
     const farm = await prisma.farm.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         owner: {
           select: {
@@ -51,13 +52,14 @@ export async function GET(
 // PUT /api/farms/:id
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const user = await requireAuth(request)
 
     const farm = await prisma.farm.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!farm) {
@@ -93,7 +95,7 @@ export async function PUT(
     }
 
     const updatedFarm = await prisma.farm.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       include: {
         owner: {
@@ -115,14 +117,15 @@ export async function PUT(
 // DELETE /api/farms/:id
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const user = await requireAuth(request)
     requireRole(user, ['Admin'])
 
     await prisma.farm.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     return NextResponse.json({ message: 'Farm deleted successfully' })
@@ -130,4 +133,3 @@ export async function DELETE(
     return handleApiError(error)
   }
 }
-

@@ -1,14 +1,12 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useDataContext } from '../../hooks/useDataContext';
-import { ProcessingBatch, ProcessingBatchStatus, ParchmentLot, GreenBeanLot, HarvestLot, User, UserRole, CuppingSessionType, CuppingSession, JudgeScore, CuppingSample, SCA_SENSORY_ATTRIBUTES, SCA_CUP_ATTRIBUTES, PricingHistory, Customer } from '../../types';
+import { ProcessingBatch, ProcessingBatchStatus, ParchmentLot, GreenBeanLot, HarvestLot, User, UserRole, CuppingSessionType, JudgeScore, SCA_SENSORY_ATTRIBUTES, SCA_CUP_ATTRIBUTES, PricingHistory, Customer } from '../../types';
 import { Coffee, Wind, PackageCheck, Sprout, ChevronsRight, CheckCircle, Archive, PlayCircle, TestTube, Plus, Trash2, LayoutGrid, List, AlertCircle, History, Save, Search, ArrowUp, ArrowDown, ChevronDown, Check, Microscope, Star, TrendingUp, Box, Droplet, Scale, Calendar, Package, Activity, DollarSign, FileText, X } from 'lucide-react';
 import { addPricingHistory } from '../../services/salesService';
 import { getAllCustomers } from '../../services/customerService';
 import { addProcessingBatch, updateProcessingBatch } from '../../services/processingBatchService';
-import { updateHarvestLot } from '../../services/harvestLotService';
 import DatePicker from '../common/DatePicker';
-import { fetchWeatherAveragesForRange } from '../../services/weatherApiService';
 import InvoiceReceipt from './InvoiceReceipt';
 import Select from '../common/Select';
 
@@ -280,36 +278,36 @@ const KanbanCard: React.FC<{ batch: ProcessingBatch; onDragStart: (e: React.Drag
       draggable
       onDragStart={(e) => onDragStart(e, batch.id)}
       onDragEnd={onDragEnd}
-      className={`bg-white border-l-4 ${colors.borderColor} rounded-lg p-4 border border-gray-200 shadow-sm hover:shadow-md cursor-grab active:cursor-grabbing transition-shadow duration-200 mb-3`}
+      className={`bg-white border-l-4 ${colors.borderColor} rounded-xl p-4 border border-gray-200 shadow-sm hover:shadow-lg hover:border-gray-300 cursor-grab active:cursor-grabbing transition-all duration-200 mb-3`}
     >
       {/* Card Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className={`w-12 h-12 ${colors.iconBg} rounded-lg flex items-center justify-center`}>
-            <Coffee className={`h-6 w-6 ${colors.iconColor}`} />
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2.5">
+          <div className={`w-10 h-10 ${colors.iconBg} rounded-lg flex items-center justify-center`}>
+            <Coffee className={`h-5 w-5 ${colors.iconColor}`} />
           </div>
           <div>
-            <p className="text-lg font-semibold text-gray-900">{batch.id}</p>
-            <p className="text-sm text-gray-500">Processing Batch</p>
+            <p className="text-base font-semibold text-gray-900">#{batch.id.substring(0, 6).toUpperCase()}</p>
+            <p className="text-xs text-gray-500">Processing Batch</p>
           </div>
         </div>
-        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${colors.badgeColor}`}>
+        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${colors.badgeColor}`}>
           {batch.processType}
         </span>
       </div>
 
       {/* Card Body */}
       <div className="space-y-0 divide-y divide-gray-100">
-        <div className="flex items-center justify-between py-3 first:pt-0">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between py-2 first:pt-0">
+          <div className="flex items-center gap-1.5">
             <Archive className="h-4 w-4 text-gray-400" />
             <span className="text-sm font-medium text-gray-600">Harvest Lot</span>
           </div>
           <span className="text-sm font-semibold text-gray-900">{batch.harvestLotId}</span>
         </div>
 
-        <div className="flex items-center justify-between py-3">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between py-2">
+          <div className="flex items-center gap-1.5">
             <Scale className="h-4 w-4 text-gray-400" />
             <span className="text-sm font-medium text-gray-600">Weight</span>
           </div>
@@ -318,8 +316,8 @@ const KanbanCard: React.FC<{ batch: ProcessingBatch; onDragStart: (e: React.Drag
           </span>
         </div>
 
-        <div className="flex items-center justify-between py-3">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between py-2">
+          <div className="flex items-center gap-1.5">
             <Droplet className="h-4 w-4 text-gray-400" />
             <span className="text-sm font-medium text-gray-600">Moisture</span>
           </div>
@@ -329,8 +327,8 @@ const KanbanCard: React.FC<{ batch: ProcessingBatch; onDragStart: (e: React.Drag
         </div>
 
         {batch.processNotes && (
-          <div className="flex items-start justify-between py-3">
-            <div className="flex items-center gap-2">
+          <div className="flex items-start justify-between py-2">
+            <div className="flex items-center gap-1.5">
               <FileText className="h-4 w-4 text-gray-400" />
               <span className="text-sm font-medium text-gray-600">Notes</span>
             </div>
@@ -356,25 +354,24 @@ const KanbanColumn: React.FC<{ title: string; status: ProcessingBatchStatus; bat
     <div
       onDrop={(e) => onDrop(e, status)}
       onDragOver={onDragOver}
-      className="bg-gray-50 rounded-lg p-4 w-full md:w-1/2 flex flex-col border border-gray-200"
+      className="bg-white rounded-2xl p-4 w-full flex flex-col border border-gray-200 shadow-sm"
     >
       <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 ${styles.iconBg} rounded-lg flex items-center justify-center`}>
+        <div className="flex items-center gap-2.5">
+          <div className={`w-10 h-10 ${styles.iconBg} rounded-xl flex items-center justify-center shadow-md`}>
             <span className={styles.iconColor}>{icon}</span>
           </div>
           <div>
-            <h3 className="font-semibold text-lg text-gray-900">{title}</h3>
+            <h3 className="font-semibold text-base text-gray-900">{title}</h3>
             <p className={`text-sm ${styles.countColor}`}>{batches.length} {batches.length === 1 ? 'batch' : 'batches'}</p>
           </div>
         </div>
       </div>
-      <div className="flex-grow overflow-y-auto pr-2 custom-scrollbar" style={{ maxHeight: '600px' }}>
+      <div className="flex-grow overflow-y-auto pr-2 custom-scrollbar" style={{ maxHeight: '500px' }}>
         {batches.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-gray-400 bg-white rounded-lg border-2 border-dashed border-gray-300">
-            <PackageCheck className="h-12 w-12 mb-2 opacity-40" />
-            <p className="text-sm font-medium text-gray-500">No batches yet</p>
-            <p className="text-xs text-gray-400 mt-1">Drag cards here</p>
+          <div className="flex flex-col items-center justify-center py-12 text-gray-400 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors">
+            <PackageCheck className="h-12 w-12 mb-3 opacity-30" />
+            <p className="text-sm font-medium text-gray-500">No completed batches yet</p>
           </div>
         ) : (
           batches.map(batch => (
@@ -391,13 +388,12 @@ interface ProcessorWorkbenchProps {
 }
 
 const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) => {
-  const { data, setData } = useDataContext();
+  const { data, setData, refreshData } = useDataContext();
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const isAdmin = currentUser.role === UserRole.Admin;
 
   // Modal States
   const [modal, setModal] = useState<string | null>(null);
-  const [selectedBatch, setSelectedBatch] = useState<ProcessingBatch | null>(null);
   const [selectedParchment, setSelectedParchment] = useState<ParchmentLot | null>(null);
   const [selectedHarvestLot, setSelectedHarvestLot] = useState<HarvestLot | null>(null);
   const [selectedGreenBean, setSelectedGreenBean] = useState<GreenBeanLot | null>(null);
@@ -443,6 +439,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
   const [greenBeanSortConfig, setGreenBeanSortConfig] = useState<{ key: GreenBeanSortKeys; direction: SortDirection }>({ key: 'id', direction: 'asc' });
   const [greenBeanCurrentPage, setGreenBeanCurrentPage] = useState(1);
 
+  const [harvestLotSearch, setHarvestLotSearch] = useState('');
+  const [batchSearch, setBatchSearch] = useState('');
 
   const processorUser = useMemo(() => data.users.find(u => u.role === UserRole.Processor), [data.users]);
 
@@ -665,39 +663,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
   };
 
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>, newStatus: ProcessingBatchStatus) => {
+    // No longer needed - all batches are created as Completed
     e.preventDefault();
     e.stopPropagation();
-    
-    const batchId = e.dataTransfer.getData('batchId');
-    const batch = data.processingBatches.find(b => b.id === batchId);
-    if (!batch || batch.status === newStatus) {
-      setDraggedBatchId(null);
-      setIsDragging(false);
-      return;
-    }
-
-    // Reset dragged batch ID and dragging state
     setDraggedBatchId(null);
     setIsDragging(false);
-
-    // If moving to Completed, open modal to log parchment data
-    if (newStatus === ProcessingBatchStatus.Completed) {
-      openModal('completeBatch', batch);
-      return;
-    }
-
-    // Otherwise, update status via API and local state
-    try {
-      const updatedBatch = await updateProcessingBatch(batchId, { status: newStatus });
-      setData(prev => ({ 
-        ...prev, 
-        processingBatches: prev.processingBatches.map(b => b.id === batchId ? updatedBatch : b) 
-      }));
-    } catch (error: any) {
-      console.error('Failed to update processing batch status:', error);
-      // Revert on error - batch will stay in original position
-      // Optionally show error toast to user
-    }
   };
 
   const handleSaveScore = () => {
@@ -936,121 +906,62 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
           setFormError('Please select a harvest lot');
           return;
         }
-        
+
         const processType = formData.get('processType') as string;
         if (!processType || processType.trim() === '') {
           setFormError('Please select a process type');
           return;
         }
-        
+
         const processNotes = (formData.get('processNotes') as string) || undefined;
-        
-        setIsSubmitting(true);
-        try {
-          // Create processing batch via API (backend will update harvest lot status automatically)
-          const newBatch = await addProcessingBatch({
-            harvestLotId: selectedHarvestLot.id,
-            status: ProcessingBatchStatus.ToProcess,
-            processType,
-            processNotes,
-            cropYearId: cropYearId || undefined,
-          });
 
-          // Update local state with the batch from backend
-          setData(prev => {
-            // Update harvest lot status to 'Processing'
-            const updatedHarvestLots = prev.harvestLots.map((lot): HarvestLot => 
-              lot.id === selectedHarvestLot.id ? { ...lot, status: 'Processing' } : lot
-            );
-            return { 
-              ...prev, 
-              processingBatches: [newBatch, ...prev.processingBatches], 
-              harvestLots: updatedHarvestLots 
-            };
-          });
-          
-          // Close modal and reset form on success
-          setModal(null);
-          setSelectedHarvestLot(null);
-          setCropYearId('');
-          setFormError(null);
-        } catch (error: any) {
-          console.error('Failed to create processing batch:', error);
-          setFormError(error?.message || 'Failed to create processing batch. Please try again.');
-        } finally {
-          setIsSubmitting(false);
-        }
-        break;
-
-      case 'completeBatch':
-        if (!selectedBatch) {
-          setFormError('Please select a batch');
-          return;
-        }
-        
-        setIsSubmitting(true);
-        setFormError(null);
-        
+        // Validate parchment data
         const parchmentWeightKg = parseFloat(formData.get('parchmentWeightKg') as string);
         const moistureContent = parseFloat(formData.get('moistureContent') as string);
 
         if (isNaN(parchmentWeightKg) || parchmentWeightKg <= 0) {
           setFormError("Please enter a valid parchment weight in kg (greater than 0).");
-          setIsSubmitting(false);
           return;
         }
         if (isNaN(moistureContent) || moistureContent < 0 || moistureContent > 100) {
           setFormError("Please enter a valid coffee moisture between 0 and 100%.");
-          setIsSubmitting(false);
           return;
         }
 
         if (new Date(dryingEndDate) < new Date(dryingStartDate)) {
           setFormError("Drying End Date cannot be before Drying Start Date.");
-          setIsSubmitting(false);
           return;
         }
 
-        const details = { parchmentWeightKg, moistureContent, dryingStartDate, dryingEndDate, baggingDate: dryingEndDate };
-
+        setIsSubmitting(true);
         try {
-          // Enrich with weather averages if farm coordinates are available
-          let avgTempC: number | null = null;
-          let avgHumidityPct: number | null = null;
-
-          // Try to resolve farm coordinates from harvest lot location
-          const harvest = data.harvestLots.find(h => h.id === selectedBatch?.harvestLotId);
-          const farm = harvest ? data.farms.find(f => f.location === harvest.farmPlotLocation) : undefined;
-          if (farm?.latitude != null && farm?.longitude != null) {
-            const stats = await fetchWeatherAveragesForRange(farm.latitude, farm.longitude, dryingStartDate, dryingEndDate);
-            if (stats) {
-              avgTempC = stats.avgTempC;
-              avgHumidityPct = stats.avgHumidityPct;
-            }
-          }
-
-          setData(prev => {
-            // Build optional dryingLog entry (single aggregated reading)
-            const dryingLogEntry = (avgTempC != null && avgHumidityPct != null) ? [{
-              date: dryingEndDate,
-              moistureContent: moistureContent,
-              ambientTemp: parseFloat(avgTempC.toFixed(1)),
-              relativeHumidity: Math.round(avgHumidityPct)
-            }] : undefined;
-
-            const updatedBatches = prev.processingBatches.map(b => b.id === selectedBatch!.id ? { ...b, status: ProcessingBatchStatus.Completed, ...details, dryingLog: dryingLogEntry || b.dryingLog } : b);
-            const newParchmentId = `PL${String(prev.parchmentLots.length + 1).padStart(3, '0')}`;
-            const newParchmentLot: ParchmentLot = { id: newParchmentId, processingBatchId: selectedBatch!.id, harvestLotId: selectedBatch!.harvestLotId, initialWeightKg: parchmentWeightKg, currentWeightKg: parchmentWeightKg, moistureContent, processType: selectedBatch!.processType, status: 'Awaiting Hulling' };
-            return { ...prev, processingBatches: updatedBatches, parchmentLots: [newParchmentLot, ...prev.parchmentLots] };
+          // Create processing batch via API with status Completed
+          await addProcessingBatch({
+            harvestLotId: selectedHarvestLot.id,
+            status: ProcessingBatchStatus.Completed,
+            processType,
+            processNotes,
+            cropYearId: cropYearId || undefined,
+            parchmentWeightKg,
+            moistureContent,
+            dryingStartDate,
+            dryingEndDate,
+            baggingDate: dryingEndDate,
           });
-          
-          // Close modal on success
+
+          // Refresh data from backend to get the updated batch and parchment lot
+          await refreshData();
+
+          // Close modal and reset form on success
           setModal(null);
-          setSelectedBatch(null);
+          setSelectedHarvestLot(null);
+          setCropYearId('');
+          setDryingStartDate('');
+          setDryingEndDate('');
           setFormError(null);
         } catch (error: any) {
-          console.error('Failed to complete batch:', error);
-          setFormError(error?.message || 'Failed to complete batch. Please try again.');
+          console.error('Failed to create processing batch:', error);
+          setFormError(error?.message || 'Failed to create processing batch. Please try again.');
         } finally {
           setIsSubmitting(false);
         }
@@ -1195,12 +1106,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
         setCropYearId('');
       }
     }
-    if (type === 'completeBatch') {
-      setSelectedBatch(item);
-      // Initialize dates
-      setDryingStartDate(item?.dryingStartDate || '');
-      setDryingEndDate('');
-    }
     if (type === 'hullAndGrade') setSelectedParchment(item);
     if (type === 'withdrawStock') setSelectedGreenBean(item);
     setModal(type);
@@ -1212,131 +1117,575 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
 
   const readyForProcessingLots = data.harvestLots.filter(lot => lot.status === 'Ready for Processing');
 
+  const processedHarvestLots = useMemo(() => {
+    return readyForProcessingLots.filter(lot =>
+      lot.id.toLowerCase().includes(harvestLotSearch.toLowerCase()) ||
+      lot.cherryVariety.toLowerCase().includes(harvestLotSearch.toLowerCase())
+    );
+  }, [readyForProcessingLots, harvestLotSearch]);
+
   const TableView = () => (
-    <div className="bg-white shadow-sm rounded-xl overflow-hidden border border-gray-200">
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-900">
-            <tr>
-              <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Batch ID</th>
-              <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Harvest Lot</th>
-              <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Process</th>
-              <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Notes</th>
-              <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
-              <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Drying Duration</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-100">
-            {data.processingBatches.map(b => {
-              const duration = b.dryingStartDate && b.dryingEndDate
-                ? `${Math.max(1, Math.round((new Date(b.dryingEndDate).getTime() - new Date(b.dryingStartDate).getTime()) / (1000 * 3600 * 24)))} days`
-                : 'N/A';
-              const durationClass = duration === 'N/A' ? 'text-sm font-medium text-gray-400' : 'text-sm font-medium text-gray-700';
-              return (
-                <tr key={b.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                    {b.id}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                    {b.harvestLotId}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <span className={`inline-block h-2 w-2 rounded-full ${b.processType === 'Washed' ? 'bg-blue-500' : b.processType === 'Natural' ? 'bg-amber-500' : 'bg-yellow-500'}`}></span>
-                      <span className="text-sm font-medium text-gray-900">{b.processType}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap max-w-xs">
-                    <div className="flex items-start gap-2 text-sm text-gray-700">
-                      <FileText className="h-4 w-4 text-gray-400 mt-0.5" />
-                      <span className="truncate block" title={b.processNotes || ''}>{b.processNotes || '-'}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-full border ${b.status === 'Completed' ? 'bg-green-100 text-green-700 border-green-200' :
-                        'bg-yellow-100 text-yellow-700 border-yellow-200'
-                      }`}>
-                      {b.status === 'Completed' && <CheckCircle className="h-3 w-3" />}
-                      {b.status === 'To Process' && <PlayCircle className="h-3 w-3" />}
-                      {b.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={durationClass}>{duration}</span>
+    <div className="space-y-5">
+      {/* Processing Summary */}
+      <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
+        <div className="flex items-center gap-2.5 mb-4">
+          <div className="p-2 bg-indigo-500 rounded-lg">
+            <Activity className="h-5 w-5 text-white" />
+          </div>
+          <h3 className="font-semibold text-base text-gray-900">Processing Summary</h3>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+            <p className="text-xs font-semibold text-green-600 uppercase mb-1">Completed</p>
+            <p className="text-xl font-bold text-green-700">{data.processingBatches.filter(b => b.status === ProcessingBatchStatus.Completed).length}</p>
+            <p className="text-xs text-green-600">batches</p>
+          </div>
+          <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+            <p className="text-xs font-semibold text-amber-600 uppercase mb-1">Parchment</p>
+            <p className="text-xl font-bold text-amber-700">{data.parchmentLots.length}</p>
+            <p className="text-xs text-amber-600">lots in stock</p>
+          </div>
+          <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+            <p className="text-xs font-semibold text-blue-600 uppercase mb-1">Green Bean</p>
+            <p className="text-xl font-bold text-blue-700">{data.greenBeanLots.length}</p>
+            <p className="text-xs text-blue-600">lots available</p>
+          </div>
+          <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+            <p className="text-xs font-semibold text-purple-600 uppercase mb-1">Ready</p>
+            <p className="text-xl font-bold text-purple-700">{readyForProcessingLots.length}</p>
+            <p className="text-xs text-purple-600">harvest lots</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Incoming Harvest Lots Table */}
+      <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
+        {/* Header with search */}
+        <div className="p-4 bg-green-50 border-b border-green-200">
+          <div className="flex items-center gap-2.5 mb-3">
+            <div className="p-2 bg-green-600 rounded-lg">
+              <Coffee className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Incoming Harvest Lots</h3>
+            </div>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search lots..."
+              value={harvestLotSearch}
+              onChange={e => setHarvestLotSearch(e.target.value)}
+              className="pl-10 w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            />
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-900">
+              <tr>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Lot ID</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Variety</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Weight (kg)</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Farmer</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-100">
+              {processedHarvestLots.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-400">
+                    <Coffee className="h-12 w-12 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-medium">No harvest lots available</p>
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              ) : (
+                processedHarvestLots.map(lot => (
+                  <tr key={lot.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">#{lot.id.substring(0, 6).toUpperCase()}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{lot.cherryVariety}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-green-600">{lot.weightKg} kg</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{lot.farmerName}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <button
+                        onClick={() => openModal('startProcessing', lot)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-colors"
+                      >
+                        <PlayCircle className="h-3.5 w-3.5" /> Record Process
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Processing Batches Table */}
+      <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
+        {/* Header with search */}
+        <div className="p-4 bg-blue-50 border-b border-blue-200">
+          <div className="flex items-center gap-2.5 mb-3">
+            <div className="p-2 bg-blue-600 rounded-lg">
+              <Activity className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Processing Batches</h3>
+            </div>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search batches..."
+              value={batchSearch}
+              onChange={e => setBatchSearch(e.target.value)}
+              className="pl-10 w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-900">
+              <tr>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Batch ID</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Harvest Lot</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Process</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Notes</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Drying Duration</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-100">
+              {processedBatches.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-400">
+                    <Activity className="h-12 w-12 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-medium">No matching batches found</p>
+                  </td>
+                </tr>
+              ) : (
+                processedBatches.map(b => {
+                  const duration = b.dryingStartDate && b.dryingEndDate
+                    ? `${Math.max(1, Math.round((new Date(b.dryingEndDate).getTime() - new Date(b.dryingStartDate).getTime()) / (1000 * 3600 * 24)))} days`
+                    : 'N/A';
+                  const durationClass = duration === 'N/A' ? 'text-sm font-medium text-gray-400' : 'text-sm font-medium text-gray-700';
+                  return (
+                    <tr key={b.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
+                        #{b.id.substring(0, 6).toUpperCase()}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                        #{b.harvestLotId.substring(0, 6).toUpperCase()}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`inline-block h-2 w-2 rounded-full ${b.processType === 'Washed' ? 'bg-blue-500' : b.processType === 'Natural' ? 'bg-amber-500' : 'bg-yellow-500'}`}></span>
+                          <span className="text-sm font-medium text-gray-900">{b.processType}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap max-w-xs">
+                        <div className="flex items-start gap-1.5 text-sm text-gray-700">
+                          <FileText className="h-4 w-4 text-gray-400 mt-0.5" />
+                          <span className="truncate block" title={b.processNotes || ''}>{b.processNotes || '-'}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-full border ${b.status === 'Completed' ? 'bg-green-50 text-green-700 border-green-200' :
+                            'bg-yellow-50 text-yellow-700 border-yellow-200'
+                          }`}>
+                          {b.status === 'Completed' && <CheckCircle className="h-3 w-3" />}
+                          {b.status === 'To Process' && <PlayCircle className="h-3 w-3" />}
+                          {b.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={durationClass}>{duration}</span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <button
+                          onClick={() => openModal('completeBatch', b)}
+                          disabled={b.status === ProcessingBatchStatus.Completed}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-green-600 hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-1 transition-colors disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+                        >
+                          <CheckCircle className="h-3.5 w-3.5" /> Complete Batch
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Parchment Stock Table */}
+      <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
+        {/* Header with search */}
+        <div className="p-4 bg-amber-50 border-b border-amber-200">
+          <div className="flex items-center gap-2.5 mb-3">
+            <div className="p-2 bg-amber-600 rounded-lg">
+              <Box className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Parchment Stock</h3>
+            </div>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search lots..."
+              value={parchmentSearch}
+              onChange={e => {
+                setParchmentSearch(e.target.value);
+                setParchmentCurrentPage(1);
+              }}
+              className="pl-10 w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+            />
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-900">
+              <tr>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Lot ID</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Batch ID</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Weight (kg)</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Moisture (%)</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Process</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-100">
+              {paginatedParchmentLots.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-400">
+                    <Box className="h-12 w-12 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-medium">No matching parchment lots found</p>
+                  </td>
+                </tr>
+              ) : (
+                paginatedParchmentLots.map(p => (
+                  <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">#{p.id.substring(0, 6).toUpperCase()}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">#{p.processingBatchId.substring(0, 6).toUpperCase()}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{p.currentWeightKg.toFixed(2)} kg</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{p.moistureContent}%</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`inline-block h-2 w-2 rounded-full ${
+                          p.processType === 'Washed' ? 'bg-blue-500' :
+                          p.processType === 'Natural' ? 'bg-amber-500' :
+                          'bg-yellow-500'
+                        }`}></span>
+                        <span className="text-sm font-medium text-gray-900">{p.processType}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-full border ${
+                        p.status === 'Hulled'
+                          ? 'bg-gray-50 text-gray-700 border-gray-200'
+                          : 'bg-green-50 text-green-700 border-green-200'
+                      }`}>
+                        <div className={`w-2 h-2 rounded-full ${p.status === 'Hulled' ? 'bg-gray-400' : 'bg-green-500'}`}></div>
+                        {p.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <button
+                        onClick={() => openModal('hullAndGrade', p)}
+                        disabled={p.status === 'Hulled' || p.currentWeightKg <= 0}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-colors disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+                      >
+                        <ChevronsRight className="h-3.5 w-3.5" /> Hull & Grade
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        <Pagination
+          currentPage={parchmentCurrentPage}
+          totalPages={parchmentPageCount}
+          onPageChange={setParchmentCurrentPage}
+        />
+      </div>
+
+      {/* Green Bean Stock Table */}
+      <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
+        {/* Header with search */}
+        <div className="p-4 bg-green-50 border-b border-green-200">
+          <div className="flex items-center gap-2.5 mb-3">
+            <div className="p-2 bg-green-600 rounded-lg">
+              <Coffee className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">Green Bean Stock</h3>
+            </div>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search lots..."
+              value={greenBeanSearch}
+              onChange={e => {
+                setGreenBeanSearch(e.target.value);
+                setGreenBeanCurrentPage(1);
+              }}
+              className="pl-10 w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
+            />
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-900">
+              <tr>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Lot ID</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Grade</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Weight (kg)</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">QC Score</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Availability</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-100">
+              {paginatedGreenBeanLots.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-400">
+                    <Coffee className="h-12 w-12 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-medium">No matching green bean lots found</p>
+                  </td>
+                </tr>
+              ) : (
+                paginatedGreenBeanLots.map(g => {
+                  const qcScore = g.cuppingScores?.length > 0
+                    ? (g.cuppingScores.reduce((sum, c) => sum + c.score, 0) / g.cuppingScores.length).toFixed(1)
+                    : '-';
+
+                  return (
+                    <tr key={g.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">#{g.id.substring(0, 6).toUpperCase()}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{g.grade}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{g.currentWeightKg.toFixed(2)} kg</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {qcScore !== '-' ? (
+                          <div className="flex items-center gap-1.5">
+                            <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                            <span className="text-sm font-semibold text-gray-900">{qcScore}</span>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-400">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-full border ${
+                          g.availabilityStatus === 'Available'
+                            ? 'bg-green-50 text-green-700 border-green-200'
+                            : 'bg-gray-50 text-gray-700 border-gray-200'
+                        }`}>
+                          <div className={`w-2 h-2 rounded-full ${g.availabilityStatus === 'Available' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                          {g.availabilityStatus}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          {g.withdrawalHistory && g.withdrawalHistory.length > 0 && (
+                            <button
+                              onClick={() => setSelectedGreenBeanForHistory(g)}
+                              className="inline-flex items-center justify-center px-2 py-1.5 text-xs font-semibold rounded-lg text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300 focus:ring-2 focus:ring-gray-500 focus:ring-offset-1 transition-colors"
+                              title="View Withdrawal History"
+                            >
+                              <History className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setScoringLot(g)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-colors"
+                            title="QC Score"
+                          >
+                            <Star className="h-3.5 w-3.5" /> QC Score
+                          </button>
+                          <button
+                            onClick={() => openModal('withdrawStock', g)}
+                            disabled={g.availabilityStatus === 'Withdrawn'}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-colors disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed"
+                          >
+                            <ChevronsRight className="h-3.5 w-3.5" /> Withdraw
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        <Pagination
+          currentPage={greenBeanCurrentPage}
+          totalPages={greenBeanPageCount}
+          onPageChange={setGreenBeanCurrentPage}
+        />
       </div>
     </div>
   );
 
   const KanbanView = () => (
     <>
-      <div className="bg-white shadow-xl rounded-2xl overflow-hidden border border-gray-100 mb-8">
-        <div className="p-6 bg-green-50 border-b border-green-200">
-          <div className="flex items-center gap-4">
-            <div className="p-4 bg-green-600 rounded-2xl shadow-lg">
-              <Coffee className="h-8 w-8 text-white" />
-            </div>
-            <div>
-              <h3 className="text-2xl font-bold text-gray-900">Incoming Harvest Lots</h3>
-              <p className="text-sm text-gray-600 mt-1">Cherry ready for processing</p>
-            </div>
+      {/* Processing Summary Bar */}
+      <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm mb-6">
+        <div className="flex items-center gap-2.5 mb-4">
+          <div className="p-2 bg-indigo-500 rounded-lg">
+            <Activity className="h-5 w-5 text-white" />
+          </div>
+          <h3 className="font-semibold text-base text-gray-900">Processing Summary</h3>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+            <p className="text-xs font-semibold text-green-600 uppercase mb-1">Completed</p>
+            <p className="text-xl font-bold text-green-700">{data.processingBatches.filter(b => b.status === ProcessingBatchStatus.Completed).length}</p>
+            <p className="text-xs text-green-600">batches</p>
+          </div>
+          <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+            <p className="text-xs font-semibold text-amber-600 uppercase mb-1">Parchment</p>
+            <p className="text-xl font-bold text-amber-700">{data.parchmentLots.length}</p>
+            <p className="text-xs text-amber-600">lots in stock</p>
+          </div>
+          <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+            <p className="text-xs font-semibold text-blue-600 uppercase mb-1">Green Bean</p>
+            <p className="text-xl font-bold text-blue-700">{data.greenBeanLots.length}</p>
+            <p className="text-xs text-blue-600">lots available</p>
+          </div>
+          <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+            <p className="text-xs font-semibold text-purple-600 uppercase mb-1">Ready</p>
+            <p className="text-xl font-bold text-purple-700">{readyForProcessingLots.length}</p>
+            <p className="text-xs text-purple-600">harvest lots</p>
           </div>
         </div>
-        {readyForProcessingLots.length > 0 ? (
-          <div className="p-6 space-y-4">
-            {readyForProcessingLots.map(lot => (
-              <div key={lot.id} className="bg-gray-50 rounded-2xl p-6 border border-gray-200 hover:border-green-400 hover:shadow-lg transition-all duration-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-6 flex-1">
-                    <div className="text-center">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Lot ID</p>
-                      <p className="text-2xl font-bold text-gray-900">{lot.id}</p>
+      </div>
+
+      {/* Main Grid: Incoming Lots + Completed Batches */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Incoming Harvest Lots */}
+        <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
+          <div className="p-4 bg-green-50 border-b border-green-200">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-green-600 rounded-lg">
+                <Coffee className="h-5 w-5 text-white" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Incoming Harvest Lots</h3>
+            </div>
+          </div>
+          <div className="p-4" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+            {readyForProcessingLots.length > 0 ? (
+              <div className="space-y-3">
+                {readyForProcessingLots.map(lot => (
+                  <div key={lot.id} className="bg-white border-l-4 border-l-green-500 rounded-xl p-4 border border-gray-200 shadow-sm hover:shadow-lg hover:border-gray-300 transition-all duration-200">
+                    {/* Card Header */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                          <Sprout className="h-5 w-5 text-green-600" />
+                        </div>
+                        <div>
+                          <p className="text-base font-semibold text-gray-900">#{lot.id.substring(0, 6).toUpperCase()}</p>
+                          <p className="text-xs text-gray-500">Harvest Lot</p>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold border bg-green-50 text-green-700 border-green-200">
+                        Ready
+                      </span>
                     </div>
-                    <div className="h-12 w-px bg-gray-300"></div>
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Variety</p>
-                      <p className="text-lg font-semibold text-gray-800">{lot.cherryVariety}</p>
+
+                    {/* Card Body */}
+                    <div className="space-y-0 divide-y divide-gray-100 mb-3">
+                      <div className="flex items-center justify-between py-2 first:pt-0">
+                        <div className="flex items-center gap-1.5">
+                          <Coffee className="h-4 w-4 text-gray-400" />
+                          <span className="text-sm font-medium text-gray-600">Variety</span>
+                        </div>
+                        <span className="text-sm font-semibold text-gray-900">{lot.cherryVariety}</span>
+                      </div>
+                      <div className="flex items-center justify-between py-2">
+                        <div className="flex items-center gap-1.5">
+                          <Scale className="h-4 w-4 text-gray-400" />
+                          <span className="text-sm font-medium text-gray-600">Weight</span>
+                        </div>
+                        <span className="text-sm font-semibold text-green-600">{lot.weightKg} kg</span>
+                      </div>
                     </div>
-                    <div className="h-12 w-px bg-gray-300"></div>
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Weight</p>
-                      <p className="text-lg font-bold text-green-600">{lot.weightKg} kg</p>
+
+                    {/* Action Button */}
+                    <div className="flex justify-end pt-3 border-t border-gray-200">
+                      <button
+                        onClick={() => openModal('startProcessing', lot)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                      >
+                        <PlayCircle className="h-4 w-4" />
+                        Record Process
+                      </button>
                     </div>
                   </div>
-                  <button
-                    onClick={() => openModal('startProcessing', lot)}
-                    className="inline-flex items-center gap-3 px-6 py-3 text-base font-bold rounded-xl shadow-lg text-white bg-blue-600 hover:bg-blue-700 hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200"
-                  >
-                    <PlayCircle className="h-6 w-6" />
-                    <span>Start Processing</span>
-                  </button>
-                </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+                <Coffee className="h-10 w-10 opacity-30 mb-2" />
+                <p className="text-sm font-medium text-gray-500">No harvest lots available</p>
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-            <div className="p-6 bg-gray-100 rounded-full mb-4">
-              <Coffee className="h-20 w-20 opacity-30" />
+        </div>
+
+        {/* Completed Batches */}
+        <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
+          <div className="p-4 bg-green-50 border-b border-green-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-green-600 rounded-lg">
+                  <PackageCheck className="h-5 w-5 text-white" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">Completed Batches</h3>
+              </div>
+              <span className="text-sm text-green-600 font-semibold">{data.processingBatches.filter(b => b.status === ProcessingBatchStatus.Completed).length} batches</span>
             </div>
-            <p className="text-lg font-semibold text-gray-600">No harvest lots available</p>
-            <p className="text-sm text-gray-500 mt-1">Harvest lots with status "Ready for Processing" will appear here</p>
-            <p className="text-xs text-gray-400 mt-2">To create a batch, farmers need to register harvest lots first</p>
           </div>
-        )}
-      </div>
-      <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-6">
-        {[
-          { title: 'To Process', status: ProcessingBatchStatus.ToProcess, icon: <Coffee className="h-6 w-6 text-white" />, color: 'border-amber-400' },
-          { title: 'Completed', status: ProcessingBatchStatus.Completed, icon: <PackageCheck className="h-6 w-6 text-white" />, color: 'border-green-400' },
-        ].map(col => (
-          <KanbanColumn key={col.status} {...col} batches={data.processingBatches.filter(b => b.status === col.status)} onDrop={handleDrop} onDragOver={handleDragOver} onDragStart={handleDragStart} onDragEnd={handleDragEnd} />
-        ))}
+          <div className="p-4" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+            {data.processingBatches.filter(b => b.status === ProcessingBatchStatus.Completed).length > 0 ? (
+              <div className="space-y-3">
+                {data.processingBatches.filter(b => b.status === ProcessingBatchStatus.Completed).map(batch => (
+                  <KanbanCard key={batch.id} batch={batch} onDragStart={handleDragStart} onDragEnd={handleDragEnd} />
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+                <PackageCheck className="h-10 w-10 opacity-30 mb-2" />
+                <p className="text-sm font-medium text-gray-500">No completed batches yet</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
@@ -1392,6 +1741,16 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
     );
   };
 
+  const processedBatches = useMemo(() => {
+    return data.processingBatches
+      .filter(b =>
+        b.id.toLowerCase().includes(batchSearch.toLowerCase()) ||
+        b.harvestLotId.toLowerCase().includes(batchSearch.toLowerCase()) ||
+        b.processType.toLowerCase().includes(batchSearch.toLowerCase()) ||
+        b.status.toLowerCase().includes(batchSearch.toLowerCase())
+      );
+  }, [data.processingBatches, batchSearch]);
+
   const processedParchmentLots = useMemo(() => {
     const filtered = data.parchmentLots.filter(p =>
       p.id.toLowerCase().includes(parchmentSearch.toLowerCase()) ||
@@ -1446,10 +1805,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
             <p className="text-gray-600 text-sm mt-1">Manage processing batches, parchment, and green bean inventory</p>
           </div>
           <div className="flex items-center gap-2 p-1 bg-gray-100 rounded-lg">
-            <button onClick={() => setViewMode('kanban')} className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${viewMode === 'kanban' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
+            <button onClick={() => setViewMode('kanban')} className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-all duration-200 ${viewMode === 'kanban' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
               <LayoutGrid className="h-4 w-4" /> Workflow
             </button>
-            <button onClick={() => setViewMode('table')} className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${viewMode === 'table' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
+            <button onClick={() => setViewMode('table')} className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-all duration-200 ${viewMode === 'table' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
               <List className="h-4 w-4" /> Data Grid
             </button>
           </div>
@@ -1460,61 +1819,61 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
 
       {viewMode === 'kanban' ? <KanbanView /> : <TableView />}
 
-      <div className="mt-8 grid grid-cols-1 xl:grid-cols-2 gap-8">
-        {/* Parchment Inventory */}
-        <div className="bg-white shadow-xl rounded-2xl overflow-hidden flex flex-col border border-gray-100">
-          <div className="p-6 bg-amber-50 border-b border-amber-200">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 bg-amber-600 rounded-xl shadow-md">
-                <Box className="h-6 w-6 text-white" />
+      {viewMode === 'kanban' && (
+        <div className="mt-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {/* Parchment Inventory */}
+        <div className="bg-white shadow-sm rounded-lg overflow-hidden flex flex-col border border-gray-200">
+          <div className="p-4 bg-amber-50 border-b border-amber-200">
+            <div className="flex items-center gap-2.5 mb-3">
+              <div className="p-2 bg-amber-600 rounded-lg">
+                <Box className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h3 className="text-2xl font-bold text-gray-900">Parchment Stock</h3>
-                <p className="text-sm text-gray-600">Dried coffee ready for hulling</p>
+                <h3 className="text-lg font-bold text-gray-900">Parchment Stock</h3>
               </div>
             </div>
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input type="text" placeholder="Search lots..." value={parchmentSearch} onChange={e => { setParchmentSearch(e.target.value); setParchmentCurrentPage(1); }} className="pl-12 w-full border border-gray-300 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 shadow-sm" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input type="text" placeholder="Search lots..." value={parchmentSearch} onChange={e => { setParchmentSearch(e.target.value); setParchmentCurrentPage(1); }} className="pl-10 w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500" />
             </div>
           </div>
-          <div className="p-6 space-y-4 flex-grow">
+          <div className="p-4 space-y-3 flex-grow">
             {paginatedParchmentLots.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
-                <Box className="h-16 w-16 mx-auto mb-3 opacity-30" />
+              <div className="text-center py-10 text-gray-400">
+                <Box className="h-12 w-12 mx-auto mb-2 opacity-30" />
                 <p className="text-sm font-medium">No matching parchment lots found</p>
               </div>
             ) : (
               paginatedParchmentLots.map(p => (
-                <div key={p.id} className={`bg-white ${p.status === 'Hulled' ? 'border-l-gray-300' : 'border-l-amber-500'} border-l-4 rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200`}>
+                <div key={p.id} className={`bg-white ${p.status === 'Hulled' ? 'border-l-gray-300' : 'border-l-amber-500'} border-l-4 rounded-lg p-3 border border-gray-200 shadow-sm hover:shadow-md transition-shadow`}>
                   {/* Card Header */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 ${p.status === 'Hulled' ? 'bg-gray-100' : 'bg-amber-100'} rounded-lg flex items-center justify-center`}>
-                        <Box className={`h-6 w-6 ${p.status === 'Hulled' ? 'text-gray-500' : 'text-amber-600'}`} />
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-10 h-10 ${p.status === 'Hulled' ? 'bg-gray-100' : 'bg-amber-100'} rounded-lg flex items-center justify-center`}>
+                        <Box className={`h-5 w-5 ${p.status === 'Hulled' ? 'text-gray-500' : 'text-amber-600'}`} />
                       </div>
                       <div>
-                        <p className="text-lg font-semibold text-gray-900">{p.id}</p>
-                        <p className="text-sm text-gray-500">Parchment Lot</p>
+                        <p className="text-base font-semibold text-gray-900">#{p.id.substring(0, 6).toUpperCase()}</p>
+                        <p className="text-xs text-gray-500">Parchment Lot</p>
                       </div>
                     </div>
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${p.status === 'Hulled' ? 'bg-gray-50 text-gray-700 border-gray-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${p.status === 'Hulled' ? 'bg-gray-50 text-gray-700 border-gray-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
                       <div className={`w-2 h-2 rounded-full ${p.status === 'Hulled' ? 'bg-gray-400' : 'bg-green-500'}`}></div>
                       {p.status}
                     </span>
                   </div>
 
                   {/* Card Body */}
-                  <div className="space-y-0 divide-y divide-gray-100 mb-4">
-                    <div className="flex items-center justify-between py-3 first:pt-0">
-                      <div className="flex items-center gap-2">
+                  <div className="space-y-0 divide-y divide-gray-100 mb-3">
+                    <div className="flex items-center justify-between py-2 first:pt-0">
+                      <div className="flex items-center gap-1.5">
                         <Scale className="h-4 w-4 text-gray-400" />
                         <span className="text-sm font-medium text-gray-600">Weight</span>
                       </div>
                       <span className="text-sm font-semibold text-gray-900">{p.currentWeightKg.toFixed(2)} kg</span>
                     </div>
-                    <div className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between py-2">
+                      <div className="flex items-center gap-1.5">
                         <Droplet className="h-4 w-4 text-gray-400" />
                         <span className="text-sm font-medium text-gray-600">Moisture</span>
                       </div>
@@ -1523,13 +1882,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                   </div>
 
                   {/* Actions */}
-                  <div className="flex gap-2 pt-4 border-t border-gray-200">
+                  <div className="flex gap-2 pt-3 border-t border-gray-200">
                     <button
                       onClick={() => openModal('hullAndGrade', p)}
                       disabled={p.status === 'Hulled' || p.currentWeightKg <= 0}
-                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors duration-150"
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
                     >
-                      <ChevronsRight className="h-5 w-5" /> Hull & Grade
+                      <ChevronsRight className="h-4 w-4" /> Hull & Grade
                     </button>
                   </div>
                 </div>
@@ -1540,45 +1899,44 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
         </div>
 
         {/* Green Bean Inventory */}
-        <div className="bg-white shadow-xl rounded-2xl overflow-hidden flex flex-col border border-gray-100">
-          <div className="p-6 bg-green-50 border-b border-green-200">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 bg-green-600 rounded-xl shadow-md">
-                <Coffee className="h-6 w-6 text-white" />
+        <div className="bg-white shadow-sm rounded-lg overflow-hidden flex flex-col border border-gray-200">
+          <div className="p-4 bg-green-50 border-b border-green-200">
+            <div className="flex items-center gap-2.5 mb-3">
+              <div className="p-2 bg-green-600 rounded-lg">
+                <Coffee className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h3 className="text-2xl font-bold text-gray-900">Green Bean Stock</h3>
-                <p className="text-sm text-gray-600">Hulled and graded inventory</p>
+                <h3 className="text-lg font-bold text-gray-900">Green Bean Stock</h3>
               </div>
             </div>
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-              <input type="text" placeholder="Search lots..." value={greenBeanSearch} onChange={e => { setGreenBeanSearch(e.target.value); setGreenBeanCurrentPage(1); }} className="pl-12 w-full border border-gray-300 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 shadow-sm" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input type="text" placeholder="Search lots..." value={greenBeanSearch} onChange={e => { setGreenBeanSearch(e.target.value); setGreenBeanCurrentPage(1); }} className="pl-10 w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500" />
             </div>
           </div>
-          <div className="p-6 space-y-4 flex-grow">
+          <div className="p-4 space-y-3 flex-grow">
             {paginatedGreenBeanLots.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
-                <Coffee className="h-16 w-16 mx-auto mb-3 opacity-30" />
+              <div className="text-center py-10 text-gray-400">
+                <Coffee className="h-12 w-12 mx-auto mb-2 opacity-30" />
                 <p className="text-sm font-medium">No matching green bean lots found</p>
               </div>
             ) : (
               paginatedGreenBeanLots.map(g => (
-                <div key={g.id} className={`bg-white ${g.availabilityStatus === 'Withdrawn' ? 'border-l-gray-300' : 'border-l-green-500'} border-l-4 rounded-lg p-6 border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200`}>
+                <div key={g.id} className={`bg-white ${g.availabilityStatus === 'Withdrawn' ? 'border-l-gray-300' : 'border-l-green-500'} border-l-4 rounded-lg p-3 border border-gray-200 shadow-sm hover:shadow-md transition-shadow`}>
                   {/* Card Header */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 ${g.availabilityStatus === 'Withdrawn' ? 'bg-gray-100' : 'bg-green-100'} rounded-lg flex items-center justify-center`}>
-                        <Coffee className={`h-6 w-6 ${g.availabilityStatus === 'Withdrawn' ? 'text-gray-500' : 'text-green-600'}`} />
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-10 h-10 ${g.availabilityStatus === 'Withdrawn' ? 'bg-gray-100' : 'bg-green-100'} rounded-lg flex items-center justify-center`}>
+                        <Coffee className={`h-5 w-5 ${g.availabilityStatus === 'Withdrawn' ? 'text-gray-500' : 'text-green-600'}`} />
                       </div>
                       <div>
-                        <p className="text-lg font-semibold text-gray-900">{g.id}</p>
-                        <p className="text-sm text-gray-500">Green Bean Lot</p>
+                        <p className="text-base font-semibold text-gray-900">#{g.id.substring(0, 6).toUpperCase()}</p>
+                        <p className="text-xs text-gray-500">Green Bean Lot</p>
                       </div>
                     </div>
                     <button
                       onClick={() => handleToggleAvailability(g.id)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${g.availabilityStatus === 'Available' ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'}`}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${g.availabilityStatus === 'Available' ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'}`}
                     >
                       <div className={`w-2 h-2 rounded-full ${g.availabilityStatus === 'Available' ? 'bg-green-500' : 'bg-gray-400'}`}></div>
                       {g.availabilityStatus}
@@ -1586,23 +1944,23 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                   </div>
 
                   {/* Card Body */}
-                  <div className="space-y-0 divide-y divide-gray-100 mb-4">
-                    <div className="flex items-center justify-between py-3 first:pt-0">
-                      <div className="flex items-center gap-2">
+                  <div className="space-y-0 divide-y divide-gray-100 mb-3">
+                    <div className="flex items-center justify-between py-2 first:pt-0">
+                      <div className="flex items-center gap-1.5">
                         <Star className="h-4 w-4 text-gray-400" />
                         <span className="text-sm font-medium text-gray-600">Grade</span>
                       </div>
                       <span className="text-sm font-semibold text-gray-900">{g.grade}</span>
                     </div>
-                    <div className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between py-2">
+                      <div className="flex items-center gap-1.5">
                         <Scale className="h-4 w-4 text-gray-400" />
                         <span className="text-sm font-medium text-gray-600">Weight</span>
                       </div>
                       <span className="text-sm font-semibold text-gray-900">{g.currentWeightKg.toFixed(2)} kg</span>
                     </div>
-                    <div className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between py-2">
+                      <div className="flex items-center gap-1.5">
                         <DollarSign className="h-4 w-4 text-gray-400" />
                         <span className="text-sm font-medium text-gray-600">Price/kg</span>
                       </div>
@@ -1612,8 +1970,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                         <span className="text-sm font-medium text-gray-400">Not set</span>
                       )}
                     </div>
-                    <div className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between py-2">
+                      <div className="flex items-center gap-1.5">
                         <TrendingUp className="h-4 w-4 text-gray-400" />
                         <span className="text-sm font-medium text-gray-600">QC Score</span>
                       </div>
@@ -1626,29 +1984,29 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                   </div>
 
                   {/* Actions */}
-                  <div className="flex gap-2 pt-4 border-t border-gray-200">
+                  <div className="flex gap-2 pt-3 border-t border-gray-200">
                     {g.withdrawalHistory && g.withdrawalHistory.length > 0 && (
                       <button
                         onClick={() => setSelectedGreenBeanForHistory(g)}
-                        className="inline-flex items-center justify-center w-10 h-10 rounded-lg text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 transition-colors"
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 transition-colors"
                         title="View Withdrawal History"
                         aria-label="View withdrawal history"
                       >
-                        <History className="h-5 w-5" />
+                        <History className="h-4 w-4" />
                       </button>
                     )}
                     <button
                       onClick={() => setScoringLot(g)}
-                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 transition-colors"
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 transition-colors"
                     >
-                      <Star className="h-5 w-5" /> QC Score
+                      <Star className="h-4 w-4" /> QC Score
                     </button>
                     <button
                       onClick={() => openModal('withdrawStock', g)}
                       disabled={g.availabilityStatus === 'Withdrawn'}
-                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
                     >
-                      <ChevronsRight className="h-5 w-5" /> Withdraw
+                      <ChevronsRight className="h-4 w-4" /> Withdraw
                     </button>
                   </div>
                 </div>
@@ -1658,6 +2016,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
           <Pagination currentPage={greenBeanCurrentPage} totalPages={greenBeanPageCount} onPageChange={setGreenBeanCurrentPage} />
         </div>
       </div>
+      )}
 
       {modal && <ModalPortal><div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div className={`bg-white rounded-2xl shadow-2xl w-full ${modal === 'completeBatch' ? 'max-w-4xl' : 'max-w-2xl'} max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col`}>
@@ -1687,7 +2046,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                   <PlayCircle className="h-10 w-10 text-blue-600" />
                 </div>
                 <div>
-                  <h2 className="text-3xl font-bold text-gray-900">Start Processing</h2>
+                  <h2 className="text-3xl font-bold text-gray-900">Record Process</h2>
                   <p className="text-base text-gray-600 mt-1">Lot #{selectedHarvestLot.id}</p>
                 </div>
               </div>
@@ -1737,44 +2096,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                     name="processNotes"
                     rows={2}
                     placeholder="e.g., Ferment 24h in sealed tank, raised-bed drying, frequent turning"
-                    className="w-full border-2 border-gray-300 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all resize-y"
+                    className="w-full border border-gray-300 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all resize-none"
                   />
                   <p className="mt-1 text-xs text-gray-500">Use this to capture special steps or parameters for this batch.</p>
                 </div>
-              </div>
-            </>}
-            {modal === 'completeBatch' && selectedBatch && <>
-              {/* Modal Header */}
-              <div className="flex items-center gap-4 mb-8">
-                <div className="p-4 bg-green-600 rounded-2xl shadow-lg">
-                  <PackageCheck className="h-10 w-10 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-3xl font-bold text-gray-900">Log Parchment Data</h2>
-                  <p className="text-base text-gray-600 mt-1">Batch #{selectedBatch.id}</p>
-                </div>
-              </div>
 
-              {/* Batch Info Card */}
-              <div className="bg-gray-50 rounded-2xl p-6 mb-8 border border-gray-200 shadow-sm">
-                <div className="grid grid-cols-3 gap-6">
-                  <div className="text-center">
-                    <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">Harvest Lot</p>
-                    <p className="text-xl font-bold text-gray-900">{selectedBatch.harvestLotId}</p>
-                  </div>
-                  <div className="text-center border-l-2 border-gray-300">
-                    <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">Process Type</p>
-                    <p className="text-xl font-bold text-gray-900">{selectedBatch.processType}</p>
-                  </div>
-                  <div className="text-center border-l-2 border-gray-300">
-                    <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">Status</p>
-                    <p className="text-xl font-bold text-amber-600">{selectedBatch.status}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Form Fields */}
-              <div className="space-y-6">
+                {/* Parchment Weight and Moisture */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-base font-bold text-gray-700 mb-3">
@@ -1813,6 +2140,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                     <p className="mt-2 text-xs text-gray-500">Measured on parchment at end of drying (workers input).</p>
                   </div>
                 </div>
+
+                {/* Drying Dates */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <DatePicker
@@ -2317,13 +2646,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
               </>;
             })()}
             <div className="mt-8 flex justify-end space-x-3">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => {
                   setModal(null);
                   setFormError(null);
                   setSelectedHarvestLot(null);
-                  setSelectedBatch(null);
                   setCropYearId('');
                 }} 
                 className="px-6 py-2.5 border border-gray-300 rounded-xl shadow-sm text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"

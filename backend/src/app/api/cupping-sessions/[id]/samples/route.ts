@@ -5,10 +5,11 @@ import { requireAuth, handleApiError } from '@/lib/middleware'
 // POST /api/cupping-sessions/:id/samples - Add sample to session
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     const body = await request.json()
     const { blindCode, greenBeanLotId, submitterInfo, originInfo, lotInfo } = body
@@ -22,7 +23,7 @@ export async function POST(
 
     const sample = await prisma.cuppingSample.create({
       data: {
-        cuppingSessionId: params.id,
+        cuppingSessionId: id,
         blindCode,
         greenBeanLotId: greenBeanLotId || null,
         submitterInfo: JSON.stringify(submitterInfo),
@@ -47,4 +48,3 @@ export async function POST(
     return handleApiError(error)
   }
 }
-

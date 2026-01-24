@@ -26,27 +26,6 @@ export const getAllCustomers = (): Customer[] => {
   return [];
 };
 
-export const saveAllCustomers = (customers: Customer[]) => {
-  localStorage.setItem(CUSTOMERS_STORAGE_KEY, JSON.stringify(customers));
-};
-
-export const addCustomer = (customer: Customer) => {
-  const all = getAllCustomers();
-  all.unshift(customer);
-  saveAllCustomers(all);
-};
-
-export const updateCustomer = (updated: Customer) => {
-  const all = getAllCustomers();
-  const updated2 = all.map(c => c.id === updated.id ? updated : c);
-  saveAllCustomers(updated2);
-};
-
-export const deleteCustomer = (customerId: string) => {
-  const all = getAllCustomers();
-  const filtered = all.filter(c => c.id !== customerId);
-  saveAllCustomers(filtered);
-};
 
 // Sale Order functions
 export const initializeSaleOrders = (defaultOrders: SaleOrder[]) => {
@@ -69,27 +48,6 @@ export const getAllSaleOrders = (): SaleOrder[] => {
   return [];
 };
 
-export const saveAllSaleOrders = (orders: SaleOrder[]) => {
-  localStorage.setItem(SALE_ORDERS_STORAGE_KEY, JSON.stringify(orders));
-};
-
-export const addSaleOrder = (order: SaleOrder) => {
-  const all = getAllSaleOrders();
-  all.unshift(order);
-  saveAllSaleOrders(all);
-};
-
-export const updateSaleOrder = (updated: SaleOrder) => {
-  const all = getAllSaleOrders();
-  const updated2 = all.map(o => o.id === updated.id ? updated : o);
-  saveAllSaleOrders(updated2);
-};
-
-export const deleteSaleOrder = (orderId: string) => {
-  const all = getAllSaleOrders();
-  const filtered = all.filter(o => o.id !== orderId);
-  saveAllSaleOrders(filtered);
-};
 
 // Invoice functions
 export const initializeInvoices = (defaultInvoices: Invoice[]) => {
@@ -112,27 +70,6 @@ export const getAllInvoices = (): Invoice[] => {
   return [];
 };
 
-export const saveAllInvoices = (invoices: Invoice[]) => {
-  localStorage.setItem(INVOICES_STORAGE_KEY, JSON.stringify(invoices));
-};
-
-export const addInvoice = (invoice: Invoice) => {
-  const all = getAllInvoices();
-  all.unshift(invoice);
-  saveAllInvoices(all);
-};
-
-export const updateInvoice = (updated: Invoice) => {
-  const all = getAllInvoices();
-  const updated2 = all.map(i => i.id === updated.id ? updated : i);
-  saveAllInvoices(updated2);
-};
-
-export const deleteInvoice = (invoiceId: string) => {
-  const all = getAllInvoices();
-  const filtered = all.filter(i => i.id !== invoiceId);
-  saveAllInvoices(filtered);
-};
 
 // Pricing History functions
 export const initializePricingHistory = (defaultHistory: PricingHistory[]) => {
