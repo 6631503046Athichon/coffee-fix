@@ -16,9 +16,20 @@ export interface AuthenticatedUser {
  * Require authentication - throws error if not authenticated
  */
 export async function requireAuth(request: NextRequest): Promise<AuthenticatedUser> {
+  // #region agent log
+  const cookieHeader = request.headers.get('cookie') || '';
+  const authHeader = request.headers.get('authorization') || '';
+  fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'middleware.ts:18',message:'requireAuth entry',data:{hasCookieHeader:!!cookieHeader,cookieHeaderLength:cookieHeader.length,hasAuthHeader:!!authHeader},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+  // #endregion
   const token = extractToken(request)
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'middleware.ts:20',message:'extractToken result',data:{hasToken:!!token,tokenLength:token?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+  // #endregion
   
   if (!token) {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'middleware.ts:23',message:'No token found',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     throw new Error('Unauthorized')
   }
 
@@ -26,7 +37,13 @@ export async function requireAuth(request: NextRequest): Promise<AuthenticatedUs
   let payload;
   try {
     payload = verifyToken(token)
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'middleware.ts:30',message:'Token verified',data:{userId:payload.userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
   } catch (error) {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'middleware.ts:33',message:'Token verification failed',data:{errorMessage:error instanceof Error?error.message:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     throw error;
   }
 
@@ -45,6 +62,9 @@ export async function requireAuth(request: NextRequest): Promise<AuthenticatedUs
   })
 
   if (!user || !user.isActive) {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/84336004-c515-4477-b161-abcf43f933fa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'middleware.ts:45',message:'User not found or inactive',data:{found:!!user,isActive:user?.isActive},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     throw new Error('User not found or inactive')
   }
 
