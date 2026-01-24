@@ -77,7 +77,10 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, onClose, on
       onClose()
       resetForm()
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to update user')
+      // api.ts throws Error objects with message property, not response objects
+      const errorMessage = err instanceof Error ? err.message : (err.response?.data?.error || 'Failed to update user')
+      setError(errorMessage)
+      console.error('Error updating user:', err)
     } finally {
       setLoading(false)
     }

@@ -97,6 +97,37 @@ export async function PUT(
     }
 
     // Admin updates
+    // Check for duplicate email/username before updating
+    if (email !== undefined && email) {
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          email: email,
+          id: { not: id }, // Exclude current user
+        },
+      })
+      if (existingUser) {
+        return NextResponse.json(
+          { error: 'Email already exists' },
+          { status: 409 }
+        )
+      }
+    }
+
+    if (username !== undefined && username) {
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          username: username,
+          id: { not: id }, // Exclude current user
+        },
+      })
+      if (existingUser) {
+        return NextResponse.json(
+          { error: 'Username already exists' },
+          { status: 409 }
+        )
+      }
+    }
+
     const updateData: any = {}
     if (name !== undefined) updateData.name = name
     if (email !== undefined) updateData.email = email
