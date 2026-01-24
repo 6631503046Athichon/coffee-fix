@@ -4,6 +4,21 @@ import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { hashPassword } from '@/lib/auth'
 import { generateUsername, generatePassword } from '@/lib/credentialGenerator'
 
+// Map display names to Prisma enum values
+const roleDisplayToEnum: Record<string, string> = {
+  'Farmer': 'Farmer',
+  'Processor': 'Processor',
+  'Roaster': 'Roaster',
+  'Head Judge': 'HeadJudge',
+  'HeadJudge': 'HeadJudge',
+  'Cupper': 'Cupper',
+  'Admin': 'Admin',
+}
+
+function normalizeRoles(roles: string[]): string[] {
+  return roles.map(role => roleDisplayToEnum[role] || role)
+}
+
 // GET /api/users - List all users
 export async function GET(request: NextRequest) {
   try {
@@ -148,7 +163,7 @@ export async function POST(request: NextRequest) {
         email: email || null, // Use provided email or null
         password,
         name,
-        roles: roles || [],
+        roles: normalizeRoles(roles || []),
         isActive: isActive !== undefined ? isActive : true,
         // Only require changes for auto-generated credentials
         mustChangePassword: autoGenerate,
