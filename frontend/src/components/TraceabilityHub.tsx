@@ -3,8 +3,10 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../hooks/useDataContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Search, ExternalLink, CheckCircle, Archive, AlertCircle } from 'lucide-react';
+import { Search, ExternalLink, CheckCircle, Archive, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { UserRole } from '../types';
+
+const PAGE_SIZE = 10;
 
 const TraceabilityHub: React.FC = () => {
     const { data } = useDataContext();
@@ -12,6 +14,7 @@ const TraceabilityHub: React.FC = () => {
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
     const [error, setError] = useState<string | null>(null);
+    const [currentPage, setCurrentPage] = useState(1);
 
     // Check if user has access
     useEffect(() => {
@@ -98,6 +101,18 @@ const TraceabilityHub: React.FC = () => {
         }
     }, [enrichedLots, searchTerm]);
 
+    // Reset page when search changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm]);
+
+    // Pagination logic
+    const totalPages = Math.ceil(filteredLots.length / PAGE_SIZE);
+    const paginatedLots = filteredLots.slice(
+        (currentPage - 1) * PAGE_SIZE,
+        currentPage * PAGE_SIZE
+    );
+
     // Show error if data processing failed
     if (error) {
         return (
@@ -155,19 +170,19 @@ const TraceabilityHub: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-100">
-                            {filteredLots.length === 0 ? (
+                            {paginatedLots.length === 0 ? (
                                 <tr>
                                     <td colSpan={7} className="px-6 py-12 text-center">
                                         <Search className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                                         <p className="text-sm font-medium text-gray-500">
-                                            {enrichedLots.length === 0 
+                                            {enrichedLots.length === 0
                                                 ? 'No green bean lots available. Process some batches to create traceability records.'
                                                 : 'No lots match your search criteria.'}
                                         </p>
                                     </td>
                                 </tr>
                             ) : (
-                                filteredLots.map(lot => {
+                                paginatedLots.map(lot => {
                                     if (!lot || !lot.id) return null;
                                     return (
                                         <tr key={lot.id} className="hover:bg-gray-50 transition-colors duration-200">
@@ -213,6 +228,40 @@ const TraceabilityHub: React.FC = () => {
                         </tbody>
                     </table>
                 </div>
+                {/* Pagination */}
+                {totalPages > 1 && (
+                    <div className="flex justify-center items-center px-4 py-3 bg-gray-50 border-t border-gray-200">
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                            </button>
+                            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                                <button
+                                    key={page}
+                                    onClick={() => setCurrentPage(page)}
+                                    className={`w-7 h-7 text-xs font-medium rounded-md transition-colors ${
+                                        currentPage === page
+                                            ? 'bg-blue-600 text-white'
+                                            : 'text-gray-700 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    {page}
+                                </button>
+                            ))}
+                            <button
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                            >
+                                <ChevronRight className="h-4 w-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

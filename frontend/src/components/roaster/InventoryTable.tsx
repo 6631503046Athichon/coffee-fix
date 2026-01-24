@@ -26,32 +26,32 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast }) =>
         </h3>
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="w-full divide-y divide-gray-200 table-fixed">
+          <thead className="bg-gray-900">
             <tr>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Lot</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Info</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Remaining</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Action</th>
+              <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider w-1/4">Lot</th>
+              <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider w-1/3">Info</th>
+              <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider w-1/5">Remaining</th>
+              <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider w-1/5">Action</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {items.map((item) => (
               <tr key={item.id} className="bg-white hover:bg-gray-50 transition-colors duration-150">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-sm font-bold text-gray-900">{item.greenBeanLotId}</span>
+                <td className="px-4 py-4">
+                  <span className="text-sm font-bold text-gray-900 truncate block" title={item.greenBeanLotId}>{item.greenBeanLotId.substring(0, 8)}...</span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm">
+                <td className="px-4 py-4">
+                  <div className="text-sm truncate">
                     <span className="text-gray-700 font-medium">{item.variety}</span>
                     <span className="text-gray-500 mx-1">/</span>
                     <span className="text-gray-600">{item.process}</span>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-4 py-4">
                   <span className="text-sm text-gray-700 font-semibold">{toFixed2(item.remainingWeightKg)} kg</span>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-4 py-4">
                   <Button
                     variant="success"
                     size="sm"

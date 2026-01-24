@@ -99,7 +99,8 @@ const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({ visible, onClose, lot, 
 
           {/* Line item */}
           <div className="overflow-hidden rounded-xl border border-gray-200 mb-8">
-            <table className="min-w-full">
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
               <thead className="bg-gray-100">
                 <tr>
                   <th className="text-left text-xs font-bold uppercase tracking-wider text-gray-600 px-4 py-3">Description</th>
@@ -119,7 +120,8 @@ const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({ visible, onClose, lot, 
                   <td className="px-4 py-4 text-right font-bold text-gray-900">{total.toFixed(2)} {currency}</td>
                 </tr>
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
 
           {/* QR and notes */}

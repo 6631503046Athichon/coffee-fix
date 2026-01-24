@@ -3,7 +3,7 @@ import * as React from 'react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Farm, GAPLogEntry, UserRole } from '../../types';
-import { PlusCircle, Filter, FileText, Printer, X, CheckCircle, Edit, Trash2 } from 'lucide-react';
+import { PlusCircle, Filter, FileText, Printer, X, CheckCircle, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
 import Select from '../common/Select';
 import { Modal } from '../common/Modal';
@@ -14,6 +14,8 @@ import { Badge } from '../common/Badge';
 import { Alert } from '../common/Alert';
 import { generateGAPLogId } from '../../utils/idGenerator';
 import { addGAPLog, updateGAPLog } from '../../services/gapLogService';
+
+const ITEMS_PER_PAGE = 10;
 
 const GAPComplianceHelper: React.FC = () => {
     const { data, setData } = useDataContext();
@@ -36,6 +38,7 @@ const GAPComplianceHelper: React.FC = () => {
     const [plotFilter, setPlotFilter] = React.useState('All');
     const [activityFilter, setActivityFilter] = React.useState('All');
     const [isReportModalOpen, setIsReportModalOpen] = React.useState(false);
+    const [currentPage, setCurrentPage] = React.useState(1);
     
     const [editingLog, setEditingLog] = React.useState<GAPLogEntry | null>(null);
     
@@ -275,7 +278,18 @@ const GAPComplianceHelper: React.FC = () => {
             return plotMatch && activityMatch;
         });
     }, [data.gapLogs, plotFilter, activityFilter, currentUser, canViewLog]);
-    
+
+    // Reset page when filters change
+    React.useEffect(() => {
+        setCurrentPage(1);
+    }, [plotFilter, activityFilter]);
+
+    const totalPages = Math.ceil(filteredLogs.length / ITEMS_PER_PAGE);
+    const paginatedLogs = React.useMemo(() => {
+        const start = (currentPage - 1) * ITEMS_PER_PAGE;
+        return filteredLogs.slice(start, start + ITEMS_PER_PAGE);
+    }, [filteredLogs, currentPage]);
+
     const reportData = React.useMemo(() => {
         // fix: Explicitly type the initial value for the reduce function to ensure
         // TypeScript correctly infers the type of `reportData`.
@@ -304,7 +318,7 @@ const GAPComplianceHelper: React.FC = () => {
 
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-8 min-w-0 w-full overflow-hidden">
             <PageHeader
                 title="GAP Compliance Helper"
                 description="Log and report agricultural activities for certification."
@@ -468,21 +482,22 @@ const GAPComplianceHelper: React.FC = () => {
                             <p className="text-sm text-gray-500 mb-4">Start logging your agricultural activities to track GAP Compliance</p>
                         </div>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-900">
+                        <div className="overflow-hidden">
+                            <div className="overflow-x-auto overflow-y-hidden">
+                                <table className="w-full divide-y divide-gray-200 table-fixed">
+                                    <thead className="bg-gray-900">
                                     <tr>
-                                        <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Farm/Plot</th>
-                                        <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Date</th>
-                                        <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Type</th>
-                                        <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Product/Method</th>
-                                        <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Quantity</th>
-                                        <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Notes</th>
-                                        <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wider">Actions</th>
+                                        <th scope="col" className="w-[18%] px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Farm/Plot</th>
+                                        <th scope="col" className="w-[10%] px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Date</th>
+                                        <th scope="col" className="w-[12%] px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Type</th>
+                                        <th scope="col" className="w-[18%] px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Product/Method</th>
+                                        <th scope="col" className="w-[10%] px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Quantity</th>
+                                        <th scope="col" className="w-[20%] px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Notes</th>
+                                        <th scope="col" className="w-[12%] px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
-                                    {filteredLogs.map((log) => {
+                                    {paginatedLogs.map((log) => {
                                         const logFarm = log.farmId ? farmMap.get(log.farmId) : undefined;
                                         const primaryLabel = logFarm?.name ?? log.farmPlotLocation ?? 'Farm not specified';
                                         const secondaryLabel = logFarm?.location && logFarm?.name ? logFarm.location : undefined;
@@ -531,7 +546,46 @@ const GAPComplianceHelper: React.FC = () => {
                                         );
                                     })}
                                 </tbody>
-                            </table>
+                                </table>
+                            </div>
+
+                            {/* Pagination */}
+                            {totalPages > 1 && (
+                                <div className="flex justify-center items-center px-4 py-3 bg-gray-50 border-t border-gray-200">
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                            disabled={currentPage === 1}
+                                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                                        >
+                                            <ChevronLeft className="h-4 w-4" />
+                                        </button>
+                                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                                            <button
+                                                key={page}
+                                                onClick={() => setCurrentPage(page)}
+                                                className={`w-8 h-8 text-sm font-medium rounded-md transition-colors ${
+                                                    currentPage === page
+                                                        ? 'bg-blue-600 text-white'
+                                                        : 'text-gray-700 hover:bg-gray-100'
+                                                }`}
+                                            >
+                                                {page}
+                                            </button>
+                                        ))}
+                                        <button
+                                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                            disabled={currentPage === totalPages}
+                                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                                        >
+                                            <ChevronRight className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                    <span className="ml-4 text-sm text-gray-500">
+                                        Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredLogs.length)} of {filteredLogs.length}
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -598,8 +652,9 @@ const GAPComplianceHelper: React.FC = () => {
                                                         ({typeLogs.length} {typeLogs.length === 1 ? 'entry' : 'entries'})
                                                     </span>
                                                 </div>
-                                                <div className="overflow-x-auto">
-                                                    <table className="min-w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+                                                <div className="overflow-hidden rounded-lg border border-gray-200">
+                                                    <div className="overflow-x-auto">
+                                                        <table className="min-w-full text-sm">
                                                         <thead className="bg-gray-900">
                                                             <tr>
                                                                 <th className="text-left px-4 py-4 font-bold text-white w-1/4 border-b border-gray-200 tracking-wider">Date</th>
@@ -616,7 +671,8 @@ const GAPComplianceHelper: React.FC = () => {
                                                                 </tr>
                                                             ))}
                                                         </tbody>
-                                                    </table>
+                                                        </table>
+                                                    </div>
                                                 </div>
                                             </div>
                                         );

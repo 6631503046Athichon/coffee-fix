@@ -40,7 +40,9 @@ export default function ActivityTable({ activities, onUpdate, onDelete }: {
 
   return (
     <>
-      <table>
+      <div className="overflow-hidden rounded-lg border border-gray-200">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
         <thead>
           <tr>
             <th>PLOT</th>
@@ -68,7 +70,9 @@ export default function ActivityTable({ activities, onUpdate, onDelete }: {
             </tr>
           ))}
         </tbody>
-      </table>
+          </table>
+        </div>
+      </div>
 
       {showEditModal && editingActivity && (
         <div className="modal">

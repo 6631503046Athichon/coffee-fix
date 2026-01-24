@@ -21,43 +21,43 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({ lots, onClaim }) 
         </h3>
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="w-full divide-y divide-gray-200 table-fixed">
+          <thead className="bg-gray-900">
             <tr>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Lot</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Info</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Score</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Grade</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Available</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Action</th>
+              <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider w-1/5">Lot</th>
+              <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider w-1/4">Info</th>
+              <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider w-1/8">Score</th>
+              <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider w-1/8">Grade</th>
+              <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider w-1/8">Available</th>
+              <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider w-1/8">Action</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {lots.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-6 text-center text-sm text-gray-500">No internal lots available</td>
+                <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">No internal lots available</td>
               </tr>
             ) : (
               lots.map((lot) => (
                 <tr key={lot.id} className="bg-white hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-bold text-gray-900">{lot.id}</span>
+                  <td className="px-4 py-4">
+                    <span className="text-sm font-bold text-gray-900 truncate block" title={lot.id}>{lot.id.substring(0, 8)}...</span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm">
+                  <td className="px-4 py-4">
+                    <div className="text-sm truncate">
                       <span className="text-gray-700 font-medium">{lot.displayInfo}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-4">
                     <span className="text-sm font-bold text-blue-600">{lot.displayScore}</span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-4">
                     <span className="text-sm font-semibold text-gray-700">{lot.gradeDisplay}</span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-4">
                     <span className="text-sm text-gray-700 font-semibold">{toFixed2(lot.currentWeightKg)} kg</span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-4">
                     <Button
                       variant="primary"
                       size="sm"

@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { ActivityType } from '../../types';
 import { addActivityType, updateActivityType, deleteActivityType, activityTypeNameExists } from '../../services/activityTypeService';
-import { Plus, Edit, Trash2, CheckCircle, XCircle, AlertCircle, X, Save, Tag } from 'lucide-react';
+import { Plus, Edit, Trash2, CheckCircle, XCircle, AlertCircle, X, Save, Tag, ChevronLeft, ChevronRight } from 'lucide-react';
+
+const PAGE_SIZE = 10;
 
 const ActivityTypeManagement: React.FC = () => {
   const { data, setData } = useDataContext();
@@ -15,6 +17,7 @@ const ActivityTypeManagement: React.FC = () => {
   });
   const [showSuccess, setShowSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const resetForm = () => {
     setFormData({ name: '', description: '', isActive: true });
@@ -127,6 +130,13 @@ const ActivityTypeManagement: React.FC = () => {
   const activeTypes = data.activityTypes.filter(t => t.isActive);
   const inactiveTypes = data.activityTypes.filter(t => !t.isActive);
 
+  // Pagination logic
+  const totalPages = Math.ceil(data.activityTypes.length / PAGE_SIZE);
+  const paginatedTypes = data.activityTypes.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -215,7 +225,7 @@ const ActivityTypeManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
-              {data.activityTypes.length === 0 ? (
+              {paginatedTypes.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                     <Tag className="h-12 w-12 mx-auto mb-3 opacity-30" />
@@ -224,7 +234,7 @@ const ActivityTypeManagement: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                data.activityTypes.map((type) => (
+                paginatedTypes.map((type) => (
                   <tr key={type.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
@@ -277,6 +287,40 @@ const ActivityTypeManagement: React.FC = () => {
             </tbody>
           </table>
         </div>
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex justify-center items-center px-4 py-3 bg-gray-50 border-t border-gray-200">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`w-7 h-7 text-xs font-medium rounded-md transition-colors ${
+                    currentPage === page
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add/Edit Modal */}

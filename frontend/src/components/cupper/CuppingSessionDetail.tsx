@@ -24,8 +24,9 @@ const ScoreTable: React.FC<{ session: CuppingSession, sampleId: string }> = ({ s
     }
 
     return (
-        <div className="overflow-x-auto mt-4">
-            <table className="min-w-full border-collapse border border-gray-200">
+        <div className="overflow-hidden rounded-lg mt-4">
+            <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse border border-gray-200">
                 <thead className="bg-gray-900">
                     <tr>
                         <th className="px-3 py-4 text-left text-xs font-bold text-white uppercase tracking-wider border border-gray-200">Judge</th>
@@ -44,7 +45,8 @@ const ScoreTable: React.FC<{ session: CuppingSession, sampleId: string }> = ({ s
                         </tr>
                     ))}
                 </tbody>
-            </table>
+                </table>
+            </div>
         </div>
     );
 };

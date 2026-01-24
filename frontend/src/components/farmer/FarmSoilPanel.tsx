@@ -723,9 +723,10 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                 ยังไม่มีการบันทึกผลวิเคราะห์ดินสำหรับฟาร์มนี้
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead className="bg-gray-900 text-white">
+              <div className="overflow-hidden rounded-lg border border-gray-200">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead className="bg-gray-900 text-white">
                     <tr>
                       <th className="px-4 py-3 text-left font-semibold">วันที่ตรวจ</th>
                       <th className="px-4 py-3 text-left font-semibold">แปลง</th>
@@ -777,7 +778,8 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                  </table>
+                </div>
               </div>
             )}
           </div>

@@ -31,13 +31,13 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({ lots, onClaim, on
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-900">
             <tr>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Lot</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Info</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Grade</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Available</th>
-              <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Action</th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Lot</th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Info</th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Grade</th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Available</th>
+              <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Action</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
