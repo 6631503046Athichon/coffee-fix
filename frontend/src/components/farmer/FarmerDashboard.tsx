@@ -520,7 +520,7 @@ const FarmerDashboard: React.FC = () => {
                             <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                                 Variety
                             </th>
-                            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider w-64">
+                            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[200px] md:min-w-[250px]">
                                 Spider Chart
                             </th>
                             <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
