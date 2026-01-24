@@ -445,7 +445,7 @@ const ProcessTypeManagement: React.FC = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-3">
                     Color Scheme <span className="text-red-500">*</span>
                   </label>
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {COLOR_SCHEMES.map((scheme) => (
                       <button
                         key={scheme.name}

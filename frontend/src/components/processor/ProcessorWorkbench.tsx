@@ -2054,16 +2054,16 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                 </div>
               </div>
               <div className="bg-gray-50 rounded-2xl p-8 mb-8 border border-gray-200 shadow-sm">
-                <div className="grid grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-8">
                   <div className="text-center">
                     <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">Variety</p>
                     <p className="text-2xl font-bold text-gray-900">{selectedHarvestLot.cherryVariety}</p>
                   </div>
-                  <div className="text-center border-l-2 border-gray-300">
+                  <div className="text-center sm:border-l-2 sm:border-gray-300">
                     <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">Weight</p>
                     <p className="text-2xl font-bold text-green-600">{selectedHarvestLot.weightKg} kg</p>
                   </div>
-                  <div className="text-center border-l-2 border-gray-300">
+                  <div className="text-center sm:border-l-2 sm:border-gray-300">
                     <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">Farmer</p>
                     <p className="text-2xl font-bold text-gray-900">{selectedHarvestLot.farmerName}</p>
                   </div>
@@ -2241,7 +2241,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                         <div className="flex-shrink-0 w-10 h-10 bg-green-600 rounded-xl flex items-center justify-center">
                           <span className="text-white font-bold text-lg">#{index + 1}</span>
                         </div>
-                        <div className="flex-1 grid grid-cols-3 gap-3">
+                        <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
                             <label className="block text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">Grade</label>
                             <GradeDropdown
@@ -2691,7 +2691,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
 
             {/* Lot Info Card */}
             <div className="bg-amber-50 rounded-2xl p-6 mb-6 border border-amber-200">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Grade</p>
                   <p className="text-2xl font-bold text-amber-600">{scoringLot.grade}</p>
