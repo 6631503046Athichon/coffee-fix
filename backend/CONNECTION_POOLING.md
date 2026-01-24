@@ -55,12 +55,85 @@ DATABASE_URL="postgresql://user:pass@host.neon.tech/db?sslmode=require&pgbouncer
 2. Vercel จะจัดการ connection pooling ให้อัตโนมัติ
 3. ใช้ connection string จาก Vercel dashboard
 
-## การตั้งค่าใน Vercel
+## การตั้งค่าใน Vercel (ขั้นตอนละเอียด)
 
-1. ไปที่ Vercel Project Settings
-2. ไปที่ Environment Variables
-3. ตั้งค่า `DATABASE_URL` ด้วย connection string ที่มี connection pooling
-4. Redeploy application
+### ขั้นตอนที่ 1: เข้าไปที่ Vercel Dashboard
+
+1. ไปที่ [Vercel Dashboard](https://vercel.com/dashboard)
+2. เลือก project ของคุณ (coffee-fix-backend)
+3. คลิกที่ **Settings** → **Environment Variables**
+
+### ขั้นตอนที่ 2: ตรวจสอบ DATABASE_URL ปัจจุบัน
+
+1. ดูว่ามี `DATABASE_URL` อยู่แล้วหรือไม่
+2. คัดลอกค่า DATABASE_URL ปัจจุบันไว้ก่อน (เพื่อแก้ไข)
+
+### ขั้นตอนที่ 3: แก้ไข DATABASE_URL
+
+เลือกวิธีที่เหมาะสมกับ database provider ของคุณ:
+
+#### สำหรับ Supabase:
+
+1. ไปที่ Supabase Dashboard → Project Settings → Database
+2. คัดลอก **Connection string** (ใช้ **Connection Pooling** mode)
+3. หรือแก้ไข DATABASE_URL ปัจจุบัน:
+   - เปลี่ยน port จาก `5432` เป็น `6543` (PgBouncer port)
+   - เพิ่ม `?pgbouncer=true` ที่ท้าย URL
+   
+   ตัวอย่าง:
+   ```
+   postgresql://postgres:[PASSWORD]@[PROJECT_REF].supabase.co:6543/postgres?pgbouncer=true
+   ```
+
+#### สำหรับ Neon:
+
+1. ไปที่ Neon Dashboard → Connection Details
+2. เลือก **Connection pooling** mode
+3. คัดลอก connection string
+4. หรือเพิ่ม `?pgbouncer=true&connection_limit=1` ที่ท้าย URL
+   
+   ตัวอย่าง:
+   ```
+   postgresql://user:pass@host.neon.tech/db?sslmode=require&pgbouncer=true&connection_limit=1
+   ```
+
+#### สำหรับ Prisma Accelerate (แนะนำ - ง่ายที่สุด):
+
+1. ไปที่ [Prisma Accelerate](https://www.prisma.io/accelerate)
+2. สร้าง account (ฟรี tier มีให้ใช้)
+3. สร้าง Accelerate project
+4. คัดลอก Accelerate connection string
+   
+   ตัวอย่าง:
+   ```
+   prisma://accelerate.prisma-data.net/?api_key=YOUR_API_KEY
+   ```
+
+### ขั้นตอนที่ 4: ตั้งค่าใน Vercel
+
+1. ใน Vercel Environment Variables:
+   - คลิก **Add New** หรือแก้ไข `DATABASE_URL` ที่มีอยู่
+   - วาง connection string ใหม่
+   - เลือก **Production**, **Preview**, และ **Development** (หรือตามต้องการ)
+   - คลิก **Save**
+
+### ขั้นตอนที่ 5: Redeploy
+
+1. ไปที่ **Deployments** tab
+2. คลิก **...** (three dots) บน deployment ล่าสุด
+3. เลือก **Redeploy**
+4. หรือ push code ใหม่เพื่อ trigger deployment อัตโนมัติ
+
+### ขั้นตอนที่ 6: ตรวจสอบ
+
+1. หลังจาก deploy เสร็จ ลองใช้งาน application
+2. ตรวจสอบ Vercel Function Logs:
+   - ไปที่ **Deployments** → เลือก deployment → **Functions** tab
+   - ดู logs ว่ายังมี connection pool error หรือไม่
+3. ถ้ายังมี error ให้ตรวจสอบ:
+   - DATABASE_URL ถูกต้องหรือไม่
+   - Connection pooler ทำงานหรือไม่
+   - Database provider มี connection limit หรือไม่
 
 ## ตรวจสอบ
 
