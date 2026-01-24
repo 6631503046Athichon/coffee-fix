@@ -94,12 +94,15 @@ const Login: React.FC = () => {
                 </label>
                 <input
                   id="identifier"
+                  name="email"
                   type="text"
+                  autoComplete="username"
                   required
                   value={formData.identifier}
                   onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition-colors shadow-sm hover:border-gray-400"
                   placeholder="username or @email.com"
+                  data-testid="login-email"
                 />
               </div>
 
@@ -111,12 +114,15 @@ const Login: React.FC = () => {
                 <div className="relative">
                   <input
                     id="password"
+                    name="password"
                     type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
                     required
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     className="w-full px-4 py-2.5 pr-12 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition-colors shadow-sm hover:border-gray-400"
                     placeholder="••••••••"
+                    data-testid="login-password"
                   />
                   <button
                     type="button"
@@ -145,6 +151,7 @@ const Login: React.FC = () => {
               <button
                 type="submit"
                 disabled={isLoading}
+                data-testid="login-submit"
                 className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isLoading ? (

@@ -6,6 +6,8 @@ import { Coffee, Wind, PackageCheck, Sprout, ChevronsRight, CheckCircle, Archive
 import { addPricingHistory } from '../../services/salesService';
 import { getAllCustomers } from '../../services/customerService';
 import { addProcessingBatch, updateProcessingBatch } from '../../services/processingBatchService';
+import { createGreenBeanLot } from '../../services/greenBeanLotService';
+import { updateParchmentLot } from '../../services/parchmentLotService';
 import DatePicker from '../common/DatePicker';
 import InvoiceReceipt from './InvoiceReceipt';
 import Select from '../common/Select';
@@ -291,10 +293,6 @@ const KanbanCard: React.FC<{ batch: ProcessingBatch }> = ({ batch }) => {
       {/* Card Body - Compact */}
       <div className="text-xs space-y-1.5 text-gray-500">
         <div className="flex justify-between">
-          <span>Lot</span>
-          <span className="font-medium text-gray-900 truncate max-w-[120px]" title={batch.harvestLotId}>{batch.harvestLotId.substring(0, 8)}...</span>
-        </div>
-        <div className="flex justify-between">
           <span>Weight</span>
           <span className="font-medium text-gray-900">{batch.parchmentWeightKg ? `${batch.parchmentWeightKg} kg` : '-'}</span>
         </div>
@@ -401,11 +399,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
 
   // Table Control States
   const [parchmentSearch, setParchmentSearch] = useState('');
-  const [parchmentSortConfig, setParchmentSortConfig] = useState<{ key: ParchmentSortKeys; direction: SortDirection }>({ key: 'id', direction: 'asc' });
+  const [parchmentSortConfig, setParchmentSortConfig] = useState<{ key: ParchmentSortKeys; direction: SortDirection }>({ key: 'id', direction: 'desc' });
   const [parchmentCurrentPage, setParchmentCurrentPage] = useState(1);
 
   const [greenBeanSearch, setGreenBeanSearch] = useState('');
-  const [greenBeanSortConfig, setGreenBeanSortConfig] = useState<{ key: GreenBeanSortKeys; direction: SortDirection }>({ key: 'id', direction: 'asc' });
+  const [greenBeanSortConfig, setGreenBeanSortConfig] = useState<{ key: GreenBeanSortKeys; direction: SortDirection }>({ key: 'id', direction: 'desc' });
   const [greenBeanCurrentPage, setGreenBeanCurrentPage] = useState(1);
 
   const [harvestLotSearch, setHarvestLotSearch] = useState('');
@@ -453,6 +451,19 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
   // Hull & Grade Modal State
   const [gradedLots, setGradedLots] = useState<{ grade: string; weight: string; price: string }[]>([{ grade: 'Grade A', weight: '', price: '' }]);
   const [totalGreenWeight, setTotalGreenWeight] = useState('');
+
+  // Auto-calculate total green weight from graded lots
+  useEffect(() => {
+    const total = gradedLots.reduce((sum, lot) => {
+      const weight = parseFloat(lot.weight) || 0;
+      return sum + weight;
+    }, 0);
+    if (total > 0) {
+      setTotalGreenWeight(total.toFixed(2));
+    } else {
+      setTotalGreenWeight('');
+    }
+  }, [gradedLots]);
 
   // Process Type Selection State - initialize with first active process type
   const [selectedProcessType, setSelectedProcessType] = useState<string>(() => {
@@ -896,63 +907,59 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
       case 'hullAndGrade':
         if (!selectedParchment) return;
         const greenWeight = parseFloat(totalGreenWeight);
+        if (isNaN(greenWeight) || greenWeight <= 0) {
+          setFormError("Please enter weights for the graded lots.");
+          return;
+        }
         if (Math.abs(gradedWeightSum - greenWeight) > 0.01) {
-          alert("Validation Error: The sum of the weights for the graded lots must exactly match the total green bean weight.");
+          setFormError("The sum of the weights for the graded lots must exactly match the total green bean weight.");
           return;
         }
 
-        const today = new Date().toISOString().substring(0, 10);
+        setIsSubmitting(true);
+        try {
+          // Create green bean lots via API
+          for (const gl of gradedLots) {
+            const weight = parseFloat(gl.weight);
+            if (isNaN(weight) || weight <= 0) continue;
 
-        setData(prev => {
-          const newGreenBeanLots: GreenBeanLot[] = gradedLots.map((gl, index) => {
-            const newId = `GBL${String(prev.greenBeanLots.length + index + 1).padStart(3, '0')}`;
-            const priceValue = parseFloat(gl.price);
-            const hasPrice = !isNaN(priceValue) && priceValue > 0;
-
-            return {
-              id: newId,
+            await createGreenBeanLot({
+              sourceType: 'Internal',
               parchmentLotId: selectedParchment.id,
               grade: gl.grade,
-              initialWeightKg: parseFloat(gl.weight),
-              currentWeightKg: parseFloat(gl.weight),
+              initialWeightKg: weight,
+              currentWeightKg: weight,
               availabilityStatus: 'Available',
-              cuppingScores: [],
-              ...(hasPrice ? {
-                pricePerKg: priceValue,
-                currency: 'THB',
-                priceSetDate: today,
-                priceSetBy: currentUser.id
-              } : {})
-            };
+            });
+          }
+
+          // Calculate parchment weight used (hulling ratio ~82% green bean / parchment)
+          const HULLING_RATIO = 0.82;
+          const parchmentUsed = greenWeight / HULLING_RATIO;
+          const currentParchmentWeight = selectedParchment.currentWeightKg || selectedParchment.initialWeightKg;
+          const remainingWeight = Math.max(0, currentParchmentWeight - parchmentUsed);
+
+          // Update parchment lot - set to Hulled only if no weight remaining
+          await updateParchmentLot(selectedParchment.id, {
+            status: remainingWeight <= 0.01 ? 'Hulled' : 'AwaitingHulling',
+            currentWeightKg: Math.round(remainingWeight * 100) / 100,
           });
 
-          // Create pricing history entries for lots with prices
-          const newPricingHistory: PricingHistory[] = newGreenBeanLots
-            .filter(lot => lot.pricePerKg)
-            .map(lot => ({
-              id: `PH${String(prev.pricingHistory.length + 1).padStart(3, '0')}`,
-              greenBeanLotId: lot.id,
-              pricePerKg: lot.pricePerKg!,
-              currency: 'THB',
-              effectiveDate: today,
-              setBy: currentUser.id,
-              notes: `Initial price set during hulling & grading`
-            }));
+          // Refresh data from backend
+          await refreshData();
 
-          // Save to localStorage
-          newPricingHistory.forEach(ph => addPricingHistory(ph));
-
-          const updatedParchment = prev.parchmentLots.map(p => p.id === selectedParchment.id ? { ...p, status: 'Hulled' as 'Hulled', currentWeightKg: 0 } : p)
-
-          return {
-            ...prev,
-            greenBeanLots: [...newGreenBeanLots, ...prev.greenBeanLots],
-            parchmentLots: updatedParchment,
-            pricingHistory: [...newPricingHistory, ...prev.pricingHistory]
-          }
-        });
-        setTotalGreenWeight('');
-        setGradedLots([{ grade: 'Grade A', weight: '', price: '' }]);
+          // Close modal and reset form
+          setModal(null);
+          setSelectedParchment(null);
+          setTotalGreenWeight('');
+          setGradedLots([{ grade: 'Grade A', weight: '', price: '' }]);
+          setFormError(null);
+        } catch (error: any) {
+          console.error('Failed to hull and grade:', error);
+          setFormError(error?.message || 'Failed to save. Please try again.');
+        } finally {
+          setIsSubmitting(false);
+        }
         break;
 
       case 'withdrawStock':
@@ -1594,7 +1601,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
       {/* Main Grid: Incoming Lots + Completed Batches */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Incoming Harvest Lots */}
-        <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
+        <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200 flex flex-col">
           <div className="p-3 bg-green-50 border-b border-green-200">
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-green-600 rounded-md">
@@ -1604,7 +1611,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
               <span className="ml-auto text-xs text-green-600 font-semibold">{readyForProcessingLots.length}</span>
             </div>
           </div>
-          <div className="p-3">
+          <div className="p-3 h-[400px] overflow-y-auto">
             {readyForProcessingLots.length > 0 ? (
               <div className="space-y-2">
                 {paginatedHarvestCards.map(lot => (
@@ -1649,7 +1656,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
           </div>
           {/* Pagination */}
           {harvestCardTotalPages > 1 && (
-            <div className="flex justify-center items-center py-3 border-t border-gray-200">
+            <div className="mt-auto flex justify-center items-center py-3 border-t border-gray-200">
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setHarvestCardPage(p => Math.max(1, p - 1))}
@@ -1684,7 +1691,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
         </div>
 
         {/* Completed Batches */}
-        <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
+        <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200 flex flex-col">
           <div className="p-3 bg-sky-50 border-b border-sky-200">
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-sky-600 rounded-md">
@@ -1694,7 +1701,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
               <span className="ml-auto text-xs text-sky-600 font-semibold">{completedBatchesForCard.length}</span>
             </div>
           </div>
-          <div className="p-3">
+          <div className="p-3 h-[400px] overflow-y-auto">
             {completedBatchesForCard.length > 0 ? (
               <div className="space-y-2">
                 {paginatedCompletedCards.map(batch => (
@@ -1710,7 +1717,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
           </div>
           {/* Pagination */}
           {completedCardTotalPages > 1 && (
-            <div className="flex justify-center items-center py-3 border-t border-gray-200">
+            <div className="mt-auto flex justify-center items-center py-3 border-t border-gray-200">
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setCompletedCardPage(p => Math.max(1, p - 1))}
@@ -1899,7 +1906,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
               <input type="text" placeholder="Search..." value={parchmentSearch} onChange={e => { setParchmentSearch(e.target.value); setParchmentCurrentPage(1); }} className="pl-9 w-full border border-amber-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-amber-300 focus:border-amber-300 outline-none" />
             </div>
           </div>
-          <div className="p-3 space-y-2">
+          <div className="p-3 space-y-2 h-[400px] overflow-y-auto">
             {paginatedParchmentLots.length === 0 ? (
               <div className="text-center py-8 text-gray-400">
                 <Box className="h-10 w-10 mx-auto mb-2 opacity-30" />
@@ -1961,21 +1968,34 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
             </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input type="text" placeholder="Search..." value={greenBeanSearch} onChange={e => { setGreenBeanSearch(e.target.value); setGreenBeanCurrentPage(1); }} className="pl-9 w-full border border-teal-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-teal-300 focus:border-teal-300 outline-none" />
+              <input type="text" placeholder="Search lots..." value={greenBeanSearch} onChange={e => { setGreenBeanSearch(e.target.value); setGreenBeanCurrentPage(1); }} className="pl-9 w-full border border-teal-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-teal-300 focus:border-teal-300 outline-none" />
             </div>
           </div>
-          <div className="p-3 space-y-2">
+          <div className="p-3 space-y-2 h-[400px] overflow-y-auto">
             {paginatedGreenBeanLots.length === 0 ? (
               <div className="text-center py-8 text-gray-400">
                 <Coffee className="h-10 w-10 mx-auto mb-2 opacity-30" />
                 <p className="text-sm font-medium">No matching green bean lots found</p>
               </div>
             ) : (
-              paginatedGreenBeanLots.map(g => (
+              paginatedGreenBeanLots.map(g => {
+                const qcScore = g.cuppingScores?.length > 0
+                  ? (g.cuppingScores.reduce((sum, c) => sum + c.score, 0) / g.cuppingScores.length).toFixed(1)
+                  : null;
+
+                return (
                 <div key={g.id} className={`bg-white border-l-4 ${g.availabilityStatus === 'Withdrawn' ? 'border-l-gray-300' : 'border-l-teal-500'} rounded-lg p-3 border border-gray-200 hover:shadow-md transition-all`}>
                   {/* Card Header */}
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-semibold text-gray-900">#{g.id.substring(0, 6).toUpperCase()}</p>
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-teal-500 rounded-md">
+                        <Coffee className="h-4 w-4 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">#{g.id.substring(0, 6).toUpperCase()}</p>
+                        <p className="text-xs text-teal-600">Green Bean Lot</p>
+                      </div>
+                    </div>
                     <button
                       onClick={() => handleToggleAvailability(g.id)}
                       className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${g.availabilityStatus === 'Available' ? 'bg-teal-50 text-teal-700 hover:bg-teal-100' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
@@ -1985,7 +2005,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                     </button>
                   </div>
 
-                  {/* Card Body - Compact */}
+                  {/* Card Body */}
                   <div className="text-xs space-y-1.5 text-gray-500 mb-3">
                     <div className="flex justify-between items-center">
                       <span className="flex items-center gap-1.5"><Star className="h-3 w-3" />Grade</span>
@@ -2000,12 +2020,20 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                       {g.pricePerKg ? (
                         <span className="font-medium text-teal-600">{g.pricePerKg.toFixed(2)} THB</span>
                       ) : (
-                        <span className="text-gray-400">-</span>
+                        <span className="text-gray-400">Not set</span>
+                      )}
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="flex items-center gap-1.5"><Activity className="h-3 w-3" />QC Score</span>
+                      {qcScore ? (
+                        <span className="font-medium text-gray-900">{qcScore}</span>
+                      ) : (
+                        <span className="text-gray-400">N/A</span>
                       )}
                     </div>
                   </div>
 
-                  {/* Actions - Compact */}
+                  {/* Actions */}
                   <div className="flex gap-2">
                     {g.withdrawalHistory && g.withdrawalHistory.length > 0 && (
                       <button
@@ -2018,20 +2046,23 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                     )}
                     <button
                       onClick={() => setScoringLot(g)}
-                      className="flex-1 py-2 text-xs font-medium rounded-md text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 transition-colors"
+                      className="flex-1 py-2 text-xs font-medium rounded-md text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 transition-colors inline-flex items-center justify-center gap-1.5"
                     >
+                      <Star className="h-3 w-3" />
                       QC Score
                     </button>
                     <button
                       onClick={() => openModal('withdrawStock', g)}
                       disabled={g.availabilityStatus === 'Withdrawn'}
-                      className="flex-1 py-2 text-xs font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                      className="flex-1 py-2 text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center gap-1.5"
                     >
+                      <ChevronsRight className="h-3 w-3" />
                       Withdraw
                     </button>
                   </div>
                 </div>
-              ))
+              );
+              })
             )}
           </div>
           <div className="mt-auto">
@@ -2224,16 +2255,16 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                     <div className="flex items-center gap-2">
                       <Scale className="h-5 w-5 text-green-600" />
                       Total Green Bean Weight
+                      <span className="text-xs font-normal text-gray-500">(auto-calculated)</span>
                     </div>
                   </label>
                   <input
                     type="number"
                     step="0.1"
                     value={totalGreenWeight}
-                    onChange={e => setTotalGreenWeight(e.target.value)}
-                    required
-                    placeholder="Enter total weight in kg"
-                    className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-lg font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500 shadow-sm transition-all"
+                    readOnly
+                    placeholder="Enter weights below"
+                    className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-lg font-semibold bg-gray-50 text-green-700 cursor-not-allowed shadow-sm"
                   />
                   {totalGreenWeight && (
                     <div className="mt-3 flex items-center justify-between bg-blue-50 rounded-xl p-4 border border-blue-200">

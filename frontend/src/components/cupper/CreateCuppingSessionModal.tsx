@@ -26,6 +26,7 @@ const CreateCuppingSessionModal: React.FC<CreateCuppingSessionModalProps> = ({ i
     const [submitter, setSubmitter] = useState('');
     const [origin, setOrigin] = useState('');
     const [process, setProcess] = useState('');
+    const [sampleError, setSampleError] = useState('');
 
     useEffect(() => {
         if (isOpen) {
@@ -35,6 +36,8 @@ const CreateCuppingSessionModal: React.FC<CreateCuppingSessionModalProps> = ({ i
                 setType(sessionToEdit.type);
                 setSelectedJudges(sessionToEdit.judges.map(j => j.id));
                 setSamples(sessionToEdit.samples.map(s => ({...s}))); // Create a copy to avoid direct mutation
+                setSampleError('');
+                setFormError('');
             } else {
                 setName('');
                 setDate(new Date().toISOString().substring(0, 10));
@@ -45,15 +48,21 @@ const CreateCuppingSessionModal: React.FC<CreateCuppingSessionModalProps> = ({ i
                 setSubmitter('');
                 setOrigin('');
                 setProcess('');
+                setSampleError('');
+                setFormError('');
             }
         }
     }, [isOpen, sessionToEdit, isEditMode]);
 
-    const handleAddSample = () => {
+    const handleAddSample = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
         if (!blindCode || !submitter || !origin || !process) {
-            alert("Please fill all sample fields.");
+            setSampleError("Please fill all sample fields.");
             return;
         }
+        setSampleError('');
         const newSample: Partial<CuppingSample> = {
             id: `temp-${Date.now()}`, // More unique temporary ID
             blindCode,
@@ -109,12 +118,15 @@ const CreateCuppingSessionModal: React.FC<CreateCuppingSessionModalProps> = ({ i
         );
     };
 
+    const [formError, setFormError] = useState('');
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!name || !date || selectedJudges.length === 0 || samples.length === 0) {
-            alert("Please fill all required fields and add at least one judge and one sample.");
+            setFormError("Please fill all required fields and add at least one judge and one sample.");
             return;
         }
+        setFormError('');
 
         const judgeObjects = data.users
             .filter(u => selectedJudges.includes(u.id))
@@ -157,14 +169,19 @@ const CreateCuppingSessionModal: React.FC<CreateCuppingSessionModalProps> = ({ i
     const availableJudges = data.users.filter(u => u.role === UserRole.Cupper || u.role === UserRole.HeadJudge);
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" aria-modal="true" role="dialog">
-            <div className="bg-white rounded-lg p-8 shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" aria-modal="true" role="dialog" onClick={onClose}>
+            <div className="bg-white rounded-lg p-8 shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-2xl font-bold text-gray-800">{isEditMode ? 'Edit Cupping Session' : 'Create New Cupping Session'}</h2>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
+                    <button type="button" onClick={onClose} className="text-gray-500 hover:text-gray-800">
                         <X className="h-6 w-6" />
                     </button>
                 </div>
+                {formError && (
+                    <div className="mb-4 text-sm text-red-600 bg-red-50 p-3 rounded border border-red-200">
+                        {formError}
+                    </div>
+                )}
                 <form onSubmit={handleSubmit}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
                         {/* Left Column */}
@@ -211,11 +228,16 @@ const CreateCuppingSessionModal: React.FC<CreateCuppingSessionModalProps> = ({ i
                             <h3 className="text-lg font-semibold text-gray-700 mb-2">Samples ({samples.length})</h3>
                             {/* Add Sample Form */}
                             <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 mb-4">
+                                {sampleError && (
+                                    <div className="mb-2 text-sm text-red-600 bg-red-50 p-2 rounded">
+                                        {sampleError}
+                                    </div>
+                                )}
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 items-end">
-                                    <input type="text" placeholder="Blind Code" value={blindCode} onChange={e => setBlindCode(e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2" />
-                                    <input type="text" placeholder="Submitter" value={submitter} onChange={e => setSubmitter(e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2" />
-                                    <input type="text" placeholder="Origin/Farm" value={origin} onChange={e => setOrigin(e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2" />
-                                    <input type="text" placeholder="Process" value={process} onChange={e => setProcess(e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2" />
+                                    <input type="text" placeholder="Blind Code" value={blindCode} onChange={e => { setBlindCode(e.target.value); setSampleError(''); }} className="w-full border border-gray-300 rounded-md shadow-sm text-sm p-2" />
+                                    <input type="text" placeholder="Submitter" value={submitter} onChange={e => { setSubmitter(e.target.value); setSampleError(''); }} className="w-full border border-gray-300 rounded-md shadow-sm text-sm p-2" />
+                                    <input type="text" placeholder="Origin/Farm" value={origin} onChange={e => { setOrigin(e.target.value); setSampleError(''); }} className="w-full border border-gray-300 rounded-md shadow-sm text-sm p-2" />
+                                    <input type="text" placeholder="Process" value={process} onChange={e => { setProcess(e.target.value); setSampleError(''); }} className="w-full border border-gray-300 rounded-md shadow-sm text-sm p-2" />
                                 </div>
                                 <button type="button" onClick={handleAddSample} className="mt-2 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded shadow-sm text-white bg-indigo-500 hover:bg-indigo-600">
                                     <Plus className="h-4 w-4 mr-1"/> Add Sample
@@ -232,10 +254,10 @@ const CreateCuppingSessionModal: React.FC<CreateCuppingSessionModalProps> = ({ i
                                                 <button type="button" onClick={() => handleMoveSample(index, 'down')} disabled={index === samples.length - 1} className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30"><ArrowDown size={16} /></button>
                                             </div>
                                             <div className="flex-grow grid grid-cols-2 gap-2">
-                                                <input type="text" placeholder="Blind Code" value={s.blindCode || ''} onChange={e => handleSampleChange(index, 'blindCode', e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2" />
-                                                <input type="text" placeholder="Submitter" value={s.submitterInfo?.name || ''} onChange={e => handleSampleChange(index, 'submitter', e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2" />
-                                                <input type="text" placeholder="Origin" value={s.originInfo?.farm || ''} onChange={e => handleSampleChange(index, 'origin', e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2" />
-                                                <input type="text" placeholder="Process" value={s.lotInfo?.process || ''} onChange={e => handleSampleChange(index, 'process', e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2" />
+                                                <input type="text" placeholder="Blind Code" value={s.blindCode || ''} onChange={e => handleSampleChange(index, 'blindCode', e.target.value)} className="w-full border border-gray-300 rounded-md shadow-sm text-sm p-2" />
+                                                <input type="text" placeholder="Submitter" value={s.submitterInfo?.name || ''} onChange={e => handleSampleChange(index, 'submitter', e.target.value)} className="w-full border border-gray-300 rounded-md shadow-sm text-sm p-2" />
+                                                <input type="text" placeholder="Origin" value={s.originInfo?.farm || ''} onChange={e => handleSampleChange(index, 'origin', e.target.value)} className="w-full border border-gray-300 rounded-md shadow-sm text-sm p-2" />
+                                                <input type="text" placeholder="Process" value={s.lotInfo?.process || ''} onChange={e => handleSampleChange(index, 'process', e.target.value)} className="w-full border border-gray-300 rounded-md shadow-sm text-sm p-2" />
                                             </div>
                                             <button type="button" onClick={() => handleRemoveSample(s.id!)} className="p-1 text-red-500 hover:text-red-700"><Trash2 size={16} /></button>
                                         </div>

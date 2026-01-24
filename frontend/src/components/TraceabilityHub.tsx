@@ -91,9 +91,10 @@ const TraceabilityHub: React.FC = () => {
                     (lot.variety?.toLowerCase() || '').includes(searchLower)
                 );
             }).sort((a, b) => {
+                // Sort by ID descending (newest first)
                 const aId = a?.id || '';
                 const bId = b?.id || '';
-                return aId.localeCompare(bId);
+                return bId.localeCompare(aId);
             });
         } catch (error) {
             console.error('Error filtering lots:', error);
