@@ -5,10 +5,11 @@ import { requireAuth, handleApiError } from '@/lib/middleware'
 // POST /api/cupping-sessions/:id/scores - Submit score for a sample
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(request)
+    const { id } = await params
 
     const body = await request.json()
     const { sampleId, scores, notes } = body
@@ -25,7 +26,7 @@ export async function POST(
       where: { id: sampleId },
     })
 
-    if (!sample || sample.cuppingSessionId !== params.id) {
+    if (!sample || sample.cuppingSessionId !== id) {
       return NextResponse.json(
         { error: 'Sample not found in this session' },
         { status: 404 }
@@ -36,7 +37,7 @@ export async function POST(
     const judge = await prisma.cuppingSessionJudge.findUnique({
       where: {
         cuppingSessionId_judgeId: {
-          cuppingSessionId: params.id,
+          cuppingSessionId: id,
           judgeId: user.id,
         },
       },
@@ -57,7 +58,7 @@ export async function POST(
     const existingScore = await prisma.judgeScore.findUnique({
       where: {
         cuppingSessionId_sampleId_judgeId: {
-          cuppingSessionId: params.id,
+          cuppingSessionId: id,
           sampleId,
           judgeId: user.id,
         },
@@ -93,7 +94,7 @@ export async function POST(
       // Create new score
       judgeScore = await prisma.judgeScore.create({
         data: {
-          cuppingSessionId: params.id,
+          cuppingSessionId: id,
           sampleId,
           judgeId: user.id,
           judgeName: user.name,
@@ -124,7 +125,7 @@ export async function POST(
         where: {
           greenBeanLotId_sessionId: {
             greenBeanLotId: sample.greenBeanLotId,
-            sessionId: params.id,
+            sessionId: id,
           },
         },
         update: {
@@ -132,7 +133,7 @@ export async function POST(
         },
         create: {
           greenBeanLotId: sample.greenBeanLotId,
-          sessionId: params.id,
+          sessionId: id,
           score: totalScore,
         },
       })
@@ -146,4 +147,3 @@ export async function POST(
     return handleApiError(error)
   }
 }
-

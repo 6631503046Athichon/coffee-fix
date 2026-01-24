@@ -5,13 +5,14 @@ import { requireAuth, handleApiError } from '@/lib/middleware'
 // GET /api/roaster-inventory/:id
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     const inventoryItem = await prisma.roasterInventoryItem.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         roaster: {
           select: {
@@ -70,13 +71,14 @@ export async function GET(
 // PUT /api/roaster-inventory/:id
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(request)
+    const { id } = await params
 
     const inventoryItem = await prisma.roasterInventoryItem.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!inventoryItem) {
@@ -102,7 +104,7 @@ export async function PUT(
     if (remainingWeightKg !== undefined) updateData.remainingWeightKg = parseFloat(remainingWeightKg)
 
     const updatedItem = await prisma.roasterInventoryItem.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       include: {
         roaster: {
@@ -137,4 +139,3 @@ export async function PUT(
     return handleApiError(error)
   }
 }
-

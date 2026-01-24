@@ -5,13 +5,14 @@ import { requireAuth, handleApiError } from '@/lib/middleware'
 // GET /api/invoices/:id
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     const invoice = await prisma.invoice.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         saleOrder: {
           include: {
@@ -62,10 +63,11 @@ export async function GET(
 // PUT /api/invoices/:id
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     const body = await request.json()
     const { status, notes } = body
@@ -75,7 +77,7 @@ export async function PUT(
     if (notes !== undefined) updateData.notes = notes
 
     const updatedInvoice = await prisma.invoice.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       include: {
         saleOrder: {
@@ -109,4 +111,3 @@ export async function PUT(
     return handleApiError(error)
   }
 }
-

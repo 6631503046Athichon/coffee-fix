@@ -1,6 +1,7 @@
 import { Farm } from '../types';
 import { api } from './api';
 import { transformFarmFromBackend, transformFarmToBackend } from './utils/transformers';
+import { handleApiError, handleApiErrorWithFallback } from '../utils/errorHandler';
 
 /**
  * Fetch all farms from the backend API
@@ -10,8 +11,10 @@ export const getAllFarms = async (): Promise<Farm[]> => {
     const response = await api.get<{ farms: any[] }>('/farms');
     return response.farms.map(transformFarmFromBackend);
   } catch (error) {
-    console.error('Failed to fetch farms:', error);
-    return [];
+    return handleApiErrorWithFallback<Farm[]>(error, {
+      operation: 'fetch farms',
+      fallbackValue: [],
+    });
   }
 };
 
@@ -25,23 +28,8 @@ export const addFarm = async (farmData: Partial<Farm>): Promise<Farm> => {
       transformFarmToBackend(farmData)
     );
     return transformFarmFromBackend(response.farm);
-  } catch (error: any) {
-    const errorMessage = error?.message || 'Failed to create farm';
-    
-    // Provide user-friendly error messages
-    if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
-      throw new Error('Authentication failed. Please log in again and try submitting the form.');
-    }
-    
-    if (errorMessage.includes('timeout') || errorMessage.includes('not responding')) {
-      throw new Error('Connection timeout. Please check your internet connection and try again.');
-    }
-    
-    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('network')) {
-      throw new Error('Cannot connect to server. Please ensure the backend server is running on port 3001.');
-    }
-    
-    throw new Error(errorMessage);
+  } catch (error) {
+    throw new Error(handleApiError(error, 'create farm'));
   }
 };
 
@@ -55,23 +43,8 @@ export const updateFarm = async (farmId: string, farmData: Partial<Farm>): Promi
       transformFarmToBackend(farmData)
     );
     return transformFarmFromBackend(response.farm);
-  } catch (error: any) {
-    const errorMessage = error?.message || 'Failed to update farm';
-    
-    // Provide user-friendly error messages
-    if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
-      throw new Error('Authentication failed. Please log in again and try updating the farm.');
-    }
-    
-    if (errorMessage.includes('timeout') || errorMessage.includes('not responding')) {
-      throw new Error('Connection timeout. Please check your internet connection and try again.');
-    }
-    
-    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('network')) {
-      throw new Error('Cannot connect to server. Please ensure the backend server is running on port 3001.');
-    }
-    
-    throw new Error(errorMessage);
+  } catch (error) {
+    throw new Error(handleApiError(error, 'update farm'));
   }
 };
 

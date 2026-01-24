@@ -5,13 +5,14 @@ import { requireAuth, handleApiError } from '@/lib/middleware'
 // GET /api/cupping-sessions/:id
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     await requireAuth(request)
 
     const cuppingSession = await prisma.cuppingSession.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         creator: {
           select: {
@@ -61,7 +62,7 @@ export async function GET(
 
     // Get all scores for this session
     const scores = await prisma.judgeScore.findMany({
-      where: { cuppingSessionId: params.id },
+      where: { cuppingSessionId: id },
       include: {
         judge: {
           select: {
@@ -107,9 +108,10 @@ export async function GET(
 // PUT /api/cupping-sessions/:id
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     await requireAuth(request)
 
     const body = await request.json()
@@ -123,7 +125,7 @@ export async function PUT(
     if (finalResults !== undefined) updateData.finalResults = JSON.stringify(finalResults)
 
     const updatedSession = await prisma.cuppingSession.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       include: {
         creator: {
@@ -160,4 +162,3 @@ export async function PUT(
     return handleApiError(error)
   }
 }
-

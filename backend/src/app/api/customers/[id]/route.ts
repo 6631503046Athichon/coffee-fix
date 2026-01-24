@@ -5,13 +5,14 @@ import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 // GET /api/customers/:id
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     const customer = await prisma.customer.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         saleOrders: {
           take: 10,
@@ -44,11 +45,12 @@ export async function GET(
 // PUT /api/customers/:id
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(request)
     requireRole(user, ['Admin', 'Roaster'])
+    const { id } = await params
 
     const body = await request.json()
     const { name, type, contactEmail, contactPhone, address, notes } = body
@@ -62,7 +64,7 @@ export async function PUT(
     if (notes !== undefined) updateData.notes = notes
 
     const updatedCustomer = await prisma.customer.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
     })
 
@@ -75,15 +77,16 @@ export async function PUT(
 // DELETE /api/customers/:id
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(request)
     requireRole(user, ['Admin'])
+    const { id } = await params
 
     // Check if customer has orders
     const ordersCount = await prisma.saleOrder.count({
-      where: { customerId: params.id },
+      where: { customerId: id },
     })
 
     if (ordersCount > 0) {
@@ -94,7 +97,7 @@ export async function DELETE(
     }
 
     await prisma.customer.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     return NextResponse.json({ message: 'Customer deleted successfully' })
@@ -102,4 +105,3 @@ export async function DELETE(
     return handleApiError(error)
   }
 }
-
