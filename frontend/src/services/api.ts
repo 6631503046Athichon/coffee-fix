@@ -46,9 +46,16 @@ async function request<T>(
         const isLoginEndpoint = endpoint.includes('/auth/login')
         const isAuthMeEndpoint = endpoint.includes('/auth/me')
         
-        if (!isLoginEndpoint) {
-          // Clear invalid token for other endpoints
+        if (!isLoginEndpoint && !isAuthMeEndpoint) {
+          // Clear invalid token and user data for other endpoints
           localStorage.removeItem('auth-token')
+          localStorage.removeItem('coffee_lab_user')
+          
+          // Dispatch custom event to notify AuthContext to logout
+          // This ensures the app state is cleared and user is redirected to login
+          window.dispatchEvent(new CustomEvent('auth:logout', { 
+            detail: { reason: 'token_expired' } 
+          }))
         }
         
         // For /auth/me, 401 is expected when user is not logged in
