@@ -121,6 +121,20 @@ export function handleApiError(error: any): NextResponse {
     error?.message === 'Insufficient permissions' ||
     error?.message === 'User not found or inactive'
 
+  // Check for database connection pool errors
+  const isConnectionPoolError = 
+    error?.message?.includes('MaxClientsInSessionMode') ||
+    error?.message?.includes('max clients reached') ||
+    error?.code === 'P1001' // Prisma connection error code
+
+  if (isConnectionPoolError) {
+    console.error('Database Connection Pool Error:', error)
+    return errorResponse(
+      'Database connection pool exhausted. Please configure connection pooling. See CONNECTION_POOLING.md for details.',
+      503
+    )
+  }
+
   if (!isExpectedAuthError) {
   console.error('API Error:', error)
   }
