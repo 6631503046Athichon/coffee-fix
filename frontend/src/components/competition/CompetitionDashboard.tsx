@@ -152,7 +152,7 @@ const CompetitionDashboard: React.FC<{ currentUserRoles: UserRole[] }> = ({ curr
             return (
                 <div className="bg-white p-6 rounded-lg shadow">
                     <h2 className="text-2xl font-bold mb-4 flex items-center"><ClipboardList className="mr-2 text-gray-500" /> Session Setup</h2>
-                    <div className="grid grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div><h3 className="font-semibold">Judges</h3><ul className="list-disc list-inside">{session.judges.map(j => <li key={j.id}>{j.name}</li>)}</ul></div>
                         <div><h3 className="font-semibold">Samples</h3><ul className="list-disc list-inside">{session.samples.map(s => <li key={s.id}>{s.blindCode}</li>)}</ul></div>
                     </div>

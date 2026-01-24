@@ -160,7 +160,7 @@ const HullAndGradeModal: React.FC<HullAndGradeModalProps> = ({
               <div className="flex-shrink-0 w-10 h-10 bg-green-600 rounded-xl flex items-center justify-center">
                 <span className="text-white font-bold text-lg">#{index + 1}</span>
               </div>
-              <div className="flex-1 grid grid-cols-3 gap-3">
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">Grade</label>
                   <GradeDropdown
