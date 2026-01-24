@@ -1,11 +1,37 @@
-import { PrismaClient, UserRole } from '@prisma/client'
+import { PrismaClient, UserRole, HarvestLotStatus, ProcessingBatchStatus, ParchmentLotStatus, GreenBeanSourceType, GreenBeanAvailabilityStatus } from '@prisma/client'
 import { hashPassword } from '../src/lib/auth'
+import { faker } from '@faker-js/faker'
 
 const prisma = new PrismaClient()
 
+// Coffee varieties list
+const COFFEE_VARIETIES = [
+  'Gesha', 'Caturra', 'Bourbon', 'Typica', 'SL28', 'SL34',
+  'Pacamara', 'Catuai', 'Mundo Novo', 'Maragogype', 'Kent',
+  'Blue Mountain', 'Ethiopian Heirloom', 'Java', 'Tekisic'
+]
+
+// Process types
+const PROCESS_TYPES = ['Washed', 'Natural', 'Honey']
+
+// Thai locations for farms
+const THAI_LOCATIONS = [
+  { name: 'Chiang Mai', lat: 18.7883, lng: 98.9853, altitude: '1200m' },
+  { name: 'Chiang Rai', lat: 19.9071, lng: 99.8309, altitude: '1400m' },
+  { name: 'Doi Inthanon', lat: 18.5883, lng: 98.4869, altitude: '1500m' },
+  { name: 'Mae Hong Son', lat: 19.2990, lng: 97.9654, altitude: '1100m' },
+  { name: 'Nan Province', lat: 18.7756, lng: 100.7730, altitude: '1000m' },
+  { name: 'Phayao', lat: 19.1676, lng: 99.9083, altitude: '900m' },
+  { name: 'Lampang', lat: 18.2888, lng: 99.4906, altitude: '850m' },
+  { name: 'Tak', lat: 16.8839, lng: 99.1258, altitude: '800m' },
+]
+
+// Grades for green beans
+const GRADES = ['Grade A', 'Grade B', 'Grade C', 'Peaberry', 'Screen 18', 'Screen 17', 'Screen 16']
+
 async function main() {
   console.log('🌱 Starting seed...')
-  
+
   // Check if we're in development environment
   const isDevelopment = process.env.NODE_ENV !== 'production' && !process.env.VERCEL && !process.env.RAILWAY_ENVIRONMENT
 
@@ -14,7 +40,7 @@ async function main() {
   const admin = await prisma.user.upsert({
     where: { email: '6631503046@lamduan.mfu.ac.th' },
     update: {
-      password: adminPassword, // Update password if user exists
+      password: adminPassword,
       username: 'admin',
       name: 'Admin User',
       roles: [UserRole.Admin],
@@ -40,7 +66,7 @@ async function main() {
   const secondAdmin = await prisma.user.upsert({
     where: { email: 'admin2@coffee.com' },
     update: {
-      password: secondAdminPassword, // Update password if user exists
+      password: secondAdminPassword,
       username: 'admin2',
       name: 'Second Admin',
       roles: [UserRole.Admin],
@@ -72,16 +98,16 @@ async function main() {
         name: 'Test User (Admin)',
         roles: [UserRole.Farmer, UserRole.Admin],
         isActive: true,
-        mustChangePassword: false, // Allow immediate testing
+        mustChangePassword: false,
       },
       {
         email: 'farmer-test@example.com',
         username: 'farmer-test',
         password: await hashPassword('test123456'),
         name: 'Test Farmer',
-        roles: [UserRole.Farmer], // Only Farmer role for access control testing
+        roles: [UserRole.Farmer],
         isActive: true,
-        mustChangePassword: false, // Allow immediate testing
+        mustChangePassword: false,
       }
     ] : []),
     {
@@ -125,7 +151,7 @@ async function main() {
     const user = await prisma.user.upsert({
       where: { email: userData.email },
       update: {
-        password: userData.password, // Update password if user exists
+        password: userData.password,
         username: userData.username,
         name: userData.name,
         roles: userData.roles,
@@ -134,90 +160,354 @@ async function main() {
       },
       create: {
         ...userData,
-        // Preserve isActive and mustChangePassword if already set in userData
         isActive: userData.isActive !== undefined ? userData.isActive : true,
         mustChangePassword: userData.mustChangePassword !== undefined ? userData.mustChangePassword : false,
       },
     })
     console.log('✅ Created/Updated user:', user.email)
   }
-  
+
   if (isDevelopment) {
     console.log('⚠️  Test user (test@example.com) created for development/testing only')
   }
 
-  // Create sample farms for testing (only in development)
-  if (isDevelopment) {
-    // Get test users
-    const testUser = await prisma.user.findUnique({
-      where: { email: 'test@example.com' }
-    })
-    const farmerUser = await prisma.user.findUnique({
-      where: { email: 'farmer@coffee.com' }
-    })
+  // ============================================================
+  // Generate 10 Mock Users with Faker
+  // ============================================================
+  console.log('\n📦 Generating 10 mock users...')
 
-    if (testUser) {
-      // Check if farm already exists for test user
-      const existingTestFarm = await prisma.farm.findFirst({
-        where: {
-          ownerId: testUser.id,
-          farmName: 'Test Coffee Farm'
-        }
-      })
+  const roleDistribution = [
+    { role: UserRole.Farmer, count: 4 },
+    { role: UserRole.Processor, count: 2 },
+    { role: UserRole.Roaster, count: 2 },
+    { role: UserRole.Cupper, count: 1 },
+    { role: UserRole.HeadJudge, count: 1 },
+  ]
 
-      if (!existingTestFarm) {
-        const testFarm = await prisma.farm.create({
-          data: {
-            farmName: 'Test Coffee Farm',
-            location: 'Chiang Mai, Thailand',
-            latitude: 18.7883,
-            longitude: 98.9853,
-            altitude: '1200m',
-            ownerId: testUser.id,
-            caretakerName: 'John Doe',
-            sizeHectares: 5.5,
-            varieties: ['Gesha', 'Caturra', 'Typica'],
-            archived: false,
-          },
-        })
-        console.log('✅ Created test farm:', testFarm.farmName)
-      } else {
-        console.log('ℹ️  Test farm already exists:', existingTestFarm.farmName)
+  const createdMockUsers: { id: string; name: string; roles: UserRole[] }[] = []
+  let userIndex = 1
+
+  for (const { role, count } of roleDistribution) {
+    for (let i = 0; i < count; i++) {
+      const firstName = faker.person.firstName()
+      const lastName = faker.person.lastName()
+      const name = `${firstName} ${lastName}`
+      const email = faker.internet.email({ firstName, lastName, provider: 'coffeelab.test' }).toLowerCase()
+      const username = faker.internet.username({ firstName, lastName }).toLowerCase().slice(0, 20)
+
+      // Some users get multiple roles (20% chance)
+      const additionalRoles: UserRole[] = []
+      if (Math.random() < 0.2) {
+        const allRoles = Object.values(UserRole).filter(r => r !== role)
+        additionalRoles.push(allRoles[Math.floor(Math.random() * allRoles.length)])
       }
-    }
 
-    if (farmerUser) {
-      // Check if farm already exists for farmer user
-      const existingFarmerFarm = await prisma.farm.findFirst({
-        where: {
-          ownerId: farmerUser.id,
-          farmName: 'Maria\'s Coffee Estate'
-        }
-      })
+      const userRoles = [role, ...additionalRoles]
+      const hashedPassword = await hashPassword('password123')
 
-      if (!existingFarmerFarm) {
-        const farmerFarm = await prisma.farm.create({
-          data: {
-            farmName: 'Maria\'s Coffee Estate',
-            location: 'Doi Inthanon, Chiang Mai, Thailand',
-            latitude: 18.5883,
-            longitude: 98.4869,
-            altitude: '1500m',
-            ownerId: farmerUser.id,
-            caretakerName: 'Maria Rodriguez',
-            sizeHectares: 12.0,
-            varieties: ['Bourbon', 'SL28', 'SL34'],
-            archived: false,
+      try {
+        const mockUser = await prisma.user.upsert({
+          where: { email },
+          update: {},
+          create: {
+            email,
+            username: `${username}_${userIndex}`,
+            password: hashedPassword,
+            name,
+            roles: userRoles,
+            isActive: Math.random() > 0.05, // 95% active
+            mustChangePassword: false,
           },
         })
-        console.log('✅ Created farmer farm:', farmerFarm.farmName)
-      } else {
-        console.log('ℹ️  Farmer farm already exists:', existingFarmerFarm.farmName)
+        createdMockUsers.push({ id: mockUser.id, name: mockUser.name, roles: mockUser.roles as UserRole[] })
+        userIndex++
+      } catch (e) {
+        // Skip if duplicate
+        console.log(`⚠️  Skipped duplicate user: ${email}`)
       }
     }
   }
+  console.log(`✅ Created ${createdMockUsers.length} mock users`)
 
-  // Create default activity types
+  // ============================================================
+  // Create Farms for Farmers
+  // ============================================================
+  console.log('\n🌾 Creating farms for farmers...')
+
+  const farmers = createdMockUsers.filter(u => u.roles.includes(UserRole.Farmer))
+  const createdFarms: { id: string; ownerId: string; farmName: string }[] = []
+
+  for (const farmer of farmers) {
+    const location = THAI_LOCATIONS[Math.floor(Math.random() * THAI_LOCATIONS.length)]
+    const farmName = `${faker.word.adjective().charAt(0).toUpperCase() + faker.word.adjective().slice(1)} ${faker.word.noun().charAt(0).toUpperCase() + faker.word.noun().slice(1)} Coffee Farm`
+
+    // Check if farm exists
+    const existingFarm = await prisma.farm.findFirst({
+      where: { ownerId: farmer.id }
+    })
+
+    if (!existingFarm) {
+      const farm = await prisma.farm.create({
+        data: {
+          farmName,
+          location: `${location.name}, Thailand`,
+          latitude: location.lat + (Math.random() - 0.5) * 0.1,
+          longitude: location.lng + (Math.random() - 0.5) * 0.1,
+          altitude: location.altitude,
+          ownerId: farmer.id,
+          caretakerName: farmer.name,
+          sizeHectares: parseFloat((Math.random() * 20 + 2).toFixed(1)),
+          varieties: faker.helpers.arrayElements(COFFEE_VARIETIES, { min: 2, max: 5 }),
+          archived: false,
+        },
+      })
+      createdFarms.push({ id: farm.id, ownerId: farm.ownerId, farmName: farm.farmName })
+    }
+  }
+  console.log(`✅ Created ${createdFarms.length} farms`)
+
+  // ============================================================
+  // Create Crop Years
+  // ============================================================
+  console.log('\n📅 Creating crop years...')
+
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const currentMonth = now.getMonth() + 1
+
+  let activeCropYearStart: number
+  if (currentMonth >= 10) {
+    activeCropYearStart = currentYear
+  } else {
+    activeCropYearStart = currentYear - 1
+  }
+
+  const cropYearsToCreate = []
+  for (let i = -2; i <= 2; i++) {
+    const yearStart = activeCropYearStart + i
+    const yearEnd = yearStart + 1
+    const yearString = `${yearStart}/${yearEnd}`
+
+    cropYearsToCreate.push({
+      year: yearString,
+      startDate: new Date(`${yearStart}-10-01`),
+      endDate: new Date(`${yearEnd}-09-30`),
+      description: i === 0
+        ? `Current crop year ${yearString}`
+        : i < 0
+          ? `Previous crop year ${yearString}`
+          : `Next crop year ${yearString}`,
+    })
+  }
+
+  const createdCropYears: { id: string; year: string }[] = []
+  for (const cy of cropYearsToCreate) {
+    const cropYear = await prisma.cropYear.upsert({
+      where: { year: cy.year },
+      update: {
+        startDate: cy.startDate,
+        endDate: cy.endDate,
+        description: cy.description,
+      },
+      create: {
+        year: cy.year,
+        startDate: cy.startDate,
+        endDate: cy.endDate,
+        description: cy.description,
+      },
+    })
+    createdCropYears.push({ id: cropYear.id, year: cropYear.year })
+    console.log('✅ Created/Updated crop year:', cropYear.year)
+  }
+
+  // ============================================================
+  // Create Harvest Lots
+  // ============================================================
+  console.log('\n🍒 Creating harvest lots...')
+
+  const createdHarvestLots: { id: string; farmId: string; cropYearId: string; weightKg: number }[] = []
+
+  for (const farm of createdFarms.slice(0, 4)) { // Create for first 4 farms
+    const farmer = farmers.find(f => f.id === farm.ownerId)
+    if (!farmer) continue
+
+    const numLots = Math.floor(Math.random() * 4) + 1 // 1-4 lots per farm
+
+    for (let i = 0; i < numLots; i++) {
+      const cropYear = createdCropYears[Math.floor(Math.random() * 3)] // Use one of first 3 crop years
+      const weight = parseFloat((Math.random() * 500 + 50).toFixed(1))
+      const variety = COFFEE_VARIETIES[Math.floor(Math.random() * COFFEE_VARIETIES.length)]
+      const harvestDate = faker.date.between({
+        from: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000),
+        to: new Date()
+      })
+
+      const harvestLot = await prisma.harvestLot.create({
+        data: {
+          farmerName: farmer.name,
+          cherryVariety: variety,
+          weightKg: weight,
+          farmPlotLocation: `Plot ${faker.number.int({ min: 1, max: 10 })}`,
+          harvestDate,
+          status: Math.random() > 0.3 ? HarvestLotStatus.Processing : HarvestLotStatus.ReadyForProcessing,
+          cropYearId: cropYear.id,
+          farmId: farm.id,
+          createdById: farmer.id,
+        },
+      })
+      createdHarvestLots.push({
+        id: harvestLot.id,
+        farmId: farm.id,
+        cropYearId: cropYear.id,
+        weightKg: weight
+      })
+    }
+  }
+  console.log(`✅ Created ${createdHarvestLots.length} harvest lots`)
+
+  // ============================================================
+  // Create Processing Batches
+  // ============================================================
+  console.log('\n⚙️ Creating processing batches...')
+
+  const processors = createdMockUsers.filter(u => u.roles.includes(UserRole.Processor))
+  const createdProcessingBatches: { id: string; harvestLotId: string; processType: string }[] = []
+
+  for (const harvestLot of createdHarvestLots.slice(0, 10)) { // Process first 10 lots
+    const processor = processors[Math.floor(Math.random() * processors.length)]
+    const processType = PROCESS_TYPES[Math.floor(Math.random() * PROCESS_TYPES.length)]
+    const status = faker.helpers.arrayElement([
+      ProcessingBatchStatus.ToProcess,
+      ProcessingBatchStatus.Drying,
+      ProcessingBatchStatus.Completed,
+      ProcessingBatchStatus.Completed, // More likely to be completed
+    ])
+
+    const batch = await prisma.processingBatch.create({
+      data: {
+        harvestLotId: harvestLot.id,
+        createdById: processor?.id,
+        status,
+        processType,
+        processNotes: faker.lorem.sentence(),
+        cropYearId: harvestLot.cropYearId,
+        parchmentWeightKg: status === ProcessingBatchStatus.Completed
+          ? parseFloat((harvestLot.weightKg * 0.2).toFixed(1))
+          : null,
+        moistureContent: status === ProcessingBatchStatus.Completed
+          ? parseFloat((Math.random() * 3 + 10).toFixed(1))
+          : null,
+        dryingStartDate: status !== ProcessingBatchStatus.ToProcess
+          ? faker.date.recent({ days: 30 })
+          : null,
+        dryingEndDate: status === ProcessingBatchStatus.Completed
+          ? faker.date.recent({ days: 7 })
+          : null,
+      },
+    })
+    createdProcessingBatches.push({
+      id: batch.id,
+      harvestLotId: harvestLot.id,
+      processType
+    })
+  }
+  console.log(`✅ Created ${createdProcessingBatches.length} processing batches`)
+
+  // ============================================================
+  // Create Parchment Lots
+  // ============================================================
+  console.log('\n📦 Creating parchment lots...')
+
+  const completedBatches = await prisma.processingBatch.findMany({
+    where: { status: ProcessingBatchStatus.Completed },
+    include: { harvestLot: true }
+  })
+
+  const createdParchmentLots: { id: string; processingBatchId: string }[] = []
+
+  for (const batch of completedBatches.slice(0, 5)) {
+    const weight = parseFloat((batch.harvestLot.weightKg * 0.2).toFixed(1))
+
+    const parchmentLot = await prisma.parchmentLot.create({
+      data: {
+        processingBatchId: batch.id,
+        harvestLotId: batch.harvestLotId,
+        initialWeightKg: weight,
+        currentWeightKg: weight,
+        moistureContent: parseFloat((Math.random() * 3 + 10).toFixed(1)),
+        processType: batch.processType,
+        status: Math.random() > 0.5 ? ParchmentLotStatus.Hulled : ParchmentLotStatus.AwaitingHulling,
+      },
+    })
+    createdParchmentLots.push({ id: parchmentLot.id, processingBatchId: batch.id })
+  }
+  console.log(`✅ Created ${createdParchmentLots.length} parchment lots`)
+
+  // ============================================================
+  // Create Green Bean Lots
+  // ============================================================
+  console.log('\n🫘 Creating green bean lots...')
+
+  const hulledParchments = await prisma.parchmentLot.findMany({
+    where: { status: ParchmentLotStatus.Hulled }
+  })
+
+  const createdGreenBeanLots: { id: string }[] = []
+
+  for (const parchment of hulledParchments) {
+    const weight = parseFloat((parchment.currentWeightKg * 0.8).toFixed(1))
+    const grade = GRADES[Math.floor(Math.random() * GRADES.length)]
+
+    const greenBeanLot = await prisma.greenBeanLot.create({
+      data: {
+        sourceType: GreenBeanSourceType.Internal,
+        parchmentLotId: parchment.id,
+        grade,
+        initialWeightKg: weight,
+        currentWeightKg: weight,
+        availabilityStatus: GreenBeanAvailabilityStatus.Available,
+        pricePerKg: parseFloat((Math.random() * 200 + 100).toFixed(2)),
+        currency: 'THB',
+        priceSetDate: new Date(),
+      },
+    })
+    createdGreenBeanLots.push({ id: greenBeanLot.id })
+  }
+
+  // Create some external green bean lots
+  for (let i = 0; i < 2; i++) {
+    const weight = parseFloat((Math.random() * 100 + 20).toFixed(1))
+    const grade = GRADES[Math.floor(Math.random() * GRADES.length)]
+
+    await prisma.greenBeanLot.create({
+      data: {
+        sourceType: GreenBeanSourceType.External,
+        grade,
+        initialWeightKg: weight,
+        currentWeightKg: weight,
+        availabilityStatus: GreenBeanAvailabilityStatus.Available,
+        pricePerKg: parseFloat((Math.random() * 300 + 150).toFixed(2)),
+        currency: 'THB',
+        priceSetDate: new Date(),
+        externalSource: {
+          originName: faker.location.country(),
+          producerName: faker.company.name(),
+          variety: COFFEE_VARIETIES[Math.floor(Math.random() * COFFEE_VARIETIES.length)],
+          processType: PROCESS_TYPES[Math.floor(Math.random() * PROCESS_TYPES.length)],
+          purchaseDate: faker.date.recent({ days: 60 }).toISOString(),
+          pricePerKg: parseFloat((Math.random() * 300 + 150).toFixed(2)),
+          currency: 'THB',
+        },
+      },
+    })
+  }
+  console.log(`✅ Created ${createdGreenBeanLots.length + 2} green bean lots`)
+
+  // ============================================================
+  // Create Activity Types
+  // ============================================================
+  console.log('\n📋 Creating activity types...')
+
   const activityTypes = [
     { name: 'Fertilizer', description: 'Fertilizer application' },
     { name: 'Pest Management', description: 'Pest control activities' },
@@ -238,7 +528,11 @@ async function main() {
     console.log('✅ Created activity type:', activityType.name)
   }
 
-  // Create default process types
+  // ============================================================
+  // Create Process Types
+  // ============================================================
+  console.log('\n🔄 Creating process types...')
+
   const processTypes = [
     {
       name: 'Washed',
@@ -286,61 +580,85 @@ async function main() {
     console.log('✅ Created process type:', processType.name)
   }
 
-  // Create crop years automatically based on current date
-  // Coffee crop year typically runs from October to September
-  const now = new Date()
-  const currentYear = now.getFullYear()
-  const currentMonth = now.getMonth() + 1 // 1-12
-  
-  // Determine the active crop year based on current date
-  // If month >= 10 (October), we're in the new crop year
-  // If month < 10, we're still in the previous crop year
-  let activeCropYearStart: number
-  if (currentMonth >= 10) {
-    activeCropYearStart = currentYear
-  } else {
-    activeCropYearStart = currentYear - 1
-  }
-  
-  // Create crop years: previous 2 years, current year, and next 2 years
-  const cropYearsToCreate = []
-  for (let i = -2; i <= 2; i++) {
-    const yearStart = activeCropYearStart + i
-    const yearEnd = yearStart + 1
-    const yearString = `${yearStart}/${yearEnd}`
-    
-    cropYearsToCreate.push({
-      year: yearString,
-      startDate: new Date(`${yearStart}-10-01`),
-      endDate: new Date(`${yearEnd}-09-30`),
-      description: i === 0 
-        ? `Current crop year ${yearString}` 
-        : i < 0 
-          ? `Previous crop year ${yearString}`
-          : `Next crop year ${yearString}`,
+  // ============================================================
+  // Create Sample Farms for Test Users (Development Only)
+  // ============================================================
+  if (isDevelopment) {
+    const testUser = await prisma.user.findUnique({
+      where: { email: 'test@example.com' }
     })
+    const farmerUser = await prisma.user.findUnique({
+      where: { email: 'farmer@coffee.com' }
+    })
+
+    if (testUser) {
+      const existingTestFarm = await prisma.farm.findFirst({
+        where: {
+          ownerId: testUser.id,
+          farmName: 'Test Coffee Farm'
+        }
+      })
+
+      if (!existingTestFarm) {
+        const testFarm = await prisma.farm.create({
+          data: {
+            farmName: 'Test Coffee Farm',
+            location: 'Chiang Mai, Thailand',
+            latitude: 18.7883,
+            longitude: 98.9853,
+            altitude: '1200m',
+            ownerId: testUser.id,
+            caretakerName: 'John Doe',
+            sizeHectares: 5.5,
+            varieties: ['Gesha', 'Caturra', 'Typica'],
+            archived: false,
+          },
+        })
+        console.log('✅ Created test farm:', testFarm.farmName)
+      }
+    }
+
+    if (farmerUser) {
+      const existingFarmerFarm = await prisma.farm.findFirst({
+        where: {
+          ownerId: farmerUser.id,
+          farmName: 'Maria\'s Coffee Estate'
+        }
+      })
+
+      if (!existingFarmerFarm) {
+        const farmerFarm = await prisma.farm.create({
+          data: {
+            farmName: 'Maria\'s Coffee Estate',
+            location: 'Doi Inthanon, Chiang Mai, Thailand',
+            latitude: 18.5883,
+            longitude: 98.4869,
+            altitude: '1500m',
+            ownerId: farmerUser.id,
+            caretakerName: 'Maria Rodriguez',
+            sizeHectares: 12.0,
+            varieties: ['Bourbon', 'SL28', 'SL34'],
+            archived: false,
+          },
+        })
+        console.log('✅ Created farmer farm:', farmerFarm.farmName)
+      }
+    }
   }
 
-  for (const cy of cropYearsToCreate) {
-    const cropYear = await prisma.cropYear.upsert({
-      where: { year: cy.year },
-      update: {
-        // Update dates in case they changed (shouldn't happen, but just in case)
-        startDate: cy.startDate,
-        endDate: cy.endDate,
-        description: cy.description,
-      },
-      create: {
-        year: cy.year,
-        startDate: cy.startDate,
-        endDate: cy.endDate,
-        description: cy.description,
-      },
-    })
-    console.log('✅ Created/Updated crop year:', cropYear.year, `(${cy.description})`)
-  }
+  // ============================================================
+  // Summary
+  // ============================================================
+  console.log('\n📊 Seed Summary:')
+  console.log(`   👥 Mock Users: ${createdMockUsers.length}`)
+  console.log(`   🌾 Farms: ${createdFarms.length}`)
+  console.log(`   📅 Crop Years: ${createdCropYears.length}`)
+  console.log(`   🍒 Harvest Lots: ${createdHarvestLots.length}`)
+  console.log(`   ⚙️ Processing Batches: ${createdProcessingBatches.length}`)
+  console.log(`   📦 Parchment Lots: ${createdParchmentLots.length}`)
+  console.log(`   🫘 Green Bean Lots: ${createdGreenBeanLots.length + 2}`)
 
-  console.log('🎉 Seed completed!')
+  console.log('\n🎉 Seed completed!')
 }
 
 main()
@@ -351,4 +669,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect()
   })
-
