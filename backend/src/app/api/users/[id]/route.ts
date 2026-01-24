@@ -6,13 +6,14 @@ import { hashPassword } from '@/lib/auth'
 // GET /api/users/:id
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const currentUser = await requireAuth(request)
-    
+
     // Users can view their own profile, admins can view any
-    if (currentUser.id !== params.id && !currentUser.roles.includes('Admin')) {
+    if (currentUser.id !== id && !currentUser.roles.includes('Admin')) {
       return NextResponse.json(
         { error: 'Forbidden' },
         { status: 403 }
@@ -20,7 +21,7 @@ export async function GET(
     }
 
     const user = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id },
       select: {
         id: true,
         username: true,
@@ -51,13 +52,14 @@ export async function GET(
 // PUT /api/users/:id
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const currentUser = await requireAuth(request)
-    
+
     // Users can update their own profile (limited fields), admins can update any
-    const isOwnProfile = currentUser.id === params.id
+    const isOwnProfile = currentUser.id === id
     const isAdmin = currentUser.roles.includes('Admin')
 
     if (!isOwnProfile && !isAdmin) {
@@ -78,7 +80,7 @@ export async function PUT(
       if (username) updateData.username = username
 
       const updatedUser = await prisma.user.update({
-        where: { id: params.id },
+        where: { id },
         data: updateData,
         select: {
           id: true,
@@ -108,7 +110,7 @@ export async function PUT(
     }
 
     const updatedUser = await prisma.user.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       select: {
         id: true,
@@ -130,14 +132,15 @@ export async function PUT(
 // DELETE /api/users/:id
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     const currentUser = await requireAuth(request)
     requireRole(currentUser, ['Admin'])
 
     // Prevent deleting own account
-    if (currentUser.id === params.id) {
+    if (currentUser.id === id) {
       return NextResponse.json(
         { error: 'Cannot delete your own account' },
         { status: 400 }
@@ -145,7 +148,7 @@ export async function DELETE(
     }
 
     await prisma.user.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     return NextResponse.json({ message: 'User deleted successfully' })

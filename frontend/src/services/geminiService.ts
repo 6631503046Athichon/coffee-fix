@@ -119,7 +119,10 @@ Based on this data, provide:
   }
 };
 
-export const generateComprehensiveReport = async (appData: AppData): Promise<ComprehensiveQualityReport> => {
+/**
+ * Extract lot analysis data from app data
+ */
+function extractLotAnalysisData(appData: AppData) {
     const analysisData = appData.greenBeanLots.map(gbl => {
         const parchmentLot = appData.parchmentLots.find(p => p.id === gbl.parchmentLotId);
         const processingBatch = appData.processingBatches.find(b => b.id === parchmentLot?.processingBatchId);
@@ -128,6 +131,7 @@ export const generateComprehensiveReport = async (appData: AppData): Promise<Com
         let finalScore: number | null = null;
         let finalNotes: string | null = null;
         const scoreInfo = gbl.cuppingScores[0];
+
         if (scoreInfo) {
             const session = appData.cuppingSessions.find(s => s.id === scoreInfo.sessionId);
             const sample = session?.samples.find(s => s.greenBeanLotId === gbl.id);
@@ -138,7 +142,7 @@ export const generateComprehensiveReport = async (appData: AppData): Promise<Com
                 finalScore = scoreInfo.score;
             }
         }
-        
+
         if (!finalScore) return null;
 
         return {
@@ -149,13 +153,50 @@ export const generateComprehensiveReport = async (appData: AppData): Promise<Com
             notes: finalNotes || 'No final notes available.'
         };
     }).filter((item): item is NonNullable<typeof item> => item !== null);
-    
+
     if (analysisData.length === 0) {
         throw new Error("Not enough data to generate a report.");
     }
 
-    // Sort by score and take top lots to keep prompt concise
-    const topLotsData = analysisData.sort((a,b) => b.score - a.score).slice(0, 10);
+    return analysisData.sort((a, b) => b.score - a.score).slice(0, 10);
+}
+
+/**
+ * Get mock comprehensive report for development
+ */
+function getMockComprehensiveReport(): ComprehensiveQualityReport {
+    return {
+        title: "Mock Annual Coffee Quality Report 2025",
+        executiveSummary: "This year was marked by the exceptional performance of the Gesha variety, particularly when processed using the Honey method. These coffees consistently achieved the highest scores due to their complexity, sweetness, and clean cup profiles. A key trend was the direct correlation between meticulous processing and high cupping scores, highlighting the importance of post-harvest techniques.",
+        topPerformingCoffees: [
+            { lotId: "GBL001", variety: "Gesha", process: "Honey", score: 90.50, tastingNotes: "Remarkable complexity with layers of tropical fruit, jasmine, and a honey-sweet finish." },
+            { lotId: "GBL002", variety: "Caturra", process: "Washed", score: 88.25, tastingNotes: "A very clean and elegant coffee with notes of citrus, green apple, and a delicate floral quality." },
+        ],
+        varietyAnalysis: {
+            topVariety: "Gesha",
+            averageScore: 90.50,
+            analysis: "The Gesha variety continues to dominate the high end of the quality spectrum. Its inherent genetic potential for complex floral and fruit notes, when combined with skilled farming, results in scores that are consistently higher than other varieties in the dataset."
+        },
+        processingAnalysis: {
+            topProcess: "Honey",
+            averageScore: 90.50,
+            analysis: "The Honey process demonstrated its ability to produce exceptionally sweet and full-bodied coffees this year, leading to the highest average scores. This method appears to enhance the natural sweetness of the Gesha cherry, creating a highly desirable cup profile."
+        },
+        keyTrends: [
+            "Strong positive correlation between Gesha variety and scores above 90.",
+            "Honey processed coffees are outperforming Washed and Natural methods in terms of overall score.",
+            "High sweetness scores are a common denominator across all top-performing lots, indicating excellent cherry ripeness."
+        ],
+        recommendations: {
+            forFarmers: "Consider planting more Gesha if the climate is suitable. Focus on achieving optimal cherry ripeness at harvest to maximize sweetness.",
+            forProcessors: "Refine and expand Honey processing techniques, as this method is currently yielding the highest quality and value. Maintain detailed drying logs to ensure consistency.",
+            forRoasters: "Prioritize sourcing Gesha and Honey processed lots for premium, high-margin offerings. Use the detailed tasting notes in marketing to attract discerning customers."
+        }
+    };
+}
+
+export const generateComprehensiveReport = async (appData: AppData): Promise<ComprehensiveQualityReport> => {
+    const topLotsData = extractLotAnalysisData(appData);
     
     const prompt = `You are a world-class coffee industry analyst. Your task is to create a comprehensive annual quality report based on the provided dataset of cupped coffee lots. The report should be engaging, insightful, and professional, written in a clear and accessible tone for stakeholders like farmers, roasters, and processors.
 
@@ -173,37 +214,10 @@ export const generateComprehensiveReport = async (appData: AppData): Promise<Com
         - forFarmers: Advice on variety selection, agricultural practices, etc.
         - forProcessors: Advice on processing methods to focus on.
         - forRoasters: Advice on sourcing priorities and marketing angles.`;
-    
+
     if (!API_KEY) {
         await new Promise(resolve => setTimeout(resolve, 2000));
-        return {
-            title: "Mock Annual Coffee Quality Report 2025",
-            executiveSummary: "This year was marked by the exceptional performance of the Gesha variety, particularly when processed using the Honey method. These coffees consistently achieved the highest scores due to their complexity, sweetness, and clean cup profiles. A key trend was the direct correlation between meticulous processing and high cupping scores, highlighting the importance of post-harvest techniques.",
-            topPerformingCoffees: [
-                { lotId: "GBL001", variety: "Gesha", process: "Honey", score: 90.50, tastingNotes: "Remarkable complexity with layers of tropical fruit, jasmine, and a honey-sweet finish." },
-                { lotId: "GBL002", variety: "Caturra", process: "Washed", score: 88.25, tastingNotes: "A very clean and elegant coffee with notes of citrus, green apple, and a delicate floral quality." },
-            ],
-            varietyAnalysis: {
-                topVariety: "Gesha",
-                averageScore: 90.50,
-                analysis: "The Gesha variety continues to dominate the high end of the quality spectrum. Its inherent genetic potential for complex floral and fruit notes, when combined with skilled farming, results in scores that are consistently higher than other varieties in the dataset."
-            },
-            processingAnalysis: {
-                topProcess: "Honey",
-                averageScore: 90.50,
-                analysis: "The Honey process demonstrated its ability to produce exceptionally sweet and full-bodied coffees this year, leading to the highest average scores. This method appears to enhance the natural sweetness of the Gesha cherry, creating a highly desirable cup profile."
-            },
-            keyTrends: [
-                "Strong positive correlation between Gesha variety and scores above 90.",
-                "Honey processed coffees are outperforming Washed and Natural methods in terms of overall score.",
-                "High sweetness scores are a common denominator across all top-performing lots, indicating excellent cherry ripeness."
-            ],
-            recommendations: {
-                forFarmers: "Consider planting more Gesha if the climate is suitable. Focus on achieving optimal cherry ripeness at harvest to maximize sweetness.",
-                forProcessors: "Refine and expand Honey processing techniques, as this method is currently yielding the highest quality and value. Maintain detailed drying logs to ensure consistency.",
-                forRoasters: "Prioritize sourcing Gesha and Honey processed lots for premium, high-margin offerings. Use the detailed tasting notes in marketing to attract discerning customers."
-            }
-        };
+        return getMockComprehensiveReport();
     }
     
     try {
@@ -343,7 +357,10 @@ Format your response as clear, practical recommendations that a farmer can imple
   }
 };
 
-export const getPlatformTrends = async (appData: AppData): Promise<PlatformInsight> => {
+/**
+ * Extract trend analysis data from app data
+ */
+function extractTrendAnalysisData(appData: AppData) {
     const analysisData = appData.greenBeanLots.map(gbl => {
         const parchmentLot = appData.parchmentLots.find(p => p.id === gbl.parchmentLotId);
         const processingBatch = appData.processingBatches.find(b => b.id === parchmentLot?.processingBatchId);
@@ -352,6 +369,7 @@ export const getPlatformTrends = async (appData: AppData): Promise<PlatformInsig
         let finalScore: number | null = null;
         let finalNotes: string | null = null;
         const scoreInfo = gbl.cuppingScores[0];
+
         if (scoreInfo) {
             const session = appData.cuppingSessions.find(s => s.id === scoreInfo.sessionId);
             const sample = session?.samples.find(s => s.greenBeanLotId === gbl.id);
@@ -362,7 +380,7 @@ export const getPlatformTrends = async (appData: AppData): Promise<PlatformInsig
                 finalScore = scoreInfo.score;
             }
         }
-        
+
         if (!finalScore) return null;
 
         return {
@@ -376,6 +394,28 @@ export const getPlatformTrends = async (appData: AppData): Promise<PlatformInsig
     if (analysisData.length === 0) {
         throw new Error("Not enough data to perform trend analysis.");
     }
+
+    return analysisData;
+}
+
+/**
+ * Get mock platform trends for development
+ */
+function getMockPlatformTrends(): PlatformInsight {
+    return {
+        topPerformingVariety: { variety: "Gesha", avgScore: 89.25 },
+        topPerformingProcess: { process: "Honey", avgScore: 89.25 },
+        notableCorrelations: [
+            "Gesha variety is strongly associated with high scores and complex floral notes.",
+            "The Honey process appears to be yielding the highest quality results in this dataset.",
+            "There is a consistent trend of high sweetness scores across top-performing lots."
+        ],
+        overallSummary: "Mock Data: This year's data highlights the exceptional performance of the Gesha variety, particularly when combined with the Honey process. Roasters should prioritize these lots for premium offerings. The consistent high sweetness scores suggest excellent cherry ripeness and meticulous processing across the board."
+    };
+}
+
+export const getPlatformTrends = async (appData: AppData): Promise<PlatformInsight> => {
+    const analysisData = extractTrendAnalysisData(appData);
     
     const prompt = `You are a world-class coffee quality data scientist. Analyze the following dataset from a specialty coffee platform. Each entry represents a distinct coffee lot with its cupping score and characteristics.
 
@@ -390,16 +430,7 @@ export const getPlatformTrends = async (appData: AppData): Promise<PlatformInsig
 
     if (!API_KEY) {
         await new Promise(resolve => setTimeout(resolve, 2000));
-        return {
-            topPerformingVariety: { variety: "Gesha", avgScore: 89.25 },
-            topPerformingProcess: { process: "Honey", avgScore: 89.25 },
-            notableCorrelations: [
-                "Gesha variety is strongly associated with high scores and complex floral notes.",
-                "The Honey process appears to be yielding the highest quality results in this dataset.",
-                "There is a consistent trend of high sweetness scores across top-performing lots."
-            ],
-            overallSummary: "Mock Data: This year's data highlights the exceptional performance of the Gesha variety, particularly when combined with the Honey process. Roasters should prioritize these lots for premium offerings. The consistent high sweetness scores suggest excellent cherry ripeness and meticulous processing across the board."
-        };
+        return getMockPlatformTrends();
     }
 
     try {

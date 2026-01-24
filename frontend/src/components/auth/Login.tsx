@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Coffee, LogIn, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { UserRole } from '../../types';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -16,6 +17,15 @@ const Login: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Helper function to get dashboard path by role
+  const getDashboardPathByRole = (roles: UserRole[]): string => {
+    if (roles.includes(UserRole.Processor)) return '/processor';
+    if (roles.includes(UserRole.Roaster)) return '/roaster';
+    if (roles.includes(UserRole.Cupper) || roles.includes(UserRole.HeadJudge)) return '/cupping';
+    if (roles.includes(UserRole.Farmer) || roles.includes(UserRole.Admin)) return '/farmer-dashboard';
+    return '/farmer-dashboard'; // default
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -28,7 +38,8 @@ const Login: React.FC = () => {
       if (user.mustChangePassword || user.mustChangeUsername || user.mustChangeEmail) {
         navigate('/first-login-setup');
       } else {
-        navigate('/dashboard');
+        // Redirect to appropriate dashboard based on user role
+        navigate(getDashboardPathByRole(user.roles));
       }
     } catch (err) {
       let errorMessage = 'Login failed';

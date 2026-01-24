@@ -5,13 +5,14 @@ import { requireAuth, handleApiError } from '@/lib/middleware'
 // GET /api/gap-logs/:id
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     const gapLog = await prisma.gAPLogEntry.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         farm: {
           select: {
@@ -52,10 +53,11 @@ export async function GET(
 // PUT /api/gap-logs/:id
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     const body = await request.json()
     const { farmId, farmPlotLocation, activityTypeId, date, productUsed, quantity, notes } = body
@@ -79,7 +81,7 @@ export async function PUT(
     if (notes !== undefined) updateData.notes = notes
 
     const updatedGapLog = await prisma.gAPLogEntry.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       include: {
         farm: {
@@ -114,13 +116,14 @@ export async function PUT(
 // DELETE /api/gap-logs/:id
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     await prisma.gAPLogEntry.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     return NextResponse.json({ message: 'GAP log deleted successfully' })
@@ -128,4 +131,3 @@ export async function DELETE(
     return handleApiError(error)
   }
 }
-

@@ -5,10 +5,11 @@ import { requireAuth, handleApiError } from '@/lib/middleware'
 // POST /api/green-bean-lots/:id/withdrawals - Create withdrawal
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(request)
+    const { id } = await params
 
     const body = await request.json()
     const { amountKg, withdrawalType, purpose, notes, salePrice, currency, customerName, invoiceNumber, deliveryAddress } = body
@@ -22,7 +23,7 @@ export async function POST(
 
     // Get current lot
     const lot = await prisma.greenBeanLot.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!lot) {
@@ -48,7 +49,7 @@ export async function POST(
       // Create withdrawal
       await tx.greenBeanWithdrawal.create({
         data: {
-          greenBeanLotId: params.id,
+          greenBeanLotId: id,
           amountKg: parseFloat(amountKg),
           withdrawalType,
           purpose,
@@ -66,7 +67,7 @@ export async function POST(
 
       // Update lot weight
       await tx.greenBeanLot.update({
-        where: { id: params.id },
+        where: { id },
         data: {
           currentWeightKg: lot.currentWeightKg - parseFloat(amountKg),
         },
@@ -74,7 +75,7 @@ export async function POST(
     })
 
     const updatedLot = await prisma.greenBeanLot.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         withdrawalHistory: {
           include: {
@@ -98,4 +99,3 @@ export async function POST(
     return handleApiError(error)
   }
 }
-

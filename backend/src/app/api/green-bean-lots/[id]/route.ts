@@ -5,13 +5,14 @@ import { requireAuth, handleApiError } from '@/lib/middleware'
 // GET /api/green-bean-lots/:id
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     const greenBeanLot = await prisma.greenBeanLot.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         parchmentLot: {
           include: {
@@ -89,10 +90,11 @@ export async function GET(
 // PUT /api/green-bean-lots/:id
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(request)
+    const { id } = await params
 
     const body = await request.json()
     const { grade, currentWeightKg, availabilityStatus, pricePerKg, currency, priceSetDate } = body
@@ -109,7 +111,7 @@ export async function PUT(
     }
 
     const updatedLot = await prisma.greenBeanLot.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       include: {
         parchmentLot: {
@@ -142,7 +144,7 @@ export async function PUT(
     if (pricePerKg && currency) {
       await prisma.pricingHistory.create({
         data: {
-          greenBeanLotId: params.id,
+          greenBeanLotId: id,
           pricePerKg: parseFloat(pricePerKg),
           currency,
           effectiveDate: priceSetDate ? new Date(priceSetDate) : new Date(),
@@ -156,4 +158,3 @@ export async function PUT(
     return handleApiError(error)
   }
 }
-

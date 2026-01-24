@@ -5,13 +5,14 @@ import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 // GET /api/process-types/:id
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     const processType = await prisma.processType.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!processType) {
@@ -37,11 +38,12 @@ export async function GET(
 // PUT /api/process-types/:id
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(request)
     requireRole(user, ['Admin'])
+    const { id } = await params
 
     const body = await request.json()
     const { name, description, colorScheme, isActive } = body
@@ -59,7 +61,7 @@ export async function PUT(
     if (isActive !== undefined) updateData.isActive = isActive
 
     const updatedProcessType = await prisma.processType.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
     })
 
@@ -79,14 +81,15 @@ export async function PUT(
 // DELETE /api/process-types/:id
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(request)
     requireRole(user, ['Admin'])
+    const { id } = await params
 
     await prisma.processType.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     return NextResponse.json({ message: 'Process type deleted successfully' })
@@ -94,4 +97,3 @@ export async function DELETE(
     return handleApiError(error)
   }
 }
-
