@@ -189,16 +189,16 @@ const StartProcessingModal: React.FC<StartProcessingModalProps> = ({
         </div>
       </div>
       <div className="bg-gray-50 rounded-2xl p-8 mb-8 border border-gray-200 shadow-sm">
-        <div className="grid grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-8">
           <div className="text-center">
             <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">Variety</p>
             <p className="text-2xl font-bold text-gray-900">{harvestLot.cherryVariety}</p>
           </div>
-          <div className="text-center border-l-2 border-gray-300">
+          <div className="text-center sm:border-l-2 sm:border-gray-300">
             <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">Weight</p>
             <p className="text-2xl font-bold text-green-600">{harvestLot.weightKg} kg</p>
           </div>
-          <div className="text-center border-l-2 border-gray-300">
+          <div className="text-center sm:border-l-2 sm:border-gray-300">
             <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">Farmer</p>
             <p className="text-2xl font-bold text-gray-900">{harvestLot.farmerName}</p>
           </div>

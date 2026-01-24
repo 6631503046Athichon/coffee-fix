@@ -213,7 +213,7 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
             <Thermometer className="h-4 w-4 text-gray-500" />
             อุณหภูมิ
           </h3>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className={labelClass}>ต่ำสุด (°C) *</label>
               <input
