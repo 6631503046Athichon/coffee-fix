@@ -111,7 +111,7 @@ const Header: React.FC<HeaderProps> = ({ currentUserRoles }) => {
       'Farmer': 'bg-green-100 text-green-700 border-green-200',
       'Processor': 'bg-blue-100 text-blue-700 border-blue-200',
       'Roaster': 'bg-amber-100 text-amber-700 border-amber-200',
-      'Head Judge': 'bg-blue-100 text-blue-700 border-blue-200',
+      'HeadJudge': 'bg-blue-100 text-blue-700 border-blue-200',
       'Cupper': 'bg-blue-100 text-blue-700 border-blue-200',
     };
     return colors[role] || 'bg-gray-100 text-gray-700 border-gray-200';
@@ -126,7 +126,7 @@ const Header: React.FC<HeaderProps> = ({ currentUserRoles }) => {
       'Farmer': 'bg-green-600',
       'Processor': 'bg-blue-600',
       'Roaster': 'bg-amber-600',
-      'Head Judge': 'bg-purple-600',
+      'HeadJudge': 'bg-purple-600',
       'Cupper': 'bg-indigo-600',
       'Admin': 'bg-red-600',
     };

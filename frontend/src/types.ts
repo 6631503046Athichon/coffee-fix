@@ -4,7 +4,7 @@ export enum UserRole {
   Farmer = 'Farmer',
   Processor = 'Processor',
   Roaster = 'Roaster',
-  HeadJudge = 'Head Judge',
+  HeadJudge = 'HeadJudge',
   Cupper = 'Cupper',
   Admin = 'Admin',
 }
