@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { HarvestLot, User, UserRole } from '../../types';
-import { Download, Filter, ChevronRight, Database, Edit, Trash2 } from 'lucide-react';
+import { Download, Filter, ChevronRight, ChevronLeft, Database, Edit, Trash2 } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
 import Select from '../common/Select';
 import { Modal } from '../common/Modal';
@@ -15,6 +15,8 @@ import { formatHarvestLotId } from '../../utils/formatHarvestLotId';
 
 // Removed inline CustomFilterDropdown in favor of shared Select
 
+const ITEMS_PER_PAGE = 10;
+
 interface FarmerDataHubProps {
     currentUser: User;
 }
@@ -24,6 +26,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
     const navigate = useNavigate();
     const [yearFilter, setYearFilter] = useState<string>('All');
     const [plotFilter, setPlotFilter] = useState<string>('All');
+    const [currentPage, setCurrentPage] = useState(1);
 
     // Guard clause for null currentUser
     if (!currentUser) {
@@ -69,6 +72,17 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
             return userMatch && yearMatch && plotMatch;
         });
     }, [data.harvestLots, yearFilter, plotFilter, currentUser]);
+
+    // Reset page when filters change
+    React.useEffect(() => {
+        setCurrentPage(1);
+    }, [yearFilter, plotFilter]);
+
+    const totalPages = Math.ceil(filteredLots.length / ITEMS_PER_PAGE);
+    const paginatedLots = useMemo(() => {
+        const start = (currentPage - 1) * ITEMS_PER_PAGE;
+        return filteredLots.slice(start, start + ITEMS_PER_PAGE);
+    }, [filteredLots, currentPage]);
 
     const handleDelete = (lotId: string, e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent row click
@@ -148,7 +162,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
     };
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 min-w-0 w-full overflow-hidden">
             <PageHeader
                 title="Data Hub"
                 description="Master table of all harvest data"
@@ -188,70 +202,70 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                 </div>
             </div>
 
-            <div className="bg-white shadow-sm rounded-xl overflow-hidden border border-gray-200">
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
+            <div className="bg-white shadow-sm rounded-xl border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto overflow-y-hidden">
+                    <table className="w-full divide-y divide-gray-200 table-fixed">
                         <thead className="bg-gray-900">
                             <tr>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Lot ID</th>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Farmer</th>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Variety</th>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Weight (kg)</th>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Harvest Date</th>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
-                                <th scope="col" className="px-6 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">Actions</th>
-                                <th scope="col" className="px-6 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">Details</th>
+                                <th scope="col" className="w-[12%] px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Lot ID</th>
+                                <th scope="col" className="w-[14%] px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Farmer</th>
+                                <th scope="col" className="w-[14%] px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Variety</th>
+                                <th scope="col" className="w-[10%] px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Weight</th>
+                                <th scope="col" className="w-[12%] px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Harvest Date</th>
+                                <th scope="col" className="w-[14%] px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
+                                <th scope="col" className="w-[12%] px-4 py-3 text-center text-xs font-bold text-white uppercase tracking-wider">Actions</th>
+                                <th scope="col" className="w-[12%] px-4 py-3 text-center text-xs font-bold text-white uppercase tracking-wider">Details</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-100">
-                            {filteredLots.length === 0 ? (
+                            {paginatedLots.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="px-6 py-12 text-center">
-                                        <Database className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                                        <p className="text-gray-500 text-lg font-medium">No harvest data found</p>
+                                    <td colSpan={8} className="px-4 py-12 text-center">
+                                        <Database className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                                        <p className="text-gray-500 text-base font-medium">No harvest data found</p>
                                         <p className="text-gray-400 text-sm">Try adjusting your filters</p>
                                     </td>
                                 </tr>
                             ) : (
-                                filteredLots.map((lot: HarvestLot) => (
+                                paginatedLots.map((lot: HarvestLot) => (
                                     <tr
                                         key={lot.id}
                                         onClick={() => navigate(`/farmer-dashboard/${lot.id}`)}
                                         className="hover:bg-gray-50 transition-colors cursor-pointer"
                                     >
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                                        <td className="px-4 py-3 text-sm font-semibold text-gray-900 truncate">
                                             {formatHarvestLotId(lot.id, 'short', lot.harvestDate)}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                        <td className="px-4 py-3 text-sm text-gray-700 truncate">
                                             {lot.farmerName}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                        <td className="px-4 py-3 text-sm text-gray-700 truncate">
                                             {lot.cherryVariety}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
                                             {lot.weightKg} kg
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                        <td className="px-4 py-3 text-sm text-gray-600">
                                             {lot.harvestDate}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
+                                        <td className="px-4 py-3">
                                             <Badge variant={lot.status === 'Processing' ? 'primary' : 'success'}>
                                                 {lot.status}
                                             </Badge>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm">
+                                        <td className="px-4 py-3 text-center text-sm">
                                             {canEdit(lot) ? (
-                                                <div className="flex items-center justify-center gap-2">
+                                                <div className="flex items-center justify-center gap-1">
                                                     <button
                                                         onClick={(e) => openEditModal(lot, e)}
-                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-blue-600 transition-colors hover:border-blue-100 hover:bg-blue-50 hover:text-blue-700"
+                                                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-blue-600 transition-colors hover:border-blue-100 hover:bg-blue-50 hover:text-blue-700"
                                                         title="Edit"
                                                     >
                                                         <Edit className="h-4 w-4" />
                                                     </button>
                                                     <button
                                                         onClick={(e) => handleDelete(lot.id, e)}
-                                                        className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-red-600 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-700"
+                                                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-red-600 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-700"
                                                         title="Delete"
                                                     >
                                                         <Trash2 className="h-4 w-4" />
@@ -261,13 +275,13 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                                                 <span className="text-xs font-medium text-gray-400">—</span>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm">
+                                        <td className="px-4 py-3 text-center text-sm">
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     navigate(`/farmer-dashboard/${lot.id}`);
                                                 }}
-                                                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-transparent text-indigo-600 transition-colors hover:border-indigo-100 hover:bg-indigo-50 hover:text-indigo-700"
+                                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-indigo-600 transition-colors hover:border-indigo-100 hover:bg-indigo-50 hover:text-indigo-700"
                                                 title="Open details"
                                             >
                                                 <ChevronRight className="h-4 w-4" />
@@ -279,6 +293,44 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                    <div className="flex justify-center items-center px-4 py-3 bg-gray-50 border-t border-gray-200">
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                            </button>
+                            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                                <button
+                                    key={page}
+                                    onClick={() => setCurrentPage(page)}
+                                    className={`w-8 h-8 text-sm font-medium rounded-md transition-colors ${
+                                        currentPage === page
+                                            ? 'bg-blue-600 text-white'
+                                            : 'text-gray-700 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    {page}
+                                </button>
+                            ))}
+                            <button
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                            >
+                                <ChevronRight className="h-4 w-4" />
+                            </button>
+                        </div>
+                        <span className="ml-4 text-sm text-gray-500">
+                            Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredLots.length)} of {filteredLots.length}
+                        </span>
+                    </div>
+                )}
             </div>
 
             {/* Edit Modal */}

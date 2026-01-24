@@ -1,12 +1,92 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { User, UserRole } from '../types';
-import { Users as UsersIcon, AlertCircle, UserPlus, Edit, Trash2, Shield, Search, Key, X, Filter } from 'lucide-react';
+import { Users as UsersIcon, AlertCircle, UserPlus, Edit, Trash2, Shield, Search, Key, X, Filter, ChevronDown, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import CreateUserModal from './modals/CreateUserModal';
 import EditUserModal from './modals/EditUserModal';
 import TransferOwnershipModal from './modals/TransferOwnershipModal';
+
+// Custom Dropdown Component
+interface DropdownOption {
+    value: string;
+    label: string;
+    icon?: React.ReactNode;
+}
+
+interface CustomDropdownProps {
+    options: DropdownOption[];
+    value: string;
+    onChange: (value: string) => void;
+    placeholder: string;
+    icon?: React.ReactNode;
+}
+
+const CustomDropdown: React.FC<CustomDropdownProps> = ({ options, value, onChange, placeholder, icon }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    const selectedOption = options.find(opt => opt.value === value);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    return (
+        <div ref={dropdownRef} className="relative">
+            <button
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                className={`flex items-center gap-2 pl-3 pr-3 py-2.5 border rounded-xl text-sm transition-all duration-200 cursor-pointer font-medium min-w-[140px] ${
+                    isOpen
+                        ? 'border-indigo-500 ring-2 ring-indigo-500 bg-white'
+                        : 'border-gray-200 bg-gray-50 hover:bg-white hover:border-gray-300'
+                }`}
+            >
+                {icon && <span className="text-gray-400">{icon}</span>}
+                <span className={`flex-1 text-left ${value ? 'text-gray-700' : 'text-gray-400'}`}>
+                    {selectedOption?.label || placeholder}
+                </span>
+                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isOpen && (
+                <div className="absolute top-full left-0 mt-2 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden z-50">
+                    <div className="py-1 max-h-60 overflow-y-auto">
+                        {options.map((option) => (
+                            <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => {
+                                    onChange(option.value);
+                                    setIsOpen(false);
+                                }}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                                    value === option.value
+                                        ? 'bg-indigo-50 text-indigo-700 font-medium'
+                                        : 'text-gray-700 hover:bg-gray-50'
+                                }`}
+                            >
+                                {option.icon && <span>{option.icon}</span>}
+                                <span className="flex-1 text-left">{option.label}</span>
+                                {value === option.value && (
+                                    <Check className="h-4 w-4 text-indigo-600" />
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 const UserManagement: React.FC = () => {
     const { currentUser } = useAuth();
@@ -21,6 +101,10 @@ const UserManagement: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [roleFilter, setRoleFilter] = useState<string>('');
     const [statusFilter, setStatusFilter] = useState<string>('');
+
+    // Pagination states
+    const [currentPage, setCurrentPage] = useState(1);
+    const PAGE_SIZE = 10;
 
     // Redirect if not admin (additional check in component)
     useEffect(() => {
@@ -41,6 +125,7 @@ const UserManagement: React.FC = () => {
     // Load users from backend on component mount and when filters change
     useEffect(() => {
         fetchUsers();
+        setCurrentPage(1);
     }, [searchTerm, roleFilter, statusFilter]);
 
     const fetchUsers = async () => {
@@ -200,42 +285,62 @@ const UserManagement: React.FC = () => {
             </div>
 
             {/* Search and Filter Section */}
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200 mb-6">
-                <div className="flex flex-col md:flex-row gap-4">
+            <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200 mb-6 relative z-20">
+                <div className="flex flex-col lg:flex-row gap-4">
+                    {/* Search Input */}
                     <div className="flex-1 relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                         <input
                             type="text"
                             placeholder="Search by name, email, or username..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 placeholder-gray-400"
                         />
                     </div>
-                    <div className="flex gap-3">
-                        <select
+
+                    {/* Filters */}
+                    <div className="flex flex-wrap gap-3 items-center">
+                        {/* Role Filter */}
+                        <CustomDropdown
+                            options={[
+                                { value: '', label: 'All Roles' },
+                                ...Object.values(UserRole).map(role => ({
+                                    value: role,
+                                    label: role,
+                                    icon: <div className={`h-2 w-2 rounded-full ${
+                                        role === UserRole.Admin ? 'bg-purple-500' :
+                                        role === UserRole.Farmer ? 'bg-green-500' :
+                                        role === UserRole.Processor ? 'bg-blue-500' :
+                                        role === UserRole.Roaster ? 'bg-orange-500' :
+                                        role === UserRole.HeadJudge ? 'bg-indigo-500' :
+                                        'bg-pink-500'
+                                    }`} />
+                                }))
+                            ]}
                             value={roleFilter}
-                            onChange={(e) => setRoleFilter(e.target.value)}
-                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                            <option value="">All Roles</option>
-                            {Object.values(UserRole).map(role => (
-                                <option key={role} value={role}>{role}</option>
-                            ))}
-                        </select>
-                        <select
+                            onChange={setRoleFilter}
+                            placeholder="All Roles"
+                            icon={<Filter className="h-4 w-4" />}
+                        />
+
+                        {/* Status Filter */}
+                        <CustomDropdown
+                            options={[
+                                { value: '', label: 'All Status', icon: <div className="h-2 w-2 rounded-full bg-gray-300" /> },
+                                { value: 'active', label: 'Active', icon: <div className="h-2 w-2 rounded-full bg-green-500" /> },
+                                { value: 'inactive', label: 'Inactive', icon: <div className="h-2 w-2 rounded-full bg-gray-400" /> },
+                            ]}
                             value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                            <option value="">All Status</option>
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
-                        </select>
+                            onChange={setStatusFilter}
+                            placeholder="All Status"
+                        />
+
+                        {/* Clear Button */}
                         {(searchTerm || roleFilter || statusFilter) && (
                             <button
                                 onClick={clearFilters}
-                                className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg hover:bg-gray-50"
+                                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 hover:border-red-300 transition-all duration-200"
                             >
                                 <X className="h-4 w-4" />
                                 Clear
@@ -243,9 +348,33 @@ const UserManagement: React.FC = () => {
                         )}
                     </div>
                 </div>
+
+                {/* Results Count */}
                 {(searchTerm || roleFilter || statusFilter) && (
-                    <div className="mt-3 text-sm text-gray-500">
-                        Found {users.length} user{users.length !== 1 ? 's' : ''}
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                        <div className="flex items-center gap-2 text-sm">
+                            <span className="font-semibold text-indigo-600">{users.length}</span>
+                            <span className="text-gray-500">user{users.length !== 1 ? 's' : ''} found</span>
+                            {searchTerm && (
+                                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md text-xs font-medium">
+                                    "{searchTerm}"
+                                </span>
+                            )}
+                            {roleFilter && (
+                                <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-md text-xs font-medium">
+                                    {roleFilter}
+                                </span>
+                            )}
+                            {statusFilter && (
+                                <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${
+                                    statusFilter === 'active'
+                                        ? 'bg-green-50 text-green-700'
+                                        : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                    {statusFilter}
+                                </span>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>
@@ -296,19 +425,18 @@ const UserManagement: React.FC = () => {
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-900">
                             <tr>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Name</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Username</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Email</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Password</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Roles</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Actions</th>
+                                <th className="w-[15%] px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Name</th>
+                                <th className="w-[18%] px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Username</th>
+                                <th className="w-[25%] px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Email</th>
+                                <th className="w-[17%] px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Roles</th>
+                                <th className="w-[10%] px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
+                                <th className="w-[15%] px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {users.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center">
+                                    <td colSpan={6} className="px-4 py-12 text-center">
                                         <UsersIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
                                         <p className="text-gray-500 font-medium">No users found</p>
                                         <p className="text-sm text-gray-400 mt-1">
@@ -317,56 +445,35 @@ const UserManagement: React.FC = () => {
                                     </td>
                                 </tr>
                             ) : (
-                                users.map(user => (
+                                users.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map(user => (
                                     <tr key={user.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center gap-2">
-                                                <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                                        <td className="px-4 py-4">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <div className="text-sm font-medium text-gray-900 truncate">{user.name}</div>
                                                 {user.isSuperAdmin && (
-                                                    <Shield className="h-4 w-4 text-purple-600" title="Super Admin" />
+                                                    <Shield className="h-4 w-4 text-purple-600 flex-shrink-0" title="Super Admin" />
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm text-gray-500">{user.username || 'N/A'}</div>
+                                        <td className="px-4 py-4">
+                                            <div className="text-sm text-gray-500 truncate" title={user.username || 'N/A'}>{user.username || 'N/A'}</div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm text-gray-500">{user.email || 'N/A'}</div>
+                                        <td className="px-4 py-4">
+                                            <div className="text-sm text-gray-500 truncate" title={user.email || 'N/A'}>{user.email || 'N/A'}</div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            {user.temporaryPassword ? (
-                                                <div className="flex items-center gap-2">
-                                                    <code className="text-xs font-mono bg-amber-50 text-amber-800 px-2 py-1 rounded border border-amber-200">
-                                                        {user.temporaryPassword}
-                                                    </code>
-                                                    <button
-                                                        onClick={() => {
-                                                            navigator.clipboard.writeText(user.temporaryPassword!);
-                                                            alert('Password copied!');
-                                                        }}
-                                                        className="text-xs text-amber-600 hover:text-amber-800"
-                                                        title="Copy password"
-                                                    >
-                                                        Copy
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <span className="text-sm text-gray-400">*****</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4">
+                                        <td className="px-4 py-4">
                                             <div className="flex flex-wrap gap-1">
                                                 {user.roles.map(role => (
                                                     <span
                                                         key={role}
-                                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${getRoleBadgeColor(role)}`}
+                                                        className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border ${getRoleBadgeColor(role)}`}
                                                     >
                                                         {role}
                                                     </span>
                                                 ))}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
+                                        <td className="px-4 py-4">
                                             <span
                                                 className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${
                                                     user.isActive !== false
@@ -377,11 +484,11 @@ const UserManagement: React.FC = () => {
                                                 {user.isActive !== false ? 'Active' : 'Disabled'}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center gap-2">
+                                        <td className="px-4 py-4">
+                                            <div className="flex items-center gap-1">
                                                 <button
                                                     onClick={() => handleEditUser(user)}
-                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                                     title="Edit user"
                                                 >
                                                     <Edit className="h-4 w-4" />
@@ -391,14 +498,14 @@ const UserManagement: React.FC = () => {
                                                         setResetPasswordUser(user);
                                                         setNewPassword('');
                                                     }}
-                                                    className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                                    className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
                                                     title="Reset password"
                                                 >
                                                     <Key className="h-4 w-4" />
                                                 </button>
                                                 <button
                                                     onClick={() => handleDeleteUser(user)}
-                                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                     title={user.isSuperAdmin ? "Cannot delete super admin" : "Delete user"}
                                                     disabled={user.isSuperAdmin}
                                                 >
@@ -412,6 +519,40 @@ const UserManagement: React.FC = () => {
                         </tbody>
                     </table>
                 </div>
+                {/* Pagination */}
+                {users.length > PAGE_SIZE && (
+                    <div className="flex justify-center items-center px-4 py-3 bg-gray-50 border-t border-gray-200">
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                                className="p-2 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                            </button>
+                            {Array.from({ length: Math.ceil(users.length / PAGE_SIZE) }, (_, i) => i + 1).map(page => (
+                                <button
+                                    key={page}
+                                    onClick={() => setCurrentPage(page)}
+                                    className={`w-8 h-8 text-sm font-medium rounded-md transition-colors ${
+                                        currentPage === page
+                                            ? 'bg-blue-600 text-white'
+                                            : 'text-gray-700 hover:bg-gray-100'
+                                    }`}
+                                >
+                                    {page}
+                                </button>
+                            ))}
+                            <button
+                                onClick={() => setCurrentPage(p => Math.min(Math.ceil(users.length / PAGE_SIZE), p + 1))}
+                                disabled={currentPage === Math.ceil(users.length / PAGE_SIZE)}
+                                className="p-2 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                            >
+                                <ChevronRight className="h-4 w-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Modals */}

@@ -378,6 +378,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                     totalPages={totalPages}
                     onPrev={() => setPage(p => Math.max(1, p-1))}
                     onNext={() => setPage(p => Math.min(totalPages, p+1))}
+                    onPageChange={(newPage) => setPage(newPage)}
                   />
                 </div>
 

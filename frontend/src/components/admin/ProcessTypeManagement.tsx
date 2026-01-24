@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { ProcessType } from '../../types';
 import { addProcessType, updateProcessType, deleteProcessType, processTypeNameExists } from '../../services/processTypeService';
-import { Plus, Edit, Trash2, CheckCircle, XCircle, AlertCircle, X, Save, Coffee } from 'lucide-react';
+import { Plus, Edit, Trash2, CheckCircle, XCircle, AlertCircle, X, Save, Coffee, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Predefined color schemes for process types
 const COLOR_SCHEMES = [
@@ -64,6 +64,8 @@ const COLOR_SCHEMES = [
   },
 ];
 
+const PAGE_SIZE = 10;
+
 const ProcessTypeManagement: React.FC = () => {
   const { data, setData } = useDataContext();
   const [showModal, setShowModal] = useState(false);
@@ -76,6 +78,7 @@ const ProcessTypeManagement: React.FC = () => {
   });
   const [showSuccess, setShowSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const resetForm = () => {
     setFormData({ name: '', description: '', colorScheme: COLOR_SCHEMES[0], isActive: true });
@@ -212,6 +215,13 @@ const ProcessTypeManagement: React.FC = () => {
   const activeTypes = data.processTypes.filter(t => t.isActive);
   const inactiveTypes = data.processTypes.filter(t => !t.isActive);
 
+  // Pagination logic
+  const totalPages = Math.ceil(data.processTypes.length / PAGE_SIZE);
+  const paginatedTypes = data.processTypes.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -303,7 +313,7 @@ const ProcessTypeManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
-              {data.processTypes.length === 0 ? (
+              {paginatedTypes.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
                     <Coffee className="h-12 w-12 mx-auto mb-3 opacity-30" />
@@ -312,7 +322,7 @@ const ProcessTypeManagement: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                data.processTypes.map((type) => (
+                paginatedTypes.map((type) => (
                   <tr key={type.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
@@ -373,6 +383,40 @@ const ProcessTypeManagement: React.FC = () => {
             </tbody>
           </table>
         </div>
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex justify-center items-center px-4 py-3 bg-gray-50 border-t border-gray-200">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`w-7 h-7 text-xs font-medium rounded-md transition-colors ${
+                    currentPage === page
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add/Edit Modal */}

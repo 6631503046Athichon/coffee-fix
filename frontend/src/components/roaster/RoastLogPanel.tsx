@@ -1,6 +1,5 @@
 import React from 'react';
-import { BookText, Flame } from 'lucide-react';
-import { Button } from '../common/Button';
+import { BookText, Flame, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Badge } from '../common/Badge';
 import { RoastBatch } from '../../types';
 import { toFixed2 } from '../../utils/formatters';
@@ -11,7 +10,8 @@ const RoastLogPanel: React.FC<{
   totalPages: number;
   onPrev: () => void;
   onNext: () => void;
-}> = ({ roasts, page, totalPages, onPrev, onNext }) => {
+  onPageChange?: (page: number) => void;
+}> = ({ roasts, page, totalPages, onPrev, onNext, onPageChange }) => {
   const pageSize = 5;
   const start = (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, roasts.length);
@@ -103,29 +103,39 @@ const RoastLogPanel: React.FC<{
             </div>
           ))}
 
-          <div className="flex items-center justify-between pt-2">
-            <div className="text-xs text-gray-500">{`Showing ${start}–${end} of ${roasts.length}`}</div>
-            <div className="space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onPrev}
-                disabled={page === 1}
-                className="text-xs"
-              >
-                Prev
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onNext}
-                disabled={page === totalPages}
-                className="text-xs"
-              >
-                Next
-              </Button>
+          {totalPages > 1 && (
+            <div className="flex justify-center items-center pt-4 pb-2">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={onPrev}
+                  disabled={page === 1}
+                  className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => (
+                  <button
+                    key={pageNum}
+                    onClick={() => onPageChange ? onPageChange(pageNum) : (pageNum < page ? onPrev() : onNext())}
+                    className={`w-7 h-7 text-xs font-medium rounded-md transition-colors ${
+                      page === pageNum
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                ))}
+                <button
+                  onClick={onNext}
+                  disabled={page === totalPages}
+                  className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

@@ -25,3 +25,9 @@ export type { AlertProps } from './Alert';
 
 export { default as Select } from './Select';
 export { default as DatePicker } from './DatePicker';
+
+// New reusable components
+export { Dropdown } from './Dropdown';
+export type { DropdownOption } from './Dropdown';
+
+export { default as ErrorBoundary } from './ErrorBoundary';
