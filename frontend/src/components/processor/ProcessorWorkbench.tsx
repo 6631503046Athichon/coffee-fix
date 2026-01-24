@@ -9,9 +9,6 @@ import { addProcessingBatch, updateProcessingBatch } from '../../services/proces
 import DatePicker from '../common/DatePicker';
 import InvoiceReceipt from './InvoiceReceipt';
 import Select from '../common/Select';
-import StartProcessingModal from './modals/StartProcessingModal';
-import HullAndGradeModal from './modals/HullAndGradeModal';
-import CompleteBatchModal from './modals/CompleteBatchModal';
 
 type ViewMode = 'kanban' | 'table';
 type SortDirection = 'asc' | 'desc';
