@@ -16,7 +16,9 @@
       "Bash(powershell -Command \"Stop-Process -Id 9924 -Force\")",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push)"
+      "Bash(git push)",
+      "Bash(timeout:*)",
+      "Bash(ping:*)"
     ]
   }
 }
