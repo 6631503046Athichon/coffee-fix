@@ -78,6 +78,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     loadUser();
+
+    // Listen for auth logout events (triggered by 401 errors)
+    const handleAuthLogout = () => {
+      // Clear user state and redirect to login
+      setCurrentUser(null);
+      setIsAuthenticated(false);
+      localStorage.removeItem('coffee_lab_user');
+      localStorage.removeItem('auth-token');
+      
+      // Redirect to login if not already there
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    };
+
+    window.addEventListener('auth:logout', handleAuthLogout);
+
+    return () => {
+      window.removeEventListener('auth:logout', handleAuthLogout);
+    };
   }, []);
 
   const login = async (identifier: string, password: string): Promise<User> => {
