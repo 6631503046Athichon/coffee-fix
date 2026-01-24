@@ -15,7 +15,8 @@
       "Bash(cmd /c \"taskkill /F /PID 9924\")",
       "Bash(powershell -Command \"Stop-Process -Id 9924 -Force\")",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git push)"
     ]
   }
 }
