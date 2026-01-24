@@ -3,6 +3,21 @@ import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { hashPassword } from '@/lib/auth'
 
+// Map display names to Prisma enum values
+const roleDisplayToEnum: Record<string, string> = {
+  'Farmer': 'Farmer',
+  'Processor': 'Processor',
+  'Roaster': 'Roaster',
+  'Head Judge': 'HeadJudge',
+  'HeadJudge': 'HeadJudge',
+  'Cupper': 'Cupper',
+  'Admin': 'Admin',
+}
+
+function normalizeRoles(roles: string[]): string[] {
+  return roles.map(role => roleDisplayToEnum[role] || role)
+}
+
 // GET /api/users/:id
 export async function GET(
   request: NextRequest,
@@ -132,7 +147,7 @@ export async function PUT(
     if (name !== undefined) updateData.name = name
     if (email !== undefined) updateData.email = email
     if (username !== undefined) updateData.username = username
-    if (roles !== undefined) updateData.roles = roles
+    if (roles !== undefined) updateData.roles = normalizeRoles(roles)
     if (isActive !== undefined) updateData.isActive = isActive
     if (password) {
       updateData.password = await hashPassword(password)
