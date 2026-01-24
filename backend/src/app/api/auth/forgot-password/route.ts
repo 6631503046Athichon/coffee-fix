@@ -27,12 +27,9 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    console.log('[FORGOT-PASSWORD] User lookup:', { email, found: !!user, hasEmail: !!user?.email })
-
     // Don't reveal if user exists or not (security best practice)
     // Always return success message
     if (!user || !user.email) {
-      console.log('[FORGOT-PASSWORD] Skipping email send - user not found or no email')
       return NextResponse.json({
         message: 'If an account with that email exists, we have sent a password reset link.',
       })
@@ -68,10 +65,8 @@ export async function POST(request: NextRequest) {
 
     // Send password reset email
     // If email fails, return error (no mock mode)
-    console.log('[FORGOT-PASSWORD] Attempting to send email to:', user.email)
     try {
       await sendPasswordResetEmail(user.email, resetToken, user.name)
-      console.log('[FORGOT-PASSWORD] Email sent successfully')
     } catch (emailError) {
       // Email failed - return error to user
       console.error('[FORGOT-PASSWORD] Failed to send email:', emailError)
@@ -95,8 +90,6 @@ export async function POST(request: NextRequest) {
       response.devToken = resetToken
       // Use hash router format: /#/reset-password?token=...
       response.devResetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/#/reset-password?token=${resetToken}`
-      console.log('[DEV] Password reset token for testing:', resetToken)
-      console.log('[DEV] Reset URL:', response.devResetUrl)
     }
 
     return NextResponse.json(response)

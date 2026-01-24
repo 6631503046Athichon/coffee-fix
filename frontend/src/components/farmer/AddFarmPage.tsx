@@ -372,6 +372,7 @@ const AddFarmPage: React.FC = () => {
 			: 'bg-red-50 border-red-200 text-red-700';
 
 	return (
+		<div className="max-w-4xl mx-auto">
 		<div className="space-y-6">
 			{/* Header Section */}
 			<div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-2xl p-6 shadow-sm border border-emerald-200">
@@ -657,6 +658,7 @@ const AddFarmPage: React.FC = () => {
 					</div>
 				</div>
 			</form>
+		</div>
 		</div>
 	);
 };

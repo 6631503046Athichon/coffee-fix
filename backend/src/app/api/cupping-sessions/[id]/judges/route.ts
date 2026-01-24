@@ -5,10 +5,11 @@ import { requireAuth, handleApiError } from '@/lib/middleware'
 // POST /api/cupping-sessions/:id/judges - Add judge to session
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     const body = await request.json()
     const { judgeId, judgeName, judgeRole } = body
@@ -22,7 +23,7 @@ export async function POST(
 
     const judge = await prisma.cuppingSessionJudge.create({
       data: {
-        cuppingSessionId: params.id,
+        cuppingSessionId: id,
         judgeId,
         judgeName,
         judgeRole,
@@ -46,4 +47,3 @@ export async function POST(
     return handleApiError(error)
   }
 }
-

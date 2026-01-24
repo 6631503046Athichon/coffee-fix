@@ -59,7 +59,18 @@ export async function POST(request: NextRequest) {
     requireRole(user, ['Processor', 'Admin'])
 
     const body = await request.json()
-    const { harvestLotId, status, processType, processNotes, cropYearId } = body
+    const {
+      harvestLotId,
+      status,
+      processType,
+      processNotes,
+      cropYearId,
+      parchmentWeightKg,
+      moistureContent,
+      dryingStartDate,
+      dryingEndDate,
+      baggingDate
+    } = body
 
     // Validation
     if (!harvestLotId || !processType) {
@@ -79,6 +90,12 @@ export async function POST(request: NextRequest) {
           processType,
           processNotes: processNotes || null,
           cropYearId: cropYearId || null,
+          createdById: user.id,
+          parchmentWeightKg: parchmentWeightKg ? parseFloat(parchmentWeightKg) : null,
+          moistureContent: moistureContent ? parseFloat(moistureContent) : null,
+          dryingStartDate: dryingStartDate ? new Date(dryingStartDate) : null,
+          dryingEndDate: dryingEndDate ? new Date(dryingEndDate) : null,
+          baggingDate: baggingDate ? new Date(baggingDate) : null,
         },
         include: {
           harvestLot: {
@@ -95,13 +112,32 @@ export async function POST(request: NextRequest) {
               year: true,
             },
           },
+          dryingLogs: {
+            orderBy: { date: 'asc' },
+          },
+          parchmentLots: true,
         },
       });
 
-      // Update harvest lot status to 'Processing'
+      // If status is Completed and we have parchment data, create parchment lot
+      if (status === 'Completed' && parchmentWeightKg && moistureContent) {
+        await tx.parchmentLot.create({
+          data: {
+            processingBatchId: batch.id,
+            harvestLotId: harvestLotId,
+            initialWeightKg: parseFloat(parchmentWeightKg),
+            currentWeightKg: parseFloat(parchmentWeightKg),
+            moistureContent: parseFloat(moistureContent),
+            processType: processType,
+            status: 'AwaitingHulling',
+          },
+        });
+      }
+
+      // Update harvest lot status to 'Completed' if batch is completed
       await tx.harvestLot.update({
         where: { id: harvestLotId },
-        data: { status: 'Processing' }, // Prisma enum: HarvestLotStatus.Processing
+        data: { status: status === 'Completed' ? 'Completed' : 'Processing' },
       });
 
       return batch;

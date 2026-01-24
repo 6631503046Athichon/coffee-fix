@@ -5,13 +5,14 @@ import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 // GET /api/crop-years/:id
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     const cropYear = await prisma.cropYear.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         harvestLots: {
           take: 10,
@@ -46,11 +47,12 @@ export async function GET(
 // PUT /api/crop-years/:id
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(request)
     requireRole(user, ['Admin'])
+    const { id } = await params
 
     const body = await request.json()
     const { year, startDate, endDate, description } = body
@@ -62,7 +64,7 @@ export async function PUT(
     if (description !== undefined) updateData.description = description
 
     const updatedCropYear = await prisma.cropYear.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
     })
 
@@ -71,4 +73,3 @@ export async function PUT(
     return handleApiError(error)
   }
 }
-

@@ -19,6 +19,8 @@ import { getAllHarvestLots } from './services/harvestLotService';
 import { getAllGAPLogs } from './services/gapLogService';
 import { getAllCropYears } from './services/cropYearService';
 import { getAllProcessingBatches } from './services/processingBatchService';
+import { getAllParchmentLots } from './services/parchmentLotService';
+import { getAllGreenBeanLots } from './services/greenBeanLotService';
 import { Sidebar, Header } from './components/layout';
 import Login from './components/auth/Login';
 import ForgotPassword from './components/auth/ForgotPassword';
@@ -58,9 +60,9 @@ const getDashboardPathByRole = (roles: UserRole[]): string => {
 
 // Root Redirect Component - redirects to login if not authenticated
 const RootRedirect: React.FC = () => {
-  const { isAuthenticated, isAuthLoading } = useAuth();
-    
-  
+  const { isAuthenticated, isAuthLoading, currentUser } = useAuth();
+
+
   if (isAuthLoading) {
     // Show loading state while checking authentication
     return (
@@ -72,11 +74,12 @@ const RootRedirect: React.FC = () => {
       </div>
     );
   }
-  
-  if (isAuthenticated) {
-    return <Navigate to="/farmer-dashboard" replace />;
+
+  if (isAuthenticated && currentUser) {
+    // Redirect to appropriate dashboard based on user role
+    return <Navigate to={getDashboardPathByRole(currentUser.roles)} replace />;
   }
-  
+
   return <Navigate to="/login" replace />;
 };
 
@@ -111,7 +114,7 @@ const ProtectedRoutes: React.FC = () => {
         storedCustomers = getAllCustomersFromStorage();
       }
       
-      const [storedFarms, storedSoilAnalyses, storedWeatherRecords, storedHarvestLots, storedGAPLogs, storedActivityTypes, storedProcessTypes, storedSaleOrders, storedInvoices, storedPricingHistory, storedCropYears, storedProcessingBatches] = await Promise.all([
+      const [storedFarms, storedSoilAnalyses, storedWeatherRecords, storedHarvestLots, storedGAPLogs, storedActivityTypes, storedProcessTypes, storedSaleOrders, storedInvoices, storedPricingHistory, storedCropYears, storedProcessingBatches, storedParchmentLots, storedGreenBeanLots] = await Promise.all([
         getAllFarms(),
         getAllSoilAnalyses(),
         getAllWeatherRecords(),
@@ -124,6 +127,8 @@ const ProtectedRoutes: React.FC = () => {
         getAllPricingHistory(),
         getAllCropYears(),
         getAllProcessingBatches(),
+        getAllParchmentLots(),
+        getAllGreenBeanLots(),
       ]);
 
       setData(prev => ({
@@ -141,6 +146,8 @@ const ProtectedRoutes: React.FC = () => {
         pricingHistory: storedPricingHistory.length > 0 ? storedPricingHistory : prev.pricingHistory,
         cropYears: storedCropYears, // Always use backend data, even if empty
         processingBatches: storedProcessingBatches.length > 0 ? storedProcessingBatches : prev.processingBatches,
+        parchmentLots: storedParchmentLots.length > 0 ? storedParchmentLots : prev.parchmentLots,
+        greenBeanLots: storedGreenBeanLots.length > 0 ? storedGreenBeanLots : prev.greenBeanLots,
       }));
     } catch (error) {
       console.error('Failed to load data from backend:', error);

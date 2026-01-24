@@ -4,6 +4,7 @@ import {
   transformHarvestLotFromBackend,
   transformHarvestLotToBackend,
 } from './utils/transformers';
+import { handleApiError, handleApiErrorWithFallback } from '../utils/errorHandler';
 
 /**
  * Fetch all harvest lots, optionally filtered by farm ID or status
@@ -16,15 +17,17 @@ export const getAllHarvestLots = async (
     const params: Record<string, string> = {};
     if (farmId) params.farmId = farmId;
     if (status) params.status = status;
-    
+
     const response = await api.get<{ harvestLots: any[] }>(
       '/harvest-lots',
       Object.keys(params).length > 0 ? params : undefined
     );
     return response.harvestLots.map(transformHarvestLotFromBackend);
   } catch (error) {
-    console.error('Failed to fetch harvest lots:', error);
-    return [];
+    return handleApiErrorWithFallback<HarvestLot[]>(error, {
+      operation: 'fetch harvest lots',
+      fallbackValue: [],
+    });
   }
 };
 
@@ -36,8 +39,10 @@ export const getHarvestLotById = async (lotId: string): Promise<HarvestLot | nul
     const response = await api.get<{ harvestLot: any }>(`/harvest-lots/${lotId}`);
     return transformHarvestLotFromBackend(response.harvestLot);
   } catch (error) {
-    console.error('Failed to fetch harvest lot:', error);
-    return null;
+    return handleApiErrorWithFallback<HarvestLot | null>(error, {
+      operation: 'fetch harvest lot',
+      fallbackValue: null,
+    });
   }
 };
 
@@ -45,11 +50,15 @@ export const getHarvestLotById = async (lotId: string): Promise<HarvestLot | nul
  * Create a new harvest lot
  */
 export const addHarvestLot = async (lotData: Partial<HarvestLot>): Promise<HarvestLot> => {
-  const response = await api.post<{ harvestLot: any; message: string }>(
-    '/harvest-lots',
-    transformHarvestLotToBackend(lotData)
-  );
-  return transformHarvestLotFromBackend(response.harvestLot);
+  try {
+    const response = await api.post<{ harvestLot: any; message: string }>(
+      '/harvest-lots',
+      transformHarvestLotToBackend(lotData)
+    );
+    return transformHarvestLotFromBackend(response.harvestLot);
+  } catch (error) {
+    throw new Error(handleApiError(error, 'create harvest lot'));
+  }
 };
 
 /**
@@ -59,17 +68,25 @@ export const updateHarvestLot = async (
   lotId: string,
   lotData: Partial<HarvestLot>
 ): Promise<HarvestLot> => {
-  const response = await api.put<{ harvestLot: any }>(
-    `/harvest-lots/${lotId}`,
-    transformHarvestLotToBackend(lotData)
-  );
-  return transformHarvestLotFromBackend(response.harvestLot);
+  try {
+    const response = await api.put<{ harvestLot: any }>(
+      `/harvest-lots/${lotId}`,
+      transformHarvestLotToBackend(lotData)
+    );
+    return transformHarvestLotFromBackend(response.harvestLot);
+  } catch (error) {
+    throw new Error(handleApiError(error, 'update harvest lot'));
+  }
 };
 
 /**
  * Delete a harvest lot
  */
 export const deleteHarvestLot = async (lotId: string): Promise<void> => {
-  await api.delete(`/harvest-lots/${lotId}`);
+  try {
+    await api.delete(`/harvest-lots/${lotId}`);
+  } catch (error) {
+    throw new Error(handleApiError(error, 'delete harvest lot'));
+  }
 };
 

@@ -1,4 +1,5 @@
 import { api } from './api'
+import { handleApiErrorWithFallback } from '../utils/errorHandler'
 
 // This type must match the backend's NotificationItem export
 export type NotificationType = 'FARM_REQUEST_PENDING' | 'FARM_REQUEST_REVIEWED'
@@ -43,16 +44,23 @@ function saveReadSet(userId: string, set: Set<string>) {
  * based on the read status stored in localStorage.
  */
 export async function fetchNotifications(userId: string): Promise<NotificationsResponse> {
-  // The backend returns all relevant notifications; client determines what's 'unread'.
-  const response = await api.get<{ notifications: NotificationItem[] }>('/notifications')
-  
-  const readSet = getReadSet(userId)
-  
-  const unreadCount = response.notifications.filter(n => !readSet.has(n.id)).length
-  
-  return {
-    notifications: response.notifications,
-    unreadCount,
+  try {
+    // The backend returns all relevant notifications; client determines what's 'unread'.
+    const response = await api.get<{ notifications: NotificationItem[] }>('/notifications')
+
+    const readSet = getReadSet(userId)
+
+    const unreadCount = response.notifications.filter(n => !readSet.has(n.id)).length
+
+    return {
+      notifications: response.notifications,
+      unreadCount,
+    }
+  } catch (error) {
+    return handleApiErrorWithFallback<NotificationsResponse>(error, {
+      operation: 'fetch notifications',
+      fallbackValue: { notifications: [], unreadCount: 0 },
+    })
   }
 }
 

@@ -189,7 +189,7 @@ const CupperScoringSheet: React.FC<{ currentUser: User }> = ({ currentUser }) =>
     };
     
     return (
-        <div>
+        <div className="max-w-4xl mx-auto">
              <h1 className="text-3xl font-bold text-gray-900 mb-2">SCA Cupping Form</h1>
              <p className="text-gray-600 mb-6">Select a session and sample to begin scoring.</p>
 
