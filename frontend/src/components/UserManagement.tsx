@@ -60,9 +60,27 @@ const UserManagement: React.FC = () => {
 
             const response = await api.get<{ users: User[] }>(`/users${queryString}`);
             setUsers(response.users || []);
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error fetching users:', err);
-            setError('Failed to load users. Please check if the backend is running.');
+            
+            // Provide more specific error messages
+            let errorMessage = 'Failed to load users.';
+            if (err instanceof Error) {
+                const errMsg = err.message.toLowerCase();
+                if (errMsg.includes('401') || errMsg.includes('unauthorized')) {
+                    errorMessage = 'Authentication required. Please log in again.';
+                } else if (errMsg.includes('403') || errMsg.includes('forbidden')) {
+                    errorMessage = 'Access denied. Admin role required to view users.';
+                } else if (errMsg.includes('failed to fetch') || errMsg.includes('network') || errMsg.includes('cannot connect')) {
+                    errorMessage = 'Cannot connect to backend server. Please check if the backend is running.';
+                } else if (errMsg.includes('timeout')) {
+                    errorMessage = 'Request timeout. The server is taking too long to respond.';
+                } else {
+                    errorMessage = `Failed to load users: ${err.message}`;
+                }
+            }
+            
+            setError(errorMessage);
             setUsers([]);
         } finally {
             setLoading(false);
@@ -233,10 +251,25 @@ const UserManagement: React.FC = () => {
             {error && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-lg">
                     <div className="flex items-start">
-                        <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-3" />
-                        <div>
+                        <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 mr-3 flex-shrink-0" />
+                        <div className="flex-1">
                             <p className="text-sm font-semibold text-red-800">Error</p>
                             <p className="text-sm text-red-700 mt-1">{error}</p>
+                            {error.includes('Authentication required') && (
+                                <p className="text-xs text-red-600 mt-2">
+                                    Your session may have expired. Please try refreshing the page or logging in again.
+                                </p>
+                            )}
+                            {error.includes('Access denied') && (
+                                <p className="text-xs text-red-600 mt-2">
+                                    You need Admin role to access this page. Please contact an administrator.
+                                </p>
+                            )}
+                            {error.includes('Cannot connect') && (
+                                <p className="text-xs text-red-600 mt-2">
+                                    Make sure the backend server is running and accessible. Check the console for more details.
+                                </p>
+                            )}
                         </div>
                     </div>
                 </div>
