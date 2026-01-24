@@ -35,7 +35,7 @@ const HarvestLotDetail: React.FC = () => {
     const lot = data.harvestLots.find(h => h.id === lotId);
     if (!lot) {
         return (
-            <div className="text-center">
+            <div className="max-w-5xl mx-auto text-center">
                 <h1 className="text-2xl font-bold">Harvest Lot Not Found</h1>
                 <Link to="/farmer-dashboard" className="mt-4 inline-flex items-center text-indigo-600 hover:text-indigo-800">
                     <ArrowLeft className="h-4 w-4 mr-2" />
@@ -74,7 +74,7 @@ const HarvestLotDetail: React.FC = () => {
     );
 
     return (
-        <div>
+        <div className="max-w-5xl mx-auto">
             <Link to="/farmer-dashboard" className="inline-flex items-center text-sm font-semibold text-indigo-600 hover:text-indigo-800 mb-4">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Dashboard

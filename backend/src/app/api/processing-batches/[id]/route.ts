@@ -5,13 +5,14 @@ import { requireAuth, handleApiError } from '@/lib/middleware'
 // GET /api/processing-batches/:id
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     await requireAuth(request)
 
     const processingBatch = await prisma.processingBatch.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         harvestLot: {
           include: {
@@ -53,9 +54,10 @@ export async function GET(
 // PUT /api/processing-batches/:id
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
     await requireAuth(request)
 
     const body = await request.json()
@@ -73,7 +75,7 @@ export async function PUT(
     if (cropYearId !== undefined) updateData.cropYearId = cropYearId
 
     const updatedBatch = await prisma.processingBatch.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       include: {
         harvestLot: {
@@ -102,4 +104,3 @@ export async function PUT(
     return handleApiError(error)
   }
 }
-

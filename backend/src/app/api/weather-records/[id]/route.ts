@@ -5,13 +5,14 @@ import { requireAuth, handleApiError } from '@/lib/middleware'
 // GET /api/weather-records/:id
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     const weatherRecord = await prisma.weatherRecord.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         farm: {
           select: {
@@ -45,10 +46,11 @@ export async function GET(
 // PUT /api/weather-records/:id
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     const body = await request.json()
     const {
@@ -77,7 +79,7 @@ export async function PUT(
     if (notes !== undefined) updateData.notes = notes
 
     const updatedWeatherRecord = await prisma.weatherRecord.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       include: {
         farm: {
@@ -105,13 +107,14 @@ export async function PUT(
 // DELETE /api/weather-records/:id
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     await prisma.weatherRecord.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     return NextResponse.json({ message: 'Weather record deleted successfully' })
@@ -119,4 +122,3 @@ export async function DELETE(
     return handleApiError(error)
   }
 }
-

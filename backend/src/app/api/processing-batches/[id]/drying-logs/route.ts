@@ -5,10 +5,11 @@ import { requireAuth, handleApiError } from '@/lib/middleware'
 // POST /api/processing-batches/:id/drying-logs - Add drying log entry
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     const body = await request.json()
     const { date, moistureContent, ambientTemp, relativeHumidity } = body
@@ -22,7 +23,7 @@ export async function POST(
 
     const dryingLog = await prisma.dryingLogEntry.create({
       data: {
-        processingBatchId: params.id,
+        processingBatchId: id,
         date: new Date(date),
         moistureContent: parseFloat(moistureContent),
         ambientTemp: parseFloat(ambientTemp),
@@ -38,4 +39,3 @@ export async function POST(
     return handleApiError(error)
   }
 }
-

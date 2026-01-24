@@ -99,24 +99,12 @@ async function sendWithGmail(options: EmailOptions): Promise<void> {
   const fromName = process.env.EMAIL_FROM_NAME || 'Coffee Lab Platform'
   const fromEmail = process.env.GMAIL_USER
 
-  console.log('[EMAIL] Sending via Gmail SMTP:', {
-    from: fromEmail,
-    to: options.to,
-    subject: options.subject,
-  })
-
-  const info = await transporter.sendMail({
+  await transporter.sendMail({
     from: `"${fromName}" <${fromEmail}>`,
     to: options.to,
     subject: options.subject,
     html: options.html,
     text: options.text || options.html.replace(/<[^>]*>/g, ''),
-  })
-
-  console.log('[SUCCESS] Email sent via Gmail:', {
-    messageId: info.messageId,
-    to: options.to,
-    subject: options.subject,
   })
 }
 
@@ -132,24 +120,12 @@ async function sendWithBrevo(options: EmailOptions): Promise<void> {
     throw new Error('BREVO_FROM_EMAIL not configured')
   }
 
-  console.log('[EMAIL] Sending via Brevo SMTP:', {
-    from: fromEmail,
-    to: options.to,
-    subject: options.subject,
-  })
-
-  const info = await transporter.sendMail({
+  await transporter.sendMail({
     from: `"${fromName}" <${fromEmail}>`,
     to: options.to,
     subject: options.subject,
     html: options.html,
     text: options.text || options.html.replace(/<[^>]*>/g, ''),
-  })
-
-  console.log('[SUCCESS] Email sent via Brevo:', {
-    messageId: info.messageId,
-    to: options.to,
-    subject: options.subject,
   })
 }
 
@@ -183,24 +159,12 @@ async function sendWithMailjet(options: EmailOptions): Promise<void> {
   const fromName = process.env.EMAIL_FROM_NAME || 'Coffee Lab Platform'
   const fromEmail = process.env.MAILJET_FROM_EMAIL || process.env.BREVO_FROM_EMAIL || 'noreply@coffee-lab.com'
 
-  console.log('[EMAIL] Sending via Mailjet SMTP:', {
-    from: fromEmail,
-    to: options.to,
-    subject: options.subject,
-  })
-
-  const info = await transporter.sendMail({
+  await transporter.sendMail({
     from: `"${fromName}" <${fromEmail}>`,
     to: options.to,
     subject: options.subject,
     html: options.html,
     text: options.text || options.html.replace(/<[^>]*>/g, ''),
-  })
-
-  console.log('[SUCCESS] Email sent via Mailjet:', {
-    messageId: info.messageId,
-    to: options.to,
-    subject: options.subject,
   })
 }
 
@@ -215,12 +179,6 @@ async function sendWithResend(options: EmailOptions): Promise<void> {
   }
 
   const from = process.env.EMAIL_FROM || process.env.RESEND_FROM || 'onboarding@resend.dev'
-
-  console.log('[EMAIL] Sending via Resend API:', {
-    from,
-    to: options.to,
-    subject: options.subject,
-  })
 
   const result = await client.emails.send({
     from,
@@ -237,12 +195,6 @@ async function sendWithResend(options: EmailOptions): Promise<void> {
   if (!result.data || !result.data.id) {
     throw new Error('Email sending failed: No email ID returned from Resend API')
   }
-
-  console.log('[SUCCESS] Email sent via Resend:', {
-    id: result.data.id,
-    to: options.to,
-    subject: options.subject,
-  })
 }
 
 /**
