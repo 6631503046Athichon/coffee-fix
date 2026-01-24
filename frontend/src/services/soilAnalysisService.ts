@@ -4,6 +4,7 @@ import {
   transformSoilAnalysisFromBackend,
   transformSoilAnalysisToBackend,
 } from './utils/transformers';
+import { handleApiError, handleApiErrorWithFallback } from '../utils/errorHandler';
 
 /**
  * Fetch all soil analyses, optionally filtered by farm ID
@@ -14,8 +15,10 @@ export const getAllSoilAnalyses = async (farmId?: string): Promise<SoilAnalysis[
     const response = await api.get<{ soilAnalyses: any[] }>('/soil-analyses', params);
     return response.soilAnalyses.map(transformSoilAnalysisFromBackend);
   } catch (error) {
-    console.error('Failed to fetch soil analyses:', error);
-    return [];
+    return handleApiErrorWithFallback<SoilAnalysis[]>(error, {
+      operation: 'fetch soil analyses',
+      fallbackValue: [],
+    });
   }
 };
 
@@ -31,23 +34,8 @@ export const addSoilAnalysis = async (
       transformSoilAnalysisToBackend(analysisData)
     );
     return transformSoilAnalysisFromBackend(response.soilAnalysis);
-  } catch (error: any) {
-    const errorMessage = error?.message || 'Failed to create soil analysis';
-    
-    // Provide user-friendly error messages
-    if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
-      throw new Error('Authentication failed. Please log in again and try submitting the form.');
-    }
-    
-    if (errorMessage.includes('timeout') || errorMessage.includes('not responding')) {
-      throw new Error('Connection timeout. Please check your internet connection and try again.');
-    }
-    
-    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('network')) {
-      throw new Error('Cannot connect to server. Please ensure the backend server is running on port 3001.');
-    }
-    
-    throw new Error(errorMessage);
+  } catch (error) {
+    throw new Error(handleApiError(error, 'create soil analysis'));
   }
 };
 
@@ -64,23 +52,8 @@ export const updateSoilAnalysis = async (
       transformSoilAnalysisToBackend(analysisData)
     );
     return transformSoilAnalysisFromBackend(response.soilAnalysis);
-  } catch (error: any) {
-    const errorMessage = error?.message || 'Failed to update soil analysis';
-    
-    // Provide user-friendly error messages
-    if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
-      throw new Error('Authentication failed. Please log in again and try updating the analysis.');
-    }
-    
-    if (errorMessage.includes('timeout') || errorMessage.includes('not responding')) {
-      throw new Error('Connection timeout. Please check your internet connection and try again.');
-    }
-    
-    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('network')) {
-      throw new Error('Cannot connect to server. Please ensure the backend server is running on port 3001.');
-    }
-    
-    throw new Error(errorMessage);
+  } catch (error) {
+    throw new Error(handleApiError(error, 'update soil analysis'));
   }
 };
 
@@ -88,7 +61,11 @@ export const updateSoilAnalysis = async (
  * Delete a soil analysis
  */
 export const deleteSoilAnalysis = async (analysisId: string): Promise<void> => {
-  await api.delete(`/soil-analyses/${analysisId}`);
+  try {
+    await api.delete(`/soil-analyses/${analysisId}`);
+  } catch (error) {
+    throw new Error(handleApiError(error, 'delete soil analysis'));
+  }
 };
 
 // Legacy localStorage functions for backward compatibility

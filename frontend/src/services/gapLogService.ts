@@ -1,6 +1,7 @@
 import { GAPLogEntry } from '../types';
 import { api } from './api';
 import { transformGAPLogFromBackend } from './utils/transformers';
+import { handleApiError, handleApiErrorWithFallback } from '../utils/errorHandler';
 
 /**
  * Find activity type ID by name
@@ -27,15 +28,17 @@ export const getAllGAPLogs = async (
     const params: Record<string, string> = {};
     if (farmId) params.farmId = farmId;
     if (activityTypeId) params.activityTypeId = activityTypeId;
-    
+
     const response = await api.get<{ gapLogs: any[] }>(
       '/gap-logs',
       Object.keys(params).length > 0 ? params : undefined
     );
     return response.gapLogs.map(transformGAPLogFromBackend);
   } catch (error) {
-    console.error('Failed to fetch GAP logs:', error);
-    return [];
+    return handleApiErrorWithFallback<GAPLogEntry[]>(error, {
+      operation: 'fetch GAP logs',
+      fallbackValue: [],
+    });
   }
 };
 
@@ -47,9 +50,9 @@ export const addGAPLog = async (logData: Partial<GAPLogEntry>): Promise<GAPLogEn
     if (!logData.activityType) {
       throw new Error('Activity type is required');
     }
-    
+
     const activityTypeId = await findActivityTypeId(logData.activityType);
-    
+
     const response = await api.post<{ gapLog: any; message: string }>('/gap-logs', {
       farmId: logData.farmId || null,
       farmPlotLocation: logData.farmPlotLocation || '',
@@ -59,29 +62,17 @@ export const addGAPLog = async (logData: Partial<GAPLogEntry>): Promise<GAPLogEn
       quantity: logData.quantity || '',
       notes: logData.notes || null,
     });
-    
+
     return transformGAPLogFromBackend(response.gapLog);
-  } catch (error: any) {
-    const errorMessage = error?.message || 'Failed to create GAP log entry';
-    
-    // Provide user-friendly error messages
-    if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
-      throw new Error('Authentication failed. Please log in again and try submitting the form.');
-    }
-    
-    if (errorMessage.includes('timeout') || errorMessage.includes('not responding')) {
-      throw new Error('Connection timeout. Please check your internet connection and try again.');
-    }
-    
-    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('network')) {
-      throw new Error('Cannot connect to server. Please ensure the backend server is running on port 3001.');
-    }
-    
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create GAP log entry';
+
+    // Preserve specific "Activity type" errors
     if (errorMessage.includes('Activity type')) {
       throw new Error(errorMessage);
     }
-    
-    throw new Error(errorMessage);
+
+    throw new Error(handleApiError(error, 'create GAP log entry'));
   }
 };
 
@@ -101,31 +92,16 @@ export const updateGAPLog = async (
       quantity: logData.quantity,
       notes: logData.notes,
     };
-    
+
     // Find activity type ID if activity type name is provided
     if (logData.activityType) {
       updatePayload.activityTypeId = await findActivityTypeId(logData.activityType);
     }
-    
+
     const response = await api.put<{ gapLog: any }>(`/gap-logs/${logId}`, updatePayload);
     return transformGAPLogFromBackend(response.gapLog);
-  } catch (error: any) {
-    const errorMessage = error?.message || 'Failed to update GAP log entry';
-    
-    // Provide user-friendly error messages
-    if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
-      throw new Error('Authentication failed. Please log in again and try updating the log.');
-    }
-    
-    if (errorMessage.includes('timeout') || errorMessage.includes('not responding')) {
-      throw new Error('Connection timeout. Please check your internet connection and try again.');
-    }
-    
-    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('network')) {
-      throw new Error('Cannot connect to server. Please ensure the backend server is running on port 3001.');
-    }
-    
-    throw new Error(errorMessage);
+  } catch (error) {
+    throw new Error(handleApiError(error, 'update GAP log entry'));
   }
 };
 
@@ -133,6 +109,10 @@ export const updateGAPLog = async (
  * Delete a GAP log entry
  */
 export const deleteGAPLog = async (logId: string): Promise<void> => {
-  await api.delete(`/gap-logs/${logId}`);
+  try {
+    await api.delete(`/gap-logs/${logId}`);
+  } catch (error) {
+    throw new Error(handleApiError(error, 'delete GAP log entry'));
+  }
 };
 

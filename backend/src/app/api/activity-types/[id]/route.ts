@@ -5,13 +5,14 @@ import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 // GET /api/activity-types/:id
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAuth(request)
+    const { id } = await params
 
     const activityType = await prisma.activityType.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         _count: {
           select: {
@@ -37,11 +38,12 @@ export async function GET(
 // PUT /api/activity-types/:id
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(request)
     requireRole(user, ['Admin'])
+    const { id } = await params
 
     const body = await request.json()
     const { name, description, isActive } = body
@@ -52,7 +54,7 @@ export async function PUT(
     if (isActive !== undefined) updateData.isActive = isActive
 
     const updatedActivityType = await prisma.activityType.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
     })
 
@@ -65,15 +67,16 @@ export async function PUT(
 // DELETE /api/activity-types/:id
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(request)
     requireRole(user, ['Admin'])
+    const { id } = await params
 
     // Check if used in any GAP logs
     const gapLogsCount = await prisma.gAPLogEntry.count({
-      where: { activityTypeId: params.id },
+      where: { activityTypeId: id },
     })
 
     if (gapLogsCount > 0) {
@@ -84,7 +87,7 @@ export async function DELETE(
     }
 
     await prisma.activityType.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     return NextResponse.json({ message: 'Activity type deleted successfully' })
@@ -92,4 +95,3 @@ export async function DELETE(
     return handleApiError(error)
   }
 }
-

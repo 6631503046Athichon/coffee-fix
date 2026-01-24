@@ -179,8 +179,6 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         const cropYearExists = data.cropYears.some(cy => cy.id === cropYearId);
         if (!cropYearExists) {
           console.error('Selected crop year not found in available crop years:', cropYearId);
-          console.log('Available crop years:', data.cropYears.map(cy => ({ id: cy.id, year: cy.year })));
-          console.log('Total crop years loaded:', data.cropYears.length);
           setFormErrors({ general: 'Selected crop year not found. Please select a valid crop year.' });
           setIsSubmitting(false);
           return;
@@ -207,7 +205,6 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         cropYearId: validCropYearId,
       };
 
-      console.log('Submitting harvest lot with cropYearId:', validCropYearId);
       const savedLot = await addHarvestLot(lotData);
       
       setData(prev => ({

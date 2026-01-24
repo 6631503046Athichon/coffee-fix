@@ -1,5 +1,6 @@
 import { CropYear } from '../types';
 import { api } from './api';
+import { handleApiErrorWithFallback } from '../utils/errorHandler';
 
 /**
  * Fetch all crop years from the backend API
@@ -15,8 +16,10 @@ export const getAllCropYears = async (): Promise<CropYear[]> => {
       description: cy.description || undefined,
     }));
   } catch (error) {
-    console.error('Failed to fetch crop years:', error);
-    return [];
+    return handleApiErrorWithFallback<CropYear[]>(error, {
+      operation: 'fetch crop years',
+      fallbackValue: [],
+    });
   }
 };
 

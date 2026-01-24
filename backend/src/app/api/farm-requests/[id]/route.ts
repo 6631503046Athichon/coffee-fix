@@ -5,13 +5,14 @@ import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 // GET /api/farm-requests/:id
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(request)
+    const { id } = await params
 
     const farmRequest = await prisma.farmRequest.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         requester: {
           select: {
@@ -53,14 +54,15 @@ export async function GET(
 // PUT /api/farm-requests/:id - Update farm request (approve/reject)
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(request)
     requireRole(user, ['Admin'])
+    const { id } = await params
 
     const farmRequest = await prisma.farmRequest.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!farmRequest) {
@@ -95,7 +97,7 @@ export async function PUT(
       await prisma.$transaction(async (tx) => {
         // Update the request
         await tx.farmRequest.update({
-          where: { id: params.id },
+          where: { id },
           data: updateData,
         })
 
@@ -114,13 +116,13 @@ export async function PUT(
     } else {
       // Just update the request
       await prisma.farmRequest.update({
-        where: { id: params.id },
+        where: { id },
         data: updateData,
       })
     }
 
     const updatedRequest = await prisma.farmRequest.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         requester: {
           select: {
@@ -143,4 +145,3 @@ export async function PUT(
     return handleApiError(error)
   }
 }
-
