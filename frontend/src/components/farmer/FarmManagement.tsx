@@ -384,7 +384,6 @@ const FarmManagement: React.FC = () => {
 						>
 							<div className="flex items-start justify-between mb-4 gap-3">
 								<div className="flex-1 space-y-1.5 min-w-0">
-									<p className="text-xs font-semibold text-gray-400">{farm.id}</p>
 									<h3 className="text-xl font-bold text-gray-900 leading-tight truncate">{farm.name ?? farm.location}</h3>
 									<p className="text-sm text-gray-500 leading-relaxed truncate">{farm.location}</p>
 									<div className="space-y-0.5">

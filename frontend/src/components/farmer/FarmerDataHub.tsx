@@ -12,6 +12,7 @@ import { PageHeader } from '../common/PageHeader';
 import { Badge } from '../common/Badge';
 import { exportToCSV } from '../../utils/exportCSV';
 import { formatHarvestLotId } from '../../utils/formatHarvestLotId';
+import { formatDateDisplay } from '../../utils/formatters';
 
 // Removed inline CustomFilterDropdown in favor of shared Select
 
@@ -61,16 +62,18 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
     }, [data.harvestLots]);
     
     const filteredLots = useMemo(() => {
-        return data.harvestLots.filter(lot => {
-            // Filter by current user (farmers see only their own data, admins see all)
-            const isAdmin = currentUser.roles?.includes(UserRole.Admin) || false;
-            const userMatch = isAdmin || lot.farmerName === currentUser.name;
+        return data.harvestLots
+            .filter(lot => {
+                // Filter by current user (farmers see only their own data, admins see all)
+                const isAdmin = currentUser.roles?.includes(UserRole.Admin) || false;
+                const userMatch = isAdmin || lot.farmerName === currentUser.name;
 
-            const lotYear = new Date(lot.harvestDate).getFullYear().toString();
-            const yearMatch = yearFilter === 'All' || lotYear === yearFilter;
-            const plotMatch = plotFilter === 'All' || lot.farmPlotLocation === plotFilter;
-            return userMatch && yearMatch && plotMatch;
-        });
+                const lotYear = new Date(lot.harvestDate).getFullYear().toString();
+                const yearMatch = yearFilter === 'All' || lotYear === yearFilter;
+                const plotMatch = plotFilter === 'All' || lot.farmPlotLocation === plotFilter;
+                return userMatch && yearMatch && plotMatch;
+            })
+            .sort((a, b) => new Date(b.harvestDate).getTime() - new Date(a.harvestDate).getTime());
     }, [data.harvestLots, yearFilter, plotFilter, currentUser]);
 
     // Reset page when filters change
@@ -246,7 +249,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                                             {lot.weightKg} kg
                                         </td>
                                         <td className="px-4 py-3 text-sm text-gray-600">
-                                            {lot.harvestDate}
+                                            {formatDateDisplay(lot.harvestDate)}
                                         </td>
                                         <td className="px-4 py-3">
                                             <Badge variant={lot.status === 'Processing' ? 'primary' : 'success'}>

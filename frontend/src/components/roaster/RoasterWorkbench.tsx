@@ -148,18 +148,20 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         } as GreenBeanLot & { variety: string; process: string; finalScore: string | number; displayScore: string; displayInfo: string; gradeDisplay: string };
     };
 
-    // Split into External and Internal lists
+    // Split into External and Internal lists (sorted by ID descending - newest first)
     const availableExternalLots = useMemo(() =>
         data.greenBeanLots
             .filter(lot => lot.availabilityStatus === 'Available' && lot.currentWeightKg > 0 && lot.sourceType === GreenBeanSourceType.External)
-            .map(mapLotForDisplay),
+            .map(mapLotForDisplay)
+            .sort((a, b) => b.id.localeCompare(a.id)),
         [data]
     );
 
     const availableInternalLots = useMemo(() =>
         data.greenBeanLots
             .filter(lot => lot.availabilityStatus === 'Available' && lot.currentWeightKg > 0 && lot.sourceType === GreenBeanSourceType.Internal)
-            .map(mapLotForDisplay),
+            .map(mapLotForDisplay)
+            .sort((a, b) => b.id.localeCompare(a.id)),
         [data]
     );
 
@@ -175,7 +177,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                     variety: harvestLot?.cherryVariety || 'N/A',
                     process: parchmentLot?.processType || 'N/A',
                 };
-            }),
+            })
+            .sort((a, b) => b.id.localeCompare(a.id)),
         [data, currentUser.id]
     );
 
@@ -193,6 +196,15 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         if (page > totalPages) setPage(totalPages);
     }, [totalPages, page]);
     const pagedRoasts = useMemo(() => myRoasts.slice((page-1)*pageSize, (page-1)*pageSize + pageSize), [myRoasts, page]);
+
+    // Pagination for Inventory
+    const [inventoryPage, setInventoryPage] = useState(1);
+    const inventoryPageSize = 5;
+    const inventoryTotalPages = Math.max(1, Math.ceil(myInventory.length / inventoryPageSize));
+    useEffect(() => {
+        if (inventoryPage > inventoryTotalPages) setInventoryPage(inventoryTotalPages);
+    }, [inventoryTotalPages, inventoryPage]);
+    const pagedInventory = useMemo(() => myInventory.slice((inventoryPage-1)*inventoryPageSize, (inventoryPage-1)*inventoryPageSize + inventoryPageSize), [myInventory, inventoryPage]);
 
     const openClaimModal = (lot: GreenBeanLot & { variety: string, process: string, finalScore: string | number }) => {
         setSelectedLot(lot);
@@ -364,8 +376,11 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                     {/* My Inventory */}
                     <div ref={inventoryRef}>
                       <InventoryTable
-                        items={myInventory as any}
+                        items={pagedInventory as any}
                         onLogRoast={(item) => openLogRoastModal(item as any)}
+                        currentPage={inventoryPage}
+                        totalPages={inventoryTotalPages}
+                        onPageChange={setInventoryPage}
                       />
                     </div>
                 </div>
@@ -388,42 +403,94 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             <Modal
                 isOpen={isClaimModalOpen && !!selectedLot}
                 onClose={() => setIsClaimModalOpen(false)}
-                maxWidth="md"
+                maxWidth="2xl"
             >
                 {selectedLot && (
                     <form onSubmit={handleClaimSubmit}>
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="p-3 bg-green-100 rounded-xl">
-                                <Package className="h-6 w-6 text-green-600" />
+                        {/* Header */}
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="p-4 bg-gradient-to-br from-green-100 to-emerald-100 rounded-2xl shadow-sm">
+                                <Package className="h-8 w-8 text-green-600" />
                             </div>
                             <div>
                                 <h2 className="text-2xl font-bold text-gray-900">Claim Stock</h2>
-                                <p className="text-sm text-gray-500">from Lot {selectedLot.id}</p>
+                                <p className="text-sm text-gray-500 mt-0.5">
+                                    Transfer green beans to your inventory
+                                </p>
                             </div>
                         </div>
 
-                        <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6">
-                            <p className="text-sm font-medium text-green-900">Available Stock</p>
-                            <p className="text-3xl font-bold text-green-700">{toFixed2(selectedLot.currentWeightKg)} kg</p>
+                        {/* Lot Details Card */}
+                        <div className="bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 rounded-2xl p-5 mb-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-white text-sm font-mono font-bold text-gray-900 shadow-sm border border-gray-200" title={selectedLot.id}>
+                                    #{selectedLot.id.substring(0, 6).toUpperCase()}
+                                </span>
+                                <span className={`px-3 py-1.5 text-xs font-semibold rounded-full ${
+                                    selectedLot.finalScore !== 'N/A' && Number(selectedLot.finalScore) >= 85
+                                        ? 'bg-purple-100 text-purple-800'
+                                        : selectedLot.finalScore !== 'N/A' && Number(selectedLot.finalScore) >= 80
+                                        ? 'bg-blue-100 text-blue-800'
+                                        : 'bg-gray-100 text-gray-700'
+                                }`}>
+                                    Score: {selectedLot.finalScore}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Variety</p>
+                                    <p className="text-base font-bold text-gray-900">{selectedLot.variety || 'N/A'}</p>
+                                </div>
+                                <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Process</p>
+                                    <p className="text-base font-bold text-gray-900">{selectedLot.process || 'N/A'}</p>
+                                </div>
+                                <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Grade</p>
+                                    <p className="text-base font-bold text-gray-900">{selectedLot.grade || 'N/A'}</p>
+                                </div>
+                            </div>
                         </div>
 
-                        <Input
-                            label="Amount to Claim (kg)"
-                            type="number"
-                            step="0.1"
-                            max={selectedLot.currentWeightKg}
-                            value={claimAmount}
-                            onChange={e => setClaimAmount(e.target.value)}
-                            required
-                            fullWidth
-                            className="text-lg font-semibold"
-                            placeholder="0.00"
-                        />
+                        {/* Available Stock Display */}
+                        <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-6 mb-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-semibold text-green-800 mb-1">Available Stock</p>
+                                    <p className="text-4xl font-bold text-green-700">{toFixed2(selectedLot.currentWeightKg)} <span className="text-2xl font-medium">kg</span></p>
+                                </div>
+                                <div className="p-3 bg-green-100 rounded-full">
+                                    <Coffee className="h-8 w-8 text-green-600" />
+                                </div>
+                            </div>
+                        </div>
 
-                        <div className="flex justify-end gap-3 mt-6">
+                        {/* Claim Amount Input */}
+                        <div className="mb-6">
+                            <label className="block text-sm font-bold text-gray-700 mb-2">Amount to Claim</label>
+                            <div className="relative">
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    min="0.1"
+                                    max={selectedLot.currentWeightKg}
+                                    value={claimAmount}
+                                    onChange={e => setClaimAmount(e.target.value)}
+                                    required
+                                    className="w-full text-2xl font-bold text-gray-900 border-2 border-gray-200 rounded-xl px-5 py-4 pr-16 focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all"
+                                    placeholder="0.00"
+                                />
+                                <span className="absolute right-5 top-1/2 -translate-y-1/2 text-lg font-semibold text-gray-400">kg</span>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-2">Enter the amount you want to transfer to your roasting inventory</p>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
                             <Button
                                 type="button"
                                 variant="secondary"
+                                size="lg"
                                 onClick={() => setIsClaimModalOpen(false)}
                             >
                                 Cancel
@@ -432,6 +499,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                                 type="submit"
                                 variant="success"
                                 size="lg"
+                                icon={<Package className="h-5 w-5" />}
                             >
                                 Claim Stock
                             </Button>
@@ -642,7 +710,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             <Modal
                 isOpen={isAddLotModalOpen}
                 onClose={() => setIsAddLotModalOpen(false)}
-                maxWidth="xl"
+                maxWidth="2xl"
             >
                                         <form
                                             onSubmit={(e) => {
