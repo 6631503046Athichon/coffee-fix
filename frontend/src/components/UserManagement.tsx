@@ -71,6 +71,8 @@ const UserManagement: React.FC = () => {
                     errorMessage = 'Authentication required. Please log in again.';
                 } else if (errMsg.includes('403') || errMsg.includes('forbidden')) {
                     errorMessage = 'Access denied. Admin role required to view users.';
+                } else if (errMsg.includes('connection pool') || errMsg.includes('maxclientsinsessionmode') || errMsg.includes('pool exhausted')) {
+                    errorMessage = 'Database connection pool exhausted. This is a server configuration issue. Please configure connection pooling in Vercel environment variables. See CONNECTION_POOLING.md for details.';
                 } else if (errMsg.includes('failed to fetch') || errMsg.includes('network') || errMsg.includes('cannot connect')) {
                     errorMessage = 'Cannot connect to backend server. Please check if the backend is running.';
                 } else if (errMsg.includes('timeout')) {
@@ -269,6 +271,20 @@ const UserManagement: React.FC = () => {
                                 <p className="text-xs text-red-600 mt-2">
                                     Make sure the backend server is running and accessible. Check the console for more details.
                                 </p>
+                            )}
+                            {error.includes('connection pool') && (
+                                <div className="text-xs text-red-600 mt-2 space-y-1">
+                                    <p><strong>วิธีแก้ไข:</strong></p>
+                                    <ol className="list-decimal list-inside ml-2 space-y-1">
+                                        <li>ไปที่ Vercel Project Settings → Environment Variables</li>
+                                        <li>ตั้งค่า DATABASE_URL ให้ใช้ connection pooler:</li>
+                                        <li className="ml-4">- Supabase: ใช้ port 6543 และเพิ่ม ?pgbouncer=true</li>
+                                        <li className="ml-4">- Neon: เพิ่ม ?pgbouncer=true&connection_limit=1</li>
+                                        <li className="ml-4">- หรือใช้ Prisma Accelerate (แนะนำ)</li>
+                                        <li>Redeploy application</li>
+                                    </ol>
+                                    <p className="mt-2">ดูรายละเอียดเพิ่มเติมใน backend/CONNECTION_POOLING.md</p>
+                                </div>
                             )}
                         </div>
                     </div>
