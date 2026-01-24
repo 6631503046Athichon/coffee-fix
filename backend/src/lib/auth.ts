@@ -1,7 +1,15 @@
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production'
+// JWT_SECRET is required - fail fast if not configured
+if (!process.env.JWT_SECRET) {
+  throw new Error(
+    'FATAL: JWT_SECRET environment variable is not set. ' +
+    'Please configure JWT_SECRET in your .env file for security.'
+  )
+}
+
+const JWT_SECRET: string = process.env.JWT_SECRET
 const JWT_EXPIRES_IN = '7d'
 
 export interface JWTPayload {
@@ -51,6 +59,9 @@ export function verifyToken(token: string): JWTPayload {
  * Extract token from Authorization header or cookie
  */
 export function extractToken(request: Request): string | null {
+  const authHeader = request.headers.get('Authorization');
+  const cookieHeader = request.headers.get('Cookie');
+
   // Try Authorization header first
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7);
