@@ -68,6 +68,7 @@ export interface Farm {
 
 export interface HarvestLot {
   id: string;
+  farmId?: string;
   farmerName: string;
   cherryVariety: string;
   weightKg: number;

@@ -80,7 +80,7 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
     setFetchError('');
 
     try {
-      const weatherData = await fetchWeatherData(farm.latitude, farm.longitude, recordDate);
+      const weatherData = await fetchWeatherData(farm.latitude, farm.longitude);
 
       if (weatherData) {
         setTemperatureMin(weatherData.temperatureMin.toString());
@@ -116,7 +116,7 @@ export const WeatherModal: React.FC<WeatherModalProps> = ({
         humidity: parseFloat(humidity),
         notes: notes || undefined,
       };
-      updateWeatherRecord(updatedRecord);
+      updateWeatherRecord(editingRecord.id, updatedRecord);
       setData(prev => ({
         ...prev,
         weatherRecords: prev.weatherRecords.map(r => r.id === editingRecord.id ? updatedRecord : r)

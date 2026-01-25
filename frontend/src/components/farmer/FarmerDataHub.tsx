@@ -159,7 +159,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
         exportToCSV({ filename: 'harvest_data_export.csv', headers, data: rows });
     };
 
-    const isAdmin = currentUser.role === UserRole.Admin;
+    const isAdmin = currentUser.roles?.includes(UserRole.Admin);
     const canEdit = (lot: HarvestLot) => {
         return isAdmin || lot.farmerName === currentUser.name;
     };

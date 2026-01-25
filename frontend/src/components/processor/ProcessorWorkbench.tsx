@@ -357,7 +357,7 @@ interface ProcessorWorkbenchProps {
 const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) => {
   const { data, setData, refreshData } = useDataContext();
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
-  const isAdmin = currentUser.role === UserRole.Admin;
+  const isAdmin = currentUser.roles?.includes(UserRole.Admin);
 
   // Modal States
   const [modal, setModal] = useState<string | null>(null);
@@ -419,7 +419,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
   const [completedCardPage, setCompletedCardPage] = useState(1);
   const CARD_PAGE_SIZE = 3;
 
-  const processorUser = useMemo(() => data.users.find(u => u.role === UserRole.Processor), [data.users]);
+  const processorUser = useMemo(() => data.users.find(u => u.roles?.includes(UserRole.Processor)), [data.users]);
 
   // (Removed) Top-of-workbench stat tiles were deprecated; relying on detailed sections below.
 
@@ -491,10 +491,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
     };
     
     // Only load customers if user has access (Admin or Roaster)
-    if (currentUser.role === UserRole.Admin || currentUser.role === UserRole.Roaster) {
+    if (currentUser.roles?.includes(UserRole.Admin) || currentUser.roles?.includes(UserRole.Roaster)) {
       loadCustomers();
     }
-  }, [currentUser.role]);
+  }, [currentUser.roles]);
 
   // Customer options for dropdown
   const customerOptions = useMemo(() => {
@@ -941,7 +941,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
 
           // Update parchment lot - set to Hulled only if no weight remaining
           await updateParchmentLot(selectedParchment.id, {
-            status: remainingWeight <= 0.01 ? 'Hulled' : 'AwaitingHulling',
+            status: remainingWeight <= 0.01 ? 'Hulled' : 'Awaiting Hulling',
             currentWeightKg: Math.round(remainingWeight * 100) / 100,
           });
 
@@ -2474,7 +2474,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                           className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
                       )}
-                      {customers.length === 0 && !customersLoading && (currentUser.role === UserRole.Admin || currentUser.role === UserRole.Roaster) && (
+                      {customers.length === 0 && !customersLoading && (currentUser.roles?.includes(UserRole.Admin) || currentUser.roles?.includes(UserRole.Roaster)) && (
                         <p className="mt-1 text-xs text-gray-500">
                           <a href="/customers" target="_blank" className="text-blue-600 hover:underline">
                             Create customers
@@ -2753,7 +2753,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                 </div>
                 <div>
                   <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Current Score</p>
-                  <p className="text-2xl font-bold text-purple-600">{scoringLot.qcScore ? scoringLot.qcScore.toFixed(2) : 'N/A'}</p>
+                  <p className="text-2xl font-bold text-purple-600">{scoringLot.cuppingScores?.length > 0 ? (scoringLot.cuppingScores.reduce((sum, s) => sum + s.score, 0) / scoringLot.cuppingScores.length).toFixed(2) : 'N/A'}</p>
                 </div>
               </div>
             </div>

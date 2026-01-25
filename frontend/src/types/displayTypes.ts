@@ -1,5 +1,6 @@
-// Import base types from data context
-import type { GreenBeanLot } from '@/contexts/DataContext';
+import React from 'react';
+// Import base types
+import type { GreenBeanLot } from '../types';
 
 // Display types for various tables and components
 

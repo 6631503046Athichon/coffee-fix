@@ -64,7 +64,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
     // Initial fetch
     const doAutoFetch = async () => {
       try {
-        const weatherData = await fetchWeatherData(farm.latitude!, farm.longitude!, new Date().toISOString().substring(0, 10));
+        const weatherData = await fetchWeatherData(farm.latitude!, farm.longitude!);
         if (weatherData) {
           // Auto-save the weather record
           const weatherRecord: Partial<WeatherRecord> = {
@@ -148,7 +148,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
     setFetchError('');
 
     try {
-      const weatherData = await fetchWeatherData(farm.latitude, farm.longitude, recordDate);
+      const weatherData = await fetchWeatherData(farm.latitude, farm.longitude);
 
       if (weatherData) {
         setTemperatureMin(weatherData.temperatureMin.toString());
@@ -303,7 +303,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
       isOpen={isOpen}
       onClose={onClose || (() => {})}
       title="ข้อมูลอากาศของฟาร์ม"
-      maxWidth="4xl"
+      maxWidth="5xl"
     >
       <div className="space-y-6">
       {!farm ? (
