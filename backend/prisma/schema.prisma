@@ -56,6 +56,7 @@ model Farm {
   latitude       Float?
   longitude      Float?
   altitude       String?
+  googleMapsUrl  String?
   ownerId        String
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
