@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { PlusCircle, Save, MapPin, Compass, X, RefreshCw, ArrowLeft, Sprout, User, Ruler, Coffee, Leaf, Info } from 'lucide-react';
 import { useDataContext } from '../../hooks/useDataContext';
@@ -75,12 +75,17 @@ const AddFarmPage: React.FC = () => {
 	const [isGeocoding, setIsGeocoding] = useState(false);
 	const [isGettingLocation, setIsGettingLocation] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const lastLoadedFarmIdRef = useRef<string | null>(null);
 
 	const isEditing = Boolean(farmId);
 	const editingFarm = farmId ? data.farms.find(f => f.id === farmId) : null;
 
 	useEffect(() => {
 		if (isEditing && editingFarm) {
+			if (lastLoadedFarmIdRef.current === editingFarm.id) {
+				return;
+			}
+			lastLoadedFarmIdRef.current = editingFarm.id;
 			setFarmName(editingFarm.name ?? '');
 			setFarmLocation(editingFarm.location);
 			const parsedOwners = editingFarm.ownerNames && editingFarm.ownerNames.length > 0
@@ -110,6 +115,7 @@ const AddFarmPage: React.FC = () => {
 				editingFarm.sizeHectares !== undefined && editingFarm.sizeHectares !== null ? String(editingFarm.sizeHectares) : '',
 			);
 		} else {
+			lastLoadedFarmIdRef.current = null;
 			// Reset form for new farm
 			setFarmName('');
 			setFarmLocation('');
@@ -123,7 +129,7 @@ const AddFarmPage: React.FC = () => {
 			setSizeInput('');
 		}
 		setFormError(null);
-	}, [isEditing, editingFarm, currentUser]);
+	}, [isEditing, editingFarm]);
 
 	const toggleVariety = (variety: string) => {
 		setSelectedVarieties(prev => (prev.includes(variety) ? prev.filter(v => v !== variety) : [...prev, variety]));
