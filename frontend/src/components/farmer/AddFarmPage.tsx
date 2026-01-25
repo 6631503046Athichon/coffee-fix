@@ -25,35 +25,6 @@ const COFFEE_VARIETIES = [
 	'Ethiopian Heirloom',
 ];
 
-type ParsedCoords = { lat: number; lng: number } | null;
-
-function parseGoogleMapsUrl(url: string): ParsedCoords {
-	if (!url) return null;
-	try {
-		const trimmed = url.trim();
-
-		const atMatch = trimmed.match(/@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
-		if (atMatch) {
-			return {
-				lat: parseFloat(atMatch[1]),
-				lng: parseFloat(atMatch[2]),
-			};
-		}
-
-		const qMatch = trimmed.match(/[?&]q=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
-		if (qMatch) {
-			return {
-				lat: parseFloat(qMatch[1]),
-				lng: parseFloat(qMatch[2]),
-			};
-		}
-
-		return null;
-	} catch {
-		return null;
-	}
-}
-
 const AddFarmPage: React.FC = () => {
 	const navigate = useNavigate();
 	const { farmId } = useParams<{ farmId?: string }>();
@@ -62,11 +33,10 @@ const AddFarmPage: React.FC = () => {
 
 	const [farmName, setFarmName] = useState('');
 	const [farmLocation, setFarmLocation] = useState('');
-	const [ownerNames, setOwnerNames] = useState<string[]>(['']);
-	const [farmerNames, setFarmerNames] = useState<string[]>(['']);
+	const [ownerName, setOwnerName] = useState(currentUser?.name ?? '');
+	const [caretakerName, setCaretakerName] = useState('');
 	const [selectedVarieties, setSelectedVarieties] = useState<string[]>([]);
 	const [customVariety, setCustomVariety] = useState('');
-	const [googleMapsUrl, setGoogleMapsUrl] = useState('');
 	const [latitudeInput, setLatitudeInput] = useState('');
 	const [longitudeInput, setLongitudeInput] = useState('');
 	const [sizeInput, setSizeInput] = useState('');
@@ -80,24 +50,19 @@ const AddFarmPage: React.FC = () => {
 	const editingFarm = farmId ? data.farms.find(f => f.id === farmId) : null;
 
 	useEffect(() => {
+		if (currentUser && !ownerName) {
+			setOwnerName(currentUser.name);
+		}
+	}, [currentUser, ownerName]);
+
+	useEffect(() => {
 		if (isEditing && editingFarm) {
 			setFarmName(editingFarm.name ?? '');
 			setFarmLocation(editingFarm.location);
-			const combinedOwnerName = editingFarm.ownerName ?? editingFarm.farmerName ?? '';
-			const parsedOwners = combinedOwnerName
-				.split(',')
-				.map(name => name.trim())
-				.filter(Boolean);
-			setOwnerNames(parsedOwners.length > 0 ? parsedOwners : ['']);
-			const combinedFarmerName = editingFarm.caretakerName ?? '';
-			const parsedFarmers = combinedFarmerName
-				.split(',')
-				.map(name => name.trim())
-				.filter(Boolean);
-			setFarmerNames(parsedFarmers.length > 0 ? parsedFarmers : ['']);
+			setOwnerName(editingFarm.ownerName ?? editingFarm.farmerName);
+			setCaretakerName(editingFarm.caretakerName ?? '');
 			setSelectedVarieties(editingFarm.varieties ?? []);
 			setCustomVariety('');
-			setGoogleMapsUrl(editingFarm.googleMapsUrl ?? '');
 			setLatitudeInput(
 				editingFarm.latitude !== undefined && editingFarm.latitude !== null ? String(editingFarm.latitude) : '',
 			);
@@ -111,11 +76,10 @@ const AddFarmPage: React.FC = () => {
 			// Reset form for new farm
 			setFarmName('');
 			setFarmLocation('');
-			setOwnerNames(['']);
-			setFarmerNames(['']);
+			setOwnerName(currentUser?.name ?? '');
+			setCaretakerName('');
 			setSelectedVarieties([]);
 			setCustomVariety('');
-			setGoogleMapsUrl('');
 			setLatitudeInput('');
 			setLongitudeInput('');
 			setSizeInput('');
@@ -127,30 +91,6 @@ const AddFarmPage: React.FC = () => {
 		setSelectedVarieties(prev => (prev.includes(variety) ? prev.filter(v => v !== variety) : [...prev, variety]));
 	};
 
-	const handleOwnerNameChange = (index: number, value: string) => {
-		setOwnerNames(prev => prev.map((name, i) => (i === index ? value : name)));
-	};
-
-	const handleAddOwnerName = () => {
-		setOwnerNames(prev => [...prev, '']);
-	};
-
-	const handleRemoveOwnerName = (index: number) => {
-		setOwnerNames(prev => (prev.length === 1 ? [''] : prev.filter((_, i) => i !== index)));
-	};
-
-	const handleFarmerNameChange = (index: number, value: string) => {
-		setFarmerNames(prev => prev.map((name, i) => (i === index ? value : name)));
-	};
-
-	const handleAddFarmerName = () => {
-		setFarmerNames(prev => [...prev, '']);
-	};
-
-	const handleRemoveFarmerName = (index: number) => {
-		setFarmerNames(prev => (prev.length === 1 ? [''] : prev.filter((_, i) => i !== index)));
-	};
-
 	const removeVariety = (variety: string) => {
 		setSelectedVarieties(prev => prev.filter(v => v !== variety));
 	};
@@ -160,34 +100,6 @@ const AddFarmPage: React.FC = () => {
 		if (!trimmed) return;
 		setSelectedVarieties(prev => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
 		setCustomVariety('');
-	};
-
-	const handleExtractFromGoogleMapsUrl = () => {
-		setFormError(null);
-
-		if (!googleMapsUrl.trim()) {
-			setFormError('Please paste a Google Maps URL first');
-			return;
-		}
-
-		const parsed = parseGoogleMapsUrl(googleMapsUrl);
-		if (!parsed) {
-			setFormError('Unable to extract coordinates from this Google Maps URL. Please check the link or enter coordinates manually.');
-			return;
-		}
-
-		const { lat, lng } = parsed;
-		if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-			setFormError('The coordinates from this URL are not in a valid range.');
-			return;
-		}
-
-		setLatitudeInput(lat.toFixed(6));
-		setLongitudeInput(lng.toFixed(6));
-		setToast({
-			type: 'success',
-			message: 'Coordinates extracted from Google Maps URL',
-		});
 	};
 
 	const handleSaveFarm = async (event: React.FormEvent) => {
@@ -218,13 +130,16 @@ const AddFarmPage: React.FC = () => {
 			setIsSubmitting(false);
 			return;
 		}
-		const sanitizedOwners = ownerNames.map(name => name.trim()).filter(Boolean);
-		if (sanitizedOwners.length === 0) {
+		if (!ownerName.trim()) {
 			setFormError('Please enter farm owner name');
 			setIsSubmitting(false);
 			return;
 		}
-		const sanitizedFarmers = farmerNames.map(name => name.trim()).filter(Boolean);
+		if (!caretakerName.trim()) {
+			setFormError('Please enter caretaker name');
+			setIsSubmitting(false);
+			return;
+		}
 		if (selectedVarieties.length === 0) {
 			setFormError('Please select or add at least 1 coffee variety');
 			setIsSubmitting(false);
@@ -273,8 +188,8 @@ const AddFarmPage: React.FC = () => {
 			sizeHectares = parsedSize;
 		}
 
-		const ownerDisplayName = sanitizedOwners.join(', ');
-		const caretakerDisplayName = sanitizedFarmers.length > 0 ? sanitizedFarmers.join(', ') : undefined;
+		const ownerDisplayName = ownerName.trim();
+		const caretakerDisplayName = caretakerName.trim();
 		const timestamp = new Date().toISOString();
 
 		if (isEditing && farmId) {
@@ -290,7 +205,6 @@ const AddFarmPage: React.FC = () => {
 				farmerName: ownerDisplayName,
 				ownerName: ownerDisplayName,
 				caretakerName: caretakerDisplayName,
-				googleMapsUrl: googleMapsUrl.trim() || undefined,
 				location: farmLocation.trim(),
 				varieties: [...selectedVarieties].sort(),
 				latitude,
@@ -330,7 +244,6 @@ const AddFarmPage: React.FC = () => {
 				farmerName: ownerDisplayName,
 				ownerName: ownerDisplayName,
 				caretakerName: caretakerDisplayName,
-				googleMapsUrl: googleMapsUrl.trim() || undefined,
 				location: farmLocation.trim(),
 				ownerUserId: currentUser.id,
 				varieties: [...selectedVarieties].sort(),
@@ -533,78 +446,22 @@ const AddFarmPage: React.FC = () => {
 						<h2 className="text-xl font-bold text-gray-900">People</h2>
 					</div>
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<div className="space-y-3">
-							<div className="flex items-center justify-between">
-								<label className="block text-sm font-semibold text-gray-700">Farm Owner Name</label>
-								<Button
-									type="button"
-									variant="secondary"
-									onClick={handleAddOwnerName}
-									className="px-3 py-1.5 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
-								>
-									Add Owner
-								</Button>
-							</div>
-							<div className="space-y-2">
-								{ownerNames.map((name, index) => (
-									<div key={`owner-${index}`} className="flex items-center gap-2">
-										<Input
-											placeholder={`Owner name ${index + 1}`}
-											value={name}
-											onChange={e => handleOwnerNameChange(index, e.target.value)}
-											fullWidth
-										/>
-										{ownerNames.length > 1 && (
-											<Button
-												type="button"
-												variant="outline"
-												onClick={() => handleRemoveOwnerName(index)}
-												className="px-2.5 py-2 text-gray-500 hover:text-red-600"
-												aria-label={`Remove owner ${index + 1}`}
-											>
-												<X className="h-4 w-4" />
-											</Button>
-										)}
-									</div>
-								))}
-							</div>
-						</div>
-						<div className="space-y-3">
-							<div className="flex items-center justify-between">
-								<label className="block text-sm font-semibold text-gray-700">Farmer</label>
-								<Button
-									type="button"
-									variant="secondary"
-									onClick={handleAddFarmerName}
-									className="px-3 py-1.5 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
-								>
-									Add Farmer
-								</Button>
-							</div>
-							<div className="space-y-2">
-								{farmerNames.map((name, index) => (
-									<div key={`farmer-${index}`} className="flex items-center gap-2">
-										<Input
-											placeholder={`Farmer name ${index + 1}`}
-											value={name}
-											onChange={e => handleFarmerNameChange(index, e.target.value)}
-											fullWidth
-										/>
-										{farmerNames.length > 1 && (
-											<Button
-												type="button"
-												variant="outline"
-												onClick={() => handleRemoveFarmerName(index)}
-												className="px-2.5 py-2 text-gray-500 hover:text-red-600"
-												aria-label={`Remove farmer ${index + 1}`}
-											>
-												<X className="h-4 w-4" />
-											</Button>
-										)}
-									</div>
-								))}
-							</div>
-						</div>
+						<Input
+							label="Farm Owner Name"
+							placeholder="Owner's real name"
+							value={ownerName}
+							onChange={e => setOwnerName(e.target.value)}
+							required
+							fullWidth
+						/>
+						<Input
+							label="Caretaker Name"
+							placeholder="Manager/Main Caretaker"
+							value={caretakerName}
+							onChange={e => setCaretakerName(e.target.value)}
+							required
+							fullWidth
+						/>
 					</div>
 				</div>
 
@@ -617,13 +474,6 @@ const AddFarmPage: React.FC = () => {
 						<h2 className="text-xl font-bold text-gray-900">Location Details</h2>
 					</div>
 					<div className="space-y-4">
-						<Input
-							label="Google Maps URL (optional)"
-							placeholder="Paste a full Google Maps link, e.g. https://www.google.com/maps/..."
-							value={googleMapsUrl}
-							onChange={e => setGoogleMapsUrl(e.target.value)}
-							fullWidth
-						/>
 						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 							<Input
 								label="Latitude"
@@ -655,16 +505,6 @@ const AddFarmPage: React.FC = () => {
 									className="bg-white hover:bg-sky-50 border-sky-300 text-sky-700 hover:text-sky-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
 								>
 									{isGeocoding ? 'Finding...' : 'Find GPS from Location'}
-								</Button>
-								<Button
-									type="button"
-									variant="outline"
-									onClick={handleExtractFromGoogleMapsUrl}
-									disabled={!googleMapsUrl.trim()}
-									icon={<MapPin className="h-4 w-4" />}
-									className="bg-white hover:bg-sky-50 border-sky-300 text-sky-700 hover:text-sky-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-								>
-									Use Google Maps URL
 								</Button>
 								<Button
 									type="button"

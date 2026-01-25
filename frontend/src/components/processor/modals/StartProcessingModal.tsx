@@ -233,7 +233,7 @@ const StartProcessingModal: React.FC<StartProcessingModalProps> = ({
             name="processNotes"
             rows={2}
             placeholder="e.g., Ferment 24h in sealed tank, raised-bed drying, frequent turning"
-            className="w-full border border-gray-300 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all resize-none"
+            className="w-full border border-gray-300 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-blue-500 shadow-sm transition-all resize-none"
           />
           <p className="mt-1 text-xs text-gray-500">Use this to capture special steps or parameters for this batch.</p>
         </div>

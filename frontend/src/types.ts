@@ -51,7 +51,6 @@ export interface Farm {
   farmerName: string;
   ownerName?: string;
   caretakerName?: string;
-  googleMapsUrl?: string;
   location: string;
   latitude?: number;
   longitude?: number;

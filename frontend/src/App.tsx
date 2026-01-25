@@ -287,9 +287,9 @@ const ProtectedRoutes: React.FC = () => {
     <DataContext.Provider value={contextValue}>
       <div className="flex h-screen bg-gray-50 text-gray-800">
         <Sidebar navItems={navItems} currentUserRoles={currentUser?.roles || [UserRole.Farmer]} />
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden w-full lg:w-auto">
+        <div className="flex-1 flex flex-col min-w-0 w-full lg:w-auto">
           <Header currentUserRoles={currentUser?.roles || [UserRole.Farmer]} />
-          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-3 sm:p-4 md:p-6 lg:p-8 pt-16 lg:pt-4">
+          <main className="flex-1 overflow-auto bg-gray-100 p-3 sm:p-4 md:p-6 lg:p-8 pt-16 lg:pt-4">
             <Routes>
               <Route path="/farmer" element={<Navigate to="/farmer-dashboard" replace />} />
               <Route path="/dashboard" element={<Navigate to="/farmer-dashboard" replace />} />

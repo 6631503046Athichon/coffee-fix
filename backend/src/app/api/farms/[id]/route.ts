@@ -78,7 +78,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, archived, googleMapsUrl } = body
+    const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, archived } = body
 
     const updateData: any = {}
     if (farmName !== undefined) updateData.farmName = farmName
@@ -89,7 +89,6 @@ export async function PUT(
     if (sizeHectares !== undefined) updateData.sizeHectares = sizeHectares ? parseFloat(sizeHectares) : null
     if (varieties !== undefined) updateData.varieties = varieties
     if (caretakerName !== undefined) updateData.caretakerName = caretakerName || null
-    if (googleMapsUrl !== undefined) updateData.googleMapsUrl = googleMapsUrl || null
     if (archived !== undefined) {
       updateData.archived = archived
       updateData.archivedAt = archived ? new Date() : null

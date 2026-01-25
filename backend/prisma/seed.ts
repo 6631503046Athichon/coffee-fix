@@ -221,80 +221,6 @@ async function main() {
     );
   }
 
-  // Create sample farms for testing (only in development)
-  if (isDevelopment) {
-    // Get test users
-    const testUser = await prisma.user.findUnique({
-      where: { email: "test@example.com" },
-    });
-    const farmerUser = await prisma.user.findUnique({
-      where: { email: "farmer@coffee.com" },
-    });
-
-    if (testUser) {
-      // Check if farm already exists for test user
-      const existingTestFarm = await prisma.farm.findFirst({
-        where: {
-          ownerId: testUser.id,
-          farmName: "Test Coffee Farm",
-        },
-      });
-
-      if (!existingTestFarm) {
-        const testFarm = await prisma.farm.create({
-          data: {
-            farmName: "Test Coffee Farm",
-            location: "Chiang Mai, Thailand",
-            latitude: 18.7883,
-            longitude: 98.9853,
-            altitude: "1200m",
-            ownerId: testUser.id,
-            caretakerName: "John Doe",
-            sizeHectares: 5.5,
-            varieties: ["Gesha", "Caturra", "Typica"],
-            archived: false,
-          },
-        });
-        console.log("✅ Created test farm:", testFarm.farmName);
-      } else {
-        console.log("ℹ️  Test farm already exists:", existingTestFarm.farmName);
-      }
-    }
-
-    if (farmerUser) {
-      // Check if farm already exists for farmer user
-      const existingFarmerFarm = await prisma.farm.findFirst({
-        where: {
-          ownerId: farmerUser.id,
-          farmName: "Maria's Coffee Estate",
-        },
-      });
-
-      if (!existingFarmerFarm) {
-        const farmerFarm = await prisma.farm.create({
-          data: {
-            farmName: "Maria's Coffee Estate",
-            location: "Doi Inthanon, Chiang Mai, Thailand",
-            latitude: 18.5883,
-            longitude: 98.4869,
-            altitude: "1500m",
-            ownerId: farmerUser.id,
-            caretakerName: "Maria Rodriguez",
-            sizeHectares: 12.0,
-            varieties: ["Bourbon", "SL28", "SL34"],
-            archived: false,
-          },
-        });
-        console.log("✅ Created farmer farm:", farmerFarm.farmName);
-      } else {
-        console.log(
-          "ℹ️  Farmer farm already exists:",
-          existingFarmerFarm.farmName,
-        );
-      }
-    }
-  }
-
   // ============================================================
   // Generate 10 Mock Users with Faker
   // ============================================================
@@ -971,6 +897,72 @@ async function main() {
       },
     });
     console.log("✅ Created process type:", processType.name);
+  }
+
+  // ============================================================
+  // Create Sample Farms for Test Users (Development Only)
+  // ============================================================
+  if (isDevelopment) {
+    const testUser = await prisma.user.findUnique({
+      where: { email: "test@example.com" },
+    });
+    const farmerUser = await prisma.user.findUnique({
+      where: { email: "farmer@coffee.com" },
+    });
+
+    if (testUser) {
+      const existingTestFarm = await prisma.farm.findFirst({
+        where: {
+          ownerId: testUser.id,
+          farmName: "Test Coffee Farm",
+        },
+      });
+
+      if (!existingTestFarm) {
+        const testFarm = await prisma.farm.create({
+          data: {
+            farmName: "Test Coffee Farm",
+            location: "Chiang Mai, Thailand",
+            latitude: 18.7883,
+            longitude: 98.9853,
+            altitude: "1200m",
+            ownerId: testUser.id,
+            caretakerName: "John Doe",
+            sizeHectares: 5.5,
+            varieties: ["Gesha", "Caturra", "Typica"],
+            archived: false,
+          },
+        });
+        console.log("✅ Created test farm:", testFarm.farmName);
+      }
+    }
+
+    if (farmerUser) {
+      const existingFarmerFarm = await prisma.farm.findFirst({
+        where: {
+          ownerId: farmerUser.id,
+          farmName: "Maria's Coffee Estate",
+        },
+      });
+
+      if (!existingFarmerFarm) {
+        const farmerFarm = await prisma.farm.create({
+          data: {
+            farmName: "Maria's Coffee Estate",
+            location: "Doi Inthanon, Chiang Mai, Thailand",
+            latitude: 18.5883,
+            longitude: 98.4869,
+            altitude: "1500m",
+            ownerId: farmerUser.id,
+            caretakerName: "Maria Rodriguez",
+            sizeHectares: 12.0,
+            varieties: ["Bourbon", "SL28", "SL34"],
+            archived: false,
+          },
+        });
+        console.log("✅ Created farmer farm:", farmerFarm.farmName);
+      }
+    }
   }
 
   // ============================================================
