@@ -2,34 +2,6 @@ import { GreenBeanLot } from '../types';
 import { api } from './api';
 import { handleApiErrorWithFallback } from '../utils/errorHandler';
 
-export interface CreateGreenBeanLotInput {
-  sourceType: 'Internal' | 'External';
-  parchmentLotId?: string;
-  grade: string;
-  initialWeightKg: number;
-  currentWeightKg?: number;
-  availabilityStatus?: string;
-  pricePerKg?: number;
-  currency?: string;
-  externalSource?: {
-    originName?: string;
-    variety?: string;
-    processType?: string;
-    purchaseDate?: string;
-    pricePerKg?: number;
-    currency?: string;
-    supplierNotes?: string;
-  };
-}
-
-/**
- * Create a new green bean lot
- */
-export const createGreenBeanLot = async (input: CreateGreenBeanLotInput): Promise<GreenBeanLot> => {
-  const response = await api.post<{ greenBeanLot: any }>('/green-bean-lots', input);
-  return transformGreenBeanLotFromBackend(response.greenBeanLot);
-};
-
 /**
  * Fetch all green bean lots, optionally filtered by sourceType, availabilityStatus, or parchmentLotId
  */

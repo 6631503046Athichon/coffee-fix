@@ -609,10 +609,9 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                 ยังไม่มีการบันทึกข้อมูลอากาศสำหรับฟาร์มนี้
               </div>
             ) : (
-              <div className="overflow-hidden rounded-lg border border-gray-200">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead className="bg-gray-900 text-white">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                  <thead className="bg-gray-900 text-white">
                     <tr>
                       <th className="px-4 py-3 text-left font-semibold">วันที่บันทึก</th>
                       <th className="px-4 py-3 text-center font-semibold">อุณหภูมิ (°C)</th>
@@ -666,8 +665,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                       </tr>
                     ))}
                   </tbody>
-                  </table>
-                </div>
+                </table>
               </div>
             )}
           </div>
