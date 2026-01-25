@@ -374,7 +374,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
       isOpen={isOpen}
       onClose={onClose || (() => {})}
       title="ข้อมูลดินของฟาร์ม"
-      maxWidth="4xl"
+      maxWidth="5xl"
     >
       <div className="space-y-6">
       {!farm ? (

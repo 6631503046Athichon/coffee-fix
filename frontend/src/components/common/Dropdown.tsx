@@ -41,7 +41,7 @@ interface DropdownProps<T = string> {
  *   placeholder="Select an option"
  * />
  */
-export function Dropdown<T extends string = string>({
+const Dropdown = <T extends string = string>({
   value,
   onChange,
   options,
@@ -51,7 +51,7 @@ export function Dropdown<T extends string = string>({
   required = false,
   label,
   error
-}: DropdownProps<T>): React.ReactElement {
+}: DropdownProps<T>): React.ReactElement => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -175,6 +175,7 @@ export function Dropdown<T extends string = string>({
       )}
     </div>
   );
-}
+};
 
+export { Dropdown };
 export default Dropdown;
