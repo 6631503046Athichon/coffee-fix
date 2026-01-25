@@ -178,7 +178,6 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         // Check if the selected cropYearId exists in data.cropYears
         const cropYearExists = data.cropYears.some(cy => cy.id === cropYearId);
         if (!cropYearExists) {
-          console.error('Selected crop year not found in available crop years:', cropYearId);
           setFormErrors({ general: 'Selected crop year not found. Please select a valid crop year.' });
           setIsSubmitting(false);
           return;
@@ -186,7 +185,6 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         // Validate UUID format (basic check)
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (!uuidRegex.test(cropYearId)) {
-          console.error('Invalid crop year ID format (not a UUID):', cropYearId);
           setFormErrors({ general: 'Invalid crop year ID format. Please select a valid crop year.' });
           setIsSubmitting(false);
           return;
@@ -231,9 +229,6 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         setSuccessMessage(null);
         setIsSubmitting(false);
       }, 2000);
-
-      // Don't close modal automatically - let user close manually or add another lot
-      // onClose();
     } catch (error: any) {
       console.error('Failed to add harvest lot:', error);
       const errorMessage = error?.message || error?.error || 'Failed to register harvest lot. Please try again.';
