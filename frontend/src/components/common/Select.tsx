@@ -112,4 +112,5 @@ const Select = <T,>({
   );
 };
 
+export { Select };
 export default Select;

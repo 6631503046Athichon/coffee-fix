@@ -130,7 +130,7 @@ const CreateCuppingSessionModal: React.FC<CreateCuppingSessionModalProps> = ({ i
 
         const judgeObjects = data.users
             .filter(u => selectedJudges.includes(u.id))
-            .map(u => ({ id: u.id, name: u.name, role: u.role as UserRole.Cupper | UserRole.HeadJudge }));
+            .map(u => ({ id: u.id, name: u.name, role: (u.roles?.includes(UserRole.HeadJudge) ? UserRole.HeadJudge : UserRole.Cupper) as UserRole.Cupper | UserRole.HeadJudge }));
 
         const existingSampleNumbers = samples
             .map(s => parseInt(s.id?.replace(/S|temp-/g, '') || ''))
@@ -166,7 +166,7 @@ const CreateCuppingSessionModal: React.FC<CreateCuppingSessionModalProps> = ({ i
 
     if (!isOpen) return null;
 
-    const availableJudges = data.users.filter(u => u.role === UserRole.Cupper || u.role === UserRole.HeadJudge);
+    const availableJudges = data.users.filter(u => u.roles?.includes(UserRole.Cupper) || u.roles?.includes(UserRole.HeadJudge));
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" aria-modal="true" role="dialog" onClick={onClose}>
@@ -216,7 +216,7 @@ const CreateCuppingSessionModal: React.FC<CreateCuppingSessionModalProps> = ({ i
                                     {availableJudges.map(judge => (
                                         <label key={judge.id} className={`flex items-center space-x-3 cursor-pointer p-2 rounded-md transition-colors ${selectedJudges.includes(judge.id) ? 'bg-indigo-100' : 'hover:bg-gray-100'}`}>
                                                 <input type="checkbox" checked={selectedJudges.includes(judge.id)} onChange={() => handleJudgeToggle(judge.id)} className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" />
-                                                <span className="text-sm text-gray-800 font-medium">{judge.name} <span className="text-xs text-gray-500 font-normal">({judge.role})</span></span>
+                                                <span className="text-sm text-gray-800 font-medium">{judge.name} <span className="text-xs text-gray-500 font-normal">({judge.roles?.join(', ')})</span></span>
                                         </label>
                                     ))}
                                     </div>

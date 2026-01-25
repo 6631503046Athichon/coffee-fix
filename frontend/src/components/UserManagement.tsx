@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Navigate } from 'react-router-dom';
 import { User, UserRole } from '../types';
 import { Users as UsersIcon, AlertCircle, UserPlus, Edit, Trash2, Shield, Search, Key, X, Filter, ChevronDown, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { api } from '../services/api';
@@ -451,7 +450,9 @@ const UserManagement: React.FC = () => {
                                             <div className="flex items-center gap-2 min-w-0">
                                                 <div className="text-sm font-medium text-gray-900 truncate">{user.name}</div>
                                                 {user.isSuperAdmin && (
-                                                    <Shield className="h-4 w-4 text-purple-600 flex-shrink-0" title="Super Admin" />
+                                                    <span title="Super Admin">
+                                                        <Shield className="h-4 w-4 text-purple-600 flex-shrink-0" />
+                                                    </span>
                                                 )}
                                             </div>
                                         </td>

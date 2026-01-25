@@ -64,7 +64,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
     const [isAddLotModalOpen, setIsAddLotModalOpen] = useState(false);
     const [isLogRoastModalOpen, setIsLogRoastModalOpen] = useState(false);
-    const [selectedLot, setSelectedLot] = useState<(GreenBeanLot & { variety: string, process: string, finalScore: string | number }) | null>(null);
+    const [selectedLot, setSelectedLot] = useState<(GreenBeanLot & { variety: string, process: string, finalScore?: string | number }) | null>(null);
     const [selectedInventoryItem, setSelectedInventoryItem] = useState<(RoasterInventoryItem & { variety: string, process: string }) | null>(null);
     const [claimAmount, setClaimAmount] = useState('');
     const [roastForm, setRoastForm] = useState({ batchSize: '', roastedWeight: '', notes: '', flavorNotes: '' });
@@ -206,7 +206,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     }, [inventoryTotalPages, inventoryPage]);
     const pagedInventory = useMemo(() => myInventory.slice((inventoryPage-1)*inventoryPageSize, (inventoryPage-1)*inventoryPageSize + inventoryPageSize), [myInventory, inventoryPage]);
 
-    const openClaimModal = (lot: GreenBeanLot & { variety: string, process: string, finalScore: string | number }) => {
+    const openClaimModal = (lot: GreenBeanLot & { variety: string, process: string, finalScore?: string | number }) => {
         setSelectedLot(lot);
         setClaimAmount('');
         setIsClaimModalOpen(true);
@@ -214,7 +214,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
 
     const openLogRoastModal = (inventoryItem: RoasterInventoryItem & { variety: string, process: string }) => {
         setSelectedInventoryItem(inventoryItem);
-    setRoastForm({ batchSize: '', yieldPercentage: '85', notes: '', flavorNotes: '' });
+    setRoastForm({ batchSize: '', roastedWeight: '', notes: '', flavorNotes: '' });
     setRoastLevel(RoastLevel.Medium);
 
         const existing = (data.roastBatches

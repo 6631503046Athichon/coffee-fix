@@ -351,9 +351,7 @@ const GAPComplianceHelper: React.FC = () => {
                     <form onSubmit={handleLogSubmit} className="space-y-5">
                         {/* Error Display */}
                         {formError && (
-                            <Alert variant="error" className="mb-4">
-                                {formError}
-                            </Alert>
+                            <Alert type="error" message={formError} className="mb-4" />
                         )}
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -422,9 +420,7 @@ const GAPComplianceHelper: React.FC = () => {
 
                         <div className="flex items-center justify-between pt-2">
                             {showSuccess && (
-                                <Alert variant="success" className="flex-1 mr-4">
-                                    {editingLog ? 'Activity Log updated successfully!' : 'Activity Log saved successfully!'}
-                                </Alert>
+                                <Alert type="success" message={editingLog ? 'Activity Log updated successfully!' : 'Activity Log saved successfully!'} className="flex-1 mr-4" />
                             )}
                             <Button
                                 type="submit"

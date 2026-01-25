@@ -19,7 +19,7 @@ export interface TableProps<T> {
   className?: string;
 }
 
-export function Table<T extends Record<string, any>>({
+const Table = <T extends Record<string, any>>({
   columns,
   data,
   title,
@@ -29,7 +29,7 @@ export function Table<T extends Record<string, any>>({
   rowClassName,
   emptyMessage = 'No data available',
   className = '',
-}: TableProps<T>) {
+}: TableProps<T>): React.ReactElement => {
   const getCellValue = (row: T, column: Column<T>) => {
     if (typeof column.accessor === 'function') {
       return column.accessor(row);
@@ -107,6 +107,7 @@ export function Table<T extends Record<string, any>>({
       </div>
     </div>
   );
-}
+};
 
+export { Table };
 export default Table;

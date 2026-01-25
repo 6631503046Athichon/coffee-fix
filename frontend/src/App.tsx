@@ -324,7 +324,7 @@ const ProtectedRoutes: React.FC = () => {
 
 const App: React.FC = () => {
   const [data] = useState(MOCK_DATA);
-  const contextValue = useMemo(() => ({ data, setData: () => {} }), [data]);
+  const contextValue = useMemo(() => ({ data, setData: () => {}, refreshData: async () => {} }), [data]);
 
   // Initialize localStorage on app mount (only for non-API data)
   useEffect(() => {

@@ -107,7 +107,7 @@ const CustomCropYearDropdown: React.FC<{
         className="w-full border border-gray-300 rounded-xl px-4 py-3 text-base font-medium bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all hover:border-gray-400 flex items-center justify-between gap-2 shadow-sm"
       >
         <span className={selectedOption ? 'text-gray-900' : 'text-gray-400'}>
-          {selectedOption ? `${selectedOption.year} (${selectedOption.season})` : placeholder}
+          {selectedOption ? `${selectedOption.year}${selectedOption.description ? ` - ${selectedOption.description}` : ''}` : placeholder}
         </span>
         <svg className={`h-5 w-5 text-gray-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -140,7 +140,7 @@ const CustomCropYearDropdown: React.FC<{
                     : 'text-gray-900 hover:bg-indigo-50 hover:text-indigo-700'
                   }`}
               >
-                {option.year} ({option.season})
+                {option.year}{option.description ? ` - ${option.description}` : ''}
               </button>
             ))}
           </div>
