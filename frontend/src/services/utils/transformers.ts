@@ -59,6 +59,8 @@ export const transformSoilAnalysisFromBackend = (analysis: any) => ({
   boron: analysis.boron || undefined,
   notes: analysis.notes || undefined,
   recommendations: analysis.recommendations || undefined,
+  createdBy: analysis.createdBy || analysis.creator?.id || '',
+  createdByRole: analysis.createdByRole || analysis.creator?.roles?.[0] || 'Farmer',
   attachmentUrl: analysis.attachmentUrl || undefined,
   createdAt: analysis.createdAt,
   updatedAt: analysis.updatedAt,

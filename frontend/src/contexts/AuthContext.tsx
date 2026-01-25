@@ -13,16 +13,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Renamed isLoading to isAuthLoading for clarity to distinguish from data loading
-interface AuthContextType {
-  currentUser: User | null;
-  isAuthenticated: boolean;
-  isAuthLoading: boolean; // Renamed from isLoading
-  login: (identifier: string, password: string) => Promise<User>;
-  logout: () => Promise<void>; // Changed to async
-  setUser: (user: User) => void;
-}
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
