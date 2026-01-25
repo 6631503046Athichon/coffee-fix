@@ -165,11 +165,6 @@ const AddFarmPage: React.FC = () => {
 			return;
 		}
 		const sanitizedFarmers = farmerNames.map(name => name.trim()).filter(Boolean);
-		if (sanitizedFarmers.length === 0) {
-			setFormError('Please enter farmer name');
-			setIsSubmitting(false);
-			return;
-		}
 		if (selectedVarieties.length === 0) {
 			setFormError('Please select or add at least 1 coffee variety');
 			setIsSubmitting(false);
@@ -219,7 +214,7 @@ const AddFarmPage: React.FC = () => {
 		}
 
 		const ownerDisplayName = sanitizedOwners.join(', ');
-		const caretakerDisplayName = sanitizedFarmers.join(', ');
+		const caretakerDisplayName = sanitizedFarmers.length > 0 ? sanitizedFarmers.join(', ') : undefined;
 		const timestamp = new Date().toISOString();
 
 		if (isEditing && farmId) {
