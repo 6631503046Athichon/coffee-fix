@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     requireRole(user, ['Farmer', 'Admin'])
 
     const body = await request.json()
-    const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, ownerId, googleMapsUrl } = body
+    const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, ownerId } = body
 
     // Validation
     if (!farmName || !location) {
@@ -74,7 +74,6 @@ export async function POST(request: NextRequest) {
         sizeHectares: sizeHectares ? parseFloat(sizeHectares) : null,
         varieties: varieties || [],
         caretakerName: caretakerName || null,
-        googleMapsUrl: googleMapsUrl || null,
         ownerId: finalOwnerId,
       },
       include: {

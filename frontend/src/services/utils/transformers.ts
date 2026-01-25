@@ -9,7 +9,6 @@ export const transformFarmFromBackend = (farm: any) => ({
   location: farm.location,
   farmerName: farm.owner?.name || '',
   ownerName: farm.owner?.name || undefined,
-  googleMapsUrl: farm.googleMapsUrl || farm.googleMapsLink || undefined,
   latitude: farm.latitude || undefined,
   longitude: farm.longitude || undefined,
   altitudeMeters: farm.altitude || undefined,
@@ -26,7 +25,6 @@ export const transformFarmFromBackend = (farm: any) => ({
 export const transformFarmToBackend = (farmData: any) => ({
   farmName: farmData.name || '',
   location: farmData.location || '',
-  googleMapsUrl: farmData.googleMapsUrl || null,
   latitude: farmData.latitude?.toString() || null,
   longitude: farmData.longitude?.toString() || null,
   altitude: farmData.altitudeMeters?.toString() || null,
