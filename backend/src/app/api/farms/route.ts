@@ -43,7 +43,16 @@ export async function POST(request: NextRequest) {
     requireRole(user, ['Farmer', 'Admin'])
 
     const body = await request.json()
-    const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, ownerId, googleMapsUrl } = body
+    const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, caretakerNames, ownerId, googleMapsUrl, ownerNames } = body
+
+    const normalizedOwnerNames = Array.isArray(ownerNames)
+      ? ownerNames.map((name: unknown) => String(name).trim()).filter(Boolean)
+      : []
+    const normalizedCaretakerNames = Array.isArray(caretakerNames)
+      ? caretakerNames.map((name: unknown) => String(name).trim()).filter(Boolean)
+      : (typeof caretakerName === 'string'
+          ? caretakerName.split(',').map((name: string) => name.trim()).filter(Boolean)
+          : [])
 
     // Validation
     if (!farmName || !location) {
@@ -67,13 +76,15 @@ export async function POST(request: NextRequest) {
     const farm = await prisma.farm.create({
       data: {
         farmName,
+        ownerNames: normalizedOwnerNames,
         location,
         latitude: latitude ? parseFloat(latitude) : null,
         longitude: longitude ? parseFloat(longitude) : null,
         altitude: altitude || null,
         sizeHectares: sizeHectares ? parseFloat(sizeHectares) : null,
         varieties: varieties || [],
-        caretakerName: caretakerName || null,
+        caretakerNames: normalizedCaretakerNames,
+        caretakerName: normalizedCaretakerNames.length > 0 ? null : (caretakerName || null),
         googleMapsUrl: googleMapsUrl || null,
         ownerId: finalOwnerId,
       },

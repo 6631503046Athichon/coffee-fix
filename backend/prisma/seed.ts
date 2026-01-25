@@ -244,11 +244,13 @@ async function main() {
         const testFarm = await prisma.farm.create({
           data: {
             farmName: "Test Coffee Farm",
+            ownerNames: [testUser.name],
             location: "Chiang Mai, Thailand",
             latitude: 18.7883,
             longitude: 98.9853,
             altitude: "1200m",
             ownerId: testUser.id,
+            caretakerNames: ["John Doe"],
             caretakerName: "John Doe",
             sizeHectares: 5.5,
             varieties: ["Gesha", "Caturra", "Typica"],
@@ -274,11 +276,13 @@ async function main() {
         const farmerFarm = await prisma.farm.create({
           data: {
             farmName: "Maria's Coffee Estate",
+            ownerNames: [farmerUser.name],
             location: "Doi Inthanon, Chiang Mai, Thailand",
             latitude: 18.5883,
             longitude: 98.4869,
             altitude: "1500m",
             ownerId: farmerUser.id,
+            caretakerNames: ["Maria Rodriguez"],
             caretakerName: "Maria Rodriguez",
             sizeHectares: 12.0,
             varieties: ["Bourbon", "SL28", "SL34"],
@@ -389,11 +393,13 @@ async function main() {
       const farm = await prisma.farm.create({
         data: {
           farmName,
+          ownerNames: [farmer.name],
           location: `${location.name}, Thailand`,
           latitude: location.lat + (Math.random() - 0.5) * 0.1,
           longitude: location.lng + (Math.random() - 0.5) * 0.1,
           altitude: location.altitude,
           ownerId: farmer.id,
+          caretakerNames: [farmer.name],
           caretakerName: farmer.name,
           sizeHectares: parseFloat((Math.random() * 20 + 2).toFixed(1)),
           varieties: faker.helpers.arrayElements(COFFEE_VARIETIES, {

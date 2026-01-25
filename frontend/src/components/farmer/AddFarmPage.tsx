@@ -83,17 +83,19 @@ const AddFarmPage: React.FC = () => {
 		if (isEditing && editingFarm) {
 			setFarmName(editingFarm.name ?? '');
 			setFarmLocation(editingFarm.location);
-			const combinedOwnerName = editingFarm.ownerName ?? editingFarm.farmerName ?? '';
-			const parsedOwners = combinedOwnerName
-				.split(',')
-				.map(name => name.trim())
-				.filter(Boolean);
+			const parsedOwners = editingFarm.ownerNames && editingFarm.ownerNames.length > 0
+				? editingFarm.ownerNames
+				: (editingFarm.ownerName ?? editingFarm.farmerName ?? '')
+					.split(',')
+					.map(name => name.trim())
+					.filter(Boolean);
 			setOwnerNames(parsedOwners.length > 0 ? parsedOwners : ['']);
-			const combinedFarmerName = editingFarm.caretakerName ?? '';
-			const parsedFarmers = combinedFarmerName
-				.split(',')
-				.map(name => name.trim())
-				.filter(Boolean);
+			const parsedFarmers = editingFarm.caretakerNames && editingFarm.caretakerNames.length > 0
+				? editingFarm.caretakerNames
+				: (editingFarm.caretakerName ?? '')
+					.split(',')
+					.map(name => name.trim())
+					.filter(Boolean);
 			setFarmerNames(parsedFarmers.length > 0 ? parsedFarmers : ['']);
 			setSelectedVarieties(editingFarm.varieties ?? []);
 			setCustomVariety('');
@@ -274,7 +276,6 @@ const AddFarmPage: React.FC = () => {
 		}
 
 		const ownerDisplayName = sanitizedOwners.join(', ');
-		const caretakerDisplayName = sanitizedFarmers.length > 0 ? sanitizedFarmers.join(', ') : undefined;
 		const timestamp = new Date().toISOString();
 
 		if (isEditing && farmId) {
@@ -288,8 +289,9 @@ const AddFarmPage: React.FC = () => {
 				...existing,
 				name: farmName.trim() || undefined,
 				farmerName: ownerDisplayName,
-				ownerName: ownerDisplayName,
-				caretakerName: caretakerDisplayName,
+				ownerNames: sanitizedOwners,
+				caretakerNames: sanitizedFarmers,
+				caretakerName: undefined,
 				googleMapsUrl: googleMapsUrl.trim() || undefined,
 				location: farmLocation.trim(),
 				varieties: [...selectedVarieties].sort(),
@@ -328,8 +330,9 @@ const AddFarmPage: React.FC = () => {
 				id: generateFarmId(data.farms.map(f => f.id)),
 				name: farmName.trim(),
 				farmerName: ownerDisplayName,
-				ownerName: ownerDisplayName,
-				caretakerName: caretakerDisplayName,
+				ownerNames: sanitizedOwners,
+				caretakerNames: sanitizedFarmers,
+				caretakerName: undefined,
 				googleMapsUrl: googleMapsUrl.trim() || undefined,
 				location: farmLocation.trim(),
 				ownerUserId: currentUser.id,

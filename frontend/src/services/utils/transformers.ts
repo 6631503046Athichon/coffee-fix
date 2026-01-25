@@ -3,11 +3,20 @@
  */
 
 // Farm transformations
-export const transformFarmFromBackend = (farm: any) => ({
+export const transformFarmFromBackend = (farm: any) => {
+  const ownerNamesFromBackend = Array.isArray(farm.ownerNames) ? farm.ownerNames : []
+  const ownerNamesFallback = farm.owner?.name ? [farm.owner.name] : []
+  const caretakerNamesFromBackend = Array.isArray(farm.caretakerNames) ? farm.caretakerNames : []
+  const caretakerNamesFallback = typeof farm.caretakerName === 'string'
+    ? farm.caretakerName.split(',').map((name: string) => name.trim()).filter(Boolean)
+    : []
+
+  return {
   id: farm.id,
   name: farm.farmName || undefined,
   location: farm.location,
   farmerName: farm.owner?.name || '',
+  ownerNames: ownerNamesFromBackend.length > 0 ? ownerNamesFromBackend : ownerNamesFallback,
   ownerName: farm.owner?.name || undefined,
   googleMapsUrl: farm.googleMapsUrl || farm.googleMapsLink || undefined,
   latitude: farm.latitude || undefined,
@@ -15,26 +24,47 @@ export const transformFarmFromBackend = (farm: any) => ({
   altitudeMeters: farm.altitude || undefined,
   sizeHectares: farm.sizeHectares || undefined,
   varieties: farm.varieties || [],
+  caretakerNames: caretakerNamesFromBackend.length > 0 ? caretakerNamesFromBackend : caretakerNamesFallback,
   caretakerName: farm.caretakerName || undefined,
   createdAt: farm.createdAt,
   updatedAt: farm.updatedAt,
   archived: farm.archived || false,
   archivedAt: farm.archivedAt || undefined,
   ownerUserId: farm.ownerId,
-});
+  }
+};
 
-export const transformFarmToBackend = (farmData: any) => ({
-  farmName: farmData.name || '',
-  location: farmData.location || '',
-  googleMapsUrl: farmData.googleMapsUrl || null,
-  latitude: farmData.latitude?.toString() || null,
-  longitude: farmData.longitude?.toString() || null,
-  altitude: farmData.altitudeMeters?.toString() || null,
-  sizeHectares: farmData.sizeHectares?.toString() || null,
-  varieties: farmData.varieties || [],
-  caretakerName: farmData.caretakerName || null,
-  archived: farmData.archived || false,
-});
+export const transformFarmToBackend = (farmData: any) => {
+  const ownerNamesFromArray = Array.isArray(farmData.ownerNames) ? farmData.ownerNames : []
+  const ownerNamesFromString = typeof farmData.ownerName === 'string'
+    ? farmData.ownerName
+        .split(',')
+        .map((name: string) => name.trim())
+        .filter(Boolean)
+    : []
+  const caretakerNamesFromArray = Array.isArray(farmData.caretakerNames) ? farmData.caretakerNames : []
+  const caretakerNamesFromString = typeof farmData.caretakerName === 'string'
+    ? farmData.caretakerName
+        .split(',')
+        .map((name: string) => name.trim())
+        .filter(Boolean)
+    : []
+
+  return {
+    farmName: farmData.name || '',
+    ownerNames: ownerNamesFromArray.length > 0 ? ownerNamesFromArray : ownerNamesFromString,
+    location: farmData.location || '',
+    googleMapsUrl: farmData.googleMapsUrl || null,
+    latitude: farmData.latitude?.toString() || null,
+    longitude: farmData.longitude?.toString() || null,
+    altitude: farmData.altitudeMeters?.toString() || null,
+    sizeHectares: farmData.sizeHectares?.toString() || null,
+    varieties: farmData.varieties || [],
+    caretakerNames: caretakerNamesFromArray.length > 0 ? caretakerNamesFromArray : caretakerNamesFromString,
+    caretakerName: null,
+    archived: farmData.archived || false,
+  }
+};
 
 // Soil Analysis transformations
 export const transformSoilAnalysisFromBackend = (analysis: any) => ({
