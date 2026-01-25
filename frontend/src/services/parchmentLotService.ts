@@ -25,6 +25,17 @@ export const getAllParchmentLots = async (
 };
 
 /**
+ * Update a parchment lot
+ */
+export const updateParchmentLot = async (
+  id: string,
+  updates: Partial<ParchmentLot>
+): Promise<ParchmentLot> => {
+  const response = await api.put<{ parchmentLot: any }>(`/parchment-lots/${id}`, updates);
+  return transformParchmentLotFromBackend(response.parchmentLot);
+};
+
+/**
  * Transform parchment lot data from backend format to frontend format
  */
 function transformParchmentLotFromBackend(backendLot: any): ParchmentLot {
