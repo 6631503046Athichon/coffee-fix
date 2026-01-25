@@ -63,16 +63,13 @@ export const getAllGreenBeanLots = async (
 function transformGreenBeanLotFromBackend(backendLot: any): GreenBeanLot {
   return {
     id: backendLot.id,
+    sourceType: backendLot.sourceType || 'Internal',
     parchmentLotId: backendLot.parchmentLotId,
+    externalSource: backendLot.externalSource,
     grade: backendLot.grade,
     initialWeightKg: backendLot.initialWeightKg,
     currentWeightKg: backendLot.currentWeightKg,
     availabilityStatus: backendLot.availabilityStatus,
-    sourceType: backendLot.sourceType || 'Internal',
-    pricePerKg: backendLot.pricePerKg || undefined,
-    currency: backendLot.currency || undefined,
-    pricingDate: backendLot.pricingDate ? new Date(backendLot.pricingDate).toISOString().split('T')[0] : undefined,
-    priceSetById: backendLot.priceSetById || undefined,
     cuppingScores: backendLot.cuppingScores || [],
     withdrawalHistory: backendLot.withdrawalHistory || [],
   };
