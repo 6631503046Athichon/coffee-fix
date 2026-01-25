@@ -1,19 +1,6 @@
 import { ParchmentLot } from '../types';
 import { api } from './api';
 
-export interface UpdateParchmentLotInput {
-  status?: string;
-  currentWeightKg?: number;
-}
-
-/**
- * Update a parchment lot
- */
-export const updateParchmentLot = async (id: string, input: UpdateParchmentLotInput): Promise<ParchmentLot> => {
-  const response = await api.patch<{ parchmentLot: any }>(`/parchment-lots/${id}`, input);
-  return transformParchmentLotFromBackend(response.parchmentLot);
-};
-
 /**
  * Fetch all parchment lots, optionally filtered by processingBatchId or status
  */
