@@ -37,11 +37,7 @@ class Logger {
    * Send logs to external monitoring service (placeholder)
    */
   private sendToMonitoring(level: LogLevel, message: string, error?: Error, context?: LogContext) {
-    // TODO: Integrate with Sentry, LogRocket, or other monitoring services
-    // Example for Sentry:
-    // if (level === 'error' && error) {
-    //   Sentry.captureException(error, { extra: context });
-    // }
+    // Placeholder for external monitoring integration (Sentry, LogRocket, etc.)
   }
 
   /**
