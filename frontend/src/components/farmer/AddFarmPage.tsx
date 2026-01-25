@@ -25,6 +25,35 @@ const COFFEE_VARIETIES = [
 	'Ethiopian Heirloom',
 ];
 
+type ParsedCoords = { lat: number; lng: number } | null;
+
+function parseGoogleMapsUrl(url: string): ParsedCoords {
+	if (!url) return null;
+	try {
+		const trimmed = url.trim();
+
+		const atMatch = trimmed.match(/@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
+		if (atMatch) {
+			return {
+				lat: parseFloat(atMatch[1]),
+				lng: parseFloat(atMatch[2]),
+			};
+		}
+
+		const qMatch = trimmed.match(/[?&]q=(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
+		if (qMatch) {
+			return {
+				lat: parseFloat(qMatch[1]),
+				lng: parseFloat(qMatch[2]),
+			};
+		}
+
+		return null;
+	} catch {
+		return null;
+	}
+}
+
 const AddFarmPage: React.FC = () => {
 	const navigate = useNavigate();
 	const { farmId } = useParams<{ farmId?: string }>();
@@ -37,6 +66,7 @@ const AddFarmPage: React.FC = () => {
 	const [farmerNames, setFarmerNames] = useState<string[]>(['']);
 	const [selectedVarieties, setSelectedVarieties] = useState<string[]>([]);
 	const [customVariety, setCustomVariety] = useState('');
+	const [googleMapsUrl, setGoogleMapsUrl] = useState('');
 	const [latitudeInput, setLatitudeInput] = useState('');
 	const [longitudeInput, setLongitudeInput] = useState('');
 	const [sizeInput, setSizeInput] = useState('');
@@ -67,6 +97,7 @@ const AddFarmPage: React.FC = () => {
 			setFarmerNames(parsedFarmers.length > 0 ? parsedFarmers : ['']);
 			setSelectedVarieties(editingFarm.varieties ?? []);
 			setCustomVariety('');
+			setGoogleMapsUrl(editingFarm.googleMapsUrl ?? '');
 			setLatitudeInput(
 				editingFarm.latitude !== undefined && editingFarm.latitude !== null ? String(editingFarm.latitude) : '',
 			);
@@ -84,6 +115,7 @@ const AddFarmPage: React.FC = () => {
 			setFarmerNames(['']);
 			setSelectedVarieties([]);
 			setCustomVariety('');
+			setGoogleMapsUrl('');
 			setLatitudeInput('');
 			setLongitudeInput('');
 			setSizeInput('');
@@ -128,6 +160,34 @@ const AddFarmPage: React.FC = () => {
 		if (!trimmed) return;
 		setSelectedVarieties(prev => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
 		setCustomVariety('');
+	};
+
+	const handleExtractFromGoogleMapsUrl = () => {
+		setFormError(null);
+
+		if (!googleMapsUrl.trim()) {
+			setFormError('Please paste a Google Maps URL first');
+			return;
+		}
+
+		const parsed = parseGoogleMapsUrl(googleMapsUrl);
+		if (!parsed) {
+			setFormError('Unable to extract coordinates from this Google Maps URL. Please check the link or enter coordinates manually.');
+			return;
+		}
+
+		const { lat, lng } = parsed;
+		if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+			setFormError('The coordinates from this URL are not in a valid range.');
+			return;
+		}
+
+		setLatitudeInput(lat.toFixed(6));
+		setLongitudeInput(lng.toFixed(6));
+		setToast({
+			type: 'success',
+			message: 'Coordinates extracted from Google Maps URL',
+		});
 	};
 
 	const handleSaveFarm = async (event: React.FormEvent) => {
@@ -230,6 +290,7 @@ const AddFarmPage: React.FC = () => {
 				farmerName: ownerDisplayName,
 				ownerName: ownerDisplayName,
 				caretakerName: caretakerDisplayName,
+				googleMapsUrl: googleMapsUrl.trim() || undefined,
 				location: farmLocation.trim(),
 				varieties: [...selectedVarieties].sort(),
 				latitude,
@@ -269,6 +330,7 @@ const AddFarmPage: React.FC = () => {
 				farmerName: ownerDisplayName,
 				ownerName: ownerDisplayName,
 				caretakerName: caretakerDisplayName,
+				googleMapsUrl: googleMapsUrl.trim() || undefined,
 				location: farmLocation.trim(),
 				ownerUserId: currentUser.id,
 				varieties: [...selectedVarieties].sort(),
@@ -555,6 +617,13 @@ const AddFarmPage: React.FC = () => {
 						<h2 className="text-xl font-bold text-gray-900">Location Details</h2>
 					</div>
 					<div className="space-y-4">
+						<Input
+							label="Google Maps URL (optional)"
+							placeholder="Paste a full Google Maps link, e.g. https://www.google.com/maps/..."
+							value={googleMapsUrl}
+							onChange={e => setGoogleMapsUrl(e.target.value)}
+							fullWidth
+						/>
 						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 							<Input
 								label="Latitude"
@@ -586,6 +655,16 @@ const AddFarmPage: React.FC = () => {
 									className="bg-white hover:bg-sky-50 border-sky-300 text-sky-700 hover:text-sky-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
 								>
 									{isGeocoding ? 'Finding...' : 'Find GPS from Location'}
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									onClick={handleExtractFromGoogleMapsUrl}
+									disabled={!googleMapsUrl.trim()}
+									icon={<MapPin className="h-4 w-4" />}
+									className="bg-white hover:bg-sky-50 border-sky-300 text-sky-700 hover:text-sky-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+								>
+									Use Google Maps URL
 								</Button>
 								<Button
 									type="button"
