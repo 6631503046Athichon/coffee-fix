@@ -78,7 +78,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, archived, googleMapsUrl } = body
+    const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, caretakerNames, archived, googleMapsUrl, ownerNames } = body
 
     const updateData: any = {}
     if (farmName !== undefined) updateData.farmName = farmName
@@ -88,8 +88,23 @@ export async function PUT(
     if (altitude !== undefined) updateData.altitude = altitude
     if (sizeHectares !== undefined) updateData.sizeHectares = sizeHectares ? parseFloat(sizeHectares) : null
     if (varieties !== undefined) updateData.varieties = varieties
+    if (caretakerNames !== undefined || caretakerName !== undefined) {
+      updateData.caretakerNames = Array.isArray(caretakerNames)
+        ? caretakerNames.map((name: unknown) => String(name).trim()).filter(Boolean)
+        : (typeof caretakerName === 'string'
+            ? caretakerName.split(',').map((name: string) => name.trim()).filter(Boolean)
+            : [])
+    }
     if (caretakerName !== undefined) updateData.caretakerName = caretakerName || null
+    if (caretakerNames !== undefined && updateData.caretakerNames?.length > 0) {
+      updateData.caretakerName = null
+    }
     if (googleMapsUrl !== undefined) updateData.googleMapsUrl = googleMapsUrl || null
+    if (ownerNames !== undefined) {
+      updateData.ownerNames = Array.isArray(ownerNames)
+        ? ownerNames.map((name: unknown) => String(name).trim()).filter(Boolean)
+        : []
+    }
     if (archived !== undefined) {
       updateData.archived = archived
       updateData.archivedAt = archived ? new Date() : null
