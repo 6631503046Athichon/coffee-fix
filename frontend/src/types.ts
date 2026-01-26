@@ -49,7 +49,9 @@ export interface Farm {
   id: string;
   name?: string;
   farmerName: string;
+  ownerNames?: string[];
   ownerName?: string;
+  caretakerNames?: string[]; // Added caretakerNames to Farm type
   caretakerName?: string;
   googleMapsUrl?: string;
   location: string;

@@ -58,11 +58,15 @@ const FarmManagement: React.FC = () => {
 
 		return scopedFarms
 			.filter(farm => {
+				const ownerNamesMatch = (farm.ownerNames ?? []).some(name => name.toLowerCase().includes(lowerSearch));
+				const caretakerNamesMatch = (farm.caretakerNames ?? []).some(name => name.toLowerCase().includes(lowerSearch));
 				const matchesSearch = !lowerSearch
 					|| farm.name?.toLowerCase().includes(lowerSearch)
 					|| farm.farmerName.toLowerCase().includes(lowerSearch)
 					|| farm.ownerName?.toLowerCase().includes(lowerSearch)
+					|| ownerNamesMatch
 					|| farm.caretakerName?.toLowerCase().includes(lowerSearch)
+					|| caretakerNamesMatch
 					|| farm.location.toLowerCase().includes(lowerSearch)
 					|| farm.id.toLowerCase().includes(lowerSearch);
 				const matchesVariety = varietyFilter === 'All'
@@ -367,6 +371,12 @@ const FarmManagement: React.FC = () => {
 				<div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
 					{filteredFarms.map(farm => {
 						const isSelected = selectedFarm?.id === farm.id;
+						const ownerDisplayName = farm.ownerNames && farm.ownerNames.length > 0
+							? farm.ownerNames.join(', ')
+							: (farm.ownerName ?? farm.farmerName);
+						const caretakerDisplayName = farm.caretakerNames && farm.caretakerNames.length > 0
+							? farm.caretakerNames.join(', ')
+							: farm.caretakerName;
 						return (
 						<div
 							key={farm.id}
@@ -387,8 +397,8 @@ const FarmManagement: React.FC = () => {
 									<h3 className="text-xl font-bold text-gray-900 leading-tight truncate">{farm.name ?? farm.location}</h3>
 									<p className="text-sm text-gray-500 leading-relaxed truncate">{farm.location}</p>
 									<div className="space-y-0.5">
-										<p className="text-xs text-gray-500 leading-relaxed">Owner: <span className="font-medium">{farm.ownerName ?? farm.farmerName}</span></p>
-										{farm.caretakerName && <p className="text-xs text-gray-500 leading-relaxed">Caretaker: <span className="font-medium">{farm.caretakerName}</span></p>}
+										<p className="text-xs text-gray-500 leading-relaxed">Owner: <span className="font-medium">{ownerDisplayName}</span></p>
+										{caretakerDisplayName && <p className="text-xs text-gray-500 leading-relaxed">Caretaker: <span className="font-medium">{caretakerDisplayName}</span></p>}
 										{farm.googleMapsUrl && (
 											<p className="text-xs text-gray-500 leading-relaxed">
 												Map: <a href={farm.googleMapsUrl} target="_blank" rel="noreferrer" className="text-emerald-700 font-medium hover:underline">Open Google Maps</a>

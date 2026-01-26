@@ -52,6 +52,7 @@ model User {
 model Farm {
   id             String          @id @default(uuid())
   farmName       String
+  ownerNames     String[]        @default([])
   location       String
   latitude       Float?
   longitude      Float?
@@ -62,6 +63,7 @@ model Farm {
   updatedAt      DateTime        @updatedAt
   archived       Boolean         @default(false)
   archivedAt     DateTime?
+  caretakerNames String[]        @default([])
   caretakerName  String?
   sizeHectares   Float?
   varieties      String[]

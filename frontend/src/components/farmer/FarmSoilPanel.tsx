@@ -392,8 +392,14 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                 <p className="text-xs font-semibold text-emerald-700">{farm.id}</p>
                 <h3 className="text-xl font-bold text-gray-900">{farm.name ?? farm.location}</h3>
                 <p className="text-sm text-gray-600">{farm.location}</p>
-                <p className="text-sm text-gray-600">เจ้าของ: {farm.ownerName ?? farm.farmerName}</p>
-                {farm.caretakerName && <p className="text-sm text-gray-600">ผู้ดูแล: {farm.caretakerName}</p>}
+                <p className="text-sm text-gray-600">
+                  เจ้าของ: {farm.ownerNames && farm.ownerNames.length > 0 ? farm.ownerNames.join(', ') : (farm.ownerName ?? farm.farmerName)}
+                </p>
+                {(farm.caretakerNames && farm.caretakerNames.length > 0) || farm.caretakerName ? (
+                  <p className="text-sm text-gray-600">
+                    ผู้ดูแล: {farm.caretakerNames && farm.caretakerNames.length > 0 ? farm.caretakerNames.join(', ') : farm.caretakerName}
+                  </p>
+                ) : null}
               </div>
             </div>
             <div className="text-sm text-gray-600">
