@@ -8,22 +8,7 @@ import { Button, Input } from '../common';
 import Select from '../common/Select';
 import { addFarm, updateFarm } from '../../services/farmService';
 import { generateFarmId } from '../../utils/idGenerator';
-
-const COFFEE_VARIETIES = [
-	'Gesha',
-	'Caturra',
-	'Typica',
-	'Bourbon',
-	'SL28',
-	'SL34',
-	'Pacamara',
-	'Catuai',
-	'Mundo Novo',
-	'Maragogype',
-	'Java',
-	'Blue Mountain',
-	'Ethiopian Heirloom',
-];
+import { getActiveCoffeeVarieties, CoffeeVariety } from '../../services/coffeeVarietyService';
 
 type ParsedCoords = { lat: number; lng: number } | null;
 
@@ -66,6 +51,7 @@ const AddFarmPage: React.FC = () => {
 	const [farmerNames, setFarmerNames] = useState<string[]>(['']);
 	const [selectedVarieties, setSelectedVarieties] = useState<string[]>([]);
 	const [customVariety, setCustomVariety] = useState('');
+	const [customVarietiesList, setCustomVarietiesList] = useState<string[]>([]); // varieties ที่ user เพิ่มเอง
 	const [googleMapsUrl, setGoogleMapsUrl] = useState('');
 	const [latitudeInput, setLatitudeInput] = useState('');
 	const [longitudeInput, setLongitudeInput] = useState('');
@@ -77,8 +63,28 @@ const AddFarmPage: React.FC = () => {
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const lastLoadedFarmIdRef = useRef<string | null>(null);
 
+	// Coffee varieties from API
+	const [coffeeVarieties, setCoffeeVarieties] = useState<CoffeeVariety[]>([]);
+	const [varietiesLoading, setVarietiesLoading] = useState(true);
+
 	const isEditing = Boolean(farmId);
 	const editingFarm = farmId ? data.farms.find(f => f.id === farmId) : null;
+
+	// Fetch coffee varieties from API
+	useEffect(() => {
+		const fetchVarieties = async () => {
+			setVarietiesLoading(true);
+			try {
+				const varieties = await getActiveCoffeeVarieties();
+				setCoffeeVarieties(varieties);
+			} catch (error) {
+				console.error('Failed to fetch coffee varieties:', error);
+			} finally {
+				setVarietiesLoading(false);
+			}
+		};
+		fetchVarieties();
+	}, []);
 
 	useEffect(() => {
 		if (isEditing && editingFarm) {
@@ -166,7 +172,13 @@ const AddFarmPage: React.FC = () => {
 	const handleCustomVarietyAdd = () => {
 		const trimmed = customVariety.trim();
 		if (!trimmed) return;
+		// เพิ่มลงใน selected varieties
 		setSelectedVarieties(prev => (prev.includes(trimmed) ? prev : [...prev, trimmed]));
+		// เพิ่มลงใน dropdown ด้วย (ถ้ายังไม่มีใน list)
+		const allExistingVarieties = [...coffeeVarieties.map(v => v.name), ...customVarietiesList];
+		if (!allExistingVarieties.includes(trimmed)) {
+			setCustomVarietiesList(prev => [...prev, trimmed]);
+		}
 		setCustomVariety('');
 	};
 
@@ -738,9 +750,10 @@ const AddFarmPage: React.FC = () => {
 											toggleVariety(variety);
 										}
 									}}
-									options={COFFEE_VARIETIES.filter(v => !selectedVarieties.includes(v))}
-									placeholder="Select variety..."
+									options={[...coffeeVarieties.map(v => v.name), ...customVarietiesList].filter(v => !selectedVarieties.includes(v))}
+									placeholder={varietiesLoading ? "Loading varieties..." : "Select variety..."}
 									colorTheme="emerald"
+									disabled={varietiesLoading}
 								/>
 							</div>
 							<div className="flex-1">

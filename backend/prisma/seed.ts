@@ -260,6 +260,56 @@ async function main() {
     console.log("Created process type:", processType.name);
   }
 
+  // ============================================================
+  // Create Coffee Varieties
+  // ============================================================
+  console.log("\nCreating coffee varieties...");
+
+  const coffeeVarieties = [
+    // พันธุ์ที่นิยมในไทย
+    { name: "Catimor", species: "Arabica", origin: "Thailand", description: "พันธุ์ที่นิยมปลูกมากที่สุดในไทย ทนทานต่อโรคราสนิม", characteristics: "รสชาติกลมกล่อม มีความขมเล็กน้อย", altitude: "800-1400m" },
+    { name: "Chiang Mai 80", species: "Arabica", origin: "Thailand", description: "พันธุ์พื้นเมืองเชียงใหม่", characteristics: "รสหวานอมเปรี้ยว กลิ่นดอกไม้", altitude: "1200-1600m" },
+
+    // พันธุ์คลาสสิก
+    { name: "Typica", species: "Arabica", origin: "Ethiopia/Yemen", description: "พันธุ์ดั้งเดิม ต้นกำเนิดของพันธุ์อาราบิก้าหลายสายพันธุ์", characteristics: "รสหวานสะอาด กลิ่นหอม ความเปรี้ยวอ่อน", altitude: "1200-1800m" },
+    { name: "Bourbon", species: "Arabica", origin: "Reunion Island", description: "สายพันธุ์คลาสสิก มาจากเกาะ Reunion", characteristics: "หวาน คาราเมล ช็อกโกแลต ผลไม้", altitude: "1200-1800m" },
+    { name: "Caturra", species: "Arabica", origin: "Brazil", description: "Bourbon mutation พบในบราซิล ให้ผลผลิตสูง", characteristics: "เปรี้ยวสดใส รสผลไม้ตระกูลส้ม", altitude: "1200-1700m" },
+    { name: "Catuai", species: "Arabica", origin: "Brazil", description: "ลูกผสมระหว่าง Caturra x Mundo Novo", characteristics: "บาลานซ์ดี รสหวานอมเปรี้ยว", altitude: "800-1400m" },
+
+    // พันธุ์พรีเมียม
+    { name: "Gesha", species: "Arabica", origin: "Ethiopia", description: "พันธุ์ที่มีชื่อเสียงที่สุดในโลก มาจาก Gesha village", characteristics: "ดอกมะลิ เบอร์กาม็อต ชา รสหวานซับซ้อน", altitude: "1600-2000m" },
+    { name: "SL28", species: "Arabica", origin: "Kenya", description: "พัฒนาโดย Scott Laboratories คุณภาพสูง", characteristics: "ผลไม้เบอร์รี่ ส้ม Blackcurrant ความเปรี้ยวสดใส", altitude: "1500-2100m" },
+    { name: "SL34", species: "Arabica", origin: "Kenya", description: "พันธุ์พี่น้องกับ SL28 ทนแล้งได้ดี", characteristics: "ผลไม้เบอร์รี่ รสซับซ้อน", altitude: "1500-2100m" },
+    { name: "Pacamara", species: "Arabica", origin: "El Salvador", description: "ลูกผสม Pacas x Maragogipe เมล็ดใหญ่", characteristics: "ดอกไม้ ช็อกโกแลต ผลไม้ Body หนัก", altitude: "1200-1800m" },
+
+    // พันธุ์อื่นๆ
+    { name: "Mundo Novo", species: "Arabica", origin: "Brazil", description: "ลูกผสม Bourbon x Typica", characteristics: "ช็อกโกแลต ถั่ว รสหวาน", altitude: "1000-1600m" },
+    { name: "Maragogype", species: "Arabica", origin: "Brazil", description: "Typica mutation เมล็ดใหญ่พิเศษ (Elephant Bean)", characteristics: "รสอ่อนโยน หวาน กลิ่นผลไม้", altitude: "800-1200m" },
+    { name: "Java", species: "Arabica", origin: "Indonesia", description: "นำเข้ามาจากเยเมนสู่ชวา พันธุ์คลาสสิก", characteristics: "รสเข้ม สมุนไพร ดิน", altitude: "900-1500m" },
+    { name: "Ethiopian Heirloom", species: "Arabica", origin: "Ethiopia", description: "พันธุ์พื้นเมืองเอธิโอเปีย หลากหลายสายพันธุ์", characteristics: "ดอกไม้ เบอร์รี่ ชา ซับซ้อน", altitude: "1500-2200m" },
+    { name: "Kent", species: "Arabica", origin: "India", description: "พันธุ์จากอินเดีย ทนโรคราสนิม", characteristics: "รสหวาน บาลานซ์ดี", altitude: "1000-1500m" },
+
+    // Robusta
+    { name: "Robusta", species: "Robusta", origin: "Africa", description: "พันธุ์โรบัสต้า ให้คาเฟอีนสูง ทนทาน", characteristics: "รสเข้ม ขม Body หนัก", altitude: "200-800m" },
+  ];
+
+  for (const cv of coffeeVarieties) {
+    const coffeeVariety = await prisma.coffeeVariety.upsert({
+      where: { name: cv.name },
+      update: {},
+      create: {
+        name: cv.name,
+        species: cv.species,
+        origin: cv.origin,
+        description: cv.description,
+        characteristics: cv.characteristics,
+        altitude: cv.altitude,
+        isActive: true,
+      },
+    });
+    console.log("Created coffee variety:", coffeeVariety.name);
+  }
+
   console.log("\nSeed completed!");
 }
 

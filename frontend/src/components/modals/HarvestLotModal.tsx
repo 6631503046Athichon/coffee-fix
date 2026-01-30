@@ -11,25 +11,6 @@ import { Input } from '../common/Input';
 import { generateHarvestLotId } from '../../utils/idGenerator';
 import { addHarvestLot } from '../../services/harvestLotService';
 
-// Coffee varieties list
-const COFFEE_VARIETIES = [
-  'Gesha',
-  'Caturra',
-  'Bourbon',
-  'Typica',
-  'SL28',
-  'SL34',
-  'Pacamara',
-  'Catuai',
-  'Mundo Novo',
-  'Maragogype',
-  'Kent',
-  'Blue Mountain',
-  'Ethiopian Heirloom',
-  'Java',
-  'Tekisic',
-];
-
 interface HarvestLotModalProps {
   isOpen: boolean;
   onClose: () => void;
