@@ -110,7 +110,7 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({ lots, onClaim, on
       {/* Footer with count or Pagination */}
       {lots.length > 0 && (
         <div className="px-4 py-3 bg-gray-50 border-t border-gray-100">
-          {totalPages > 1 && onPageChange ? (
+          {onPageChange ? (
             <div className="flex justify-center items-center gap-1">
               <button
                 onClick={() => onPageChange(currentPage - 1)}

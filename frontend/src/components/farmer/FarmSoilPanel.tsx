@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FlaskConical, Microscope, X, CheckCircle, Edit3, Trash2, Sparkles, Loader2 } from 'lucide-react';
 import { Button, Input, Modal } from '../common';
+import DatePicker from '../common/DatePicker';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Farm, SoilAnalysis, UserRole } from '../../types';
@@ -436,14 +437,11 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                 fullWidth
                 disabled={isSubmitting}
               />
-              <Input
+              <DatePicker
                 label="วันที่ตรวจ"
-                type="date"
                 value={soilForm.testDate}
-                onChange={event => handleSoilFieldChange('testDate', event.target.value)}
+                onChange={(date) => handleSoilFieldChange('testDate', date)}
                 required
-                fullWidth
-                disabled={isSubmitting}
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

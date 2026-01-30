@@ -144,7 +144,8 @@ async function main() {
   }
 
   const cropYearsToCreate = [];
-  for (let i = -2; i <= 2; i++) {
+  // สร้าง 10 ปี (-5 ถึง +4) เพื่อทดสอบ UI limiting
+  for (let i = -5; i <= 4; i++) {
     const yearStart = activeCropYearStart + i;
     const yearEnd = yearStart + 1;
     const yearString = `${yearStart}/${yearEnd}`;

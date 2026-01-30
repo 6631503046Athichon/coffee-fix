@@ -58,9 +58,6 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     const location = useLocation();
     const navigate = useNavigate();
 
-    // Common currency options for quick selection
-    const CURRENCY_OPTIONS = ['THB', 'USD', 'EUR', 'JPY', 'CNY', 'IDR', 'VND', 'MYR', 'SGD', 'LAK'];
-
     const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
     const [isAddLotModalOpen, setIsAddLotModalOpen] = useState(false);
     const [isLogRoastModalOpen, setIsLogRoastModalOpen] = useState(false);
@@ -789,7 +786,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             <Modal
                 isOpen={isAddLotModalOpen}
                 onClose={() => setIsAddLotModalOpen(false)}
-                maxWidth="2xl"
+                maxWidth="5xl"
             >
                                         <form
                                             onSubmit={(e) => {
@@ -936,37 +933,22 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                                                                                                     />
                                                                                                 </div>
                                                 <div>
-                                                    <label className="block text-sm font-bold text-gray-700 mb-2">Price / kg</label>
+                                                    <label className="block text-sm font-bold text-gray-700 mb-2">Price/kg (THB)</label>
                                                     <input type="number" step="0.01" min="0" className="block w-full border-2 border-gray-300 rounded-xl py-2.5 px-3" value={newLotForm.pricePerKg} onChange={e=>setNewLotForm({...newLotForm, pricePerKg:e.target.value})}/>
                                                 </div>
                                                 <div>
-                                                    <label className="block text-sm font-bold text-gray-700 mb-2">Currency</label>
-                                                    <Select
-                                                        value={newLotForm.currency}
-                                                        onChange={(v) => setNewLotForm({ ...newLotForm, currency: (v as string) || 'THB' })}
-                                                        options={CURRENCY_OPTIONS}
-                                                        placeholder="Select currency..."
+                                                    <label className="block text-sm font-bold text-gray-700 mb-2">Total Price (THB)</label>
+                                                    <input
+                                                        type="text"
+                                                        readOnly
+                                                        className="block w-full border-2 border-gray-200 bg-gray-50 rounded-xl py-2.5 px-3 font-semibold text-green-700"
+                                                        value={
+                                                            newLotForm.pricePerKg && newLotForm.initialWeightKg
+                                                                ? (parseFloat(newLotForm.pricePerKg) * parseFloat(newLotForm.initialWeightKg)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                                                : '0.00'
+                                                        }
                                                     />
                                                 </div>
-
-                                                {/* Total Price Calculation */}
-                                                {newLotForm.pricePerKg && newLotForm.initialWeightKg && (
-                                                    <div className="md:col-span-2 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4">
-                                                        <div className="flex items-center justify-between">
-                                                            <div>
-                                                                <p className="text-sm font-semibold text-green-800 mb-1">Total Price</p>
-                                                                <p className="text-2xl font-bold text-green-700">
-                                                                    {(parseFloat(newLotForm.pricePerKg) * parseFloat(newLotForm.initialWeightKg)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                                    <span className="text-lg font-medium ml-2">{newLotForm.currency}</span>
-                                                                </p>
-                                                            </div>
-                                                            <div className="text-right text-sm text-green-600">
-                                                                <p>{parseFloat(newLotForm.pricePerKg).toFixed(2)} {newLotForm.currency}/kg</p>
-                                                                <p>× {parseFloat(newLotForm.initialWeightKg).toFixed(2)} kg</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
 
                                                 <div className="md:col-span-2">
                                                     <label className="block text-sm font-bold text-gray-700 mb-2">Taste Note (optional)</label>
@@ -974,7 +956,17 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                                                 </div>
                                                 <div className="md:col-span-2">
                                                     <label className="block text-sm font-bold text-gray-700 mb-2">Supplier Notes</label>
-                                                    <textarea rows={3} className="block w-full border-2 border-gray-300 rounded-xl py-2.5 px-3" value={newLotForm.supplierNotes} onChange={e=>setNewLotForm({...newLotForm, supplierNotes:e.target.value})}/>
+                                                    <textarea
+                                                        rows={2}
+                                                        className="block w-full border-2 border-gray-300 rounded-xl py-2.5 px-3 resize-none overflow-hidden"
+                                                        value={newLotForm.supplierNotes}
+                                                        onChange={e=>setNewLotForm({...newLotForm, supplierNotes:e.target.value})}
+                                                        onInput={e => {
+                                                            const el = e.currentTarget;
+                                                            el.style.height = 'auto';
+                                                            el.style.height = el.scrollHeight + 'px';
+                                                        }}
+                                                    />
                                                 </div>
                                             </div>
 

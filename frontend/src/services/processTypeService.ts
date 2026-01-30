@@ -1,159 +1,139 @@
 /**
  * Process Type Service
- * Manages Coffee Processing Types in localStorage
+ * Fetches Coffee Processing Types from Backend API
  */
 
 import { ProcessType } from '../types';
+import { api } from './api';
 
-const PROCESS_TYPES_STORAGE_KEY = 'coffee_lab_process_types';
+interface ProcessTypeResponse {
+  processTypes: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    colorScheme: Record<string, string>;
+    isActive: boolean;
+    createdAt: string;
+  }>;
+}
+
+interface SingleProcessTypeResponse {
+  processType: {
+    id: string;
+    name: string;
+    description: string | null;
+    colorScheme: Record<string, string>;
+    isActive: boolean;
+    createdAt: string;
+  };
+}
 
 /**
- * Initialize process types in localStorage with default values
+ * Map API response to frontend ProcessType format
  */
-export const initializeProcessTypes = (defaultTypes: ProcessType[]) => {
-  const stored = localStorage.getItem(PROCESS_TYPES_STORAGE_KEY);
-  if (!stored) {
-    localStorage.setItem(PROCESS_TYPES_STORAGE_KEY, JSON.stringify(defaultTypes));
+const mapProcessType = (pt: any): ProcessType => ({
+  id: pt.id,
+  name: pt.name,
+  description: pt.description || '',
+  colorScheme: pt.colorScheme || {},
+  isActive: pt.isActive,
+  createdDate: pt.createdAt?.split('T')[0] || new Date().toISOString().split('T')[0],
+});
+
+/**
+ * Get all process types from API
+ */
+export const getAllProcessTypes = async (): Promise<ProcessType[]> => {
+  try {
+    const data = await api.get<ProcessTypeResponse>('/process-types');
+    return (data.processTypes || []).map(mapProcessType);
+  } catch (error) {
+    console.error('Error fetching process types:', error);
+    return [];
   }
-};
-
-/**
- * Get all process types from localStorage
- */
-export const getAllProcessTypes = (): ProcessType[] => {
-  const stored = localStorage.getItem(PROCESS_TYPES_STORAGE_KEY);
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored);
-      return parsed;
-    } catch (error) {
-      console.error('Error parsing process types from localStorage:', error);
-      return [];
-    }
-  }
-  return [];
-};
-
-/**
- * Save all process types to localStorage
- */
-const saveAllProcessTypes = (types: ProcessType[]) => {
-  localStorage.setItem(PROCESS_TYPES_STORAGE_KEY, JSON.stringify(types));
-  // Dispatch custom event to notify components about the change
-  window.dispatchEvent(new Event('localStorageUpdate'));
-};
-
-/**
- * Add a new process type
- */
-export const addProcessType = (processType: ProcessType) => {
-  const all = getAllProcessTypes();
-  all.unshift(processType);
-  saveAllProcessTypes(all);
-};
-
-/**
- * Update an existing process type
- */
-export const updateProcessType = (processType: ProcessType) => {
-  const all = getAllProcessTypes();
-  const updated = all.map(t => t.id === processType.id ? processType : t);
-  saveAllProcessTypes(updated);
-};
-
-/**
- * Delete a process type
- */
-export const deleteProcessType = (id: string) => {
-  const all = getAllProcessTypes();
-  const filtered = all.filter(t => t.id !== id);
-  saveAllProcessTypes(filtered);
 };
 
 /**
  * Get active process types only
  */
-export const getActiveProcessTypes = (): ProcessType[] => {
-  return getAllProcessTypes().filter(t => t.isActive);
+export const getActiveProcessTypes = async (): Promise<ProcessType[]> => {
+  try {
+    const data = await api.get<ProcessTypeResponse>('/process-types', { isActive: 'true' });
+    return (data.processTypes || []).map(mapProcessType);
+  } catch (error) {
+    console.error('Error fetching active process types:', error);
+    return [];
+  }
 };
 
 /**
- * Check if process type name already exists
+ * Add a new process type
  */
-export const processTypeNameExists = (name: string, excludeId?: string): boolean => {
-  const all = getAllProcessTypes();
+export const addProcessType = async (processType: Omit<ProcessType, 'id'>): Promise<ProcessType | null> => {
+  try {
+    const data = await api.post<SingleProcessTypeResponse>('/process-types', {
+      name: processType.name,
+      description: processType.description,
+      colorScheme: processType.colorScheme,
+      isActive: processType.isActive,
+    });
+    return mapProcessType(data.processType);
+  } catch (error) {
+    console.error('Error adding process type:', error);
+    return null;
+  }
+};
+
+/**
+ * Update an existing process type
+ */
+export const updateProcessType = async (processType: ProcessType): Promise<ProcessType | null> => {
+  try {
+    const data = await api.patch<SingleProcessTypeResponse>(`/process-types/${processType.id}`, {
+      name: processType.name,
+      description: processType.description,
+      colorScheme: processType.colorScheme,
+      isActive: processType.isActive,
+    });
+    return mapProcessType(data.processType);
+  } catch (error) {
+    console.error('Error updating process type:', error);
+    return null;
+  }
+};
+
+/**
+ * Delete a process type
+ */
+export const deleteProcessType = async (id: string): Promise<boolean> => {
+  try {
+    await api.delete(`/process-types/${id}`);
+    return true;
+  } catch (error) {
+    console.error('Error deleting process type:', error);
+    return false;
+  }
+};
+
+// Legacy functions for backward compatibility (no-op)
+export const initializeProcessTypes = (_defaultTypes: ProcessType[]) => {
+  // No-op: Data comes from API now
+};
+
+export const resetProcessTypes = (_defaultTypes: ProcessType[]) => {
+  // No-op: Data comes from API now
+};
+
+export const processTypeNameExists = async (name: string, excludeId?: string): Promise<boolean> => {
+  const all = await getAllProcessTypes();
   return all.some(t => t.name.toLowerCase() === name.toLowerCase() && t.id !== excludeId);
 };
 
-/**
- * Reset process types to default values (force overwrite)
- */
-export const resetProcessTypes = (defaultTypes: ProcessType[]) => {
-  localStorage.setItem(PROCESS_TYPES_STORAGE_KEY, JSON.stringify(defaultTypes));
-  // Notify listeners so UI reloads fresh data
-  window.dispatchEvent(new Event('localStorageUpdate'));
+export const ensureProcessTypeExists = async (_pt: any) => {
+  // No-op: Process types are managed via Admin panel and seeded in database
+  return false;
 };
 
-/**
- * Ensure a process type exists (by name); if missing, create it.
- * Returns true if a new type was created, false if it already existed.
- */
-export const ensureProcessTypeExists = (pt: Omit<ProcessType, 'id' | 'createdDate'> & { createdDate?: string }) => {
-  const all = getAllProcessTypes();
-  const exists = all.some(t => t.name.toLowerCase() === pt.name.toLowerCase());
-  if (exists) return false;
-
-  const newId = `PT${String(all.length + 1).padStart(3, '0')}`;
-  const newType: ProcessType = {
-    id: newId,
-    name: pt.name,
-    description: pt.description,
-    colorScheme: pt.colorScheme,
-    createdDate: pt.createdDate || new Date().toISOString().slice(0, 10),
-    isActive: pt.isActive,
-  };
-  addProcessType(newType);
-  return true;
-};
-
-/**
- * Ensure baseline default process types exist (Washed, Natural, Honey).
- * Non-destructive: only adds missing ones; keeps any admin-added types.
- */
-export const ensureDefaultProcessTypes = () => {
-  ensureProcessTypeExists({
-    name: 'Washed',
-    description: 'Washed process - cherries are pulped and fermented to remove mucilage before drying',
-    colorScheme: {
-      borderColor: 'border-l-blue-500',
-      iconBg: 'bg-blue-100',
-      iconColor: 'text-blue-600',
-      badgeColor: 'bg-blue-100 text-blue-700 border-blue-200'
-    },
-    isActive: true,
-  });
-
-  ensureProcessTypeExists({
-    name: 'Natural',
-    description: 'Natural process - cherries are dried whole with the fruit intact',
-    colorScheme: {
-      borderColor: 'border-l-amber-500',
-      iconBg: 'bg-amber-100',
-      iconColor: 'text-amber-600',
-      badgeColor: 'bg-amber-100 text-amber-700 border-amber-200'
-    },
-    isActive: true,
-  });
-
-  ensureProcessTypeExists({
-    name: 'Honey',
-    description: 'Honey process - cherries are pulped but some or all mucilage is left on during drying',
-    colorScheme: {
-      borderColor: 'border-l-yellow-500',
-      iconBg: 'bg-yellow-100',
-      iconColor: 'text-yellow-600',
-      badgeColor: 'bg-yellow-100 text-yellow-700 border-yellow-200'
-    },
-    isActive: true,
-  });
+export const ensureDefaultProcessTypes = async () => {
+  // No-op: Default process types are seeded in database
 };

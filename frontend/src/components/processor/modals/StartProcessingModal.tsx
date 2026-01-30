@@ -77,73 +77,117 @@ const ProcessTypeDropdown: React.FC<{
   );
 };
 
-// Custom Dropdown Component for Crop Year Selection
-const CustomCropYearDropdown: React.FC<{
+// Crop Year Chips Component (เหมือนใน HarvestLotModal)
+const CropYearChips: React.FC<{
+  years: CropYear[];
   value: string;
   onChange: (value: string) => void;
-  options: CropYear[];
-  placeholder?: string;
-}> = ({ value, onChange, options, placeholder = 'Select...' }) => {
-  const [isOpen, setIsOpen] = React.useState(false);
-  const dropdownRef = React.useRef<HTMLDivElement>(null);
+  maxVisible?: number;
+}> = ({ years, value, onChange, maxVisible = 5 }) => {
+  const [offset, setOffset] = React.useState(0);
+  const initializedRef = React.useRef(false);
 
+  // หาปีปัจจุบันจาก today
+  const currentYearId = React.useMemo(() => {
+    const today = new Date();
+    return years.find(y => {
+      const start = new Date(y.startDate);
+      const end = new Date(y.endDate);
+      return today >= start && today <= end;
+    })?.id || '';
+  }, [years]);
+
+  // Initialize offset ให้อยู่รอบๆ ปีปัจจุบัน (แค่ครั้งแรกเท่านั้น)
   React.useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
+    if (initializedRef.current) return; // ไม่ reset ถ้า initialize แล้ว
+    if (years.length > maxVisible && currentYearId) {
+      const currentIndex = years.findIndex(y => y.id === currentYearId);
+      const halfRange = Math.floor(maxVisible / 2);
+      let startIndex = Math.max(0, currentIndex - halfRange);
+      if (startIndex + maxVisible > years.length) {
+        startIndex = Math.max(0, years.length - maxVisible);
       }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+      setOffset(startIndex);
+      initializedRef.current = true;
+    }
+  }, [years, currentYearId, maxVisible]);
 
-  const selectedOption = options.find(opt => opt.id === value);
+  // คำนวณปีที่แสดง
+  const visibleYears = React.useMemo(() => {
+    if (years.length <= maxVisible) return years;
+    return years.slice(offset, offset + maxVisible);
+  }, [years, offset, maxVisible]);
+
+  const canGoBack = offset > 0;
+  const canGoForward = offset + maxVisible < years.length;
+  const hasNavigation = years.length > maxVisible;
+
+  const baseChipClass = "relative flex items-center justify-center py-3 px-4 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer";
+  const selectedClass = "bg-blue-600 text-white border-blue-600 shadow-lg";
+  const unselectedClass = "bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50";
 
   return (
-    <div ref={dropdownRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full border border-gray-300 rounded-xl px-4 py-3 text-base font-medium bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all hover:border-gray-400 flex items-center justify-between gap-2 shadow-sm"
-      >
-        <span className={selectedOption ? 'text-gray-900' : 'text-gray-400'}>
-          {selectedOption ? `${selectedOption.year}${selectedOption.description ? ` - ${selectedOption.description}` : ''}` : placeholder}
-        </span>
-        <svg className={`h-5 w-5 text-gray-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-3">
+        {/* ปุ่ม "None" */}
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          className={`${baseChipClass} ${!value ? selectedClass : unselectedClass}`}
+        >
+          <span className="text-sm font-semibold">None</span>
+        </button>
 
-      {isOpen && (
-        <div className="absolute z-20 mt-3 left-0 right-0 bg-white border border-gray-300 rounded-xl shadow-2xl overflow-hidden">
-          <div className="py-2 max-h-60 overflow-y-auto">
+        {/* ปุ่มแต่ละปี (จำกัดจำนวน) */}
+        {visibleYears.map(year => {
+          const isSelected = value === year.id;
+          const isCurrent = year.id === currentYearId;
+
+          return (
             <button
+              key={year.id}
               type="button"
-              onClick={() => {
-                onChange('');
-                setIsOpen(false);
-              }}
-              className="w-full text-left px-5 py-3 transition-all text-base font-medium text-gray-400 hover:bg-indigo-50 hover:text-indigo-700"
+              onClick={() => onChange(year.id)}
+              className={`${baseChipClass} ${isSelected ? selectedClass : unselectedClass}`}
+              title={year.description || year.year}
             >
-              {placeholder}
+              {isCurrent && (
+                <span className={`absolute -top-2 -right-2 px-2 py-0.5 text-[10px] font-bold rounded-full shadow-sm ${
+                  isSelected ? 'bg-white text-blue-600' : 'bg-blue-500 text-white'
+                }`}>
+                  Current
+                </span>
+              )}
+              <span className="text-sm font-semibold">{year.year}</span>
             </button>
-            {options.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => {
-                  onChange(option.id);
-                  setIsOpen(false);
-                }}
-                className={`w-full text-left px-5 py-3 transition-all text-base font-medium ${option.id === value
-                    ? 'bg-indigo-100 text-indigo-700 font-bold'
-                    : 'text-gray-900 hover:bg-indigo-50 hover:text-indigo-700'
-                  }`}
-              >
-                {option.year}{option.description ? ` - ${option.description}` : ''}
-              </button>
-            ))}
-          </div>
+          );
+        })}
+      </div>
+
+      {/* Navigation arrows - ด้านล่าง */}
+      {/* ซ้าย = ไปปีใหม่ (offset-1), ขวา = ไปปีเก่า (offset+1) เพราะ years เรียง descending */}
+      {hasNavigation && (
+        <div className="flex items-center justify-center gap-4">
+          <button
+            type="button"
+            onClick={() => setOffset(Math.max(0, offset - 1))}
+            disabled={!canGoBack}
+            className={`p-2 rounded-full transition-all duration-200 ${canGoBack ? 'hover:bg-blue-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+              <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => setOffset(Math.min(years.length - maxVisible, offset + 1))}
+            disabled={!canGoForward}
+            className={`p-2 rounded-full transition-all duration-200 ${canGoForward ? 'hover:bg-blue-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+              <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/>
+            </svg>
+          </button>
         </div>
       )}
     </div>
@@ -217,13 +261,12 @@ const StartProcessingModal: React.FC<StartProcessingModalProps> = ({
 
         <div>
           <label htmlFor="cropYear" className="block text-base font-bold text-gray-700 mb-3">Crop Year (Optional)</label>
-          <CustomCropYearDropdown
+          <CropYearChips
+            years={cropYears}
             value={cropYearId}
             onChange={onCropYearChange}
-            options={cropYears}
-            placeholder="Select crop year..."
           />
-          <p className="mt-1 text-xs text-gray-500">Associate this batch with a crop year for tracking and reporting</p>
+          <p className="mt-2 text-xs text-gray-500">Associate this batch with a crop year for tracking and reporting</p>
         </div>
 
         <div>
