@@ -76,7 +76,7 @@ export interface HarvestLot {
   weightKg: number;
   farmPlotLocation: string;
   harvestDate: string;
-  status: 'Ready for Processing' | 'Processing';
+  status: 'Ready for Processing' | 'Processing' | 'Complete';
   cropYearId?: string;
 }
 
@@ -272,6 +272,8 @@ export interface WeatherRecord {
   source: 'Manual' | 'API'; // How data was collected
   notes?: string;
   recordedBy?: string; // User ID
+  createdAt?: string; // ISO datetime - เวลาที่บันทึก
+  updatedAt?: string; // ISO datetime - เวลาที่อัปเดต
 }
 
 export interface PricingHistory {

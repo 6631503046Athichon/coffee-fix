@@ -74,6 +74,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     const [selectedFlavorTags, setSelectedFlavorTags] = useState<string[]>([]);
     const availableLotsRef = useRef<HTMLDivElement>(null);
     const internalLotsRef = useRef<HTMLDivElement>(null);
+    const [lotsTab, setLotsTab] = useState<'internal' | 'external'>('internal');
     const inventoryRef = useRef<HTMLDivElement>(null);
     const roastLogRef = useRef<HTMLDivElement>(null);
 
@@ -205,6 +206,24 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         if (inventoryPage > inventoryTotalPages) setInventoryPage(inventoryTotalPages);
     }, [inventoryTotalPages, inventoryPage]);
     const pagedInventory = useMemo(() => myInventory.slice((inventoryPage-1)*inventoryPageSize, (inventoryPage-1)*inventoryPageSize + inventoryPageSize), [myInventory, inventoryPage]);
+
+    // Pagination for External Lots
+    const [externalPage, setExternalPage] = useState(1);
+    const externalPageSize = 5;
+    const externalTotalPages = Math.max(1, Math.ceil(availableExternalLots.length / externalPageSize));
+    useEffect(() => {
+        if (externalPage > externalTotalPages) setExternalPage(externalTotalPages);
+    }, [externalTotalPages, externalPage]);
+    const pagedExternalLots = useMemo(() => availableExternalLots.slice((externalPage-1)*externalPageSize, (externalPage-1)*externalPageSize + externalPageSize), [availableExternalLots, externalPage]);
+
+    // Pagination for Internal Lots
+    const [internalPage, setInternalPage] = useState(1);
+    const internalPageSize = 5;
+    const internalTotalPages = Math.max(1, Math.ceil(availableInternalLots.length / internalPageSize));
+    useEffect(() => {
+        if (internalPage > internalTotalPages) setInternalPage(internalTotalPages);
+    }, [internalTotalPages, internalPage]);
+    const pagedInternalLots = useMemo(() => availableInternalLots.slice((internalPage-1)*internalPageSize, (internalPage-1)*internalPageSize + internalPageSize), [availableInternalLots, internalPage]);
 
     const openClaimModal = (lot: GreenBeanLot & { variety: string, process: string, finalScore?: string | number }) => {
         setSelectedLot(lot);
@@ -356,21 +375,81 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
-                    {/* Available Lots - External */}
-                    <div ref={availableLotsRef}>
-                      <ExternalLotsTable
-                        lots={availableExternalLots as any}
-                        onClaim={(lot) => openClaimModal(lot as any)}
-                        onAddExternal={() => setIsAddLotModalOpen(true)}
-                      />
-                    </div>
+                    {/* Green Bean Lots - Tabbed View */}
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        {/* Tab Header */}
+                        <div className="flex items-center border-b border-gray-200">
+                            <button
+                                ref={internalLotsRef as any}
+                                onClick={() => setLotsTab('internal')}
+                                className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
+                                    lotsTab === 'internal'
+                                        ? 'bg-blue-50 text-blue-700'
+                                        : 'text-gray-600 hover:bg-gray-50'
+                                }`}
+                            >
+                                <div className="flex items-center justify-center gap-2">
+                                    <Package className="h-4 w-4" />
+                                    Internal Lots
+                                    <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700">
+                                        {availableInternalLots.length}
+                                    </span>
+                                </div>
+                            </button>
+                            <button
+                                ref={availableLotsRef as any}
+                                onClick={() => setLotsTab('external')}
+                                className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
+                                    lotsTab === 'external'
+                                        ? 'bg-emerald-50 text-emerald-700'
+                                        : 'text-gray-600 hover:bg-gray-50'
+                                }`}
+                            >
+                                <div className="flex items-center justify-center gap-2">
+                                    <Package className="h-4 w-4" />
+                                    Purchased Lots
+                                    <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700">
+                                        {availableExternalLots.length}
+                                    </span>
+                                </div>
+                            </button>
+                            {lotsTab === 'external' && (
+                                <div className="px-4">
+                                    <Button
+                                        variant="success"
+                                        size="sm"
+                                        icon={<PlusCircle className="h-4 w-4" />}
+                                        onClick={() => setIsAddLotModalOpen(true)}
+                                    >
+                                        Add Lot
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
 
-                    {/* Available Lots - Internal */}
-                    <div ref={internalLotsRef}>
-                      <InternalLotsTable
-                        lots={availableInternalLots as any}
-                        onClaim={(lot) => openClaimModal(lot as any)}
-                      />
+                        {/* Tab Content */}
+                        <div className="min-h-[400px]">
+                            {lotsTab === 'internal' ? (
+                                <InternalLotsTable
+                                    lots={pagedInternalLots as any}
+                                    onClaim={(lot) => openClaimModal(lot as any)}
+                                    currentPage={internalPage}
+                                    totalPages={internalTotalPages}
+                                    onPageChange={setInternalPage}
+                                    hideHeader
+                                />
+                            ) : (
+                                <ExternalLotsTable
+                                    lots={pagedExternalLots as any}
+                                    onClaim={(lot) => openClaimModal(lot as any)}
+                                    onAddExternal={() => setIsAddLotModalOpen(true)}
+                                    currentPage={externalPage}
+                                    totalPages={externalTotalPages}
+                                    onPageChange={setExternalPage}
+                                    hideHeader
+                                />
+                            )}
+                        </div>
                     </div>
 
                     {/* My Inventory */}
@@ -819,7 +898,12 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                                                 </div>
                                                 <div>
                                                     <label className="block text-sm font-bold text-gray-700 mb-2">Process Type</label>
-                                                    <input className="block w-full border-2 border-gray-300 rounded-xl py-2.5 px-3" value={newLotForm.processType} onChange={e=>setNewLotForm({...newLotForm, processType:e.target.value})} required/>
+                                                    <Select
+                                                        value={newLotForm.processType}
+                                                        onChange={(v) => setNewLotForm({ ...newLotForm, processType: (v as string) || '' })}
+                                                        options={data.processTypes.filter(pt => pt.isActive).map(pt => pt.name)}
+                                                        placeholder="Select process type..."
+                                                    />
                                                 </div>
                                                 <div>
                                                     <DatePicker
@@ -864,7 +948,26 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                                                         placeholder="Select currency..."
                                                     />
                                                 </div>
-                                                
+
+                                                {/* Total Price Calculation */}
+                                                {newLotForm.pricePerKg && newLotForm.initialWeightKg && (
+                                                    <div className="md:col-span-2 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4">
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <p className="text-sm font-semibold text-green-800 mb-1">Total Price</p>
+                                                                <p className="text-2xl font-bold text-green-700">
+                                                                    {(parseFloat(newLotForm.pricePerKg) * parseFloat(newLotForm.initialWeightKg)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                    <span className="text-lg font-medium ml-2">{newLotForm.currency}</span>
+                                                                </p>
+                                                            </div>
+                                                            <div className="text-right text-sm text-green-600">
+                                                                <p>{parseFloat(newLotForm.pricePerKg).toFixed(2)} {newLotForm.currency}/kg</p>
+                                                                <p>× {parseFloat(newLotForm.initialWeightKg).toFixed(2)} kg</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
                                                 <div className="md:col-span-2">
                                                     <label className="block text-sm font-bold text-gray-700 mb-2">Taste Note (optional)</label>
                                                     <input className="block w-full border-2 border-gray-300 rounded-xl py-2.5 px-3" value={newLotForm.tasteNote} onChange={e=>setNewLotForm({...newLotForm, tasteNote:e.target.value})}/>

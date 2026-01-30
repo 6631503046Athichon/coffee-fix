@@ -252,7 +252,11 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                                             {formatDateDisplay(lot.harvestDate)}
                                         </td>
                                         <td className="px-4 py-3">
-                                            <Badge variant={lot.status === 'Processing' ? 'primary' : 'success'}>
+                                            <Badge variant={
+                                                lot.status === 'Complete' ? 'purple'
+                                                : lot.status === 'Processing' ? 'primary'
+                                                : 'success'
+                                            }>
                                                 {lot.status}
                                             </Badge>
                                         </td>
@@ -304,27 +308,36 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                             <button
                                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                 disabled={currentPage === 1}
-                                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                                className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
                             >
                                 <ChevronLeft className="h-4 w-4" />
                             </button>
-                            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                                <button
-                                    key={page}
-                                    onClick={() => setCurrentPage(page)}
-                                    className={`w-8 h-8 text-sm font-medium rounded-md transition-colors ${
-                                        currentPage === page
-                                            ? 'bg-blue-600 text-white'
-                                            : 'text-gray-700 hover:bg-gray-100'
-                                    }`}
-                                >
-                                    {page}
-                                </button>
-                            ))}
+                            {(() => {
+                                const TOTAL_SLOTS = 7;
+                                const tp = totalPages;
+                                const cp = currentPage;
+                                let slots: (number | 'ellipsis')[] = [];
+                                if (tp <= TOTAL_SLOTS) {
+                                    slots = Array.from({ length: tp }, (_, i) => i + 1);
+                                } else if (cp <= 4) {
+                                    slots = [1, 2, 3, 4, 5, 'ellipsis', tp];
+                                } else if (cp >= tp - 3) {
+                                    slots = [1, 'ellipsis', tp - 4, tp - 3, tp - 2, tp - 1, tp];
+                                } else {
+                                    slots = [1, 'ellipsis', cp - 1, cp, cp + 1, 'ellipsis', tp];
+                                }
+                                return slots.map((slot, idx) => (
+                                    slot === 'ellipsis' ? (
+                                        <span key={`e-${idx}`} className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">...</span>
+                                    ) : (
+                                        <button key={slot} onClick={() => setCurrentPage(slot)} className={`w-8 h-8 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${cp === slot ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}>{slot}</button>
+                                    )
+                                ));
+                            })()}
                             <button
                                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                                 disabled={currentPage === totalPages}
-                                className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                                className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
                             >
                                 <ChevronRight className="h-4 w-4" />
                             </button>
@@ -409,6 +422,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                                     >
                                         <option value="Ready for Processing">Ready for Processing</option>
                                         <option value="Processing">Processing</option>
+                                        <option value="Complete">Complete</option>
                                     </select>
                                 </div>
                             </div>

@@ -90,6 +90,7 @@ const HullAndGradeModal: React.FC<HullAndGradeModalProps> = ({
   gradedWeightSum,
 }) => {
   const totalWeightNum = parseFloat(totalGreenWeight) || 0;
+  const exceedsParchmentWeight = totalWeightNum > parchment.currentWeightKg;
   const weightMismatch = totalWeightNum > 0 && Math.abs(gradedWeightSum - totalWeightNum) > 0.01;
   const weightLossPercent = totalGreenWeight ? (((parchment.currentWeightKg - parseFloat(totalGreenWeight)) / parchment.currentWeightKg) * 100).toFixed(1) : '0';
 
@@ -130,13 +131,31 @@ const HullAndGradeModal: React.FC<HullAndGradeModalProps> = ({
         <input
           type="number"
           step="0.1"
+          max={parchment.currentWeightKg}
           value={totalGreenWeight}
           onChange={e => onTotalGreenWeightChange(e.target.value)}
           required
-          placeholder="Enter total weight in kg"
-          className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-lg font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500 shadow-sm transition-all"
+          placeholder={`Max: ${parchment.currentWeightKg.toFixed(2)} kg`}
+          className={`mt-1 block w-full border rounded-xl py-3 px-4 text-lg font-semibold focus:ring-2 shadow-sm transition-all ${
+            exceedsParchmentWeight
+              ? 'border-red-500 focus:ring-red-500 focus:border-red-500 bg-red-50'
+              : 'border-gray-300 focus:ring-green-500 focus:border-green-500'
+          }`}
         />
-        {totalGreenWeight && (
+        {exceedsParchmentWeight && (
+          <div className="mt-3 flex items-start gap-2 bg-red-50 rounded-xl p-4 border border-red-200">
+            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-red-800">
+                น้ำหนักเกินกว่า Parchment Weight
+              </p>
+              <p className="text-xs text-red-600 mt-1">
+                Total Green Bean Weight ({totalWeightNum.toFixed(2)} kg) ไม่สามารถเกิน Parchment Weight ({parchment.currentWeightKg.toFixed(2)} kg)
+              </p>
+            </div>
+          </div>
+        )}
+        {totalGreenWeight && !exceedsParchmentWeight && (
           <div className="mt-3 flex items-center justify-between bg-blue-50 rounded-xl p-4 border border-blue-200">
             <span className="text-sm font-semibold text-gray-700">Weight Loss from Hulling</span>
             <span className="text-2xl font-bold text-blue-600">{weightLossPercent}%</span>

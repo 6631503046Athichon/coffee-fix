@@ -37,9 +37,9 @@ const HarvestLotDetail: React.FC = () => {
         return (
             <div className="max-w-5xl mx-auto text-center">
                 <h1 className="text-2xl font-bold">Harvest Lot Not Found</h1>
-                <Link to="/farmer-dashboard" className="mt-4 inline-flex items-center text-indigo-600 hover:text-indigo-800">
+                <Link to="/farmer-data-hub" className="mt-4 inline-flex items-center text-indigo-600 hover:text-indigo-800">
                     <ArrowLeft className="h-4 w-4 mr-2" />
-                    Back to Dashboard
+                    Back to Data Hub
                 </Link>
             </div>
         );
@@ -67,7 +67,9 @@ const HarvestLotDetail: React.FC = () => {
 
     const statusBadge = (
         <span className={`px-3 py-1 inline-flex text-sm leading-5 font-medium rounded-full ${
-            lot.status === 'Processing' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+            lot.status === 'Complete' ? 'bg-purple-100 text-purple-800'
+            : lot.status === 'Processing' ? 'bg-blue-100 text-blue-800'
+            : 'bg-green-100 text-green-800'
         }`}>
             {lot.status}
         </span>
@@ -75,9 +77,9 @@ const HarvestLotDetail: React.FC = () => {
 
     return (
         <div className="max-w-5xl mx-auto">
-            <Link to="/farmer-dashboard" className="inline-flex items-center text-sm font-semibold text-indigo-600 hover:text-indigo-800 mb-4">
+            <Link to="/farmer-data-hub" className="inline-flex items-center text-sm font-semibold text-indigo-600 hover:text-indigo-800 mb-4">
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Dashboard
+                Back to Data Hub
             </Link>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2">

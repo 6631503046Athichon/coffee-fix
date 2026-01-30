@@ -41,6 +41,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
   const [autoFetchInterval, setAutoFetchInterval] = useState(5); // minutes
   const [lastAutoFetch, setLastAutoFetch] = useState<Date | null>(null);
   const [nextAutoFetch, setNextAutoFetch] = useState<Date | null>(null);
+  const [isAutoFetchInitialized, setIsAutoFetchInitialized] = useState(false); // ป้องกัน race condition
 
   // Calculate temperature average automatically
   const temperatureAvg = useMemo(() => {
@@ -117,13 +118,41 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
       setEditingRecordId(null);
       setWeatherFormError(null);
       setWeatherToast(null);
+      setIsAutoFetchInitialized(false); // reset flag เพื่อให้โหลดค่าใหม่
       return;
     }
     resetForm();
     setEditingRecordId(null);
     setWeatherFormError(null);
     setWeatherToast(null);
+    setIsAutoFetchInitialized(false); // reset flag เพื่อให้โหลดค่าใหม่จาก farm ใหม่
   }, [farm]);
+
+  // โหลด auto-fetch settings จาก localStorage เมื่อ farm เปลี่ยน
+  useEffect(() => {
+    if (farm?.id && typeof window !== 'undefined') {
+      const savedEnabled = localStorage.getItem(`weatherAutoFetch_${farm.id}`);
+      const savedInterval = localStorage.getItem(`weatherAutoFetchInterval_${farm.id}`);
+
+      setAutoFetchEnabled(savedEnabled === 'true');
+      setAutoFetchInterval(savedInterval ? parseInt(savedInterval, 10) : 5);
+      setIsAutoFetchInitialized(true); // บอกว่าโหลดเสร็จแล้ว
+    }
+  }, [farm?.id]);
+
+  // บันทึก auto-fetch enabled ลง localStorage (เฉพาะหลังจากโหลดค่าเริ่มต้นแล้ว)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && farm?.id && isAutoFetchInitialized) {
+      localStorage.setItem(`weatherAutoFetch_${farm.id}`, autoFetchEnabled.toString());
+    }
+  }, [autoFetchEnabled, farm?.id, isAutoFetchInitialized]);
+
+  // บันทึก auto-fetch interval ลง localStorage (เฉพาะหลังจากโหลดค่าเริ่มต้นแล้ว)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && farm?.id && isAutoFetchInitialized) {
+      localStorage.setItem(`weatherAutoFetchInterval_${farm.id}`, autoFetchInterval.toString());
+    }
+  }, [autoFetchInterval, farm?.id, isAutoFetchInitialized]);
 
   const resetForm = () => {
     setRecordDate(new Date().toISOString().substring(0, 10));
@@ -135,10 +164,10 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
     setFetchError('');
   };
 
-  // Fetch weather from API
+  // Fetch weather from API and save immediately
   const handleFetchWeather = async () => {
     if (!farm) return;
-    
+
     if (!farm.latitude || !farm.longitude) {
       setFetchError('ฟาร์มนี้ยังไม่มีพิกัด GPS กรุณาเพิ่มพิกัดในข้อมูลฟาร์มก่อน');
       return;
@@ -151,18 +180,42 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
       const weatherData = await fetchWeatherData(farm.latitude, farm.longitude);
 
       if (weatherData) {
+        // สร้าง record และบันทึกลง database ทันที
+        const weatherRecord: Partial<WeatherRecord> = {
+          farmId: farm.id,
+          farmPlotLocation: farm.location,
+          recordDate: new Date().toISOString().substring(0, 10),
+          temperatureMin: weatherData.temperatureMin,
+          temperatureMax: weatherData.temperatureMax,
+          temperatureAvg: (weatherData.temperatureMin + weatherData.temperatureMax) / 2,
+          rainfall: weatherData.rainfall,
+          humidity: weatherData.humidity || 70,
+          source: 'API',
+          notes: `ดึงข้อมูลจาก Open-Meteo API เมื่อ ${new Date().toLocaleString('th-TH')}`,
+          recordedBy: currentUser?.id,
+        };
+
+        const newRecord = await addWeatherRecord(weatherRecord as Omit<WeatherRecord, 'id'>);
+        setData(prev => ({
+          ...prev,
+          weatherRecords: [newRecord, ...prev.weatherRecords]
+        }));
+
+        // เติม form ด้วย (ให้ user แก้ไขได้ถ้าต้องการบันทึกเพิ่ม)
         setTemperatureMin(weatherData.temperatureMin.toString());
         setTemperatureMax(weatherData.temperatureMax.toString());
         setRainfall(weatherData.rainfall.toString());
         if (weatherData.humidity) {
           setHumidity(weatherData.humidity.toString());
         }
-        setNotes(`ดึงข้อมูลอัตโนมัติจาก Open-Meteo API เมื่อ ${new Date().toLocaleString('th-TH')}`);
-        setWeatherToast({ type: 'success', message: 'ดึงข้อมูลสภาพอากาศสำเร็จ' });
+        setNotes(`ดึงข้อมูลจาก Open-Meteo API เมื่อ ${new Date().toLocaleString('th-TH')}`);
+
+        setWeatherToast({ type: 'success', message: 'ดึงและบันทึกข้อมูลสภาพอากาศสำเร็จ' });
         setTimeout(() => setWeatherToast(null), 3000);
       }
-    } catch (error) {
-      setFetchError('ไม่สามารถดึงข้อมูลสภาพอากาศได้ กรุณาลองใหม่');
+    } catch (error: any) {
+      const errorMessage = error?.message || 'ไม่สามารถดึงข้อมูลสภาพอากาศได้ กรุณาลองใหม่';
+      setFetchError(errorMessage);
       console.error('Weather fetch error:', error);
     } finally {
       setIsFetchingWeather(false);
@@ -614,6 +667,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                   <thead className="bg-gray-900 text-white">
                     <tr>
                       <th className="px-4 py-3 text-left font-semibold">วันที่บันทึก</th>
+                      <th className="px-4 py-3 text-left font-semibold">เวลาที่บันทึก</th>
                       <th className="px-4 py-3 text-center font-semibold">อุณหภูมิ (°C)</th>
                       <th className="px-4 py-3 text-center font-semibold">ฝน (mm)</th>
                       <th className="px-4 py-3 text-center font-semibold">ความชื้น (%)</th>
@@ -625,6 +679,11 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                     {selectedFarmRecords.map(record => (
                       <tr key={record.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 whitespace-nowrap">{formatDateDisplay(record.recordDate)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-gray-600">
+                          {record.createdAt
+                            ? new Date(record.createdAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+                            : '-'}
+                        </td>
                         <td className="px-4 py-3 text-center">
                           <div className="flex items-center justify-center gap-1">
                             <span className="text-blue-600 font-medium">{record.temperatureMin}</span>

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import ReactDOM from 'react-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { ProcessingBatch, ProcessingBatchStatus, ParchmentLot, GreenBeanLot, HarvestLot, User, UserRole, CuppingSessionType, JudgeScore, SCA_SENSORY_ATTRIBUTES, SCA_CUP_ATTRIBUTES, PricingHistory, Customer } from '../../types';
-import { Coffee, Wind, PackageCheck, Sprout, ChevronsRight, CheckCircle, Archive, PlayCircle, TestTube, Plus, Trash2, LayoutGrid, List, AlertCircle, History, Save, Search, ArrowUp, ArrowDown, ChevronDown, ChevronLeft, ChevronRight, Check, Microscope, Star, TrendingUp, Box, Droplet, Scale, Calendar, Package, Activity, DollarSign, FileText, X } from 'lucide-react';
+import { Coffee, Wind, PackageCheck, Sprout, ChevronsRight, CheckCircle, Archive, PlayCircle, TestTube, Plus, Trash2, LayoutGrid, List, AlertCircle, History, Save, Search, ArrowUp, ArrowDown, ChevronDown, ChevronLeft, ChevronRight, Check, Microscope, Star, TrendingUp, Box, Droplet, Scale, Calendar, Package, Activity, DollarSign, FileText, X, Play, Download, ClipboardCheck, Pencil, Eye } from 'lucide-react';
 import { addPricingHistory } from '../../services/salesService';
 import { getAllCustomers } from '../../services/customerService';
 import { addProcessingBatch, updateProcessingBatch } from '../../services/processingBatchService';
@@ -11,6 +11,8 @@ import { updateParchmentLot } from '../../services/parchmentLotService';
 import DatePicker from '../common/DatePicker';
 import InvoiceReceipt from './InvoiceReceipt';
 import Select from '../common/Select';
+import { useToast } from '../../contexts/ToastContext';
+import { formatGreenBeanId, formatParchmentId, formatProcessingBatchId, formatHarvestLotId } from '../../utils/formatDisplayId';
 import StartProcessingModal from './modals/StartProcessingModal';
 import HullAndGradeModal from './modals/HullAndGradeModal';
 import CompleteBatchModal from './modals/CompleteBatchModal';
@@ -21,6 +23,7 @@ type ParchmentSortKeys = keyof ParchmentLot | 'id';
 type GreenBeanSortKeys = keyof GreenBeanLot | 'id' | 'qcScore';
 
 const ITEMS_PER_PAGE = 3;
+const MAX_VISIBLE_PAGES = 5;
 
 // Custom Dropdown Component for Process Type Selection
 const ProcessTypeDropdown: React.FC<{
@@ -284,7 +287,7 @@ const KanbanCard: React.FC<{ batch: ProcessingBatch }> = ({ batch }) => {
     >
       {/* Card Header */}
       <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-semibold text-gray-900">#{batch.id.substring(0, 6).toUpperCase()}</p>
+        <p className="text-sm font-semibold text-gray-900">{formatProcessingBatchId(batch)}</p>
         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors.badge}`}>
           {batch.processType}
         </span>
@@ -356,6 +359,7 @@ interface ProcessorWorkbenchProps {
 
 const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) => {
   const { data, setData, refreshData } = useDataContext();
+  const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const isAdmin = currentUser.roles?.includes(UserRole.Admin);
 
@@ -401,10 +405,14 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
   const [parchmentSearch, setParchmentSearch] = useState('');
   const [parchmentSortConfig, setParchmentSortConfig] = useState<{ key: ParchmentSortKeys; direction: SortDirection }>({ key: 'id', direction: 'desc' });
   const [parchmentCurrentPage, setParchmentCurrentPage] = useState(1);
+  const [parchmentStatusFilter, setParchmentStatusFilter] = useState<string>('all');
+  const [parchmentProcessFilter, setParchmentProcessFilter] = useState<string>('all');
 
   const [greenBeanSearch, setGreenBeanSearch] = useState('');
   const [greenBeanSortConfig, setGreenBeanSortConfig] = useState<{ key: GreenBeanSortKeys; direction: SortDirection }>({ key: 'id', direction: 'desc' });
   const [greenBeanCurrentPage, setGreenBeanCurrentPage] = useState(1);
+  const [greenBeanStatusFilter, setGreenBeanStatusFilter] = useState<string>('all');
+  const [greenBeanGradeFilter, setGreenBeanGradeFilter] = useState<string>('all');
 
   const [harvestLotSearch, setHarvestLotSearch] = useState('');
   const [harvestLotPage, setHarvestLotPage] = useState(1);
@@ -889,6 +897,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
           // Refresh data from backend to get the updated batch and parchment lot
           await refreshData();
 
+          // Show success toast
+          addToast({ type: 'success', message: 'สร้าง Processing Batch สำเร็จ!' });
+
           // Close modal and reset form on success
           setModal(null);
           setSelectedHarvestLot(null);
@@ -909,6 +920,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
         const greenWeight = parseFloat(totalGreenWeight);
         if (isNaN(greenWeight) || greenWeight <= 0) {
           setFormError("Please enter weights for the graded lots.");
+          return;
+        }
+        // Validation: Total Green Bean Weight must not exceed Parchment Weight
+        if (greenWeight > selectedParchment.currentWeightKg) {
+          setFormError(`Total Green Bean Weight (${greenWeight.toFixed(2)} kg) ไม่สามารถเกิน Parchment Weight (${selectedParchment.currentWeightKg.toFixed(2)} kg)`);
           return;
         }
         if (Math.abs(gradedWeightSum - greenWeight) > 0.01) {
@@ -947,6 +963,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
 
           // Refresh data from backend
           await refreshData();
+
+          // Show success toast
+          addToast({ type: 'success', message: 'สร้าง Green Bean Lot สำเร็จ!' });
 
           // Close modal and reset form
           setModal(null);
@@ -1013,6 +1032,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
             }
           })
         }));
+        // Show success toast
+        addToast({ type: 'success', message: `Withdraw ${amountKg} kg สำเร็จ!` });
         // Reset withdrawal form state
         setWithdrawalType('Sample');
         setWithdrawalSalePrice('');
@@ -1090,29 +1111,51 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
   }, [completedBatchesForCard, completedCardPage]);
 
   const TableView = () => (
-    <div className="space-y-5">
-      {/* Processing Summary */}
-      <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-sky-50 rounded-lg p-3 border border-sky-200">
-            <p className="text-xs font-semibold text-sky-600 uppercase mb-1">Completed</p>
-            <p className="text-2xl font-bold text-sky-700">{data.processingBatches.filter(b => b.status === ProcessingBatchStatus.Completed).length}</p>
-            <p className="text-xs text-sky-600">batches</p>
+    <div className="space-y-4">
+      {/* Processing Summary - Compact */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-sky-600 uppercase">Completed</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{data.processingBatches.filter(b => b.status === ProcessingBatchStatus.Completed).length}</p>
+            </div>
+            <div className="p-2 bg-sky-50 rounded-lg">
+              <CheckCircle className="h-5 w-5 text-sky-500" />
+            </div>
           </div>
-          <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
-            <p className="text-xs font-semibold text-amber-600 uppercase mb-1">Parchment</p>
-            <p className="text-2xl font-bold text-amber-700">{data.parchmentLots.length}</p>
-            <p className="text-xs text-amber-600">lots in stock</p>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-amber-600 uppercase">Parchment</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{data.parchmentLots.length}</p>
+            </div>
+            <div className="p-2 bg-amber-50 rounded-lg">
+              <Box className="h-5 w-5 text-amber-500" />
+            </div>
           </div>
-          <div className="bg-teal-50 rounded-lg p-3 border border-teal-200">
-            <p className="text-xs font-semibold text-teal-600 uppercase mb-1">Green Bean</p>
-            <p className="text-2xl font-bold text-teal-700">{data.greenBeanLots.length}</p>
-            <p className="text-xs text-teal-600">lots available</p>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-teal-600 uppercase">Green Bean</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{data.greenBeanLots.length}</p>
+            </div>
+            <div className="p-2 bg-teal-50 rounded-lg">
+              <Coffee className="h-5 w-5 text-teal-500" />
+            </div>
           </div>
-          <div className="bg-green-50 rounded-lg p-3 border border-green-200">
-            <p className="text-xs font-semibold text-green-600 uppercase mb-1">Ready</p>
-            <p className="text-2xl font-bold text-green-700">{readyForProcessingLots.length}</p>
-            <p className="text-xs text-green-600">harvest lots</p>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-green-600 uppercase">Ready</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{readyForProcessingLots.length}</p>
+            </div>
+            <div className="p-2 bg-green-50 rounded-lg">
+              <Sprout className="h-5 w-5 text-green-500" />
+            </div>
           </div>
         </div>
       </div>
@@ -1120,21 +1163,21 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
       {/* Incoming Harvest Lots Table */}
       <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
         {/* Header with search */}
-        <div className="p-4 bg-green-50 border-b border-green-200">
-          <div className="flex items-center gap-2.5 mb-3">
-            <div className="p-2 bg-green-600 rounded-lg">
-              <Sprout className="h-5 w-5 text-white" />
+        <div className="px-4 py-3 bg-green-50 border-b border-green-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-green-600 rounded-lg">
+              <Sprout className="h-4 w-4 text-white" />
             </div>
-            <h3 className="text-lg font-bold text-gray-900">Incoming Harvest Lots</h3>
+            <h3 className="text-base font-bold text-gray-900">Incoming Harvest Lots</h3>
           </div>
-          <div className="relative">
+          <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               type="text"
               placeholder="Search lots..."
               value={harvestLotSearch}
               onChange={e => setHarvestLotSearch(e.target.value)}
-              className="pl-10 w-full border border-green-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-green-300 focus:border-green-300 outline-none"
+              className="pl-9 w-full border border-green-200 bg-white rounded-lg py-1.5 px-3 text-sm focus:ring-1 focus:ring-green-300 focus:border-green-300 outline-none"
             />
           </div>
         </div>
@@ -1162,16 +1205,17 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
               ) : (
                 paginatedHarvestLots.map(lot => (
                   <tr key={lot.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">#{lot.id.substring(0, 6).toUpperCase()}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatHarvestLotId(lot)}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{lot.cherryVariety}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-green-600">{lot.weightKg} kg</td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{lot.farmerName}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <button
                         onClick={() => openModal('startProcessing', lot)}
-                        className="px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 transition-colors"
+                        className="p-2 rounded-lg text-white bg-sky-600 hover:bg-sky-700 shadow-md hover:shadow-lg transition-all"
+                        title="Record Process"
                       >
-                        Record Process
+                        <PlayCircle size={18} />
                       </button>
                     </td>
                   </tr>
@@ -1188,27 +1232,36 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
               <button
                 onClick={() => setHarvestLotPage(p => Math.max(1, p - 1))}
                 disabled={harvestLotPage === 1}
-                className="p-2 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
-              {Array.from({ length: harvestLotTotalPages }, (_, i) => i + 1).map(page => (
-                <button
-                  key={page}
-                  onClick={() => setHarvestLotPage(page)}
-                  className={`w-8 h-8 text-sm font-medium rounded-md transition-colors ${
-                    harvestLotPage === page
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
+              {(() => {
+                const TOTAL_SLOTS = 7;
+                const tp = harvestLotTotalPages;
+                const cp = harvestLotPage;
+                let slots: (number | 'ellipsis')[] = [];
+                if (tp <= TOTAL_SLOTS) {
+                  slots = Array.from({ length: tp }, (_, i) => i + 1);
+                } else if (cp <= 4) {
+                  slots = [1, 2, 3, 4, 5, 'ellipsis', tp];
+                } else if (cp >= tp - 3) {
+                  slots = [1, 'ellipsis', tp - 4, tp - 3, tp - 2, tp - 1, tp];
+                } else {
+                  slots = [1, 'ellipsis', cp - 1, cp, cp + 1, 'ellipsis', tp];
+                }
+                return slots.map((slot, idx) => (
+                  slot === 'ellipsis' ? (
+                    <span key={`e-${idx}`} className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">...</span>
+                  ) : (
+                    <button key={slot} onClick={() => setHarvestLotPage(slot)} className={`w-8 h-8 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${cp === slot ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}>{slot}</button>
+                  )
+                ));
+              })()}
               <button
                 onClick={() => setHarvestLotPage(p => Math.min(harvestLotTotalPages, p + 1))}
                 disabled={harvestLotPage === harvestLotTotalPages}
-                className="p-2 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -1281,7 +1334,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                     return (
                       <tr key={batch.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
-                          #{batch.id.substring(0, 6).toUpperCase()}
+                          {formatProcessingBatchId(batch)}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                           #{batch.harvestLotId.substring(0, 6).toUpperCase()}
@@ -1323,33 +1376,40 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
             );
           const totalPages = Math.ceil(filteredBatches.length / COMPLETED_BATCH_PAGE_SIZE);
           if (totalPages <= 1) return null;
+          const TOTAL_SLOTS = 7;
+          const tp = totalPages;
+          const cp = completedBatchPage;
+          let slots: (number | 'ellipsis')[] = [];
+          if (tp <= TOTAL_SLOTS) {
+            slots = Array.from({ length: tp }, (_, i) => i + 1);
+          } else if (cp <= 4) {
+            slots = [1, 2, 3, 4, 5, 'ellipsis', tp];
+          } else if (cp >= tp - 3) {
+            slots = [1, 'ellipsis', tp - 4, tp - 3, tp - 2, tp - 1, tp];
+          } else {
+            slots = [1, 'ellipsis', cp - 1, cp, cp + 1, 'ellipsis', tp];
+          }
           return (
             <div className="flex justify-center items-center px-4 py-3 bg-gray-50 border-t border-gray-200">
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setCompletedBatchPage(p => Math.max(1, p - 1))}
                   disabled={completedBatchPage === 1}
-                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                  className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                  <button
-                    key={page}
-                    onClick={() => setCompletedBatchPage(page)}
-                    className={`w-8 h-8 text-sm font-medium rounded-md transition-colors ${
-                      completedBatchPage === page
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    {page}
-                  </button>
+                {slots.map((slot, idx) => (
+                  slot === 'ellipsis' ? (
+                    <span key={`e-${idx}`} className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">...</span>
+                  ) : (
+                    <button key={slot} onClick={() => setCompletedBatchPage(slot)} className={`w-8 h-8 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${cp === slot ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}>{slot}</button>
+                  )
                 ))}
                 <button
                   onClick={() => setCompletedBatchPage(p => Math.min(totalPages, p + 1))}
                   disabled={completedBatchPage === totalPages}
-                  className="p-2 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                  className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
@@ -1361,26 +1421,53 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
 
       {/* Parchment Stock Table */}
       <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
-        {/* Header with search */}
-        <div className="p-4 bg-amber-50 border-b border-amber-100">
-          <div className="flex items-center gap-2.5 mb-3">
-            <div className="p-2 bg-amber-500 rounded-lg">
-              <Box className="h-5 w-5 text-white" />
+        {/* Header with search and filters */}
+        <div className="px-4 py-3 bg-amber-50 border-b border-amber-100">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-amber-500 rounded-lg">
+                <Box className="h-4 w-4 text-white" />
+              </div>
+              <h3 className="text-base font-bold text-gray-900">Parchment Stock</h3>
             </div>
-            <h3 className="text-lg font-bold text-gray-900">Parchment Stock</h3>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search lots..."
-              value={parchmentSearch}
-              onChange={e => {
-                setParchmentSearch(e.target.value);
-                setParchmentCurrentPage(1);
-              }}
-              className="pl-10 w-full border border-amber-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-amber-300 focus:border-amber-300 outline-none"
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative w-full sm:w-48">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={parchmentSearch}
+                  onChange={e => {
+                    setParchmentSearch(e.target.value);
+                    setParchmentCurrentPage(1);
+                  }}
+                  className="pl-9 w-full border border-amber-200 bg-white rounded-lg py-1.5 px-3 text-sm focus:ring-1 focus:ring-amber-300 focus:border-amber-300 outline-none"
+                />
+              </div>
+              <Select
+                options={[
+                  { value: 'all', label: 'All Status' },
+                  { value: 'AwaitingHulling', label: 'Awaiting Hulling' },
+                  { value: 'Hulled', label: 'Hulled' },
+                ]}
+                value={parchmentStatusFilter}
+                onChange={(v) => { setParchmentStatusFilter(v as string); setParchmentCurrentPage(1); }}
+                placeholder="Status"
+                className="w-[130px]"
+              />
+              <Select
+                options={[
+                  { value: 'all', label: 'All Process' },
+                  { value: 'Washed', label: 'Washed' },
+                  { value: 'Natural', label: 'Natural' },
+                  { value: 'Honey', label: 'Honey' },
+                ]}
+                value={parchmentProcessFilter}
+                onChange={(v) => { setParchmentProcessFilter(v as string); setParchmentCurrentPage(1); }}
+                placeholder="Process"
+                className="w-[130px]"
+              />
+            </div>
           </div>
         </div>
 
@@ -1409,7 +1496,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
               ) : (
                 paginatedParchmentLots.map(p => (
                   <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">#{p.id.substring(0, 6).toUpperCase()}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatParchmentId(p)}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">#{p.processingBatchId.substring(0, 6).toUpperCase()}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{p.currentWeightKg.toFixed(2)} kg</td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{p.moistureContent}%</td>
@@ -1432,9 +1519,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                       <button
                         onClick={() => openModal('hullAndGrade', p)}
                         disabled={p.status === 'Hulled' || p.currentWeightKg <= 0}
-                        className="px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                        className="p-2 rounded-lg text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all"
+                        title="Hull & Grade"
                       >
-                        Hull & Grade
+                        <PlayCircle size={18} />
                       </button>
                     </td>
                   </tr>
@@ -1454,26 +1542,58 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
 
       {/* Green Bean Stock Table */}
       <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
-        {/* Header with search */}
-        <div className="p-4 bg-teal-50 border-b border-teal-200">
-          <div className="flex items-center gap-2.5 mb-3">
-            <div className="p-2 bg-teal-600 rounded-lg">
-              <Coffee className="h-5 w-5 text-white" />
+        {/* Header with search and filters */}
+        <div className="px-4 py-3 bg-teal-50 border-b border-teal-100">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-teal-600 rounded-lg">
+                <Coffee className="h-4 w-4 text-white" />
+              </div>
+              <h3 className="text-base font-bold text-gray-900">Green Bean Stock</h3>
             </div>
-            <h3 className="text-lg font-bold text-gray-900">Green Bean Stock</h3>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search lots..."
-              value={greenBeanSearch}
-              onChange={e => {
-                setGreenBeanSearch(e.target.value);
-                setGreenBeanCurrentPage(1);
-              }}
-              className="pl-10 w-full border border-teal-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-teal-300 focus:border-teal-300 outline-none"
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative w-full sm:w-48">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={greenBeanSearch}
+                  onChange={e => {
+                    setGreenBeanSearch(e.target.value);
+                    setGreenBeanCurrentPage(1);
+                  }}
+                  className="pl-9 w-full border border-teal-200 bg-white rounded-lg py-1.5 px-3 text-sm focus:ring-1 focus:ring-teal-300 focus:border-teal-300 outline-none"
+                />
+              </div>
+              <Select
+                options={[
+                  { value: 'all', label: 'All Status' },
+                  { value: 'Available', label: 'Available' },
+                  { value: 'Withdrawn', label: 'Withdrawn' },
+                ]}
+                value={greenBeanStatusFilter}
+                onChange={(v) => { setGreenBeanStatusFilter(v as string); setGreenBeanCurrentPage(1); }}
+                placeholder="Status"
+                className="w-[130px]"
+              />
+              <Select
+                options={[
+                  { value: 'all', label: 'All Grades' },
+                  { value: 'Grade A', label: 'Grade A' },
+                  { value: 'Grade B', label: 'Grade B' },
+                  { value: 'Grade C', label: 'Grade C' },
+                  { value: 'Peaberry', label: 'Peaberry' },
+                  { value: 'Screen 18', label: 'Screen 18' },
+                  { value: 'Screen 17', label: 'Screen 17' },
+                  { value: 'Screen 16', label: 'Screen 16' },
+                  { value: 'Screen 15', label: 'Screen 15' },
+                ]}
+                value={greenBeanGradeFilter}
+                onChange={(v) => { setGreenBeanGradeFilter(v as string); setGreenBeanCurrentPage(1); }}
+                placeholder="Grade"
+                className="w-[130px]"
+              />
+            </div>
           </div>
         </div>
 
@@ -1506,7 +1626,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
 
                   return (
                     <tr key={g.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">#{g.id.substring(0, 6).toUpperCase()}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{formatGreenBeanId(g)}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{g.grade}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{g.currentWeightKg.toFixed(2)} kg</td>
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -1538,17 +1658,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                           )}
                           <button
                             onClick={() => setScoringLot(g)}
-                            className="px-3 py-1.5 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 transition-colors"
+                            className="p-2 rounded-lg text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 transition-colors"
                             title="QC Score"
                           >
-                            QC Score
+                            <ClipboardCheck size={16} />
                           </button>
                           <button
                             onClick={() => openModal('withdrawStock', g)}
                             disabled={g.availabilityStatus === 'Withdrawn'}
-                            className="px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                            className="p-2 rounded-lg text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                            title="Withdraw"
                           >
-                            Withdraw
+                            <Download size={16} />
                           </button>
                         </div>
                       </td>
@@ -1572,28 +1693,50 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
 
   const KanbanView = () => (
     <>
-      {/* Processing Summary Bar */}
-      <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm mb-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-sky-50 rounded-lg p-3 border border-sky-200">
-            <p className="text-xs font-semibold text-sky-600 uppercase mb-1">Completed</p>
-            <p className="text-2xl font-bold text-sky-700">{data.processingBatches.filter(b => b.status === ProcessingBatchStatus.Completed).length}</p>
-            <p className="text-xs text-sky-600">batches</p>
+      {/* Processing Summary Bar - Compact */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-sky-600 uppercase">Completed</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{data.processingBatches.filter(b => b.status === ProcessingBatchStatus.Completed).length}</p>
+            </div>
+            <div className="p-2 bg-sky-50 rounded-lg">
+              <CheckCircle className="h-5 w-5 text-sky-500" />
+            </div>
           </div>
-          <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
-            <p className="text-xs font-semibold text-amber-600 uppercase mb-1">Parchment</p>
-            <p className="text-2xl font-bold text-amber-700">{data.parchmentLots.length}</p>
-            <p className="text-xs text-amber-600">lots in stock</p>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-amber-600 uppercase">Parchment</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{data.parchmentLots.length}</p>
+            </div>
+            <div className="p-2 bg-amber-50 rounded-lg">
+              <Box className="h-5 w-5 text-amber-500" />
+            </div>
           </div>
-          <div className="bg-teal-50 rounded-lg p-3 border border-teal-200">
-            <p className="text-xs font-semibold text-teal-600 uppercase mb-1">Green Bean</p>
-            <p className="text-2xl font-bold text-teal-700">{data.greenBeanLots.length}</p>
-            <p className="text-xs text-teal-600">lots available</p>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-teal-600 uppercase">Green Bean</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{data.greenBeanLots.length}</p>
+            </div>
+            <div className="p-2 bg-teal-50 rounded-lg">
+              <Coffee className="h-5 w-5 text-teal-500" />
+            </div>
           </div>
-          <div className="bg-green-50 rounded-lg p-3 border border-green-200">
-            <p className="text-xs font-semibold text-green-600 uppercase mb-1">Ready</p>
-            <p className="text-2xl font-bold text-green-700">{readyForProcessingLots.length}</p>
-            <p className="text-xs text-green-600">harvest lots</p>
+        </div>
+        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-green-600 uppercase">Ready</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{readyForProcessingLots.length}</p>
+            </div>
+            <div className="p-2 bg-green-50 rounded-lg">
+              <Sprout className="h-5 w-5 text-green-500" />
+            </div>
           </div>
         </div>
       </div>
@@ -1618,7 +1761,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                   <div key={lot.id} className="bg-white border-l-4 border-l-green-500 rounded-lg p-3 border border-gray-200 hover:shadow-md transition-all">
                     {/* Card Header */}
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-semibold text-gray-900">#{lot.id.substring(0, 6).toUpperCase()}</p>
+                      <p className="text-sm font-semibold text-gray-900">{formatHarvestLotId(lot)}</p>
                       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
                         <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                         Ready
@@ -1640,8 +1783,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                     {/* Action Button */}
                     <button
                       onClick={() => openModal('startProcessing', lot)}
-                      className="w-full py-2 text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition-colors"
+                      className="w-full py-2 text-xs font-medium rounded-md text-white bg-sky-600 hover:bg-sky-700 shadow-md hover:shadow-lg transition-all inline-flex items-center justify-center gap-1.5"
                     >
+                      <PlayCircle size={14} />
                       Record Process
                     </button>
                   </div>
@@ -1661,27 +1805,36 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                 <button
                   onClick={() => setHarvestCardPage(p => Math.max(1, p - 1))}
                   disabled={harvestCardPage === 1}
-                  className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                  className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                {Array.from({ length: harvestCardTotalPages }, (_, i) => i + 1).map(page => (
-                  <button
-                    key={page}
-                    onClick={() => setHarvestCardPage(page)}
-                    className={`w-7 h-7 text-xs font-medium rounded-md transition-colors ${
-                      harvestCardPage === page
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    {page}
-                  </button>
-                ))}
+                {(() => {
+                  const TOTAL_SLOTS = 7;
+                  const tp = harvestCardTotalPages;
+                  const cp = harvestCardPage;
+                  let slots: (number | 'ellipsis')[] = [];
+                  if (tp <= TOTAL_SLOTS) {
+                    slots = Array.from({ length: tp }, (_, i) => i + 1);
+                  } else if (cp <= 4) {
+                    slots = [1, 2, 3, 4, 5, 'ellipsis', tp];
+                  } else if (cp >= tp - 3) {
+                    slots = [1, 'ellipsis', tp - 4, tp - 3, tp - 2, tp - 1, tp];
+                  } else {
+                    slots = [1, 'ellipsis', cp - 1, cp, cp + 1, 'ellipsis', tp];
+                  }
+                  return slots.map((slot, idx) => (
+                    slot === 'ellipsis' ? (
+                      <span key={`e-${idx}`} className="w-7 h-7 flex items-center justify-center text-gray-400 text-xs">...</span>
+                    ) : (
+                      <button key={slot} onClick={() => setHarvestCardPage(slot)} className={`w-7 h-7 text-xs font-medium rounded-md transition-colors flex items-center justify-center ${cp === slot ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}>{slot}</button>
+                    )
+                  ));
+                })()}
                 <button
                   onClick={() => setHarvestCardPage(p => Math.min(harvestCardTotalPages, p + 1))}
                   disabled={harvestCardPage === harvestCardTotalPages}
-                  className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                  className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
@@ -1722,27 +1875,36 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                 <button
                   onClick={() => setCompletedCardPage(p => Math.max(1, p - 1))}
                   disabled={completedCardPage === 1}
-                  className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                  className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                {Array.from({ length: completedCardTotalPages }, (_, i) => i + 1).map(page => (
-                  <button
-                    key={page}
-                    onClick={() => setCompletedCardPage(page)}
-                    className={`w-7 h-7 text-xs font-medium rounded-md transition-colors ${
-                      completedCardPage === page
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    {page}
-                  </button>
-                ))}
+                {(() => {
+                  const TOTAL_SLOTS = 7;
+                  const tp = completedCardTotalPages;
+                  const cp = completedCardPage;
+                  let slots: (number | 'ellipsis')[] = [];
+                  if (tp <= TOTAL_SLOTS) {
+                    slots = Array.from({ length: tp }, (_, i) => i + 1);
+                  } else if (cp <= 4) {
+                    slots = [1, 2, 3, 4, 5, 'ellipsis', tp];
+                  } else if (cp >= tp - 3) {
+                    slots = [1, 'ellipsis', tp - 4, tp - 3, tp - 2, tp - 1, tp];
+                  } else {
+                    slots = [1, 'ellipsis', cp - 1, cp, cp + 1, 'ellipsis', tp];
+                  }
+                  return slots.map((slot, idx) => (
+                    slot === 'ellipsis' ? (
+                      <span key={`e-${idx}`} className="w-7 h-7 flex items-center justify-center text-gray-400 text-xs">...</span>
+                    ) : (
+                      <button key={slot} onClick={() => setCompletedCardPage(slot)} className={`w-7 h-7 text-xs font-medium rounded-md transition-colors flex items-center justify-center ${cp === slot ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`}>{slot}</button>
+                    )
+                  ));
+                })()}
                 <button
                   onClick={() => setCompletedCardPage(p => Math.min(completedCardTotalPages, p + 1))}
                   disabled={completedCardPage === completedCardTotalPages}
-                  className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+                  className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
@@ -1782,33 +1944,73 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
 
   const Pagination = ({ currentPage, totalPages, onPageChange }: { currentPage: number, totalPages: number, onPageChange: (page: number) => void }) => {
     if (totalPages <= 1) return null;
+
+    const TOTAL_SLOTS = 7; // Fixed number of slots to prevent layout shift
+
+    // Generate fixed slots array
+    const getSlots = (): (number | 'ellipsis')[] => {
+      if (totalPages <= TOTAL_SLOTS) {
+        // If total pages fit, show all with empty slots filled
+        return Array.from({ length: TOTAL_SLOTS }, (_, i) => i < totalPages ? i + 1 : 0).filter(n => n > 0) as number[];
+      }
+
+      // For many pages, use: [1] [...] [middle pages] [...] [last]
+      const slots: (number | 'ellipsis')[] = [];
+
+      if (currentPage <= 4) {
+        // Near start: 1 2 3 4 5 ... last
+        slots.push(1, 2, 3, 4, 5, 'ellipsis', totalPages);
+      } else if (currentPage >= totalPages - 3) {
+        // Near end: 1 ... last-4 last-3 last-2 last-1 last
+        slots.push(1, 'ellipsis', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+      } else {
+        // Middle: 1 ... current-1 current current+1 ... last
+        slots.push(1, 'ellipsis', currentPage - 1, currentPage, currentPage + 1, 'ellipsis', totalPages);
+      }
+
+      return slots;
+    };
+
+    const slots = getSlots();
+
     return (
       <div className="flex justify-center items-center px-4 py-2 bg-gray-50 border-t border-gray-200">
         <div className="flex items-center gap-1">
+          {/* Previous Button - Fixed width */}
           <button
             onClick={() => onPageChange(currentPage - 1)}
             disabled={currentPage === 1}
-            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+            className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-            <button
-              key={page}
-              onClick={() => onPageChange(page)}
-              className={`w-7 h-7 text-xs font-medium rounded-md transition-colors ${
-                currentPage === page
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              {page}
-            </button>
+
+          {/* Page Slots - All fixed width */}
+          {slots.map((slot, index) => (
+            slot === 'ellipsis' ? (
+              <span key={`ellipsis-${index}`} className="w-8 h-8 flex items-center justify-center text-gray-400 text-xs">
+                ...
+              </span>
+            ) : (
+              <button
+                key={slot}
+                onClick={() => onPageChange(slot)}
+                className={`w-8 h-8 text-xs font-medium rounded-md transition-colors flex items-center justify-center ${
+                  currentPage === slot
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                {slot}
+              </button>
+            )
           ))}
+
+          {/* Next Button - Fixed width */}
           <button
             onClick={() => onPageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
-            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+            className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -1818,10 +2020,20 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
   };
 
   const processedParchmentLots = useMemo(() => {
-    const filtered = data.parchmentLots.filter(p =>
+    let filtered = data.parchmentLots.filter(p =>
       p.id.toLowerCase().includes(parchmentSearch.toLowerCase()) ||
       p.status.toLowerCase().includes(parchmentSearch.toLowerCase())
     );
+
+    // Apply status filter
+    if (parchmentStatusFilter !== 'all') {
+      filtered = filtered.filter(p => p.status === parchmentStatusFilter);
+    }
+
+    // Apply process type filter
+    if (parchmentProcessFilter !== 'all') {
+      filtered = filtered.filter(p => p.processType === parchmentProcessFilter);
+    }
 
     return filtered.sort((a, b) => {
       const key = parchmentSortConfig.key;
@@ -1829,7 +2041,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
       if (a[key] > b[key]) return parchmentSortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [data.parchmentLots, parchmentSearch, parchmentSortConfig]);
+  }, [data.parchmentLots, parchmentSearch, parchmentSortConfig, parchmentStatusFilter, parchmentProcessFilter]);
 
   const parchmentPageCount = Math.ceil(processedParchmentLots.length / ITEMS_PER_PAGE);
   const paginatedParchmentLots = processedParchmentLots.slice((parchmentCurrentPage - 1) * ITEMS_PER_PAGE, parchmentCurrentPage * ITEMS_PER_PAGE);
@@ -1843,10 +2055,20 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
   }, [data.greenBeanLots, processorUser]);
 
   const processedGreenBeanLots = useMemo(() => {
-    const filtered = enrichedGreenBeanLots.filter(g =>
+    let filtered = enrichedGreenBeanLots.filter(g =>
       g.id.toLowerCase().includes(greenBeanSearch.toLowerCase()) ||
       g.grade.toLowerCase().includes(greenBeanSearch.toLowerCase())
     );
+
+    // Apply status filter
+    if (greenBeanStatusFilter !== 'all') {
+      filtered = filtered.filter(g => g.availabilityStatus === greenBeanStatusFilter);
+    }
+
+    // Apply grade filter
+    if (greenBeanGradeFilter !== 'all') {
+      filtered = filtered.filter(g => g.grade === greenBeanGradeFilter);
+    }
 
     return filtered.sort((a, b) => {
       const key = greenBeanSortConfig.key as keyof typeof a;
@@ -1856,7 +2078,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
       if (aValue > bValue) return greenBeanSortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [enrichedGreenBeanLots, greenBeanSearch, greenBeanSortConfig]);
+  }, [enrichedGreenBeanLots, greenBeanSearch, greenBeanSortConfig, greenBeanStatusFilter, greenBeanGradeFilter]);
 
   const greenBeanPageCount = Math.ceil(processedGreenBeanLots.length / ITEMS_PER_PAGE);
   const paginatedGreenBeanLots = processedGreenBeanLots.slice((greenBeanCurrentPage - 1) * ITEMS_PER_PAGE, greenBeanCurrentPage * ITEMS_PER_PAGE);
@@ -1864,23 +2086,41 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
   return (
     <div className="space-y-6">
       {/* Header Section */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-amber-500 rounded-xl shadow-lg">
-              <Coffee className="h-8 w-8 text-white" />
+      <div className="bg-white rounded-xl px-5 py-4 shadow-sm border border-gray-200">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-amber-500 rounded-xl">
+              <Coffee className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Processor Workbench</h1>
-              <p className="text-gray-600 text-sm mt-1">Manage processing batches, parchment, and green bean inventory</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Processor Workbench</h1>
+              <p className="text-gray-500 text-xs mt-0.5">Manage processing batches, parchment, and green bean inventory</p>
             </div>
           </div>
-          <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg">
-            <button onClick={() => setViewMode('kanban')} className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${viewMode === 'kanban' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
-              <LayoutGrid className="h-4 w-4" /> Workflow
+
+          {/* View Mode Toggle */}
+          <div className="flex items-center p-1 bg-gray-100 rounded-lg">
+            <button
+              onClick={() => setViewMode('kanban')}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-md transition-all duration-200 ${
+                viewMode === 'kanban'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <LayoutGrid className="h-4 w-4" />
+              <span>Workflow</span>
             </button>
-            <button onClick={() => setViewMode('table')} className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200 ${viewMode === 'table' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>
-              <List className="h-4 w-4" /> Data Grid
+            <button
+              onClick={() => setViewMode('table')}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-md transition-all duration-200 ${
+                viewMode === 'table'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <List className="h-4 w-4" />
+              <span>Data Grid</span>
             </button>
           </div>
         </div>
@@ -1917,7 +2157,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                 <div key={p.id} className={`bg-white border-l-4 ${p.status === 'Hulled' ? 'border-l-gray-300' : 'border-l-amber-500'} rounded-lg p-3 border border-gray-200 hover:shadow-md transition-all`}>
                   {/* Card Header */}
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-semibold text-gray-900">#{p.id.substring(0, 6).toUpperCase()}</p>
+                    <p className="text-sm font-semibold text-gray-900">{formatParchmentId(p)}</p>
                     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${p.status === 'Hulled' ? 'bg-gray-100 text-gray-600' : 'bg-emerald-50 text-emerald-700'}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${p.status === 'Hulled' ? 'bg-gray-400' : 'bg-emerald-500'}`}></span>
                       {p.status}
@@ -1944,8 +2184,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                   <button
                     onClick={() => openModal('hullAndGrade', p)}
                     disabled={p.status === 'Hulled' || p.currentWeightKg <= 0}
-                    className="w-full py-2 text-xs font-medium rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+                    className="w-full py-2 text-xs font-medium rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all inline-flex items-center justify-center gap-1.5"
                   >
+                    <PlayCircle size={14} />
                     Hull & Grade
                   </button>
                 </div>
@@ -1992,7 +2233,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                         <Coffee className="h-4 w-4 text-white" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">#{g.id.substring(0, 6).toUpperCase()}</p>
+                        <p className="text-sm font-semibold text-gray-900">{formatGreenBeanId(g)}</p>
                         <p className="text-xs text-teal-600">Green Bean Lot</p>
                       </div>
                     </div>
@@ -2054,9 +2295,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                     <button
                       onClick={() => openModal('withdrawStock', g)}
                       disabled={g.availabilityStatus === 'Withdrawn'}
-                      className="flex-1 py-2 text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors inline-flex items-center justify-center gap-1.5"
+                      className="flex-1 py-2 text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all inline-flex items-center justify-center gap-1.5"
                     >
-                      <ChevronsRight className="h-3 w-3" />
+                      <PlayCircle className="h-3 w-3" />
                       Withdraw
                     </button>
                   </div>
@@ -2224,8 +2465,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
               return <>
                 {/* Modal Header */}
                 <div className="flex items-center gap-4 mb-6">
-                  <div className="p-4 bg-green-600 rounded-2xl shadow-lg">
-                    <ChevronsRight className="h-10 w-10 text-white" />
+                  <div className="p-4 bg-amber-500 rounded-2xl shadow-lg">
+                    <PlayCircle className="h-10 w-10 text-white" />
                   </div>
                   <div>
                     <h2 className="text-3xl font-bold text-gray-900">Hull & Grade</h2>
@@ -2392,8 +2633,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
             {modal === 'withdrawStock' && selectedGreenBean && <>
               {/* Modal Header */}
               <div className="flex items-center gap-4 mb-6">
-                <div className="p-4 bg-indigo-600 rounded-2xl shadow-lg">
-                  <ChevronsRight className="h-10 w-10 text-white" />
+                <div className="p-4 bg-blue-600 rounded-2xl shadow-lg">
+                  <PlayCircle className="h-10 w-10 text-white" />
                 </div>
                 <div>
                   <h2 className="text-3xl font-bold text-gray-900">Withdraw Stock</h2>
@@ -3021,8 +3262,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                                 type="button"
                                 onClick={() => handleEditWithdrawal(selectedGreenBeanForHistory.id, index)}
                                 className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-all"
+                                title="Edit"
                               >
-                                <FileText className="h-3.5 w-3.5" />
+                                <Pencil className="h-3.5 w-3.5" />
                                 Edit
                               </button>
                               <button

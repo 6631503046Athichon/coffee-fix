@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { HarvestLot, UserRole } from '../../types';
-import { ChevronRight, ArrowUp, ArrowDown, Coffee, PlusCircle } from 'lucide-react';
+import { ChevronRight, ArrowUp, ArrowDown, Coffee, PlusCircle, ChevronLeft } from 'lucide-react';
 import { PageHeader } from '../common/PageHeader';
 import { Button } from '../common/Button';
 import HarvestLotModal from '../modals/HarvestLotModal';
@@ -17,11 +17,13 @@ const HarvestLotsManagement: React.FC = () => {
   const navigate = useNavigate();
 
   // Table State
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Ready for Processing' | 'Processing'>('All');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Ready for Processing' | 'Processing' | 'Complete'>('All');
   const [sortColumn, setSortColumn] = useState<SortableKeys>('id');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedFarm, setSelectedFarm] = useState<any>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 5;
 
   const handleRowClick = (lotId: string) => {
     navigate(`/farmer-dashboard/${lotId}`);
@@ -57,6 +59,18 @@ const HarvestLotsManagement: React.FC = () => {
     });
   }, [myHarvestLots, statusFilter, sortColumn, sortDirection]);
 
+  // Pagination
+  const totalPages = Math.ceil(sortedAndFilteredLots.length / ITEMS_PER_PAGE);
+  const pagedLots = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return sortedAndFilteredLots.slice(start, start + ITEMS_PER_PAGE);
+  }, [sortedAndFilteredLots, currentPage]);
+
+  // Reset page when filter changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter]);
+
   const stats = useMemo(() => ({
     totalLots: myHarvestLots.length,
     totalWeight: myHarvestLots.reduce((sum, lot) => sum + lot.weightKg, 0),
@@ -64,7 +78,7 @@ const HarvestLotsManagement: React.FC = () => {
     readyForProcessing: myHarvestLots.filter(l => l.status === 'Ready for Processing').length,
   }), [myHarvestLots]);
 
-  const filterStatuses: Array<'All' | 'Ready for Processing' | 'Processing'> = ['All', 'Ready for Processing', 'Processing'];
+  const filterStatuses: Array<'All' | 'Ready for Processing' | 'Processing' | 'Complete'> = ['All', 'Ready for Processing', 'Processing', 'Complete'];
 
   const SortableHeader: React.FC<{ column: SortableKeys; label: string }> = ({ column, label }) => (
     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -187,7 +201,7 @@ const HarvestLotsManagement: React.FC = () => {
               </Button>
             </div>
           ) : (
-            sortedAndFilteredLots.map((lot: HarvestLot) => (
+            pagedLots.map((lot: HarvestLot) => (
               <div
                 key={lot.id}
                 onClick={() => handleRowClick(lot.id)}
@@ -198,7 +212,9 @@ const HarvestLotsManagement: React.FC = () => {
                     <div className="flex items-center gap-3 mb-4">
                       <h4 className="text-xl font-bold text-gray-900">{formatHarvestLotId(lot.id, 'short', lot.harvestDate)}</h4>
                       <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                        lot.status === 'Processing'
+                        lot.status === 'Complete'
+                          ? 'bg-purple-100 text-purple-800'
+                          : lot.status === 'Processing'
                           ? 'bg-blue-100 text-blue-800'
                           : 'bg-green-100 text-green-800'
                       }`}>
@@ -232,6 +248,56 @@ const HarvestLotsManagement: React.FC = () => {
                 </div>
               </div>
             ))
+          )}
+
+          {/* Pagination */}
+          {sortedAndFilteredLots.length > 0 && totalPages > 1 && (
+            <div className="flex justify-center items-center gap-1 pt-4">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-white rounded-md disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              {(() => {
+                const TOTAL_SLOTS = 7;
+                const tp = totalPages;
+                const cp = currentPage;
+                let slots: (number | 'ellipsis')[] = [];
+                if (tp <= TOTAL_SLOTS) {
+                  slots = Array.from({ length: tp }, (_, i) => i + 1);
+                } else if (cp <= 4) {
+                  slots = [1, 2, 3, 4, 5, 'ellipsis', tp];
+                } else if (cp >= tp - 3) {
+                  slots = [1, 'ellipsis', tp - 4, tp - 3, tp - 2, tp - 1, tp];
+                } else {
+                  slots = [1, 'ellipsis', cp - 1, cp, cp + 1, 'ellipsis', tp];
+                }
+                return slots.map((slot, idx) => (
+                  slot === 'ellipsis' ? (
+                    <span key={`e-${idx}`} className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">...</span>
+                  ) : (
+                    <button
+                      key={slot}
+                      onClick={() => setCurrentPage(slot)}
+                      className={`w-8 h-8 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${
+                        cp === slot ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-white'
+                      }`}
+                    >
+                      {slot}
+                    </button>
+                  )
+                ));
+              })()}
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-white rounded-md disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
           )}
         </div>
       </div>

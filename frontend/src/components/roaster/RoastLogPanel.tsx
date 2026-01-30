@@ -160,27 +160,36 @@ const RoastLogPanel: React.FC<{
             <button
               onClick={onPrev}
               disabled={page === 1}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-white rounded-md disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-white rounded-md disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => (
-              <button
-                key={pageNum}
-                onClick={() => onPageChange ? onPageChange(pageNum) : (pageNum < page ? onPrev() : onNext())}
-                className={`w-8 h-8 text-sm font-medium rounded-md transition-colors ${
-                  page === pageNum
-                    ? 'bg-indigo-600 text-white'
-                    : 'text-gray-600 hover:bg-white'
-                }`}
-              >
-                {pageNum}
-              </button>
-            ))}
+            {(() => {
+              const TOTAL_SLOTS = 7;
+              const tp = totalPages;
+              const cp = page;
+              let slots: (number | 'ellipsis')[] = [];
+              if (tp <= TOTAL_SLOTS) {
+                slots = Array.from({ length: tp }, (_, i) => i + 1);
+              } else if (cp <= 4) {
+                slots = [1, 2, 3, 4, 5, 'ellipsis', tp];
+              } else if (cp >= tp - 3) {
+                slots = [1, 'ellipsis', tp - 4, tp - 3, tp - 2, tp - 1, tp];
+              } else {
+                slots = [1, 'ellipsis', cp - 1, cp, cp + 1, 'ellipsis', tp];
+              }
+              return slots.map((slot, idx) => (
+                slot === 'ellipsis' ? (
+                  <span key={`e-${idx}`} className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">...</span>
+                ) : (
+                  <button key={slot} onClick={() => onPageChange ? onPageChange(slot) : (slot < page ? onPrev() : onNext())} className={`w-8 h-8 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${cp === slot ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-white'}`}>{slot}</button>
+                )
+              ));
+            })()}
             <button
               onClick={onNext}
               disabled={page === totalPages}
-              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-white rounded-md disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-white rounded-md disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronRight className="h-4 w-4" />
             </button>

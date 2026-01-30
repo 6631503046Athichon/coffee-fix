@@ -1,6 +1,6 @@
 
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package } from 'lucide-react';
 
@@ -8,6 +8,8 @@ import { UserRole, CuppingSessionType, Customer } from './types';
 import { MOCK_DATA } from './constants';
 import { DataContext } from './hooks/useDataContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ToastProvider } from './contexts/ToastContext';
+import ToastContainer from './components/common/ToastContainer';
 import { getAllSoilAnalyses } from './services/soilAnalysisService';
 import { getAllWeatherRecords } from './services/weatherService';
 import { getAllCustomers as getAllCustomersFromBackend } from './services/customerService';
@@ -98,6 +100,14 @@ const FirstLoginSetupWrapper: React.FC = () => {
 const ProtectedRoutes: React.FC = () => {
   const { isAuthenticated, isAuthLoading, currentUser } = useAuth();
   const [data, setData] = useState(MOCK_DATA);
+  const [isEditing, setIsEditingState] = useState(false);
+  const isEditingRef = useRef(false);
+
+  // Function to set editing state - pauses auto-refresh while editing
+  const setIsEditing = useCallback((editing: boolean) => {
+    isEditingRef.current = editing;
+    setIsEditingState(editing);
+  }, []);
 
   // Load data from backend API
   const loadDataFromBackend = useCallback(async () => {
@@ -131,23 +141,31 @@ const ProtectedRoutes: React.FC = () => {
         getAllGreenBeanLots(),
       ]);
 
+      // Helper function to merge backend data with mock data (backend data takes priority for same IDs)
+      const mergeArrays = <T extends { id: string }>(backendData: T[], mockData: T[]): T[] => {
+        const backendIds = new Set(backendData.map(item => item.id));
+        const uniqueMockData = mockData.filter(item => !backendIds.has(item.id));
+        return [...backendData, ...uniqueMockData];
+      };
+
+      // Merge backend data with MOCK_DATA (backend data comes first, mock data fills in the rest)
       setData(prev => ({
         ...prev,
-        farms: storedFarms.length > 0 ? storedFarms : prev.farms,
+        farms: mergeArrays(storedFarms, MOCK_DATA.farms),
         soilAnalyses: storedSoilAnalyses.length > 0 ? storedSoilAnalyses : prev.soilAnalyses,
         weatherRecords: storedWeatherRecords.length > 0 ? storedWeatherRecords : prev.weatherRecords,
-        harvestLots: storedHarvestLots.length > 0 ? storedHarvestLots : prev.harvestLots,
+        harvestLots: mergeArrays(storedHarvestLots, MOCK_DATA.harvestLots),
         gapLogs: storedGAPLogs.length > 0 ? storedGAPLogs : prev.gapLogs,
         activityTypes: storedActivityTypes.length > 0 ? storedActivityTypes : prev.activityTypes,
         processTypes: storedProcessTypes.length > 0 ? storedProcessTypes : prev.processTypes,
-        customers: storedCustomers.length > 0 ? storedCustomers : prev.customers,
+        customers: mergeArrays(storedCustomers, MOCK_DATA.customers),
         saleOrders: storedSaleOrders.length > 0 ? storedSaleOrders : prev.saleOrders,
         invoices: storedInvoices.length > 0 ? storedInvoices : prev.invoices,
         pricingHistory: storedPricingHistory.length > 0 ? storedPricingHistory : prev.pricingHistory,
-        cropYears: storedCropYears, // Always use backend data, even if empty
-        processingBatches: storedProcessingBatches.length > 0 ? storedProcessingBatches : prev.processingBatches,
-        parchmentLots: storedParchmentLots.length > 0 ? storedParchmentLots : prev.parchmentLots,
-        greenBeanLots: storedGreenBeanLots.length > 0 ? storedGreenBeanLots : prev.greenBeanLots,
+        cropYears: storedCropYears.length > 0 ? storedCropYears : prev.cropYears,
+        processingBatches: mergeArrays(storedProcessingBatches, MOCK_DATA.processingBatches),
+        parchmentLots: mergeArrays(storedParchmentLots, MOCK_DATA.parchmentLots),
+        greenBeanLots: mergeArrays(storedGreenBeanLots, MOCK_DATA.greenBeanLots),
       }));
     } catch (error) {
       console.error('Failed to load data from backend:', error);
@@ -170,9 +188,11 @@ const ProtectedRoutes: React.FC = () => {
     // Initial load
     loadDataFromBackend();
 
-    // Auto-refresh every 30 seconds
+    // Auto-refresh every 30 seconds (paused while editing)
     const refreshInterval = setInterval(() => {
-      loadDataFromBackend();
+      if (!isEditingRef.current) {
+        loadDataFromBackend();
+      }
     }, 30000);
 
     // Listen for localStorage changes from other components (for activity types and process types that still use localStorage)
@@ -210,7 +230,7 @@ const ProtectedRoutes: React.FC = () => {
     };
   }, [isAuthenticated, isAuthLoading, loadDataFromBackend]);
 
-  const contextValue = useMemo(() => ({ data, setData, refreshData }), [data, setData]);
+  const contextValue = useMemo(() => ({ data, setData, refreshData, setIsEditing, isEditing }), [data, setData, setIsEditing, isEditing]);
 
   const navItems = useMemo(() => {
     let competitionAdminHref = '/cupping'; // Default to hub
@@ -324,7 +344,7 @@ const ProtectedRoutes: React.FC = () => {
 
 const App: React.FC = () => {
   const [data] = useState(MOCK_DATA);
-  const contextValue = useMemo(() => ({ data, setData: () => {}, refreshData: async () => {} }), [data]);
+  const contextValue = useMemo(() => ({ data, setData: () => {}, refreshData: async () => {}, setIsEditing: () => {}, isEditing: false }), [data]);
 
   // Initialize localStorage on app mount (only for non-API data)
   useEffect(() => {
@@ -342,37 +362,40 @@ const App: React.FC = () => {
 
   return (
     <AuthProvider>
-      <Routes>
-        {/* Public Routes - no authentication required */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/first-login-setup" element={<FirstLoginSetupWrapper />} />
-        <Route
-          path="/traceability/:lotId"
-          element={
-            <DataContext.Provider value={contextValue}>
-              <TraceabilityPage />
-            </DataContext.Provider>
-          }
-        />
-        {/* Root route - redirect to login if not authenticated */}
-        <Route path="/" element={<RootRedirect />} />
-        {/* Protected Routes - requires authentication */}
-        <Route path="/*" element={<ProtectedRoutes />} />
-        {/* 404 Fallback */}
-        <Route path="*" element={
-          <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-            <div className="text-center">
-              <h1 className="text-4xl font-bold text-gray-900 mb-4">404</h1>
-              <p className="text-gray-600 mb-6">Page not found</p>
-              <Link to="/login" className="text-blue-600 hover:text-blue-700">
-                Go to Login
-              </Link>
+      <ToastProvider>
+        <ToastContainer />
+        <Routes>
+          {/* Public Routes - no authentication required */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/first-login-setup" element={<FirstLoginSetupWrapper />} />
+          <Route
+            path="/traceability/:lotId"
+            element={
+              <DataContext.Provider value={contextValue}>
+                <TraceabilityPage />
+              </DataContext.Provider>
+            }
+          />
+          {/* Root route - redirect to login if not authenticated */}
+          <Route path="/" element={<RootRedirect />} />
+          {/* Protected Routes - requires authentication */}
+          <Route path="/*" element={<ProtectedRoutes />} />
+          {/* 404 Fallback */}
+          <Route path="*" element={
+            <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+              <div className="text-center">
+                <h1 className="text-4xl font-bold text-gray-900 mb-4">404</h1>
+                <p className="text-gray-600 mb-6">Page not found</p>
+                <Link to="/login" className="text-blue-600 hover:text-blue-700">
+                  Go to Login
+                </Link>
+              </div>
             </div>
-          </div>
-        } />
-      </Routes>
+          } />
+        </Routes>
+      </ToastProvider>
     </AuthProvider>
   );
 };
