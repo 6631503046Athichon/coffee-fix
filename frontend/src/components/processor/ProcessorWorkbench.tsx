@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useDataContext } from '../../hooks/useDataContext';
-import { ProcessingBatch, ProcessingBatchStatus, ParchmentLot, GreenBeanLot, HarvestLot, User, UserRole, CuppingSessionType, JudgeScore, SCA_SENSORY_ATTRIBUTES, SCA_CUP_ATTRIBUTES, PricingHistory, Customer } from '../../types';
+import { ProcessingBatch, ProcessingBatchStatus, ParchmentLot, GreenBeanLot, HarvestLot, User, UserRole, CuppingSessionType, JudgeScore, SCA_SENSORY_ATTRIBUTES, SCA_CUP_ATTRIBUTES, PricingHistory, Customer, CropYear } from '../../types';
 import { Coffee, Wind, PackageCheck, Sprout, ChevronsRight, CheckCircle, Archive, PlayCircle, TestTube, Plus, Trash2, LayoutGrid, List, AlertCircle, History, Save, Search, ArrowUp, ArrowDown, ChevronDown, ChevronLeft, ChevronRight, Check, Microscope, Star, TrendingUp, Box, Droplet, Scale, Calendar, Package, Activity, DollarSign, FileText, X, Play, Download, ClipboardCheck, Pencil, Eye } from 'lucide-react';
 import { addPricingHistory } from '../../services/salesService';
 import { getAllCustomers } from '../../services/customerService';
@@ -99,16 +99,26 @@ const ProcessTypeDropdown: React.FC<{
   );
 };
 
+// Helper function to format parchment status for display
+const formatParchmentStatus = (status: string): string => {
+  const statusMap: Record<string, string> = {
+    'AwaitingHulling': 'Awaiting Hulling',
+    'Hulled': 'Hulled',
+  };
+  return statusMap[status] || status;
+};
+
 // Custom Dropdown Component for Grade Selection
 const GradeDropdown: React.FC<{
   value: string;
   onChange: (value: string) => void;
   index: number;
-}> = ({ value, onChange, index }) => {
+  usedGrades?: string[];
+}> = ({ value, onChange, index, usedGrades = [] }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const options = [
+  const allOptions = [
     { value: 'Grade A', label: 'Grade A' },
     { value: 'Grade B', label: 'Grade B' },
     { value: 'Grade C', label: 'Grade C' },
@@ -118,6 +128,9 @@ const GradeDropdown: React.FC<{
     { value: 'Screen 16', label: 'Screen 16' },
     { value: 'Screen 15', label: 'Screen 15' }
   ];
+
+  // Filter out grades that are already used by other rows (keep current selection available)
+  const options = allOptions.filter(opt => !usedGrades.includes(opt.value) || opt.value === value);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -129,7 +142,7 @@ const GradeDropdown: React.FC<{
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const selectedOption = options.find(opt => opt.value === value);
+  const selectedOption = allOptions.find(opt => opt.value === value);
 
   return (
     <div ref={dropdownRef} className="relative">
@@ -168,75 +181,117 @@ const GradeDropdown: React.FC<{
   );
 };
 
-// Custom Dropdown Component for Crop Year Selection
-const CustomCropYearDropdown: React.FC<{
+// Crop Year Chips Component (เหมือนใน HarvestLotModal)
+const CropYearChips: React.FC<{
+  years: CropYear[];
   value: string;
   onChange: (value: string) => void;
-  options: { id: string; year: string; description?: string; }[];
-  placeholder: string;
-}> = ({ value, onChange, options, placeholder }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  maxVisible?: number;
+}> = ({ years, value, onChange, maxVisible = 5 }) => {
+  const [offset, setOffset] = useState(0);
+  const initializedRef = useRef(false);
 
-  const selectedCropYear = options.find(cy => cy.id === value);
+  // หาปีปัจจุบันจาก today
+  const currentYearId = useMemo(() => {
+    const today = new Date();
+    return years.find(y => {
+      const start = new Date(y.startDate);
+      const end = new Date(y.endDate);
+      return today >= start && today <= end;
+    })?.id || '';
+  }, [years]);
 
+  // Initialize offset ให้อยู่รอบๆ ปีปัจจุบัน (แค่ครั้งแรกเท่านั้น)
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
+    if (initializedRef.current) return; // ไม่ reset ถ้า initialize แล้ว
+    if (years.length > maxVisible && currentYearId) {
+      const currentIndex = years.findIndex(y => y.id === currentYearId);
+      const halfRange = Math.floor(maxVisible / 2);
+      let startIndex = Math.max(0, currentIndex - halfRange);
+      if (startIndex + maxVisible > years.length) {
+        startIndex = Math.max(0, years.length - maxVisible);
       }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+      setOffset(startIndex);
+      initializedRef.current = true;
+    }
+  }, [years, currentYearId, maxVisible]);
+
+  // คำนวณปีที่แสดง
+  const visibleYears = useMemo(() => {
+    if (years.length <= maxVisible) return years;
+    return years.slice(offset, offset + maxVisible);
+  }, [years, offset, maxVisible]);
+
+  const canGoBack = offset > 0;
+  const canGoForward = offset + maxVisible < years.length;
+  const hasNavigation = years.length > maxVisible;
+
+  const baseChipClass = "relative flex items-center justify-center py-3 px-4 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer";
+  const selectedClass = "bg-blue-600 text-white border-blue-600 shadow-lg";
+  const unselectedClass = "bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50";
 
   return (
-    <div ref={dropdownRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="block w-full border border-gray-300 rounded-xl shadow-sm py-2.5 px-3 bg-white text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400"
-      >
-        <div className="flex items-center justify-between">
-          <span className={selectedCropYear ? "text-gray-900 font-medium" : "text-gray-500"}>
-            {selectedCropYear ? selectedCropYear.year : placeholder}
-          </span>
-          <ChevronDown className={`h-5 w-5 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-        </div>
-      </button>
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-3">
+        {/* ปุ่ม "None" */}
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          className={`${baseChipClass} ${!value ? selectedClass : unselectedClass}`}
+        >
+          <span className="text-sm font-semibold">None</span>
+        </button>
 
-      {isOpen && (
-        <div className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
-          <div className="py-2">
-            {options.length === 0 ? (
-              <div className="px-4 py-3 text-sm text-gray-500 text-center">
-                No crop years available
-              </div>
-            ) : (
-              options.map((cropYear) => (
-                <button
-                  key={cropYear.id}
-                  type="button"
-                  onClick={() => {
-                    onChange(cropYear.id);
-                    setIsOpen(false);
-                  }}
-                  className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${value === cropYear.id ? 'bg-gray-100' : ''
-                    }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{cropYear.year}</p>
-                      {cropYear.description && <p className="text-xs text-gray-500">{cropYear.description}</p>}
-                    </div>
-                    {value === cropYear.id && (
-                      <Check className="h-5 w-5 text-gray-600" />
-                    )}
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
+        {/* ปุ่มแต่ละปี (จำกัดจำนวน) */}
+        {visibleYears.map(year => {
+          const isSelected = value === year.id;
+          const isCurrent = year.id === currentYearId;
+
+          return (
+            <button
+              key={year.id}
+              type="button"
+              onClick={() => onChange(year.id)}
+              className={`${baseChipClass} ${isSelected ? selectedClass : unselectedClass}`}
+              title={year.description || year.year}
+            >
+              {isCurrent && (
+                <span className={`absolute -top-2 -right-2 px-2 py-0.5 text-[10px] font-bold rounded-full shadow-sm ${
+                  isSelected ? 'bg-white text-blue-600' : 'bg-blue-500 text-white'
+                }`}>
+                  Current
+                </span>
+              )}
+              <span className="text-sm font-semibold">{year.year}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Navigation arrows - ด้านล่าง */}
+      {/* ซ้าย = ไปปีใหม่ (offset-1), ขวา = ไปปีเก่า (offset+1) เพราะ years เรียง descending */}
+      {hasNavigation && (
+        <div className="flex items-center justify-center gap-4">
+          <button
+            type="button"
+            onClick={() => setOffset(Math.max(0, offset - 1))}
+            disabled={!canGoBack}
+            className={`p-2 rounded-full transition-all duration-200 ${canGoBack ? 'hover:bg-blue-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+              <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => setOffset(Math.min(years.length - maxVisible, offset + 1))}
+            disabled={!canGoForward}
+            className={`p-2 rounded-full transition-all duration-200 ${canGoForward ? 'hover:bg-blue-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+              <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/>
+            </svg>
+          </button>
         </div>
       )}
     </div>
@@ -405,13 +460,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
   const [parchmentSearch, setParchmentSearch] = useState('');
   const [parchmentSortConfig, setParchmentSortConfig] = useState<{ key: ParchmentSortKeys; direction: SortDirection }>({ key: 'id', direction: 'desc' });
   const [parchmentCurrentPage, setParchmentCurrentPage] = useState(1);
-  const [parchmentStatusFilter, setParchmentStatusFilter] = useState<string>('all');
+  const [parchmentStatusFilter, setParchmentStatusFilter] = useState<string>('AwaitingHulling');
   const [parchmentProcessFilter, setParchmentProcessFilter] = useState<string>('all');
 
   const [greenBeanSearch, setGreenBeanSearch] = useState('');
   const [greenBeanSortConfig, setGreenBeanSortConfig] = useState<{ key: GreenBeanSortKeys; direction: SortDirection }>({ key: 'id', direction: 'desc' });
   const [greenBeanCurrentPage, setGreenBeanCurrentPage] = useState(1);
-  const [greenBeanStatusFilter, setGreenBeanStatusFilter] = useState<string>('all');
+  const [greenBeanStatusFilter, setGreenBeanStatusFilter] = useState<string>('InStock');
   const [greenBeanGradeFilter, setGreenBeanGradeFilter] = useState<string>('all');
 
   const [harvestLotSearch, setHarvestLotSearch] = useState('');
@@ -1430,8 +1485,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
               </div>
               <h3 className="text-base font-bold text-gray-900">Parchment Stock</h3>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative w-full sm:w-48">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[180px] max-w-[260px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
@@ -1441,32 +1496,34 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                     setParchmentSearch(e.target.value);
                     setParchmentCurrentPage(1);
                   }}
-                  className="pl-9 w-full border border-amber-200 bg-white rounded-lg py-1.5 px-3 text-sm focus:ring-1 focus:ring-amber-300 focus:border-amber-300 outline-none"
+                  className="pl-9 w-full border border-gray-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-amber-200 focus:border-amber-300 outline-none transition-all"
                 />
               </div>
-              <Select
-                options={[
-                  { value: 'all', label: 'All Status' },
-                  { value: 'AwaitingHulling', label: 'Awaiting Hulling' },
-                  { value: 'Hulled', label: 'Hulled' },
-                ]}
-                value={parchmentStatusFilter}
-                onChange={(v) => { setParchmentStatusFilter(v as string); setParchmentCurrentPage(1); }}
-                placeholder="Status"
-                className="w-[130px]"
-              />
-              <Select
-                options={[
-                  { value: 'all', label: 'All Process' },
-                  { value: 'Washed', label: 'Washed' },
-                  { value: 'Natural', label: 'Natural' },
-                  { value: 'Honey', label: 'Honey' },
-                ]}
-                value={parchmentProcessFilter}
-                onChange={(v) => { setParchmentProcessFilter(v as string); setParchmentCurrentPage(1); }}
-                placeholder="Process"
-                className="w-[130px]"
-              />
+              <div className="flex items-center gap-2">
+                <Select
+                  options={[
+                    { value: 'all', label: 'All Status' },
+                    { value: 'AwaitingHulling', label: 'Awaiting Hulling' },
+                    { value: 'Hulled', label: 'Hulled' },
+                  ]}
+                  value={parchmentStatusFilter}
+                  onChange={(v) => { setParchmentStatusFilter(v as string); setParchmentCurrentPage(1); }}
+                  placeholder="Status"
+                  className="w-[175px]"
+                />
+                <Select
+                  options={[
+                    { value: 'all', label: 'All Process' },
+                    { value: 'Washed', label: 'Washed' },
+                    { value: 'Natural', label: 'Natural' },
+                    { value: 'Honey', label: 'Honey' },
+                  ]}
+                  value={parchmentProcessFilter}
+                  onChange={(v) => { setParchmentProcessFilter(v as string); setParchmentCurrentPage(1); }}
+                  placeholder="Process"
+                  className="w-[135px]"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -1512,7 +1569,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className="inline-flex items-center gap-1.5 text-xs text-gray-600">
                         <span className={`w-1.5 h-1.5 rounded-full ${p.status === 'Hulled' ? 'bg-gray-300' : 'bg-green-500'}`}></span>
-                        {p.status}
+                        {formatParchmentStatus(p.status)}
                       </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
@@ -1567,9 +1624,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
               </div>
               <Select
                 options={[
-                  { value: 'all', label: 'All Status' },
-                  { value: 'Available', label: 'Available' },
-                  { value: 'Withdrawn', label: 'Withdrawn' },
+                  { value: 'all', label: 'All' },
+                  { value: 'InStock', label: 'In Stock' },
+                  { value: 'Depleted', label: 'Depleted' },
                 ]}
                 value={greenBeanStatusFilter}
                 onChange={(v) => { setGreenBeanStatusFilter(v as string); setGreenBeanCurrentPage(1); }}
@@ -2060,9 +2117,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
       g.grade.toLowerCase().includes(greenBeanSearch.toLowerCase())
     );
 
-    // Apply status filter
-    if (greenBeanStatusFilter !== 'all') {
-      filtered = filtered.filter(g => g.availabilityStatus === greenBeanStatusFilter);
+    // Apply status filter (InStock = weight > 0, Depleted = weight <= 0)
+    if (greenBeanStatusFilter === 'InStock') {
+      filtered = filtered.filter(g => g.currentWeightKg > 0);
+    } else if (greenBeanStatusFilter === 'Depleted') {
+      filtered = filtered.filter(g => g.currentWeightKg <= 0);
     }
 
     // Apply grade filter
@@ -2160,7 +2219,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                     <p className="text-sm font-semibold text-gray-900">{formatParchmentId(p)}</p>
                     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${p.status === 'Hulled' ? 'bg-gray-100 text-gray-600' : 'bg-emerald-50 text-emerald-700'}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${p.status === 'Hulled' ? 'bg-gray-400' : 'bg-emerald-500'}`}></span>
-                      {p.status}
+                      {formatParchmentStatus(p.status)}
                     </span>
                   </div>
 
@@ -2374,13 +2433,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
 
                 <div>
                   <label htmlFor="cropYear" className="block text-base font-bold text-gray-700 mb-3">Crop Year (Optional)</label>
-                  <CustomCropYearDropdown
+                  <CropYearChips
+                    years={data.cropYears}
                     value={cropYearId}
                     onChange={setCropYearId}
-                    options={data.cropYears}
-                    placeholder="Select crop year..."
                   />
-                  <p className="mt-1 text-xs text-gray-500">Associate this batch with a crop year for tracking and reporting</p>
+                  <p className="mt-2 text-xs text-gray-500">Associate this batch with a crop year for tracking and reporting</p>
                 </div>
 
                 {/* Optional special instructions/note for the chosen process */}
@@ -2459,6 +2517,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
             </>}
             {modal === 'hullAndGrade' && selectedParchment && (() => {
               const totalWeightNum = parseFloat(totalGreenWeight) || 0;
+              const exceedsParchmentWeight = totalWeightNum > selectedParchment.currentWeightKg;
               const weightMismatch = totalWeightNum > 0 && Math.abs(gradedWeightSum - totalWeightNum) > 0.01;
               const weightLossPercent = totalGreenWeight ? (((selectedParchment.currentWeightKg - parseFloat(totalGreenWeight)) / selectedParchment.currentWeightKg) * 100).toFixed(1) : '0';
 
@@ -2507,10 +2566,23 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                     placeholder="Enter weights below"
                     className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-lg font-semibold bg-gray-50 text-green-700 cursor-not-allowed shadow-sm"
                   />
-                  {totalGreenWeight && (
+                  {totalGreenWeight && !exceedsParchmentWeight && (
                     <div className="mt-3 flex items-center justify-between bg-blue-50 rounded-xl p-4 border border-blue-200">
                       <span className="text-sm font-semibold text-gray-700">Weight Loss from Hulling</span>
                       <span className="text-2xl font-bold text-blue-600">{weightLossPercent}%</span>
+                    </div>
+                  )}
+                  {exceedsParchmentWeight && (
+                    <div className="mt-3 flex items-start gap-2 bg-red-50 rounded-xl p-4 border border-red-200">
+                      <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-semibold text-red-800">
+                          น้ำหนักเกินกว่า Parchment Weight
+                        </p>
+                        <p className="text-xs text-red-600 mt-1">
+                          Total Green Bean Weight ({totalWeightNum.toFixed(2)} kg) ไม่สามารถเกิน Parchment Weight ({selectedParchment.currentWeightKg.toFixed(2)} kg)
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2540,6 +2612,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                               value={lot.grade}
                               onChange={(value) => setGradedLots(gradedLots.map((l, i) => i === index ? { ...l, grade: value } : l))}
                               index={index}
+                              usedGrades={gradedLots.map(l => l.grade).filter(g => g)}
                             />
                           </div>
                           <div>
@@ -2595,17 +2668,17 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                 </button>
 
                 {/* Total Summary Card */}
-                <div className={`mt-6 rounded-2xl p-6 border shadow-lg transition-all ${weightMismatch ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
+                <div className={`mt-6 rounded-2xl p-6 border shadow-lg transition-all ${(weightMismatch || exceedsParchmentWeight) ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-300'}`}>
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-sm font-bold text-gray-700 uppercase tracking-wide">Total Accounted For</span>
-                    {weightMismatch ? (
+                    {(weightMismatch || exceedsParchmentWeight) ? (
                       <AlertCircle className="h-6 w-6 text-red-600" />
                     ) : (
                       <Check className="h-6 w-6 text-green-600" />
                     )}
                   </div>
                   <div className="flex items-baseline gap-2 mb-2">
-                    <span className={`text-4xl font-extrabold ${weightMismatch ? 'text-red-600' : 'text-green-600'}`}>
+                    <span className={`text-4xl font-extrabold ${(weightMismatch || exceedsParchmentWeight) ? 'text-red-600' : 'text-green-600'}`}>
                       {gradedWeightSum.toFixed(2)}
                     </span>
                     <span className="text-2xl font-bold text-gray-400">/</span>
@@ -2619,7 +2692,15 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                       </p>
                     </div>
                   )}
-                  {!weightMismatch && totalWeightNum > 0 && (
+                  {exceedsParchmentWeight && !weightMismatch && (
+                    <div className="mt-3 flex items-start gap-2 bg-red-100 rounded-lg p-3 border border-red-200">
+                      <AlertCircle size={16} className="text-red-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs font-semibold text-red-800">
+                        น้ำหนักรวมเกินกว่า Parchment Weight ({selectedParchment.currentWeightKg.toFixed(2)} kg)
+                      </p>
+                    </div>
+                  )}
+                  {!weightMismatch && !exceedsParchmentWeight && totalWeightNum > 0 && (
                     <div className="mt-3 flex items-center gap-2 bg-green-100 rounded-lg p-3 border border-green-200">
                       <Check size={16} className="text-green-600 flex-shrink-0" />
                       <p className="text-xs font-semibold text-green-800">
@@ -2748,15 +2829,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                           placeholder="0.00"
                           className="flex-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
-                        <select
+                        <Select
                           value={withdrawalCurrency}
-                          onChange={(e) => setWithdrawalCurrency(e.target.value)}
-                          className="border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                        >
-                          <option value="THB">THB</option>
-                          <option value="USD">USD</option>
-                          <option value="EUR">EUR</option>
-                        </select>
+                          onChange={(v) => setWithdrawalCurrency(v as string)}
+                          options={['THB', 'USD', 'EUR']}
+                          colorTheme="blue"
+                        />
                       </div>
                     </div>
                   </div>
@@ -2910,15 +2988,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                             placeholder="0.00"
                             className="flex-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           />
-                          <select
+                          <Select
                             value={withdrawalCurrency}
-                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setWithdrawalCurrency(e.target.value)}
-                            className="border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                          >
-                            <option value="THB">THB</option>
-                            <option value="USD">USD</option>
-                            <option value="EUR">EUR</option>
-                          </select>
+                            onChange={(v) => setWithdrawalCurrency(v as string)}
+                            options={['THB', 'USD', 'EUR']}
+                            colorTheme="blue"
+                          />
                         </div>
                       </div>
                     </div>
@@ -2957,7 +3032,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
               <button 
                 type="submit" 
                 className="inline-flex items-center justify-center gap-2 px-6 py-2.5 border border-transparent shadow-lg text-sm font-semibold rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed transition-all"
-                disabled={isSubmitting || (modal === 'hullAndGrade' && (Math.abs(gradedWeightSum - (parseFloat(totalGreenWeight) || 0)) > 0.01 || (parseFloat(totalGreenWeight) || 0) <= 0))}
+                disabled={isSubmitting || (modal === 'hullAndGrade' && (Math.abs(gradedWeightSum - (parseFloat(totalGreenWeight) || 0)) > 0.01 || (parseFloat(totalGreenWeight) || 0) <= 0 || (parseFloat(totalGreenWeight) || 0) > (selectedParchment?.currentWeightKg || 0)))}
               >
                 <Save className="h-4 w-4" />
                 {isSubmitting ? 'Saving...' : 'Save'}
