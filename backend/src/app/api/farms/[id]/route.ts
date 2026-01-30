@@ -138,13 +138,37 @@ export async function DELETE(
   try {
     const { id } = await params
     const user = await requireAuth(request)
-    requireRole(user, ['Admin'])
 
+    const farm = await prisma.farm.findUnique({
+      where: { id },
+    })
+
+    if (!farm) {
+      return NextResponse.json(
+        { error: 'Farm not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check permission: Admin หรือ owner ของ farm เท่านั้น
+    if (!user.roles.includes('Admin') && farm.ownerId !== user.id) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
+      )
+    }
+
+    // Cascade delete: ลบ weather records ที่เกี่ยวข้องก่อน
+    await prisma.weatherRecord.deleteMany({
+      where: { farmId: id },
+    })
+
+    // จากนั้นลบ farm
     await prisma.farm.delete({
       where: { id },
     })
 
-    return NextResponse.json({ message: 'Farm deleted successfully' })
+    return NextResponse.json({ message: 'Farm and related weather records deleted successfully' })
   } catch (error) {
     return handleApiError(error)
   }

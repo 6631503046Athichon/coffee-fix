@@ -25,11 +25,20 @@ export const getAllWeatherRecords = async (farmId?: string): Promise<WeatherReco
 export const addWeatherRecord = async (
   recordData: Partial<WeatherRecord>
 ): Promise<WeatherRecord> => {
-  const response = await api.post<{ weatherRecord: any; message: string }>(
-    '/weather-records',
-    transformWeatherRecordToBackend(recordData)
-  );
-  return transformWeatherRecordFromBackend(response.weatherRecord);
+  const payload = transformWeatherRecordToBackend(recordData);
+  console.log('[WeatherService] POST /weather-records payload:', payload);
+
+  try {
+    const response = await api.post<{ weatherRecord: any; message: string }>(
+      '/weather-records',
+      payload
+    );
+    console.log('[WeatherService] Response:', response);
+    return transformWeatherRecordFromBackend(response.weatherRecord);
+  } catch (error) {
+    console.error('[WeatherService] Error saving record:', error);
+    throw error;
+  }
 };
 
 /**

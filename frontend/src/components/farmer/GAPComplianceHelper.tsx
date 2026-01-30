@@ -503,7 +503,7 @@ const GAPComplianceHelper: React.FC = () => {
                                                 <div className="font-semibold text-gray-900">{primaryLabel}</div>
                                                 {secondaryLabel && <div className="text-xs text-gray-500 mt-0.5">{secondaryLabel}</div>}
                                             </td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{log.date}</td>
+                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{new Date(log.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
                                             <td className="px-4 py-3 whitespace-nowrap">
                                                 <Badge variant="primary">
                                                     {log.activityType}
@@ -670,7 +670,7 @@ const GAPComplianceHelper: React.FC = () => {
                                                         <tbody className="bg-white">
                                                             {typeLogs.map((log, idx) => (
                                                                 <tr key={log.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-indigo-50 transition-colors`}>
-                                                                    <td className="px-4 py-2 border-b border-gray-100 text-gray-700">{log.date}</td>
+                                                                    <td className="px-4 py-2 border-b border-gray-100 text-gray-700">{new Date(log.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
                                                                     <td className="px-4 py-2 border-b border-gray-100 text-gray-800 font-medium">{log.productUsed}</td>
                                                                     <td className="px-4 py-2 border-b border-gray-100 text-gray-700 font-medium">{log.quantity}</td>
                                                                 </tr>

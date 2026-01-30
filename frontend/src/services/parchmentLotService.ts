@@ -36,6 +36,13 @@ export const updateParchmentLot = async (
 };
 
 /**
+ * Delete a parchment lot
+ */
+export const deleteParchmentLot = async (id: string): Promise<void> => {
+  await api.delete(`/parchment-lots/${id}`);
+};
+
+/**
  * Transform parchment lot data from backend format to frontend format
  */
 function transformParchmentLotFromBackend(backendLot: any): ParchmentLot {

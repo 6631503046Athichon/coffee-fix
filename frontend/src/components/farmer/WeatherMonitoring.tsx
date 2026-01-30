@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { WeatherRecord, Farm } from '../../types';
 import { addWeatherRecord, updateWeatherRecord, deleteWeatherRecord } from '../../services/weatherService';
 import { fetchWeatherData } from '../../services/weatherApiService';
-import { Cloud, Droplets, Thermometer, Wind, Calendar, Edit, Trash2, CheckCircle, ChevronDown, Check, TrendingUp, TrendingDown, Download, X } from 'lucide-react';
+import { Cloud, Droplets, Thermometer, Wind, Calendar, Edit, Trash2, CheckCircle, ChevronDown, Check, TrendingUp, TrendingDown, Download, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
 
 // Custom Dropdown Component for Farm Selection
@@ -141,6 +141,10 @@ const WeatherMonitoring: React.FC = () => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 5;
+
   // Calculate temperature average automatically
   const temperatureAvg = useMemo(() => {
     if (temperatureMin && temperatureMax) {
@@ -236,13 +240,18 @@ const WeatherMonitoring: React.FC = () => {
     setNotes('');
   };
 
-  const handleDelete = (recordId: string) => {
+  const handleDelete = async (recordId: string) => {
     if (confirm('Are you sure you want to delete this weather record?')) {
-      deleteWeatherRecord(recordId);
-      setData(prev => ({
-        ...prev,
-        weatherRecords: prev.weatherRecords.filter(r => r.id !== recordId)
-      }));
+      try {
+        await deleteWeatherRecord(recordId);
+        setData(prev => ({
+          ...prev,
+          weatherRecords: prev.weatherRecords.filter(r => r.id !== recordId)
+        }));
+      } catch (error) {
+        console.error('Failed to delete weather record:', error);
+        alert('ไม่สามารถลบข้อมูลได้ กรุณาลองใหม่');
+      }
     }
   };
 
@@ -310,6 +319,18 @@ const WeatherMonitoring: React.FC = () => {
       return farmMatch && dateFromMatch && dateToMatch;
     });
   }, [data.weatherRecords, farmFilter, dateFrom, dateTo]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredRecords.length / ITEMS_PER_PAGE);
+  const pagedRecords = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredRecords.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredRecords, currentPage]);
+
+  // Reset page when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [farmFilter, dateFrom, dateTo]);
 
   // Statistics
   const stats = useMemo(() => {
@@ -687,7 +708,7 @@ const WeatherMonitoring: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredRecords.map((record) => (
+                pagedRecords.map((record) => (
                   <tr key={record.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">{record.recordDate}</td>
                     <td className="px-6 py-4 text-sm text-gray-700">{record.farmPlotLocation}</td>
@@ -733,6 +754,56 @@ const WeatherMonitoring: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {filteredRecords.length > 0 && totalPages > 1 && (
+          <div className="flex justify-center items-center gap-1 py-4 border-t border-gray-200">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            {(() => {
+              const TOTAL_SLOTS = 7;
+              const tp = totalPages;
+              const cp = currentPage;
+              let slots: (number | 'ellipsis')[] = [];
+              if (tp <= TOTAL_SLOTS) {
+                slots = Array.from({ length: tp }, (_, i) => i + 1);
+              } else if (cp <= 4) {
+                slots = [1, 2, 3, 4, 5, 'ellipsis', tp];
+              } else if (cp >= tp - 3) {
+                slots = [1, 'ellipsis', tp - 4, tp - 3, tp - 2, tp - 1, tp];
+              } else {
+                slots = [1, 'ellipsis', cp - 1, cp, cp + 1, 'ellipsis', tp];
+              }
+              return slots.map((slot, idx) => (
+                slot === 'ellipsis' ? (
+                  <span key={`e-${idx}`} className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">...</span>
+                ) : (
+                  <button
+                    key={slot}
+                    onClick={() => setCurrentPage(slot)}
+                    className={`w-8 h-8 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${
+                      cp === slot ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    {slot}
+                  </button>
+                )
+              ));
+            })()}
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

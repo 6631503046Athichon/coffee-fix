@@ -11,6 +11,67 @@ import { Input } from '../common/Input';
 import { generateHarvestLotId } from '../../utils/idGenerator';
 import { addHarvestLot } from '../../services/harvestLotService';
 
+// Production Year Chips Component
+const ProductionYearChips: React.FC<{
+  years: CropYear[];
+  value: string;
+  onChange: (value: string) => void;
+}> = ({ years, value, onChange }) => {
+  // Smart Logic: หาปีปัจจุบันจาก today
+  const currentYearId = useMemo(() => {
+    const today = new Date();
+    return years.find(y => {
+      const start = new Date(y.startDate);
+      const end = new Date(y.endDate);
+      return today >= start && today <= end;
+    })?.id || '';
+  }, [years]);
+
+  // Base styles for all chips - Fixed width for symmetry
+  const baseChipClass = "relative flex items-center justify-center py-3 px-4 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 cursor-pointer";
+  const selectedClass = "bg-green-600 text-white border-green-600 shadow-lg";
+  const unselectedClass = "bg-white text-gray-700 border-gray-200 hover:border-green-400 hover:bg-green-50";
+
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      {/* ปุ่ม "None" สำหรับไม่เลือกปี */}
+      <button
+        type="button"
+        onClick={() => onChange('')}
+        className={`${baseChipClass} ${!value ? selectedClass : unselectedClass}`}
+      >
+        <span className="text-sm font-semibold">None</span>
+      </button>
+
+      {/* ปุ่มแต่ละปี */}
+      {years.map(year => {
+        const isSelected = value === year.id;
+        const isCurrent = year.id === currentYearId;
+
+        return (
+          <button
+            key={year.id}
+            type="button"
+            onClick={() => onChange(year.id)}
+            className={`${baseChipClass} ${isSelected ? selectedClass : unselectedClass}`}
+            title={year.description || year.year}
+          >
+            {/* Current Badge - เฉพาะปีปัจจุบันเท่านั้น */}
+            {isCurrent && (
+              <span className={`absolute -top-2 -right-2 px-2 py-0.5 text-[10px] font-bold rounded-full shadow-sm ${
+                isSelected ? 'bg-white text-green-600' : 'bg-green-500 text-white'
+              }`}>
+                Current
+              </span>
+            )}
+            <span className="text-sm font-semibold">{year.year}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
 interface HarvestLotModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -75,8 +136,21 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
       // Clear errors and success message when modal opens
       setFormErrors({});
       setSuccessMessage(null);
+
+      // Auto-select current production year
+      if (!cropYearId && data.cropYears.length > 0) {
+        const today = new Date();
+        const currentYear = data.cropYears.find(y => {
+          const start = new Date(y.startDate);
+          const end = new Date(y.endDate);
+          return today >= start && today <= end;
+        });
+        if (currentYear) {
+          setCropYearId(currentYear.id);
+        }
+      }
     }
-  }, [isOpen, initialFarm, farmsWithVarieties, selectedFarmId]);
+  }, [isOpen, initialFarm, farmsWithVarieties, selectedFarmId, data.cropYears]);
 
   // Update form when selected farm changes
   useEffect(() => {
@@ -405,17 +479,13 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
           </div>
         </div>
 
-        {/* Crop Year - Full Width */}
+        {/* Crop Year - Full Width with Chips */}
         <div>
           <label className={labelClass}>Production Year (Optional)</label>
-          <Select<CropYear>
+          <ProductionYearChips
+            years={sortedCropYears}
             value={cropYearId}
-            onChange={(v) => setCropYearId((v as string) || '')}
-            options={sortedCropYears}
-            getValue={(cy) => cy.id}
-            getLabel={(cy) => cy.description ? `${cy.year} — ${cy.description}` : cy.year}
-            placeholder="Select production year..."
-            colorTheme="emerald"
+            onChange={setCropYearId}
           />
         </div>
 

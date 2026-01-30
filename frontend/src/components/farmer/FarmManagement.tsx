@@ -174,10 +174,10 @@ const FarmManagement: React.FC = () => {
 			),
 		};
 
-		const hasRelatedData = 
+		// Weather records จะถูกลบอัตโนมัติ (cascade delete) ไม่ต้อง block
+		const hasRelatedData =
 			relatedData.harvestLots.length > 0 ||
 			relatedData.soilAnalyses.length > 0 ||
-			relatedData.weatherRecords.length > 0 ||
 			relatedData.gapLogs.length > 0;
 
 		return { relatedData, hasRelatedData };
@@ -200,20 +200,25 @@ const FarmManagement: React.FC = () => {
 		const { relatedData, hasRelatedData } = checkFarmRelatedData(farmToDelete);
 
 		if (hasRelatedData) {
+			const parts = [];
+			if (relatedData.harvestLots.length > 0) parts.push(`Harvest Lots (${relatedData.harvestLots.length})`);
+			if (relatedData.soilAnalyses.length > 0) parts.push(`Soil Analyses (${relatedData.soilAnalyses.length})`);
+			if (relatedData.gapLogs.length > 0) parts.push(`GAP Logs (${relatedData.gapLogs.length})`);
 			setToast({
 				type: 'error',
-				message: `Cannot delete farm because it has related data. Please delete the following first: ${relatedData.harvestLots.length > 0 ? `Harvest Lots (${relatedData.harvestLots.length})` : ''}${relatedData.soilAnalyses.length > 0 ? `, Soil Analyses (${relatedData.soilAnalyses.length})` : ''}${relatedData.weatherRecords.length > 0 ? `, Weather Records (${relatedData.weatherRecords.length})` : ''}${relatedData.gapLogs.length > 0 ? `, GAP Logs (${relatedData.gapLogs.length})` : ''}`,
+				message: `Cannot delete farm because it has related data. Please delete the following first: ${parts.join(', ')}`,
 			});
 			handleCloseDeleteModal();
 			return;
 		}
 
-		// Delete farm
+		// Delete farm (weather records will be cascade deleted by backend)
 		try {
 			await deleteFarm(farmToDelete.id);
 			setData(prev => ({
 				...prev,
 				farms: prev.farms.filter(f => f.id !== farmToDelete.id),
+				weatherRecords: prev.weatherRecords.filter(r => r.farmId !== farmToDelete.id),
 			}));
 			setToast({ type: 'success', message: 'Farm deleted successfully' });
 			handleCloseDeleteModal();
@@ -594,14 +599,6 @@ const FarmManagement: React.FC = () => {
 													</span>
 												</li>
 											)}
-											{relatedData.weatherRecords.length > 0 && (
-												<li className="flex items-center gap-2">
-													<span className="w-2 h-2 bg-amber-500 rounded-full"></span>
-													<span>
-														<strong>Weather Records:</strong> {relatedData.weatherRecords.length} entries
-													</span>
-												</li>
-											)}
 											{relatedData.gapLogs.length > 0 && (
 												<li className="flex items-center gap-2">
 													<span className="w-2 h-2 bg-amber-500 rounded-full"></span>
@@ -623,6 +620,13 @@ const FarmManagement: React.FC = () => {
 									<p className="text-sm text-gray-700">
 										Are you sure you want to delete this farm? This action cannot be undone.
 									</p>
+									{relatedData.weatherRecords.length > 0 && (
+										<div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+											<p className="text-sm text-blue-700">
+												<strong>Note:</strong> {relatedData.weatherRecords.length} weather records จะถูกลบโดยอัตโนมัติ
+											</p>
+										</div>
+									)}
 									<div className="flex justify-end gap-3">
 										<Button type="button" variant="outline" onClick={handleCloseDeleteModal}>
 											Cancel

@@ -10,18 +10,30 @@ import { addFarm, updateFarm } from '../../services/farmService';
 import { generateFarmId } from '../../utils/idGenerator';
 import { getActiveCoffeeVarieties, CoffeeVariety } from '../../services/coffeeVarietyService';
 
-type ParsedCoords = { lat: number; lng: number } | null;
+type ParsedGoogleMaps = { lat: number; lng: number; placeName?: string } | null;
 
-function parseGoogleMapsUrl(url: string): ParsedCoords {
+function parseGoogleMapsUrl(url: string): ParsedGoogleMaps {
 	if (!url) return null;
 	try {
 		const trimmed = url.trim();
+
+		// Extract place name from /place/ENCODED_NAME/ pattern
+		let placeName: string | undefined;
+		const placeMatch = trimmed.match(/\/place\/([^/@]+)/);
+		if (placeMatch) {
+			try {
+				placeName = decodeURIComponent(placeMatch[1].replace(/\+/g, ' '));
+			} catch {
+				placeName = placeMatch[1].replace(/\+/g, ' ');
+			}
+		}
 
 		const atMatch = trimmed.match(/@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
 		if (atMatch) {
 			return {
 				lat: parseFloat(atMatch[1]),
 				lng: parseFloat(atMatch[2]),
+				placeName,
 			};
 		}
 
@@ -30,6 +42,7 @@ function parseGoogleMapsUrl(url: string): ParsedCoords {
 			return {
 				lat: parseFloat(qMatch[1]),
 				lng: parseFloat(qMatch[2]),
+				placeName,
 			};
 		}
 
@@ -196,7 +209,7 @@ const AddFarmPage: React.FC = () => {
 			return;
 		}
 
-		const { lat, lng } = parsed;
+		const { lat, lng, placeName } = parsed;
 		if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
 			setFormError('The coordinates from this URL are not in a valid range.');
 			return;
@@ -204,10 +217,32 @@ const AddFarmPage: React.FC = () => {
 
 		setLatitudeInput(lat.toFixed(6));
 		setLongitudeInput(lng.toFixed(6));
-		setToast({
-			type: 'success',
-			message: 'Coordinates extracted from Google Maps URL',
-		});
+
+		const existingLocation = farmLocation.trim();
+
+		// ถ้ามี Location อยู่แล้ว และดึงชื่อสถานที่จาก URL ได้ ให้เตือนว่าอาจไม่ตรงกัน
+		if (existingLocation && placeName && existingLocation !== placeName) {
+			setFarmLocation(placeName); // อัพเดทเป็นชื่อจาก URL
+			setToast({
+				type: 'success',
+				message: `เปลี่ยน Location จาก "${existingLocation}" เป็น "${placeName}" ตาม Google Maps URL`,
+			});
+		} else if (existingLocation && !placeName) {
+			// มี Location อยู่แล้ว แต่ URL ไม่มีชื่อสถานที่ - เตือนให้ตรวจสอบ
+			setFormError(`⚠️ คุณกรอก "${existingLocation}" แต่ลิงค์ Google Maps ไม่มีชื่อสถานที่ กรุณาตรวจสอบว่าพิกัด (${lat.toFixed(4)}, ${lng.toFixed(4)}) ตรงกับ "${existingLocation}" หรือไม่`);
+		} else if (placeName && !existingLocation) {
+			// ไม่มี Location - ใส่ชื่อจาก URL ให้
+			setFarmLocation(placeName);
+			setToast({
+				type: 'success',
+				message: `ดึงพิกัดและ Location "${placeName}" จาก Google Maps URL สำเร็จ`,
+			});
+		} else {
+			setToast({
+				type: 'success',
+				message: 'ดึงพิกัดจาก Google Maps URL สำเร็จ',
+			});
+		}
 	};
 
 	const handleSaveFarm = async (event: React.FormEvent) => {
@@ -646,22 +681,18 @@ const AddFarmPage: React.FC = () => {
 							fullWidth
 						/>
 						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-							<Input
-								label="Latitude"
-								placeholder="e.g., 19.910"
-								value={latitudeInput}
-								onChange={e => setLatitudeInput(e.target.value)}
-								type="text"
-								fullWidth
-							/>
-							<Input
-								label="Longitude"
-								placeholder="e.g., 99.841"
-								value={longitudeInput}
-								onChange={e => setLongitudeInput(e.target.value)}
-								type="text"
-								fullWidth
-							/>
+							<div>
+								<label className="block text-sm font-semibold text-gray-700 mb-1">Latitude</label>
+								<div className="w-full px-4 py-2.5 bg-gray-100 border border-gray-200 rounded-xl text-gray-700 font-mono text-sm min-h-[42px] flex items-center">
+									{latitudeInput || <span className="text-gray-400">—</span>}
+								</div>
+							</div>
+							<div>
+								<label className="block text-sm font-semibold text-gray-700 mb-1">Longitude</label>
+								<div className="w-full px-4 py-2.5 bg-gray-100 border border-gray-200 rounded-xl text-gray-700 font-mono text-sm min-h-[42px] flex items-center">
+									{longitudeInput || <span className="text-gray-400">—</span>}
+								</div>
+							</div>
 						</div>
 						
 						{/* GPS Tools Card */}

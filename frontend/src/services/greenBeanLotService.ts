@@ -31,6 +31,13 @@ export const createGreenBeanLot = async (input: CreateGreenBeanLotInput): Promis
 };
 
 /**
+ * Delete a green bean lot
+ */
+export const deleteGreenBeanLot = async (id: string): Promise<void> => {
+  await api.delete(`/green-bean-lots/${id}`);
+};
+
+/**
  * Fetch all green bean lots, optionally filtered by sourceType, availabilityStatus, or parchmentLotId
  */
 export const getAllGreenBeanLots = async (

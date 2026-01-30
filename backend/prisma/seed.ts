@@ -194,6 +194,7 @@ async function main() {
     },
     { name: "Pruning", description: "Tree pruning activities" },
     { name: "Harvesting", description: "Coffee cherry harvesting" },
+    { name: "Soil Management", description: "Soil preparation and management activities" },
   ];
 
   for (const at of activityTypes) {
@@ -308,6 +309,72 @@ async function main() {
       },
     });
     console.log("Created coffee variety:", coffeeVariety.name);
+  }
+
+  // ============================================================
+  // Create Soil Analysis for Farm สมชาย (เชียงราย)
+  // ============================================================
+  console.log("\nCreating soil analysis...");
+
+  const targetFarmId = "351537a2-29a1-499a-a019-475e91351664";
+  const farmExists = await prisma.farm.findUnique({
+    where: { id: targetFarmId },
+  });
+
+  if (farmExists) {
+    const soilAnalysis = await prisma.soilAnalysis.upsert({
+      where: { id: "soil-analysis-somchai-001" },
+      update: {
+        farmId: targetFarmId,
+        farmPlotLocation: "เชียงราย",
+        testDate: new Date("2026-01-30"),
+        labName: "Chiang Mai Agricultural Testing Laboratory",
+        certificateNumber: "CMATL-2026-0342",
+        pH: 6.2,
+        nitrogen: 1.5,
+        phosphorus: 25,
+        potassium: 120,
+        calcium: 850,
+        magnesium: 150,
+        organicMatter: 3.2,
+        sulfur: 15,
+        iron: 45,
+        manganese: 22,
+        zinc: 8,
+        copper: 2,
+        boron: 1.2,
+        recommendations: "ดินมีคุณภาพดี pH เหมาะสมสำหรับการปลูกกาแฟ แนะนำเพิ่มปุ๋ยอินทรีย์เพื่อรักษาระดับ OM",
+        createdBy: admin.id,
+        createdByRole: UserRole.Admin,
+      },
+      create: {
+        id: "soil-analysis-somchai-001",
+        farmId: targetFarmId,
+        farmPlotLocation: "เชียงราย",
+        testDate: new Date("2026-01-30"),
+        labName: "Chiang Mai Agricultural Testing Laboratory",
+        certificateNumber: "CMATL-2026-0342",
+        pH: 6.2,
+        nitrogen: 1.5,
+        phosphorus: 25,
+        potassium: 120,
+        calcium: 850,
+        magnesium: 150,
+        organicMatter: 3.2,
+        sulfur: 15,
+        iron: 45,
+        manganese: 22,
+        zinc: 8,
+        copper: 2,
+        boron: 1.2,
+        recommendations: "ดินมีคุณภาพดี pH เหมาะสมสำหรับการปลูกกาแฟ แนะนำเพิ่มปุ๋ยอินทรีย์เพื่อรักษาระดับ OM",
+        createdBy: admin.id,
+        createdByRole: UserRole.Admin,
+      },
+    });
+    console.log("Created soil analysis for farm:", soilAnalysis.farmPlotLocation);
+  } else {
+    console.log("Farm not found, skipping soil analysis creation for farmId:", targetFarmId);
   }
 
   console.log("\nSeed completed!");

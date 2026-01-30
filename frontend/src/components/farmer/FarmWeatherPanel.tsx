@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Cloud, Thermometer, Droplets, CloudRain, RefreshCw, X, CheckCircle, Edit3, Trash2, Loader2 } from 'lucide-react';
+import { Cloud, Thermometer, Droplets, CloudRain, RefreshCw, X, CheckCircle, Edit3, Trash2, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button, Input, Modal } from '../common';
 import Select from '../common/Select';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Farm, WeatherRecord, UserRole } from '../../types';
+import { Farm, WeatherRecord } from '../../types';
 import { addWeatherRecord, updateWeatherRecord, deleteWeatherRecord } from '../../services/weatherService';
 import { fetchWeatherData } from '../../services/weatherApiService';
+import { saveFarmConfig } from '../../services/weatherAutoFetchService';
 import DatePicker from '../common/DatePicker';
 import { formatDateDisplay } from '../../utils/formatters';
 
@@ -39,8 +40,11 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
   // Auto-fetch states
   const [autoFetchEnabled, setAutoFetchEnabled] = useState(false);
   const [autoFetchInterval, setAutoFetchInterval] = useState(5); // minutes
-  const [lastAutoFetch, setLastAutoFetch] = useState<Date | null>(null);
-  const [nextAutoFetch, setNextAutoFetch] = useState<Date | null>(null);
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 5;
+    const [nextAutoFetch, setNextAutoFetch] = useState<Date | null>(null);
   const [isAutoFetchInitialized, setIsAutoFetchInitialized] = useState(false); // ป้องกัน race condition
 
   // Calculate temperature average automatically
@@ -51,57 +55,23 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
     return '';
   }, [temperatureMin, temperatureMax]);
 
-  // Auto-fetch effect
+  // Update next fetch time display (actual fetching is handled by background service)
   useEffect(() => {
     if (!autoFetchEnabled || !farm || !farm.latitude || !farm.longitude) {
+      setNextAutoFetch(null);
       return;
     }
 
-    // Calculate next fetch time
+    // Calculate and update next fetch time for display
     const updateNextFetchTime = () => {
       setNextAutoFetch(new Date(Date.now() + autoFetchInterval * 60 * 1000));
     };
 
-    // Initial fetch
-    const doAutoFetch = async () => {
-      try {
-        const weatherData = await fetchWeatherData(farm.latitude!, farm.longitude!);
-        if (weatherData) {
-          // Auto-save the weather record
-          const weatherRecord: Partial<WeatherRecord> = {
-            farmId: farm.id,
-            farmPlotLocation: farm.location,
-            recordDate: new Date().toISOString().substring(0, 10),
-            temperatureMin: weatherData.temperatureMin,
-            temperatureMax: weatherData.temperatureMax,
-            temperatureAvg: (weatherData.temperatureMin + weatherData.temperatureMax) / 2,
-            rainfall: weatherData.rainfall,
-            humidity: weatherData.humidity || 70,
-            notes: `ดึงอัตโนมัติจาก Open-Meteo API เมื่อ ${new Date().toLocaleString('th-TH')}`,
-          };
-          const newRecord = await addWeatherRecord(weatherRecord as Omit<WeatherRecord, 'id'>);
-          setData(prev => ({
-            ...prev,
-            weatherRecords: [newRecord, ...prev.weatherRecords]
-          }));
-          setLastAutoFetch(new Date());
-          setWeatherToast({ type: 'success', message: `ดึงและบันทึกข้อมูลอัตโนมัติสำเร็จ` });
-          setTimeout(() => setWeatherToast(null), 3000);
-        }
-      } catch (error) {
-        console.error('Auto-fetch error:', error);
-        setWeatherToast({ type: 'error', message: 'ดึงข้อมูลอัตโนมัติล้มเหลว' });
-        setTimeout(() => setWeatherToast(null), 3000);
-      }
-      updateNextFetchTime();
-    };
-
-    // Set up interval
     updateNextFetchTime();
-    const intervalId = setInterval(doAutoFetch, autoFetchInterval * 60 * 1000);
+    const displayInterval = setInterval(updateNextFetchTime, autoFetchInterval * 60 * 1000);
 
-    return () => clearInterval(intervalId);
-  }, [autoFetchEnabled, autoFetchInterval, farm, setData]);
+    return () => clearInterval(displayInterval);
+  }, [autoFetchEnabled, autoFetchInterval, farm]);
 
   const selectedFarmRecords = useMemo(() => {
     if (!farm) {
@@ -111,6 +81,18 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
       .filter(record => record.farmId === farm.id)
       .sort((a, b) => new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime());
   }, [data.weatherRecords, farm]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(selectedFarmRecords.length / ITEMS_PER_PAGE);
+  const pagedRecords = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return selectedFarmRecords.slice(start, start + ITEMS_PER_PAGE);
+  }, [selectedFarmRecords, currentPage]);
+
+  // Reset page when farm changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [farm?.id]);
 
   useEffect(() => {
     if (!farm) {
@@ -140,19 +122,28 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
     }
   }, [farm?.id]);
 
-  // บันทึก auto-fetch enabled ลง localStorage (เฉพาะหลังจากโหลดค่าเริ่มต้นแล้ว)
+  // บันทึก auto-fetch settings และ register กับ background service
   useEffect(() => {
-    if (typeof window !== 'undefined' && farm?.id && isAutoFetchInitialized) {
+    if (typeof window !== 'undefined' && farm?.id && isAutoFetchInitialized && farm.latitude && farm.longitude) {
+      // Save to localStorage
       localStorage.setItem(`weatherAutoFetch_${farm.id}`, autoFetchEnabled.toString());
-    }
-  }, [autoFetchEnabled, farm?.id, isAutoFetchInitialized]);
-
-  // บันทึก auto-fetch interval ลง localStorage (เฉพาะหลังจากโหลดค่าเริ่มต้นแล้ว)
-  useEffect(() => {
-    if (typeof window !== 'undefined' && farm?.id && isAutoFetchInitialized) {
       localStorage.setItem(`weatherAutoFetchInterval_${farm.id}`, autoFetchInterval.toString());
+
+      // Register with background service (ทำงานแม้ปิด modal)
+      saveFarmConfig({
+        farmId: farm.id,
+        farmName: farm.name || farm.location,
+        latitude: farm.latitude,
+        longitude: farm.longitude,
+        location: farm.location,
+        interval: autoFetchInterval,
+        enabled: autoFetchEnabled,
+        userId: currentUser?.id,
+      });
+
+      console.log(`[FarmWeatherPanel] Auto-fetch ${autoFetchEnabled ? 'enabled' : 'disabled'} for farm ${farm.name || farm.id}`);
     }
-  }, [autoFetchInterval, farm?.id, isAutoFetchInitialized]);
+  }, [autoFetchEnabled, autoFetchInterval, farm?.id, farm?.latitude, farm?.longitude, farm?.location, farm?.name, isAutoFetchInitialized, currentUser?.id]);
 
   const resetForm = () => {
     setRecordDate(new Date().toISOString().substring(0, 10));
@@ -195,7 +186,9 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
           recordedBy: currentUser?.id,
         };
 
+        console.log('[Weather] Saving record to database:', weatherRecord);
         const newRecord = await addWeatherRecord(weatherRecord as Omit<WeatherRecord, 'id'>);
+        console.log('[Weather] Record saved successfully:', newRecord);
         setData(prev => ({
           ...prev,
           weatherRecords: [newRecord, ...prev.weatherRecords]
@@ -459,14 +452,9 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                     />
                   )}
                 </div>
-                {autoFetchEnabled && (
-                  <div className="mt-3 flex items-center gap-4 text-xs text-blue-600">
-                    {lastAutoFetch && (
-                      <span>ดึงล่าสุด: {lastAutoFetch.toLocaleTimeString('th-TH')}</span>
-                    )}
-                    {nextAutoFetch && (
-                      <span>ดึงครั้งถัดไป: {nextAutoFetch.toLocaleTimeString('th-TH')}</span>
-                    )}
+                {autoFetchEnabled && nextAutoFetch && (
+                  <div className="mt-3 text-xs text-blue-600">
+                    <span>ดึงครั้งถัดไป: {nextAutoFetch.toLocaleTimeString('th-TH')}</span>
                   </div>
                 )}
               </div>
@@ -676,7 +664,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">
-                    {selectedFarmRecords.map(record => (
+                    {pagedRecords.map(record => (
                       <tr key={record.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 whitespace-nowrap">{formatDateDisplay(record.recordDate)}</td>
                         <td className="px-4 py-3 whitespace-nowrap text-gray-600">
@@ -725,6 +713,56 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                     ))}
                   </tbody>
                 </table>
+
+                {/* Pagination */}
+                {selectedFarmRecords.length > 0 && totalPages > 1 && (
+                  <div className="flex justify-center items-center gap-1 py-4 border-t border-gray-200">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    {(() => {
+                      const TOTAL_SLOTS = 7;
+                      const tp = totalPages;
+                      const cp = currentPage;
+                      let slots: (number | 'ellipsis')[] = [];
+                      if (tp <= TOTAL_SLOTS) {
+                        slots = Array.from({ length: tp }, (_, i) => i + 1);
+                      } else if (cp <= 4) {
+                        slots = [1, 2, 3, 4, 5, 'ellipsis', tp];
+                      } else if (cp >= tp - 3) {
+                        slots = [1, 'ellipsis', tp - 4, tp - 3, tp - 2, tp - 1, tp];
+                      } else {
+                        slots = [1, 'ellipsis', cp - 1, cp, cp + 1, 'ellipsis', tp];
+                      }
+                      return slots.map((slot, idx) => (
+                        slot === 'ellipsis' ? (
+                          <span key={`e-${idx}`} className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">...</span>
+                        ) : (
+                          <button
+                            key={slot}
+                            onClick={() => setCurrentPage(slot)}
+                            className={`w-8 h-8 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${
+                              cp === slot ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                            }`}
+                          >
+                            {slot}
+                          </button>
+                        )
+                      ));
+                    })()}
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

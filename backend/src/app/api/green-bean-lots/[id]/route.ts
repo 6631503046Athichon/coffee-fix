@@ -158,3 +158,59 @@ export async function PUT(
     return handleApiError(error)
   }
 }
+
+// DELETE /api/green-bean-lots/:id
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireAuth(request)
+    const { id } = await params
+
+    // Check if lot exists
+    const lot = await prisma.greenBeanLot.findUnique({
+      where: { id },
+      include: {
+        roasterInventory: true,
+        roastBatches: true,
+      },
+    })
+
+    if (!lot) {
+      return NextResponse.json(
+        { error: 'Green bean lot not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check if there are roaster inventory or roast batches linked
+    if ((lot.roasterInventory && lot.roasterInventory.length > 0) ||
+        (lot.roastBatches && lot.roastBatches.length > 0)) {
+      return NextResponse.json(
+        { error: 'Cannot delete green bean lot with linked roaster inventory or roast batches.' },
+        { status: 400 }
+      )
+    }
+
+    // Delete related data first
+    await prisma.cuppingScore.deleteMany({
+      where: { greenBeanLotId: id },
+    })
+    await prisma.withdrawalHistory.deleteMany({
+      where: { greenBeanLotId: id },
+    })
+    await prisma.pricingHistory.deleteMany({
+      where: { greenBeanLotId: id },
+    })
+
+    // Delete the lot
+    await prisma.greenBeanLot.delete({
+      where: { id },
+    })
+
+    return NextResponse.json({ message: 'Green bean lot deleted successfully' })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}

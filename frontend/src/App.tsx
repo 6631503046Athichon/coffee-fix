@@ -12,6 +12,7 @@ import { ToastProvider } from './contexts/ToastContext';
 import ToastContainer from './components/common/ToastContainer';
 import { getAllSoilAnalyses } from './services/soilAnalysisService';
 import { getAllWeatherRecords } from './services/weatherService';
+import { initWeatherAutoFetchService, stopWeatherAutoFetchService } from './services/weatherAutoFetchService';
 import { getAllCustomers as getAllCustomersFromBackend } from './services/customerService';
 import { getAllSaleOrders, getAllInvoices, getAllPricingHistory, initializeCustomers, initializeSaleOrders, initializeInvoices, initializePricingHistory } from './services/salesService';
 import { getAllActivityTypes, initializeActivityTypes } from './services/activityTypeService';
@@ -177,6 +178,24 @@ const ProtectedRoutes: React.FC = () => {
   const refreshData = useCallback(async () => {
     await loadDataFromBackend();
   }, [loadDataFromBackend]);
+
+  // Initialize weather auto-fetch service
+  useEffect(() => {
+    if (!isAuthenticated || isAuthLoading) return;
+
+    // Initialize the service with callback to update weather records
+    initWeatherAutoFetchService((newRecord) => {
+      console.log('[App] Weather auto-fetch saved new record:', newRecord);
+      setData(prev => ({
+        ...prev,
+        weatherRecords: [newRecord, ...prev.weatherRecords.filter(r => r.id !== newRecord.id)]
+      }));
+    });
+
+    return () => {
+      stopWeatherAutoFetchService();
+    };
+  }, [isAuthenticated, isAuthLoading]);
 
   // Load data from backend API on mount
   useEffect(() => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FlaskConical, Microscope, X, CheckCircle, Edit3, Trash2, Sparkles, Loader2 } from 'lucide-react';
 import { Button, Input, Modal } from '../common';
 import { useDataContext } from '../../hooks/useDataContext';
@@ -71,6 +71,17 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeneratingRecommendations, setIsGeneratingRecommendations] = useState(false);
 
+  // Refs for auto-resizing textareas
+  const recommendationsRef = useRef<HTMLTextAreaElement>(null);
+  const notesRef = useRef<HTMLTextAreaElement>(null);
+
+  const autoResize = (element: HTMLTextAreaElement | null) => {
+    if (element) {
+      element.style.height = 'auto';
+      element.style.height = `${element.scrollHeight}px`;
+    }
+  };
+
   const selectedFarmAnalyses = useMemo(() => {
     if (!farm) {
       return [];
@@ -93,6 +104,12 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
     setSoilFormError(null);
     setSoilToast(null);
   }, [farm]);
+
+  // Auto-resize textareas when content changes
+  useEffect(() => {
+    autoResize(recommendationsRef.current);
+    autoResize(notesRef.current);
+  }, [soilForm.recommendations, soilForm.notes]);
 
   const handleSoilFieldChange = (field: keyof SoilFormState, value: string) => {
     setSoilForm(prev => ({ ...prev, [field]: value }));
@@ -620,11 +637,12 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                   </Button>
                 </div>
                 <textarea
+                  ref={recommendationsRef}
                   value={soilForm.recommendations}
                   onChange={event => handleSoilFieldChange('recommendations', event.target.value)}
-                  rows={4}
                   placeholder="เช่น เพิ่มปุ๋ยอินทรีย์เพื่อรักษาระดับ OM หรือคลิกปุ่ม 'สร้างคำแนะนำ AI' เพื่อสร้างคำแนะนำอัตโนมัติจากข้อมูลดินที่กรอก"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                  style={{ minHeight: '100px', overflow: 'hidden', resize: 'none' }}
                   disabled={isGeneratingRecommendations}
                 />
                 {isGeneratingRecommendations && (
@@ -637,11 +655,12 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">บันทึกเพิ่มเติม</label>
                 <textarea
+                  ref={notesRef}
                   value={soilForm.notes}
                   onChange={event => handleSoilFieldChange('notes', event.target.value)}
-                  rows={4}
                   placeholder="รายละเอียดเพิ่มเติมของการตรวจครั้งนี้"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                  style={{ minHeight: '100px', overflow: 'hidden', resize: 'none' }}
                   disabled={isSubmitting}
                 />
               </div>

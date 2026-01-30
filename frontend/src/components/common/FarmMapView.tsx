@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Farm } from '../../types';
 import { MapPin } from 'lucide-react';
 
@@ -21,9 +22,11 @@ const FarmMapView: React.FC<FarmMapViewProps> = ({
   onFarmClick,
   height = '500px',
 }) => {
+  const navigate = useNavigate();
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
-  const markersRef = useRef<any[]>([]);
+  const markersRef = useRef<Map<string, any>>(new Map());
+  const isMapInitializedRef = useRef(false);
 
   // Filter farms with GPS coordinates
   const farmsWithGPS = useMemo(() => {
@@ -36,8 +39,99 @@ const FarmMapView: React.FC<FarmMapViewProps> = ({
     );
   }, [farms]);
 
+  // Create marker icon
+  const createMarkerIcon = useCallback((isSelected: boolean) => {
+    if (!window.L) return null;
+    return window.L.divIcon({
+      className: `custom-marker ${isSelected ? 'selected' : ''}`,
+      html: `
+        <div class="marker-pin ${isSelected ? 'selected' : ''}" style="
+          background-color: ${isSelected ? '#10b981' : '#ef4444'};
+          width: 30px;
+          height: 30px;
+          border-radius: 50% 50% 50% 0;
+          transform: rotate(-45deg);
+          border: 3px solid white;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          position: relative;
+          cursor: pointer;
+        ">
+          <div style="
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(45deg);
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+          ">📍</div>
+        </div>
+      `,
+      iconSize: [30, 30],
+      iconAnchor: [15, 30],
+    });
+  }, []);
+
+  // Create popup content with navigation button
+  const createPopupContent = useCallback((farm: Farm) => {
+    return `
+      <div style="padding: 8px; min-width: 220px;">
+        <h3 style="margin: 0 0 8px 0; font-weight: bold; font-size: 14px; color: #111827;">
+          ${farm.name || farm.location}
+        </h3>
+        <p style="margin: 4px 0; font-size: 12px; color: #6b7280;">
+          <strong>Location:</strong> ${farm.location}
+        </p>
+        <p style="margin: 4px 0; font-size: 12px; color: #6b7280;">
+          <strong>Owner:</strong> ${farm.ownerName || farm.farmerName}
+        </p>
+        ${farm.varieties && farm.varieties.length > 0 ? `
+          <p style="margin: 4px 0; font-size: 12px; color: #6b7280;">
+            <strong>Varieties:</strong> ${farm.varieties.join(', ')}
+          </p>
+        ` : ''}
+        <p style="margin: 4px 0; font-size: 11px; color: #9ca3af;">
+          GPS: ${farm.latitude?.toFixed(4)}, ${farm.longitude?.toFixed(4)}
+        </p>
+        <button
+          onclick="window.dispatchEvent(new CustomEvent('navigateToFarm', { detail: '${farm.id}' }))"
+          style="
+            margin-top: 8px;
+            width: 100%;
+            padding: 6px 12px;
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+          "
+          onmouseover="this.style.backgroundColor='#2563eb'"
+          onmouseout="this.style.backgroundColor='#3b82f6'"
+        >
+          ดูรายละเอียด Farm
+        </button>
+      </div>
+    `;
+  }, []);
+
+  // Listen for navigation events from popup
   useEffect(() => {
-    // Load Leaflet CSS and JS from CDN
+    const handleNavigate = (event: CustomEvent) => {
+      const farmId = event.detail;
+      navigate(`/farmer-dashboard/farm/${farmId}`);
+    };
+    window.addEventListener('navigateToFarm', handleNavigate as EventListener);
+    return () => {
+      window.removeEventListener('navigateToFarm', handleNavigate as EventListener);
+    };
+  }, [navigate]);
+
+  // Initialize map once
+  useEffect(() => {
+    if (isMapInitializedRef.current) return;
+
     const loadLeaflet = () => {
       if (window.L) {
         initializeMap();
@@ -62,19 +156,13 @@ const FarmMapView: React.FC<FarmMapViewProps> = ({
     };
 
     const initializeMap = () => {
-      if (!mapRef.current || !window.L) return;
-
-      // Clear existing map
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        markersRef.current = [];
-      }
+      if (!mapRef.current || !window.L || mapInstanceRef.current) return;
 
       if (farmsWithGPS.length === 0) {
         return;
       }
 
-      // Calculate center point (average of all farm coordinates)
+      // Calculate center point
       const avgLat =
         farmsWithGPS.reduce((sum, farm) => sum + (farm.latitude || 0), 0) /
         farmsWithGPS.length;
@@ -93,80 +181,7 @@ const FarmMapView: React.FC<FarmMapViewProps> = ({
       }).addTo(map);
 
       mapInstanceRef.current = map;
-
-      // Add markers for each farm
-      farmsWithGPS.forEach(farm => {
-        const isSelected = farm.id === selectedFarmId;
-        const marker = window.L.marker([farm.latitude!, farm.longitude!], {
-          icon: window.L.divIcon({
-            className: `custom-marker ${isSelected ? 'selected' : ''}`,
-            html: `
-              <div class="marker-pin ${isSelected ? 'selected' : ''}" style="
-                background-color: ${isSelected ? '#10b981' : '#ef4444'};
-                width: 30px;
-                height: 30px;
-                border-radius: 50% 50% 50% 0;
-                transform: rotate(-45deg);
-                border: 3px solid white;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                position: relative;
-              ">
-                <div style="
-                  position: absolute;
-                  top: 50%;
-                  left: 50%;
-                  transform: translate(-50%, -50%) rotate(45deg);
-                  color: white;
-                  font-size: 16px;
-                  font-weight: bold;
-                ">📍</div>
-              </div>
-            `,
-            iconSize: [30, 30],
-            iconAnchor: [15, 30],
-          }),
-        }).addTo(map);
-
-        // Create popup content
-        const popupContent = `
-          <div style="padding: 8px; min-width: 200px;">
-            <h3 style="margin: 0 0 8px 0; font-weight: bold; font-size: 14px; color: #111827;">
-              ${farm.name || farm.location}
-            </h3>
-            <p style="margin: 4px 0; font-size: 12px; color: #6b7280;">
-              <strong>Location:</strong> ${farm.location}
-            </p>
-            <p style="margin: 4px 0; font-size: 12px; color: #6b7280;">
-              <strong>Owner:</strong> ${farm.ownerName || farm.farmerName}
-            </p>
-            ${farm.varieties && farm.varieties.length > 0 ? `
-              <p style="margin: 4px 0; font-size: 12px; color: #6b7280;">
-                <strong>Varieties:</strong> ${farm.varieties.join(', ')}
-              </p>
-            ` : ''}
-            <p style="margin: 4px 0; font-size: 11px; color: #9ca3af;">
-              GPS: ${farm.latitude?.toFixed(4)}, ${farm.longitude?.toFixed(4)}
-            </p>
-          </div>
-        `;
-
-        marker.bindPopup(popupContent);
-
-        // Handle click
-        if (onFarmClick) {
-          marker.on('click', () => {
-            onFarmClick(farm);
-          });
-        }
-
-        markersRef.current.push(marker);
-      });
-
-      // Fit map to show all markers
-      if (farmsWithGPS.length > 1) {
-        const group = new window.L.featureGroup(markersRef.current);
-        map.fitBounds(group.getBounds().pad(0.1));
-      }
+      isMapInitializedRef.current = true;
     };
 
     loadLeaflet();
@@ -176,10 +191,64 @@ const FarmMapView: React.FC<FarmMapViewProps> = ({
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
-        markersRef.current = [];
+        markersRef.current.clear();
+        isMapInitializedRef.current = false;
       }
     };
-  }, [farmsWithGPS, selectedFarmId, onFarmClick]);
+  }, []); // Only run once on mount
+
+  // Update markers when farms or selection changes (without resetting zoom)
+  useEffect(() => {
+    if (!mapInstanceRef.current || !window.L) return;
+
+    const map = mapInstanceRef.current;
+    const existingMarkers = markersRef.current;
+    const currentFarmIds = new Set(farmsWithGPS.map(f => f.id));
+
+    // Remove markers for farms that no longer exist
+    existingMarkers.forEach((marker, farmId) => {
+      if (!currentFarmIds.has(farmId)) {
+        map.removeLayer(marker);
+        existingMarkers.delete(farmId);
+      }
+    });
+
+    // Add or update markers for current farms
+    farmsWithGPS.forEach(farm => {
+      const isSelected = farm.id === selectedFarmId;
+      const existingMarker = existingMarkers.get(farm.id);
+
+      if (existingMarker) {
+        // Update existing marker icon (for selection state change)
+        existingMarker.setIcon(createMarkerIcon(isSelected));
+        existingMarker.setPopupContent(createPopupContent(farm));
+      } else {
+        // Create new marker
+        const marker = window.L.marker([farm.latitude!, farm.longitude!], {
+          icon: createMarkerIcon(isSelected),
+        }).addTo(map);
+
+        marker.bindPopup(createPopupContent(farm));
+
+        if (onFarmClick) {
+          marker.on('click', () => {
+            onFarmClick(farm);
+          });
+        }
+
+        existingMarkers.set(farm.id, marker);
+      }
+    });
+
+    // Fit bounds only on first load (when no markers existed before)
+    if (farmsWithGPS.length > 0 && existingMarkers.size === farmsWithGPS.length) {
+      const allMarkers = Array.from(existingMarkers.values());
+      if (allMarkers.length > 1 && !isMapInitializedRef.current) {
+        const group = new window.L.featureGroup(allMarkers);
+        map.fitBounds(group.getBounds().pad(0.1));
+      }
+    }
+  }, [farmsWithGPS, selectedFarmId, onFarmClick, createMarkerIcon, createPopupContent]);
 
   if (farmsWithGPS.length === 0) {
     return (

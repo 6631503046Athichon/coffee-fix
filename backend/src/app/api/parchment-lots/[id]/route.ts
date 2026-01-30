@@ -87,3 +87,51 @@ export async function GET(
     return handleApiError(error)
   }
 }
+
+// DELETE /api/parchment-lots/:id
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireAuth(request)
+    const { id } = await params
+
+    // Check if lot exists
+    const lot = await prisma.parchmentLot.findUnique({
+      where: { id },
+      include: {
+        greenBeanLots: true,
+      },
+    })
+
+    if (!lot) {
+      return NextResponse.json(
+        { error: 'Parchment lot not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check if there are green bean lots linked
+    if (lot.greenBeanLots && lot.greenBeanLots.length > 0) {
+      return NextResponse.json(
+        { error: 'Cannot delete parchment lot with linked green bean lots. Delete green bean lots first.' },
+        { status: 400 }
+      )
+    }
+
+    // Delete physical test results first
+    await prisma.physicalTestResult.deleteMany({
+      where: { parchmentLotId: id },
+    })
+
+    // Delete the lot
+    await prisma.parchmentLot.delete({
+      where: { id },
+    })
+
+    return NextResponse.json({ message: 'Parchment lot deleted successfully' })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}

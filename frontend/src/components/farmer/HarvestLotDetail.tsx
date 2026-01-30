@@ -2,7 +2,7 @@
 import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
-import { ArrowLeft, User, MapPin, Weight, Calendar, Tag, Info, CheckCircle, Award, ExternalLink, Droplets, Sprout, Wind } from 'lucide-react';
+import { ArrowLeft, User, MapPin, Weight, Calendar, Tag, Info, CheckCircle, Award, ExternalLink, Droplets } from 'lucide-react';
 import { formatHarvestLotId } from '../../utils/formatHarvestLotId';
 
 const DetailItem: React.FC<{ icon: React.ElementType; label: string; value: string | number | React.ReactNode; }> = ({ icon: Icon, label, value }) => (
@@ -47,7 +47,6 @@ const HarvestLotDetail: React.FC = () => {
     
     // --- Data Tracing ---
     const relatedBatches = data.processingBatches.filter(b => b.harvestLotId === lotId);
-    const completedBatch = relatedBatches.find(b => b.status === 'Completed');
     const relatedParchmentLots = data.parchmentLots.filter(p => relatedBatches.some(b => b.id === p.processingBatchId));
     const relatedGreenBeanLots = data.greenBeanLots.filter(g => relatedParchmentLots.some(p => p.id === g.parchmentLotId));
     const mainGreenBeanLot = relatedGreenBeanLots.length > 0 ? relatedGreenBeanLots[0] : null;
@@ -126,18 +125,9 @@ const HarvestLotDetail: React.FC = () => {
                         <TimelineStep icon={Calendar} title="Harvested" isComplete={true}>
                             {lot.harvestDate}
                         </TimelineStep>
-                         <TimelineStep icon={Droplets} title="Processing" isComplete={relatedBatches.length > 0}>
-                             {relatedBatches.length > 0 ? `${relatedBatches[0].processType} Process` : 'Pending'}
-                         </TimelineStep>
-                         <TimelineStep icon={Wind} title="Drying Completed" isComplete={!!completedBatch}>
-                             {completedBatch ? `Bagged on ${completedBatch.baggingDate}` : 'In progress or pending'}
-                         </TimelineStep>
-                         <TimelineStep icon={Sprout} title="Milled to Green Bean" isComplete={!!mainGreenBeanLot}>
-                             {mainGreenBeanLot ? `Lot ID: ${mainGreenBeanLot.id}` : 'Pending'}
-                         </TimelineStep>
-                         <TimelineStep icon={Award} title="Cupped & Scored" isComplete={!!cuppingResult} isLast>
-                             {cuppingResult ? `Score: ${cuppingResult.totalScore.toFixed(2)}` : 'Pending'}
-                         </TimelineStep>
+                        <TimelineStep icon={Droplets} title="Processing" isComplete={relatedBatches.length > 0} isLast>
+                            {relatedBatches.length > 0 ? `${relatedBatches[0].processType} Process` : 'Pending'}
+                        </TimelineStep>
                      </div>
                 </div>
             </div>

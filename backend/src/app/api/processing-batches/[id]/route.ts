@@ -104,3 +104,51 @@ export async function PUT(
     return handleApiError(error)
   }
 }
+
+// DELETE /api/processing-batches/:id
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    await requireAuth(request)
+
+    // Check if batch exists
+    const batch = await prisma.processingBatch.findUnique({
+      where: { id },
+      include: {
+        parchmentLots: true,
+      },
+    })
+
+    if (!batch) {
+      return NextResponse.json(
+        { error: 'Processing batch not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check if there are parchment lots linked
+    if (batch.parchmentLots && batch.parchmentLots.length > 0) {
+      return NextResponse.json(
+        { error: 'Cannot delete processing batch with linked parchment lots. Delete parchment lots first.' },
+        { status: 400 }
+      )
+    }
+
+    // Delete drying logs first
+    await prisma.dryingLog.deleteMany({
+      where: { processingBatchId: id },
+    })
+
+    // Delete the batch
+    await prisma.processingBatch.delete({
+      where: { id },
+    })
+
+    return NextResponse.json({ message: 'Processing batch deleted successfully' })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}

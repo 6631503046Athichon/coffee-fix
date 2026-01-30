@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { HarvestLot, User, UserRole } from '../../types';
-import { Download, Filter, ChevronRight, ChevronLeft, Database, Edit, Trash2 } from 'lucide-react';
+import { Download, Filter, ChevronRight, ChevronLeft, Database, Edit, Trash2, Package } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
 import Select from '../common/Select';
 import { Modal } from '../common/Modal';
@@ -356,92 +356,117 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                 title="Edit Harvest Lot"
                 maxWidth="2xl"
             >
-                <form onSubmit={handleEditSubmit}>
-                            <div className="space-y-5">
-                                {editingLot && (
-                                    <Input
-                                        label="Lot ID"
-                                        type="text"
-                                        id="edit-lotId"
-                                        value={editingLot.id}
-                                        disabled
-                                    />
-                                )}
-                                <Input
-                                    label="Farmer Name"
-                                    type="text"
-                                    id="edit-farmerName"
-                                    value={editFormData.farmerName}
-                                    onChange={e => setEditFormData({ ...editFormData, farmerName: e.target.value })}
-                                    required
-                                />
-                                <Input
-                                    label="Cherry Variety"
-                                    type="text"
-                                    id="edit-cherryVariety"
-                                    value={editFormData.cherryVariety}
-                                    onChange={e => setEditFormData({ ...editFormData, cherryVariety: e.target.value })}
-                                    required
-                                />
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <Input
-                                        label="Weight (kg)"
-                                        type="number"
-                                        id="edit-weightKg"
-                                        value={editFormData.weightKg}
-                                        onChange={e => setEditFormData({ ...editFormData, weightKg: e.target.value })}
-                                        required
-                                        min="0"
-                                        step="0.01"
-                                    />
-                                    <div>
-                                        <DatePicker
-                                            value={editFormData.harvestDate}
-                                            onChange={(date) => setEditFormData({ ...editFormData, harvestDate: date })}
-                                            label="Harvest Date"
-                                            required
-                                        />
-                                    </div>
+                <form onSubmit={handleEditSubmit} className="space-y-6">
+                    {/* Lot ID Badge */}
+                    {editingLot && (
+                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-blue-100 rounded-lg">
+                                    <Package className="h-5 w-5 text-blue-600" />
                                 </div>
-                                <Input
-                                    label="Farm Plot Location"
-                                    type="text"
-                                    id="edit-farmPlotLocation"
-                                    value={editFormData.farmPlotLocation}
-                                    onChange={e => setEditFormData({ ...editFormData, farmPlotLocation: e.target.value })}
-                                    required
-                                />
                                 <div>
-                                    <label htmlFor="edit-status" className="block text-sm font-semibold text-gray-700 mb-2">Status</label>
-                                    <select
-                                        id="edit-status"
-                                        value={editFormData.status}
-                                        onChange={e => setEditFormData({ ...editFormData, status: e.target.value })}
-                                        required
-                                        className="block w-full border border-gray-300 rounded-xl shadow-sm py-2.5 px-3 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                                    >
-                                        <option value="Ready for Processing">Ready for Processing</option>
-                                        <option value="Processing">Processing</option>
-                                        <option value="Complete">Complete</option>
-                                    </select>
+                                    <p className="text-xs font-medium text-blue-600 uppercase tracking-wide">Lot ID</p>
+                                    <p className="text-sm font-mono font-semibold text-gray-900">{editingLot.id.substring(0, 8)}...</p>
                                 </div>
                             </div>
-                            <div className="mt-8 flex justify-end space-x-3">
-                                <Button
-                                    type="button"
-                                    onClick={closeEditModal}
-                                    variant="outline"
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    variant="primary"
-                                >
-                                    Save Changes
-                                </Button>
+                        </div>
+                    )}
+
+                    {/* Basic Information */}
+                    <div className="space-y-4">
+                        <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">Basic Information</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Input
+                                label="Farmer Name"
+                                type="text"
+                                id="edit-farmerName"
+                                value={editFormData.farmerName}
+                                onChange={e => setEditFormData({ ...editFormData, farmerName: e.target.value })}
+                                required
+                                fullWidth
+                            />
+                            <Input
+                                label="Cherry Variety"
+                                type="text"
+                                id="edit-cherryVariety"
+                                value={editFormData.cherryVariety}
+                                onChange={e => setEditFormData({ ...editFormData, cherryVariety: e.target.value })}
+                                required
+                                fullWidth
+                            />
+                        </div>
+                    </div>
+
+                    {/* Harvest Details */}
+                    <div className="space-y-4">
+                        <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">Harvest Details</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Input
+                                label="Weight (kg)"
+                                type="number"
+                                id="edit-weightKg"
+                                value={editFormData.weightKg}
+                                onChange={e => setEditFormData({ ...editFormData, weightKg: e.target.value })}
+                                required
+                                min="0"
+                                step="0.01"
+                                fullWidth
+                            />
+                            <DatePicker
+                                value={editFormData.harvestDate}
+                                onChange={(date) => setEditFormData({ ...editFormData, harvestDate: date })}
+                                label="Harvest Date"
+                                required
+                            />
+                        </div>
+                    </div>
+
+                    {/* Location & Status */}
+                    <div className="space-y-4">
+                        <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">Location & Status</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Input
+                                label="Farm Plot Location"
+                                type="text"
+                                id="edit-farmPlotLocation"
+                                value={editFormData.farmPlotLocation}
+                                onChange={e => setEditFormData({ ...editFormData, farmPlotLocation: e.target.value })}
+                                required
+                                fullWidth
+                            />
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Status</label>
+                                <Select
+                                    value={editFormData.status}
+                                    onChange={(v) => setEditFormData({ ...editFormData, status: v as string })}
+                                    options={[
+                                        { value: 'Ready for Processing', label: 'Ready for Processing' },
+                                        { value: 'Processing', label: 'Processing' },
+                                        { value: 'Complete', label: 'Complete' }
+                                    ]}
+                                    placeholder="Select status"
+                                />
                             </div>
-                        </form>
+                        </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                        <Button
+                            type="button"
+                            onClick={closeEditModal}
+                            variant="outline"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="submit"
+                            variant="primary"
+                        >
+                            Save Changes
+                        </Button>
+                    </div>
+                </form>
             </Modal>
         </div>
     );
