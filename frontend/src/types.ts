@@ -1,26 +1,24 @@
-
-
 export enum UserRole {
-  Farmer = 'Farmer',
-  Processor = 'Processor',
-  Roaster = 'Roaster',
-  HeadJudge = 'HeadJudge',
-  Cupper = 'Cupper',
-  Admin = 'Admin',
+  Farmer = "Farmer",
+  Processor = "Processor",
+  Roaster = "Roaster",
+  HeadJudge = "HeadJudge",
+  Cupper = "Cupper",
+  Admin = "Admin",
 }
 
 export enum ProcessingBatchStatus {
-  ToProcess = 'To Process',
-  Drying = 'Drying',
-  Completed = 'Completed',
+  ToProcess = "To Process",
+  Drying = "Drying",
+  Completed = "Completed",
 }
 
 // Deprecated: Use ActivityType interface instead
 // Kept for backward compatibility
 export enum GAPActivityType {
-  Fertilizer = 'Fertilizer',
-  PestManagement = 'Pest Management',
-  WaterManagement = 'Water Management',
+  Fertilizer = "Fertilizer",
+  PestManagement = "Pest Management",
+  WaterManagement = "Water Management",
 }
 
 export interface ActivityType {
@@ -76,7 +74,7 @@ export interface HarvestLot {
   weightKg: number;
   farmPlotLocation: string;
   harvestDate: string;
-  status: 'Ready for Processing' | 'Processing' | 'Complete';
+  status: "Ready for Processing" | "Processing" | "Complete";
   cropYearId?: string;
 }
 
@@ -104,120 +102,125 @@ export interface ProcessingBatch {
 }
 
 export interface PhysicalTestResults {
-    sampleWeightGrams: number;
-    greenBeanWeightGrams: number;
-    greenBeanMoisture: number;
-    waterActivity: number;
-    density: number;
-    defectCount: number;
-    notes?: string;
+  sampleWeightGrams: number;
+  greenBeanWeightGrams: number;
+  greenBeanMoisture: number;
+  waterActivity: number;
+  density: number;
+  defectCount: number;
+  notes?: string;
 }
 
 export interface ParchmentLot {
-    id: string;
-    processingBatchId: string;
-    harvestLotId: string;
-    initialWeightKg: number;
-    currentWeightKg: number;
-    moistureContent: number;
-    processType: string;
-    status: 'Awaiting Hulling' | 'Hulled';
-    physicalTestResults?: PhysicalTestResults;
+  id: string;
+  processingBatchId: string;
+  harvestLotId: string;
+  initialWeightKg: number;
+  currentWeightKg: number;
+  moistureContent: number;
+  processType: string;
+  status: "Awaiting Hulling" | "Hulled";
+  physicalTestResults?: PhysicalTestResults;
 }
 
 export enum GreenBeanSourceType {
-    Internal = 'Internal',
-    External = 'External'
+  Internal = "Internal",
+  External = "External",
 }
 
 export interface GreenBeanLot {
-    id:string;
-    sourceType: GreenBeanSourceType;
-    parchmentLotId?: string;
+  id: string;
+  sourceType: GreenBeanSourceType;
+  parchmentLotId?: string;
   /** External source details when sourceType is External */
   externalSource?: {
-    originName: string;      // Producer/Farm or Supplier
-    variety: string;         // Declared variety
-    processType: string;     // Washed/Natural/Honey...
-    purchaseDate: string;    // ISO date
+    originName: string; // Producer/Farm or Supplier
+    variety: string; // Declared variety
+    processType: string; // Washed/Natural/Honey...
+    purchaseDate: string; // ISO date
     pricePerKg: number;
-    currency: string;        // e.g., THB, USD
+    currency: string; // e.g., THB, USD
     supplierNotes?: string;
-    producerName?: string;   // Optional: producer name if different from origin/supplier
-    score?: number;          // Optional: declared score at purchase time
-    tasteNote?: string;      // Optional: declared taste note at purchase time
+    producerName?: string; // Optional: producer name if different from origin/supplier
+    score?: number; // Optional: declared score at purchase time
+    tasteNote?: string; // Optional: declared taste note at purchase time
   };
-    grade: string;
-    initialWeightKg: number;
-    currentWeightKg: number;
-    availabilityStatus: 'Available' | 'Withdrawn';
-    cuppingScores: { sessionId: string; score: number }[];
-    withdrawalHistory?: {
-        amountKg: number;
-        withdrawalType: 'Sale' | 'Roasting Stock' | 'Sample' | 'Export' | 'Other';
-        purpose: string; // Legacy field / additional description
-        notes?: string; // Admin-editable notes
-        date: string;
-        withdrawnBy?: string; // User ID who performed withdrawal
-        withdrawnByName?: string; // User name for display
-        salePrice?: number; // Only for Sale type
-        currency?: string; // Only for Sale type (e.g., 'THB', 'USD')
-        customerName?: string; // Only for Sale type
-        invoiceNumber?: string; // Auto-generated for Sale type (e.g., "INV-2025-001")
-        deliveryAddress?: string; // Optional delivery address for Sale type
-        totalAmount?: number; // Calculated: amountKg * salePrice
-    }[];
-    pricePerKg?: number;
-    currency?: string;
-    priceSetDate?: string;
-    priceSetBy?: string;
+  grade: string;
+  initialWeightKg: number;
+  currentWeightKg: number;
+  availabilityStatus: "Available" | "Withdrawn";
+  cuppingScores: { sessionId: string; score: number }[];
+  processorScore?: number; // Score assigned by processor during hulling and grading
+  withdrawalHistory?: {
+    amountKg: number;
+    withdrawalType: "Sale" | "Roasting Stock" | "Sample" | "Export" | "Other";
+    purpose: string; // Legacy field / additional description
+    notes?: string; // Admin-editable notes
+    date: string;
+    withdrawnBy?: string; // User ID who performed withdrawal
+    withdrawnByName?: string; // User name for display
+    salePrice?: number; // Only for Sale type
+    currency?: string; // Only for Sale type (e.g., 'THB', 'USD')
+    customerName?: string; // Only for Sale type
+    invoiceNumber?: string; // Auto-generated for Sale type (e.g., "INV-2025-001")
+    deliveryAddress?: string; // Optional delivery address for Sale type
+    totalAmount?: number; // Calculated: amountKg * salePrice
+  }[];
+  pricePerKg?: number;
+  currency?: string;
+  priceSetDate?: string;
+  priceSetBy?: string;
 }
 
 export enum RoastLevel {
-  Light = 'Light',
-  Medium = 'Medium',
-  Dark = 'Dark',
+  Light = "Light",
+  Medium = "Medium",
+  Dark = "Dark",
 }
 
 export enum CuppingSessionType {
-    QC = 'Standard QC',
-    Competition = 'Competition',
+  QC = "Standard QC",
+  Competition = "Competition",
 }
 
 export interface CuppingSample {
-    id: string;
-    blindCode: string;
-    greenBeanLotId?: string; // Optional for external samples
-    submitterInfo: { name: string };
-    originInfo: { farm: string };
-    lotInfo: { process: string };
+  id: string;
+  blindCode: string;
+  greenBeanLotId?: string; // Optional for external samples
+  submitterInfo: { name: string };
+  originInfo: { farm: string };
+  lotInfo: { process: string };
 }
 
 export interface JudgeScore {
-    judgeId: string; // Corresponds to user ID
-    judgeName: string;
-    scores: { [attribute: string]: number };
-    notes: string;
-    totalScore: number;
+  judgeId: string; // Corresponds to user ID
+  judgeName: string;
+  scores: { [attribute: string]: number };
+  notes: string;
+  totalScore: number;
 }
 
 export interface CuppingSession {
+  id: string;
+  name: string;
+  date: string;
+  type: CuppingSessionType;
+  samples: CuppingSample[];
+  judges: {
     id: string;
     name: string;
-    date: string;
-    type: CuppingSessionType;
-    samples: CuppingSample[];
-    judges: { id: string, name: string, role: UserRole.Cupper | UserRole.HeadJudge | UserRole.Processor }[];
-    scores: { [sampleId: string]: JudgeScore[] };
-    status: 'Setup' | 'Scoring' | 'Adjudication' | 'Finalized';
-    finalResults?: {
-        [sampleId: string]: {
-            avgScores: { [attribute: string]: number };
-            totalScore: number;
-            finalNotes: string;
-            rank?: number;
-        }
-    }
+    role: UserRole.Cupper | UserRole.HeadJudge | UserRole.Processor;
+  }[];
+  scores: { [sampleId: string]: JudgeScore[] };
+  status: "Setup" | "Scoring" | "Adjudication" | "Finalized";
+  finalResults?: {
+    [sampleId: string]: {
+      avgScores: { [attribute: string]: number };
+      totalScore: number;
+      finalNotes: string;
+      rank?: number;
+    };
+  };
 }
 
 export interface User {
@@ -269,7 +272,7 @@ export interface WeatherRecord {
   temperatureAvg: number; // Celsius
   rainfall: number; // mm
   humidity: number; // percentage 0-100
-  source: 'Manual' | 'API'; // How data was collected
+  source: "Manual" | "API"; // How data was collected
   notes?: string;
   recordedBy?: string; // User ID
   createdAt?: string; // ISO datetime - เวลาที่บันทึก
@@ -289,7 +292,7 @@ export interface PricingHistory {
 export interface Customer {
   id: string;
   name: string;
-  type: 'Roaster' | 'Distributor' | 'Retailer' | 'Other';
+  type: "Roaster" | "Distributor" | "Retailer" | "Other";
   contactEmail?: string;
   contactPhone?: string;
   address?: string;
@@ -311,7 +314,7 @@ export interface SaleOrder {
   customerId: string;
   customerName: string;
   orderDate: string;
-  status: 'Draft' | 'Confirmed' | 'Delivered' | 'Cancelled';
+  status: "Draft" | "Confirmed" | "Delivered" | "Cancelled";
   items: SaleOrderItem[];
   totalAmount: number;
   currency: string;
@@ -325,7 +328,7 @@ export interface Invoice {
   saleOrderId: string;
   issueDate: string;
   dueDate?: string;
-  status: 'Draft' | 'Sent' | 'Paid' | 'Overdue';
+  status: "Draft" | "Sent" | "Paid" | "Overdue";
   items: SaleOrderItem[];
   subtotal: number;
   tax?: number;
@@ -391,38 +394,38 @@ export interface RoastBatch {
 }
 
 export interface PlatformInsight {
-  topPerformingVariety: { variety: string; avgScore: number; };
-  topPerformingProcess: { process: string; avgScore: number; };
+  topPerformingVariety: { variety: string; avgScore: number };
+  topPerformingProcess: { process: string; avgScore: number };
   notableCorrelations: string[];
   overallSummary: string;
 }
 
 export interface ComprehensiveQualityReport {
-    title: string;
-    executiveSummary: string;
-    topPerformingCoffees: Array<{
-        lotId: string;
-        variety: string;
-        process: string;
-        score: number;
-        tastingNotes: string;
-    }>;
-    varietyAnalysis: {
-        topVariety: string;
-        averageScore: number;
-        analysis: string;
-    };
-    processingAnalysis: {
-        topProcess: string;
-        averageScore: number;
-        analysis: string;
-    };
-    keyTrends: string[];
-    recommendations: {
-        forFarmers: string;
-        forProcessors: string;
-        forRoasters: string;
-    };
+  title: string;
+  executiveSummary: string;
+  topPerformingCoffees: Array<{
+    lotId: string;
+    variety: string;
+    process: string;
+    score: number;
+    tastingNotes: string;
+  }>;
+  varietyAnalysis: {
+    topVariety: string;
+    averageScore: number;
+    analysis: string;
+  };
+  processingAnalysis: {
+    topProcess: string;
+    averageScore: number;
+    analysis: string;
+  };
+  keyTrends: string[];
+  recommendations: {
+    forFarmers: string;
+    forProcessors: string;
+    forRoasters: string;
+  };
 }
 
 export interface AppData {
@@ -449,16 +452,27 @@ export interface AppData {
 
 // Updated for clarity to match SCA form structure
 export const SCA_SENSORY_ATTRIBUTES = [
-  'Fragrance/Aroma', 'Flavor', 'Aftertaste', 'Acidity', 'Body', 'Balance', 'Overall'
+  "Fragrance/Aroma",
+  "Flavor",
+  "Aftertaste",
+  "Acidity",
+  "Body",
+  "Balance",
+  "Overall",
 ];
 
-export const SCA_CUP_ATTRIBUTES = [
-  'Uniformity', 'Clean Cup', 'Sweetness'
-];
+export const SCA_CUP_ATTRIBUTES = ["Uniformity", "Clean Cup", "Sweetness"];
 
 // Maintained for backward compatibility with other components
 export const SCA_ATTRIBUTES = [
-  'Fragrance/Aroma', 'Flavor', 'Aftertaste', 'Acidity', 
-  'Body', 'Uniformity', 'Balance', 'Clean Cup', 
-  'Sweetness', 'Overall'
+  "Fragrance/Aroma",
+  "Flavor",
+  "Aftertaste",
+  "Acidity",
+  "Body",
+  "Uniformity",
+  "Balance",
+  "Clean Cup",
+  "Sweetness",
+  "Overall",
 ];

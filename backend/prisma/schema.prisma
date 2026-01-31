@@ -225,6 +225,7 @@ model GreenBeanLot {
   priceSetBy         String?
   createdById        String?
   externalSource     Json?
+  processorScore     Float?
   createdAt          DateTime                    @default(now())
   updatedAt          DateTime                    @updatedAt
   cuppingSamples     CuppingSample[]
@@ -657,6 +658,7 @@ enum FarmRequestStatus {
 enum HarvestLotStatus {
   ReadyForProcessing
   Processing
+  Complete
 }
 
 enum ParchmentLotStatus {
