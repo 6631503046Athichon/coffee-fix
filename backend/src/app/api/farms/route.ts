@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { validateBody, createFarmSchema } from '@/lib/validations'
 
 // This route depends on auth cookies/headers, so it must be dynamic.
 export const dynamic = 'force-dynamic'
@@ -11,7 +12,7 @@ export async function GET(request: NextRequest) {
     const user = await requireAuth(request)
 
     // Farmers can only see their own farms, admins can see all
-    const where: any = {}
+    const where: Record<string, unknown> = {}
     if (!user.roles.includes('Admin')) {
       where.ownerId = user.id
     }
@@ -42,25 +43,26 @@ export async function POST(request: NextRequest) {
     const user = await requireAuth(request)
     requireRole(user, ['Farmer', 'Admin'])
 
-    const body = await request.json()
-    const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, caretakerNames, ownerId, googleMapsUrl, ownerNames } = body
-
-    const normalizedOwnerNames = Array.isArray(ownerNames)
-      ? ownerNames.map((name: unknown) => String(name).trim()).filter(Boolean)
-      : []
-    const normalizedCaretakerNames = Array.isArray(caretakerNames)
-      ? caretakerNames.map((name: unknown) => String(name).trim()).filter(Boolean)
-      : (typeof caretakerName === 'string'
-          ? caretakerName.split(',').map((name: string) => name.trim()).filter(Boolean)
-          : [])
-
-    // Validation
-    if (!farmName || !location) {
-      return NextResponse.json(
-        { error: 'Farm name and location are required' },
-        { status: 400 }
-      )
+    // Validate request body with Zod
+    const validation = await validateBody(request, createFarmSchema)
+    if (!validation.success) {
+      return validation.error
     }
+
+    const {
+      farmName,
+      location,
+      latitude,
+      longitude,
+      altitude,
+      sizeHectares,
+      varieties,
+      caretakerName,
+      caretakerNames,
+      ownerId,
+      googleMapsUrl,
+      ownerNames,
+    } = validation.data
 
     // Use provided ownerId or current user's id
     const finalOwnerId = ownerId || user.id
@@ -76,15 +78,15 @@ export async function POST(request: NextRequest) {
     const farm = await prisma.farm.create({
       data: {
         farmName,
-        ownerNames: normalizedOwnerNames,
+        ownerNames: ownerNames || [],
         location,
-        latitude: latitude ? parseFloat(latitude) : null,
-        longitude: longitude ? parseFloat(longitude) : null,
+        latitude: latitude || null,
+        longitude: longitude || null,
         altitude: altitude || null,
-        sizeHectares: sizeHectares ? parseFloat(sizeHectares) : null,
+        sizeHectares: sizeHectares || null,
         varieties: varieties || [],
-        caretakerNames: normalizedCaretakerNames,
-        caretakerName: normalizedCaretakerNames.length > 0 ? null : (caretakerName || null),
+        caretakerNames: caretakerNames || [],
+        caretakerName: caretakerName || null,
         googleMapsUrl: googleMapsUrl || null,
         ownerId: finalOwnerId,
       },

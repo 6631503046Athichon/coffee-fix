@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, handleApiError } from '@/lib/middleware'
+import { validateBody, createGreenBeanLotSchema } from '@/lib/validations'
 
 // GET /api/green-bean-lots - List all green bean lots
 export async function GET(request: NextRequest) {
   try {
     await requireAuth(request)
 
-    const where: any = {}
-    
+    const where: Record<string, unknown> = {}
+
     // Filter by sourceType if provided
     const sourceType = request.nextUrl.searchParams.get('sourceType')
     if (sourceType) {
@@ -77,42 +78,23 @@ export async function POST(request: NextRequest) {
   try {
     await requireAuth(request)
 
-    const body = await request.json()
-    const { sourceType, parchmentLotId, grade, initialWeightKg, currentWeightKg, externalSource, availabilityStatus } = body
-
-    // Validation
-    if (!sourceType || !grade || !initialWeightKg) {
-      return NextResponse.json(
-        { error: 'Source type, grade, and initial weight are required' },
-        { status: 400 }
-      )
+    // Validate request body with Zod
+    const validation = await validateBody(request, createGreenBeanLotSchema)
+    if (!validation.success) {
+      return validation.error
     }
 
-    // If internal source, parchmentLotId is required
-    if (sourceType === 'Internal' && !parchmentLotId) {
-      return NextResponse.json(
-        { error: 'Parchment lot ID is required for internal sources' },
-        { status: 400 }
-      )
-    }
-
-    // If external source, externalSource object is required
-    if (sourceType === 'External' && !externalSource) {
-      return NextResponse.json(
-        { error: 'External source details are required for external sources' },
-        { status: 400 }
-      )
-    }
+    const { sourceType, parchmentLotId, grade, initialWeightKg, currentWeightKg, externalSource, availabilityStatus } = validation.data
 
     const greenBeanLot = await prisma.greenBeanLot.create({
       data: {
         sourceType,
         parchmentLotId: parchmentLotId || null,
         grade,
-        initialWeightKg: parseFloat(initialWeightKg),
-        currentWeightKg: currentWeightKg ? parseFloat(currentWeightKg) : parseFloat(initialWeightKg),
+        initialWeightKg,
+        currentWeightKg: currentWeightKg || initialWeightKg,
         availabilityStatus: availabilityStatus || 'Available',
-        externalSource: externalSource ? JSON.stringify(externalSource) : undefined,
+        externalSource: externalSource || undefined,
       },
       include: {
         parchmentLot: {

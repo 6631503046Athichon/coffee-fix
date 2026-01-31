@@ -33,6 +33,7 @@ import ProtectedRoute from './components/common/ProtectedRoute';
 import ProcessorWorkbench from './components/processor/ProcessorWorkbench';
 import CuppingHub from './components/cupper/CuppingHub';
 import TraceabilityPage from './components/TraceabilityPage';
+import PublicTraceabilityPage from './components/PublicTraceabilityPage';
 import CompetitionDashboard from './components/competition/CompetitionDashboard';
 import FarmerDashboard from './components/farmer/FarmerDashboard';
 import HarvestLotDetail from './components/farmer/HarvestLotDetail';
@@ -396,6 +397,10 @@ const App: React.FC = () => {
                 <TraceabilityPage />
               </DataContext.Provider>
             }
+          />
+          <Route
+            path="/trace/:publicId"
+            element={<PublicTraceabilityPage />}
           />
           {/* Root route - redirect to login if not authenticated */}
           <Route path="/" element={<RootRedirect />} />

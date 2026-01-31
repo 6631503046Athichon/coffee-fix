@@ -155,7 +155,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
     setFetchError('');
   };
 
-  // Fetch weather from API and save immediately
+  // Fetch weather from API and fill form (user must save manually)
   const handleFetchWeather = async () => {
     if (!farm) return;
 
@@ -171,30 +171,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
       const weatherData = await fetchWeatherData(farm.latitude, farm.longitude);
 
       if (weatherData) {
-        // สร้าง record และบันทึกลง database ทันที
-        const weatherRecord: Partial<WeatherRecord> = {
-          farmId: farm.id,
-          farmPlotLocation: farm.location,
-          recordDate: new Date().toISOString().substring(0, 10),
-          temperatureMin: weatherData.temperatureMin,
-          temperatureMax: weatherData.temperatureMax,
-          temperatureAvg: (weatherData.temperatureMin + weatherData.temperatureMax) / 2,
-          rainfall: weatherData.rainfall,
-          humidity: weatherData.humidity || 70,
-          source: 'API',
-          notes: `ดึงข้อมูลจาก Open-Meteo API เมื่อ ${new Date().toLocaleString('th-TH')}`,
-          recordedBy: currentUser?.id,
-        };
-
-        console.log('[Weather] Saving record to database:', weatherRecord);
-        const newRecord = await addWeatherRecord(weatherRecord as Omit<WeatherRecord, 'id'>);
-        console.log('[Weather] Record saved successfully:', newRecord);
-        setData(prev => ({
-          ...prev,
-          weatherRecords: [newRecord, ...prev.weatherRecords]
-        }));
-
-        // เติม form ด้วย (ให้ user แก้ไขได้ถ้าต้องการบันทึกเพิ่ม)
+        // เติม form fields ให้ user ตรวจสอบและกด save เอง
         setTemperatureMin(weatherData.temperatureMin.toString());
         setTemperatureMax(weatherData.temperatureMax.toString());
         setRainfall(weatherData.rainfall.toString());
@@ -202,9 +179,10 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
           setHumidity(weatherData.humidity.toString());
         }
         setNotes(`ดึงข้อมูลจาก Open-Meteo API เมื่อ ${new Date().toLocaleString('th-TH')}`);
+        setRecordDate(new Date().toISOString().substring(0, 10));
 
-        setWeatherToast({ type: 'success', message: 'ดึงและบันทึกข้อมูลสภาพอากาศสำเร็จ' });
-        setTimeout(() => setWeatherToast(null), 3000);
+        setWeatherToast({ type: 'success', message: 'ดึงข้อมูลสำเร็จ กรุณากดบันทึกเพื่อยืนยัน' });
+        setTimeout(() => setWeatherToast(null), 4000);
       }
     } catch (error: any) {
       const errorMessage = error?.message || 'ไม่สามารถดึงข้อมูลสภาพอากาศได้ กรุณาลองใหม่';

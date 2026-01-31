@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@google/genai": "^1.16.0",
+    "file-saver": "^2.0.5",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.542.0",
     "qrcode": "^1.5.4",
     "react": "^19.1.1",
@@ -19,6 +21,7 @@
     "start": "^5.1.0"
   },
   "devDependencies": {
+    "@types/file-saver": "^2.0.7",
     "@types/node": "^22.14.0",
     "@types/react": "^19.2.9",
     "@types/react-dom": "^19.2.3",

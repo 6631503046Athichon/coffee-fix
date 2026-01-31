@@ -1,20 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { hashPassword, verifyPassword, generateToken } from '@/lib/auth'
+import { verifyPassword, generateToken } from '@/lib/auth'
 import { handleApiError } from '@/lib/middleware'
+import { validateBody, loginSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { email, password } = body
-
-    // Validation
-    if (!email || !password) {
-      return NextResponse.json(
-        { error: 'Email and password are required' },
-        { status: 400 }
-      )
+    // Validate request body with Zod
+    const validation = await validateBody(request, loginSchema)
+    if (!validation.success) {
+      return validation.error
     }
+
+    const { email, password } = validation.data
 
     // Find user by email
     const user = await prisma.user.findFirst({

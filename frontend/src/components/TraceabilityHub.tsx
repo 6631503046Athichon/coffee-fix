@@ -1,25 +1,40 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../hooks/useDataContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Search, ExternalLink, CheckCircle, Archive, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
-import { UserRole } from '../types';
+import { Search, ExternalLink, CheckCircle, Archive, AlertCircle, ChevronLeft, ChevronRight, QrCode, Package, X } from 'lucide-react';
+import { UserRole, GreenBeanLot } from '../types';
+import { QRCodeModal } from './modals/QRCodeModal';
+import { BulkQRGeneratorModal } from './modals/BulkQRGeneratorModal';
 
 const PAGE_SIZE = 10;
 
+interface EnrichedLot extends GreenBeanLot {
+    processType: string;
+    variety: string;
+    finalScore: string | number;
+}
+
 const TraceabilityHub: React.FC = () => {
-    const { data } = useDataContext();
+    const { data, refreshData } = useDataContext();
     const { currentUser } = useAuth();
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
 
+    // Selection state
+    const [selectedLots, setSelectedLots] = useState<Set<string>>(new Set());
+
+    // Modal states
+    const [qrModalOpen, setQrModalOpen] = useState(false);
+    const [bulkQrModalOpen, setBulkQrModalOpen] = useState(false);
+    const [selectedLotForQR, setSelectedLotForQR] = useState<EnrichedLot | null>(null);
+
     // Check if user has access
     useEffect(() => {
         if (currentUser) {
-            const hasAccess = currentUser.roles?.some(role => 
+            const hasAccess = currentUser.roles?.some(role =>
                 role === UserRole.Admin || role === UserRole.Processor
             );
             if (!hasAccess) {
@@ -29,7 +44,6 @@ const TraceabilityHub: React.FC = () => {
     }, [currentUser, navigate]);
 
     const enrichedLots = useMemo(() => {
-        // Ensure data arrays exist and are arrays
         if (!data?.greenBeanLots || !Array.isArray(data.greenBeanLots)) {
             return [];
         }
@@ -37,11 +51,11 @@ const TraceabilityHub: React.FC = () => {
         try {
             return data.greenBeanLots.map(gbl => {
                 if (!gbl) return null;
-                
+
                 const parchmentLot = data.parchmentLots?.find(p => p?.id === gbl.parchmentLotId);
                 const processingBatch = data.processingBatches?.find(b => b?.id === parchmentLot?.processingBatchId);
                 const harvestLot = data.harvestLots?.find(h => h?.id === parchmentLot?.harvestLotId);
-                
+
                 let finalScore: string | number = 'N/A';
                 const scoreInfo = gbl.cuppingScores?.[0];
                 if (scoreInfo) {
@@ -50,12 +64,11 @@ const TraceabilityHub: React.FC = () => {
                         const sample = session?.samples?.find(s => s?.greenBeanLotId === gbl.id);
                         if (session && sample && session.finalResults && session.finalResults[sample.id]) {
                             finalScore = session.finalResults[sample.id].totalScore.toFixed(2);
-                        } else if (scoreInfo.score) { // Fallback to score on GBL if final results not compiled
+                        } else if (scoreInfo.score) {
                             finalScore = scoreInfo.score.toFixed(2);
                         }
                     } catch (error) {
                         console.error('Error processing cupping score:', error);
-                        // Use fallback score if available
                         if (scoreInfo.score) {
                             finalScore = scoreInfo.score.toFixed(2);
                         }
@@ -67,8 +80,8 @@ const TraceabilityHub: React.FC = () => {
                     processType: processingBatch?.processType || 'N/A',
                     variety: harvestLot?.cherryVariety || 'N/A',
                     finalScore,
-                };
-            }).filter(Boolean); // Remove any null entries
+                } as EnrichedLot;
+            }).filter(Boolean) as EnrichedLot[];
         } catch (error) {
             console.error('Error enriching lots:', error);
             return [];
@@ -91,7 +104,6 @@ const TraceabilityHub: React.FC = () => {
                     (lot.variety?.toLowerCase() || '').includes(searchLower)
                 );
             }).sort((a, b) => {
-                // Sort by ID descending (newest first)
                 const aId = a?.id || '';
                 const bId = b?.id || '';
                 return bId.localeCompare(aId);
@@ -114,6 +126,49 @@ const TraceabilityHub: React.FC = () => {
         currentPage * PAGE_SIZE
     );
 
+    // Selection handlers
+    const handleSelectLot = (lotId: string) => {
+        setSelectedLots(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(lotId)) {
+                newSet.delete(lotId);
+            } else {
+                newSet.add(lotId);
+            }
+            return newSet;
+        });
+    };
+
+    const handleSelectAll = () => {
+        if (selectedLots.size === paginatedLots.length) {
+            setSelectedLots(new Set());
+        } else {
+            setSelectedLots(new Set(paginatedLots.map(lot => lot.id)));
+        }
+    };
+
+    const clearSelection = () => {
+        setSelectedLots(new Set());
+    };
+
+    // QR Modal handlers
+    const openQRModal = (lot: EnrichedLot) => {
+        setSelectedLotForQR(lot);
+        setQrModalOpen(true);
+    };
+
+    const handlePublicIdGenerated = (publicTraceId: string) => {
+        // Refresh data to get updated lot info
+        if (refreshData) {
+            refreshData();
+        }
+    };
+
+    // Get selected lots as GreenBeanLot array for bulk modal
+    const selectedLotsArray = useMemo(() => {
+        return enrichedLots.filter(lot => selectedLots.has(lot.id));
+    }, [enrichedLots, selectedLots]);
+
     // Show error if data processing failed
     if (error) {
         return (
@@ -131,6 +186,9 @@ const TraceabilityHub: React.FC = () => {
         );
     }
 
+    const isAllSelected = paginatedLots.length > 0 && selectedLots.size === paginatedLots.length;
+    const isSomeSelected = selectedLots.size > 0;
+
     return (
         <div className="space-y-6">
             {/* Header Section */}
@@ -138,6 +196,36 @@ const TraceabilityHub: React.FC = () => {
                 <h1 className="text-3xl font-bold text-gray-900">Traceability Curation Hub</h1>
                 <p className="text-gray-600 mt-2">Manage and view public traceability pages for green bean lots.</p>
             </div>
+
+            {/* Bulk Action Bar */}
+            {isSomeSelected && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-indigo-100 rounded-lg">
+                            <Package className="h-5 w-5 text-indigo-600" />
+                        </div>
+                        <span className="text-sm font-medium text-indigo-900">
+                            {selectedLots.size} lot{selectedLots.size > 1 ? 's' : ''} selected
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setBulkQrModalOpen(true)}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+                        >
+                            <QrCode className="h-4 w-4" />
+                            Generate QR Codes
+                        </button>
+                        <button
+                            onClick={clearSelection}
+                            className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"
+                            title="Clear selection"
+                        >
+                            <X className="h-5 w-5" />
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Search Bar */}
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200">
@@ -161,19 +249,28 @@ const TraceabilityHub: React.FC = () => {
                     <table className="min-w-full">
                         <thead>
                             <tr className="bg-gray-900 border-b border-gray-200">
-                                <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Lot ID</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Variety</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Process</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Grade</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Final Score</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Action</th>
+                                <th className="px-4 py-4 text-left">
+                                    <input
+                                        type="checkbox"
+                                        checked={isAllSelected}
+                                        onChange={handleSelectAll}
+                                        className="w-4 h-4 text-indigo-600 bg-gray-100 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
+                                    />
+                                </th>
+                                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Lot ID</th>
+                                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Variety</th>
+                                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Process</th>
+                                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Grade</th>
+                                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Score</th>
+                                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
+                                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">QR</th>
+                                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Action</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-100">
                             {paginatedLots.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center">
+                                    <td colSpan={9} className="px-6 py-12 text-center">
                                         <Search className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                                         <p className="text-sm font-medium text-gray-500">
                                             {enrichedLots.length === 0
@@ -185,24 +282,40 @@ const TraceabilityHub: React.FC = () => {
                             ) : (
                                 paginatedLots.map(lot => {
                                     if (!lot || !lot.id) return null;
+                                    const isSelected = selectedLots.has(lot.id);
+                                    const hasPublicId = !!lot.publicTraceId;
+
                                     return (
-                                        <tr key={lot.id} className="hover:bg-gray-50 transition-colors duration-200">
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className="text-sm font-bold text-gray-900">{lot.id}</span>
+                                        <tr
+                                            key={lot.id}
+                                            className={`hover:bg-gray-50 transition-colors duration-200 ${isSelected ? 'bg-indigo-50' : ''}`}
+                                        >
+                                            <td className="px-4 py-4 whitespace-nowrap">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isSelected}
+                                                    onChange={() => handleSelectLot(lot.id)}
+                                                    className="w-4 h-4 text-indigo-600 bg-gray-100 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
+                                                />
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
+                                            <td className="px-4 py-4 whitespace-nowrap">
+                                                <span className="text-sm font-mono font-medium text-gray-900">
+                                                    {lot.id.substring(0, 8)}...
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-4 whitespace-nowrap">
                                                 <span className="text-sm text-gray-700">{lot.variety || 'N/A'}</span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
+                                            <td className="px-4 py-4 whitespace-nowrap">
                                                 <span className="text-sm font-medium text-gray-900">{lot.processType || 'N/A'}</span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
+                                            <td className="px-4 py-4 whitespace-nowrap">
                                                 <span className="text-sm text-gray-700">{lot.grade || 'N/A'}</span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
+                                            <td className="px-4 py-4 whitespace-nowrap">
                                                 <span className="text-sm font-bold text-indigo-600">{lot.finalScore || 'N/A'}</span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
+                                            <td className="px-4 py-4 whitespace-nowrap">
                                                 <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${
                                                     lot.availabilityStatus === 'Available'
                                                         ? 'bg-green-100 text-green-700 border-green-200'
@@ -212,14 +325,28 @@ const TraceabilityHub: React.FC = () => {
                                                     {lot.availabilityStatus || 'Unknown'}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
+                                            <td className="px-4 py-4 whitespace-nowrap">
+                                                <button
+                                                    onClick={() => openQRModal(lot)}
+                                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                                        hasPublicId
+                                                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200'
+                                                            : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                                                    }`}
+                                                    title={hasPublicId ? 'View/Download QR' : 'Generate QR'}
+                                                >
+                                                    <QrCode className="h-3.5 w-3.5" />
+                                                    {hasPublicId ? 'QR' : 'Generate'}
+                                                </button>
+                                            </td>
+                                            <td className="px-4 py-4 whitespace-nowrap">
                                                 <Link
-                                                    to={`/traceability/${lot.id}`}
+                                                    to={hasPublicId ? `/trace/${lot.publicTraceId}` : `/traceability/${lot.id}`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="inline-flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 font-bold text-sm transition-colors duration-200 hover:underline"
                                                 >
-                                                    View Page <ExternalLink className="h-4 w-4" />
+                                                    View <ExternalLink className="h-4 w-4" />
                                                 </Link>
                                             </td>
                                         </tr>
@@ -273,6 +400,33 @@ const TraceabilityHub: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* QR Code Modal */}
+            {selectedLotForQR && (
+                <QRCodeModal
+                    isOpen={qrModalOpen}
+                    onClose={() => {
+                        setQrModalOpen(false);
+                        setSelectedLotForQR(null);
+                    }}
+                    lotId={selectedLotForQR.id}
+                    publicTraceId={selectedLotForQR.publicTraceId}
+                    onPublicIdGenerated={handlePublicIdGenerated}
+                />
+            )}
+
+            {/* Bulk QR Generator Modal */}
+            <BulkQRGeneratorModal
+                isOpen={bulkQrModalOpen}
+                onClose={() => {
+                    setBulkQrModalOpen(false);
+                    clearSelection();
+                }}
+                selectedLots={selectedLotsArray}
+                onLotsUpdated={() => {
+                    if (refreshData) refreshData();
+                }}
+            />
         </div>
     );
 };

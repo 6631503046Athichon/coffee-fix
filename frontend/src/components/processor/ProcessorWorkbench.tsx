@@ -1124,7 +1124,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
     setData(prev => ({ ...prev, greenBeanLots: prev.greenBeanLots.map(lot => lot.id === lotId ? { ...lot, availabilityStatus: lot.availabilityStatus === 'Available' ? 'Withdrawn' : 'Available' } : lot) }));
   };
 
-  const readyForProcessingLots = data.harvestLots.filter(lot => lot.status === 'Ready for Processing');
+  // Only show lots that are ready for processing (not yet processed)
+  const readyForProcessingLots = data.harvestLots.filter(lot =>
+    lot.status === 'Ready for Processing'
+  );
 
   const filteredHarvestLots = useMemo(() => {
     return readyForProcessingLots.filter(lot =>
@@ -1246,13 +1249,14 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                 <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Variety</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Weight (kg)</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Farmer</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
               {filteredHarvestLots.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-400">
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-400">
                     <Coffee className="h-12 w-12 mx-auto mb-2 opacity-30" />
                     <p className="text-sm font-medium">No harvest lots available</p>
                   </td>
@@ -1264,6 +1268,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({ currentUser }) 
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">{lot.cherryVariety}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-green-600">{lot.weightKg} kg</td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{lot.farmerName}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                        Ready
+                      </span>
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <button
                         onClick={() => openModal('startProcessing', lot)}

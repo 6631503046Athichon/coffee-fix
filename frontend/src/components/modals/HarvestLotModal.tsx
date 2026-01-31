@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useFormPersist } from '../../hooks/useFormPersist';
 import { HarvestLot, Farm, CropYear, UserRole } from '../../types';
 import { Coffee } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
@@ -8,6 +9,7 @@ import Select from '../common/Select';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
 import { Input } from '../common/Input';
+import RestoredDataBanner from '../common/RestoredDataBanner';
 import { generateHarvestLotId } from '../../utils/idGenerator';
 import { addHarvestLot } from '../../services/harvestLotService';
 
@@ -168,11 +170,33 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
     return farmsWithVarieties.find(f => f.id === selectedFarmId) || initialFarm;
   }, [selectedFarmId, farmsWithVarieties, initialFarm]);
 
-  // Form states
-  const [cherryVariety, setCherryVariety] = useState('');
-  const [weightKg, setWeightKg] = useState('');
-  const [harvestDate, setHarvestDate] = useState(new Date().toISOString().substring(0, 10));
-  const [cropYearId, setCropYearId] = useState('');
+  // Form persist hook - saves form data to localStorage
+  const {
+    values: formValues,
+    setValue: setFormValue,
+    resetForm,
+    clearSavedData,
+    wasRestored,
+  } = useFormPersist({
+    storageKey: 'harvest-lot-modal',
+    initialValues: {
+      cherryVariety: '',
+      weightKg: '',
+      harvestDate: new Date().toISOString().substring(0, 10),
+      cropYearId: '',
+    },
+    warnOnLeave: true,
+  });
+
+  // Extract values from formValues for easier access
+  const { cherryVariety, weightKg, harvestDate, cropYearId } = formValues;
+
+  // Form state setters that use the persist hook
+  const setCherryVariety = (value: string) => setFormValue('cherryVariety', value);
+  const setWeightKg = (value: string) => setFormValue('weightKg', value);
+  const setHarvestDate = (value: string) => setFormValue('harvestDate', value);
+  const setCropYearId = (value: string) => setFormValue('cropYearId', value);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<{
@@ -210,13 +234,21 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
     }
   }, [isOpen, initialFarm, farmsWithVarieties, selectedFarmId, data.cropYears]);
 
-  // Update form when selected farm changes
+  // Update form when selected farm changes (but keep restored data)
+  const prevFarmIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (selectedFarm) {
-      setCherryVariety(selectedFarm.varieties?.[0] || '');
-      setWeightKg('');
-      setHarvestDate(new Date().toISOString().substring(0, 10));
-      setCropYearId('');
+      // Only reset if farm actually changed (not on initial mount with restored data)
+      if (prevFarmIdRef.current !== null && prevFarmIdRef.current !== selectedFarm.id) {
+        setCherryVariety(selectedFarm.varieties?.[0] || '');
+        setWeightKg('');
+        setHarvestDate(new Date().toISOString().substring(0, 10));
+        setCropYearId('');
+      } else if (!cherryVariety && selectedFarm.varieties?.[0]) {
+        // Set default variety if not set
+        setCherryVariety(selectedFarm.varieties[0]);
+      }
+      prevFarmIdRef.current = selectedFarm.id;
     }
   }, [selectedFarm]);
 
@@ -333,12 +365,13 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         onSuccess(successMsg);
       }
 
+      // Clear saved form data on success
+      clearSavedData();
+
       // Reset form (keep selected farm) after a short delay to show success message
       setTimeout(() => {
+        resetForm();
         setCherryVariety(selectedFarm.varieties?.[0] || '');
-        setWeightKg('');
-        setHarvestDate(new Date().toISOString().substring(0, 10));
-        setCropYearId('');
         setSuccessMessage(null);
         setIsSubmitting(false);
       }, 2000);
@@ -406,6 +439,13 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
       maxWidth="2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Restored Data Banner */}
+        <RestoredDataBanner
+          show={wasRestored && !successMessage}
+          onClear={resetForm}
+          message="ข้อมูลที่กรอกก่อนหน้านี้ถูกกู้คืนแล้ว"
+        />
+
         {/* Success Message */}
         {successMessage && (
           <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-2">

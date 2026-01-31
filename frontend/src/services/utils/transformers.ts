@@ -167,12 +167,12 @@ export const transformGAPLogFromBackend = (log: any) => ({
 // Harvest Lot transformations
 const HARVEST_STATUS_MAP = {
   ReadyForProcessing: 'Ready for Processing',
-  Processing: 'Processing',
+  Complete: 'Complete',
 } as const;
 
 const HARVEST_STATUS_REVERSE_MAP = {
   'Ready for Processing': 'ReadyForProcessing',
-  'Processing': 'Processing',
+  'Complete': 'Complete',
 } as const;
 
 export const transformHarvestLotFromBackend = (lot: any) => ({
@@ -183,7 +183,7 @@ export const transformHarvestLotFromBackend = (lot: any) => ({
   weightKg: lot.weightKg,
   farmPlotLocation: lot.farmPlotLocation,
   harvestDate: lot.harvestDate ? new Date(lot.harvestDate).toISOString().substring(0, 10) : '',
-  status: (HARVEST_STATUS_MAP[lot.status as keyof typeof HARVEST_STATUS_MAP] || lot.status) as 'Ready for Processing' | 'Processing',
+  status: (HARVEST_STATUS_MAP[lot.status as keyof typeof HARVEST_STATUS_MAP] || lot.status) as 'Ready for Processing' | 'Complete',
   cropYearId: lot.cropYearId || undefined,
   createdAt: lot.createdAt,
   updatedAt: lot.updatedAt,

@@ -76,7 +76,7 @@ export interface HarvestLot {
   weightKg: number;
   farmPlotLocation: string;
   harvestDate: string;
-  status: 'Ready for Processing' | 'Processing' | 'Complete';
+  status: 'Ready for Processing' | 'Complete';
   cropYearId?: string;
 }
 
@@ -171,6 +171,9 @@ export interface GreenBeanLot {
     currency?: string;
     priceSetDate?: string;
     priceSetBy?: string;
+    // QR Code & Traceability
+    publicTraceId?: string;
+    qrGeneratedAt?: string;
 }
 
 export enum RoastLevel {

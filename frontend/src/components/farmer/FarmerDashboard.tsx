@@ -226,7 +226,7 @@ const FarmerDashboard: React.FC = () => {
   const stats = useMemo(() => ({
     totalLots: myHarvestLots.length,
     totalWeight: myHarvestLots.reduce((sum, lot) => sum + lot.weightKg, 0),
-    inProcessing: myHarvestLots.filter(l => l.status === 'Processing').length,
+    completed: myHarvestLots.filter(l => l.status === 'Complete').length,
     readyForProcessing: myHarvestLots.filter(l => l.status === 'Ready for Processing').length,
   }), [myHarvestLots]);
 
@@ -475,8 +475,8 @@ const FarmerDashboard: React.FC = () => {
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-semibold text-gray-900">{formatHarvestLotId(lot.id, 'short', lot.harvestDate)}</span>
                         <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                          lot.status === 'Processing'
-                            ? 'bg-blue-100 text-blue-800'
+                          lot.status === 'Complete'
+                            ? 'bg-purple-100 text-purple-800'
                             : 'bg-green-100 text-green-800'
                         }`}>
                           {lot.status}

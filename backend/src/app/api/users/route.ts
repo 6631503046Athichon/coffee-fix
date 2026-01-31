@@ -3,6 +3,13 @@ import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { hashPassword } from '@/lib/auth'
 import { generateUsername, generatePassword } from '@/lib/credentialGenerator'
+import { validateBody, createUserSchema } from '@/lib/validations'
+import { z } from 'zod'
+
+// Extended schema for user creation with autoGenerate option
+const createUserWithOptionsSchema = createUserSchema.extend({
+  autoGenerate: z.boolean().optional().default(true),
+})
 
 // GET /api/users - List all users
 export async function GET(request: NextRequest) {
@@ -17,7 +24,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status')
 
     // Build where clause
-    const where: any = {}
+    const where: Record<string, unknown> = {}
 
     // Search by name, email, or username
     if (search) {
@@ -70,23 +77,13 @@ export async function POST(request: NextRequest) {
     const user = await requireAuth(request)
     requireRole(user, ['Admin'])
 
-    const body = await request.json()
-    const { name, email, roles, isActive, autoGenerate = true } = body
-
-    // Validation
-    if (!name) {
-      return NextResponse.json(
-        { error: 'Name is required' },
-        { status: 400 }
-      )
+    // Validate request body with Zod
+    const validation = await validateBody(request, createUserWithOptionsSchema)
+    if (!validation.success) {
+      return validation.error
     }
 
-    if (!roles || roles.length === 0) {
-      return NextResponse.json(
-        { error: 'At least one role is required' },
-        { status: 400 }
-      )
-    }
+    const { name, email, roles, isActive, autoGenerate = true } = validation.data
 
     // Validate email if provided
     if (email) {

@@ -74,11 +74,11 @@ const HarvestLotsManagement: React.FC = () => {
   const stats = useMemo(() => ({
     totalLots: myHarvestLots.length,
     totalWeight: myHarvestLots.reduce((sum, lot) => sum + lot.weightKg, 0),
-    inProcessing: myHarvestLots.filter(l => l.status === 'Processing').length,
+    completed: myHarvestLots.filter(l => l.status === 'Complete').length,
     readyForProcessing: myHarvestLots.filter(l => l.status === 'Ready for Processing').length,
   }), [myHarvestLots]);
 
-  const filterStatuses: Array<'All' | 'Ready for Processing' | 'Processing' | 'Complete'> = ['All', 'Ready for Processing', 'Processing', 'Complete'];
+  const filterStatuses: Array<'All' | 'Ready for Processing' | 'Complete'> = ['All', 'Ready for Processing', 'Complete'];
 
   const SortableHeader: React.FC<{ column: SortableKeys; label: string }> = ({ column, label }) => (
     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -214,8 +214,6 @@ const HarvestLotsManagement: React.FC = () => {
                       <span className={`px-3 py-1 text-xs font-medium rounded-full ${
                         lot.status === 'Complete'
                           ? 'bg-purple-100 text-purple-800'
-                          : lot.status === 'Processing'
-                          ? 'bg-blue-100 text-blue-800'
                           : 'bg-green-100 text-green-800'
                       }`}>
                         {lot.status}

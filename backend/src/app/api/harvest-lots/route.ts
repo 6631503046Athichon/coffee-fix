@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { validateBody, createHarvestLotSchema } from '@/lib/validations'
 
 // This route depends on auth cookies/headers, so it must be dynamic.
 export const dynamic = 'force-dynamic'
@@ -10,8 +11,8 @@ export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request)
 
-    const where: any = {}
-    
+    const where: Record<string, unknown> = {}
+
     // Filter by farmId if provided
     const farmId = request.nextUrl.searchParams.get('farmId')
     if (farmId) {
@@ -65,48 +66,30 @@ export async function POST(request: NextRequest) {
     const user = await requireAuth(request)
     requireRole(user, ['Farmer', 'Admin'])
 
-    const body = await request.json()
-    const { farmerName, cherryVariety, weightKg, farmPlotLocation, harvestDate, status, cropYearId, farmId } = body
-
-    // Validation
-    if (!farmerName || !cherryVariety || !weightKg || !farmPlotLocation || !harvestDate) {
-      return NextResponse.json(
-        { error: 'Farmer name, cherry variety, weight, farm plot location, and harvest date are required' },
-        { status: 400 }
-      )
+    // Validate request body with Zod
+    const validation = await validateBody(request, createHarvestLotSchema)
+    if (!validation.success) {
+      return validation.error
     }
 
+    const { farmerName, cherryVariety, weightKg, farmPlotLocation, harvestDate, status, cropYearId, farmId } = validation.data
+
     // Validate cropYearId if provided
-    let validCropYearId = null
-    if (cropYearId && typeof cropYearId === 'string' && cropYearId.trim() !== '') {
-      const trimmedId = cropYearId.trim()
-      
-      // Debug: Log the cropYearId being searched
-      try {
-        // Try to find crop year by ID (UUID)
-        // Prisma will validate UUID format automatically
-        const cropYear = await prisma.cropYear.findUnique({
-          where: { id: trimmedId },
-        })
-        
-        if (!cropYear) {
-          
-          return NextResponse.json(
-            { error: 'Crop year not found', details: `Crop year with ID "${trimmedId}" does not exist in database` },
-            { status: 400 }
-          )
-        }
-        validCropYearId = trimmedId
-      } catch (prismaError: any) {
-        // Handle Prisma validation errors (e.g., invalid UUID format)
-        if (prismaError.code === 'P2023' || prismaError.message?.includes('Invalid')) {
-          return NextResponse.json(
-            { error: 'Invalid crop year ID format', details: `The crop year ID "${trimmedId}" is not a valid UUID format` },
-            { status: 400 }
-          )
-        }
-        // Re-throw if it's a different error
-        throw prismaError
+    let validCropYearId = cropYearId || null
+    if (cropYearId) {
+      const cropYear = await prisma.cropYear.findUnique({
+        where: { id: cropYearId },
+      })
+
+      if (!cropYear) {
+        return NextResponse.json(
+          {
+            error: 'Validation Error',
+            message: 'ข้อมูลไม่ถูกต้อง',
+            details: [{ field: 'cropYearId', message: 'ไม่พบปีการผลิตที่ระบุ' }]
+          },
+          { status: 400 }
+        )
       }
     }
 
@@ -114,7 +97,7 @@ export async function POST(request: NextRequest) {
       data: {
         farmerName,
         cherryVariety,
-        weightKg: parseFloat(weightKg),
+        weightKg,
         farmPlotLocation,
         harvestDate: new Date(harvestDate),
         status: status || 'ReadyForProcessing',

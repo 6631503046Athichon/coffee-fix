@@ -253,9 +253,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                                         </td>
                                         <td className="px-4 py-3">
                                             <Badge variant={
-                                                lot.status === 'Complete' ? 'purple'
-                                                : lot.status === 'Processing' ? 'primary'
-                                                : 'success'
+                                                lot.status === 'Complete' ? 'purple' : 'success'
                                             }>
                                                 {lot.status}
                                             </Badge>
@@ -441,7 +439,6 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                                     onChange={(v) => setEditFormData({ ...editFormData, status: v as string })}
                                     options={[
                                         { value: 'Ready for Processing', label: 'Ready for Processing' },
-                                        { value: 'Processing', label: 'Processing' },
                                         { value: 'Complete', label: 'Complete' }
                                     ]}
                                     placeholder="Select status"

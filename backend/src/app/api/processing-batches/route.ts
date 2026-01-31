@@ -134,10 +134,10 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Update harvest lot status to 'Processing' when batch is created
+      // Update harvest lot status to Complete when processing batch is created
       await tx.harvestLot.update({
         where: { id: harvestLotId },
-        data: { status: 'Processing' },
+        data: { status: 'Complete' },
       });
 
       return batch;

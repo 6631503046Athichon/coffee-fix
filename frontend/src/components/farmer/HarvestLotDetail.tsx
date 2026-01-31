@@ -2,7 +2,7 @@
 import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
-import { ArrowLeft, User, MapPin, Weight, Calendar, Tag, Info, CheckCircle, Award, ExternalLink, Droplets } from 'lucide-react';
+import { ArrowLeft, User, MapPin, Weight, Calendar, Tag, Info, CheckCircle, Award, ExternalLink, Package, Coffee, Star } from 'lucide-react';
 import { formatHarvestLotId } from '../../utils/formatHarvestLotId';
 
 const DetailItem: React.FC<{ icon: React.ElementType; label: string; value: string | number | React.ReactNode; }> = ({ icon: Icon, label, value }) => (
@@ -67,7 +67,6 @@ const HarvestLotDetail: React.FC = () => {
     const statusBadge = (
         <span className={`px-3 py-1 inline-flex text-sm leading-5 font-medium rounded-full ${
             lot.status === 'Complete' ? 'bg-purple-100 text-purple-800'
-            : lot.status === 'Processing' ? 'bg-blue-100 text-blue-800'
             : 'bg-green-100 text-green-800'
         }`}>
             {lot.status}
@@ -125,8 +124,22 @@ const HarvestLotDetail: React.FC = () => {
                         <TimelineStep icon={Calendar} title="Harvested" isComplete={true}>
                             {lot.harvestDate}
                         </TimelineStep>
-                        <TimelineStep icon={Droplets} title="Processing" isComplete={relatedBatches.length > 0} isLast>
-                            {relatedBatches.length > 0 ? `${relatedBatches[0].processType} Process` : 'Pending'}
+                        <TimelineStep icon={Package} title="Parchment" isComplete={relatedParchmentLots.length > 0}>
+                            {relatedParchmentLots.length > 0
+                                ? `${relatedParchmentLots[0].processType} - ${relatedParchmentLots[0].currentWeightKg} kg`
+                                : 'Pending'}
+                        </TimelineStep>
+                        <TimelineStep icon={Coffee} title="Green Bean" isComplete={relatedGreenBeanLots.length > 0}>
+                            {relatedGreenBeanLots.length > 0
+                                ? `${relatedGreenBeanLots.map(g => g.grade).join(', ')} - ${relatedGreenBeanLots.reduce((sum, g) => sum + g.currentWeightKg, 0).toFixed(1)} kg`
+                                : 'Pending'}
+                        </TimelineStep>
+                        <TimelineStep icon={Star} title="QC Score" isComplete={cuppingResult !== null || (mainGreenBeanLot?.cuppingScores?.length ?? 0) > 0} isLast>
+                            {cuppingResult
+                                ? `${cuppingResult.totalScore.toFixed(2)} pts`
+                                : mainGreenBeanLot?.cuppingScores?.[0]?.score
+                                    ? `${mainGreenBeanLot.cuppingScores[0].score} pts`
+                                    : 'Pending'}
                         </TimelineStep>
                      </div>
                 </div>

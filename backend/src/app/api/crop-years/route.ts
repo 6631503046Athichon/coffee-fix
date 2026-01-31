@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
-// Helper function to ensure crop years exist
+// Helper function to ensure current crop year exists
 async function ensureCropYears() {
   const now = new Date()
   const currentYear = now.getFullYear()
   const currentMonth = now.getMonth() + 1 // 1-12
-  
+
   // Determine the active crop year based on current date
+  // Crop year runs from October 1 to September 30
   // If month >= 10 (October), we're in the new crop year
   // If month < 10, we're still in the previous crop year
   let activeCropYearStart: number
@@ -17,55 +18,34 @@ async function ensureCropYears() {
   } else {
     activeCropYearStart = currentYear - 1
   }
-  
-  // Create crop years: previous 2 years, current year, and next 2 years
-  const cropYearsToCreate = []
-  for (let i = -2; i <= 2; i++) {
-    const yearStart = activeCropYearStart + i
-    const yearEnd = yearStart + 1
-    const yearString = `${yearStart}/${yearEnd}`
-    
-    cropYearsToCreate.push({
-      year: yearString,
-      startDate: new Date(`${yearStart}-10-01`),
-      endDate: new Date(`${yearEnd}-09-30`),
-      description: i === 0 
-        ? `Current crop year ${yearString}` 
-        : i < 0 
-          ? `Previous crop year ${yearString}`
-          : `Next crop year ${yearString}`,
-    })
-  }
 
-  const createdCropYears = []
-  for (const cy of cropYearsToCreate) {
-    const cropYear = await prisma.cropYear.upsert({
-      where: { year: cy.year },
-      update: {
-        // Update dates and description in case they changed
-        startDate: cy.startDate,
-        endDate: cy.endDate,
-        description: cy.description,
-      },
-      create: {
-        year: cy.year,
-        startDate: cy.startDate,
-        endDate: cy.endDate,
-        description: cy.description,
-      },
-    })
-    createdCropYears.push(cropYear)
-  }
-  
-  return createdCropYears
+  // Create only current crop year
+  const yearEnd = activeCropYearStart + 1
+  const yearString = `${activeCropYearStart}/${yearEnd}`
+
+  const cropYear = await prisma.cropYear.upsert({
+    where: { year: yearString },
+    update: {
+      startDate: new Date(`${activeCropYearStart}-10-01`),
+      endDate: new Date(`${yearEnd}-09-30`),
+      description: `Current crop year ${yearString}`,
+    },
+    create: {
+      year: yearString,
+      startDate: new Date(`${activeCropYearStart}-10-01`),
+      endDate: new Date(`${yearEnd}-09-30`),
+      description: `Current crop year ${yearString}`,
+    },
+  })
+
+  return [cropYear]
 }
 
 // GET /api/crop-years - List all crop years (auto-creates if needed)
+// No auth required - crop years are public data
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth(request)
-
-    // Ensure crop years exist before fetching
+    // Ensure crop years exist before fetching (auto-creates if needed)
     await ensureCropYears()
 
     const cropYears = await prisma.cropYear.findMany({

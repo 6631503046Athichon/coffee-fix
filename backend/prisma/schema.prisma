@@ -26,8 +26,6 @@ model User {
   cuppingSessions      CuppingSession[]       @relation("SessionCreator")
   cuppingJudges        CuppingSessionJudge[]
   createdFarms         Farm[]                 @relation("FarmOwner")
-  farmRequests         FarmRequest[]
-  reviewedFarmRequests FarmRequest[]          @relation("FarmRequestReviewer")
   gapLogs              GAPLogEntry[]
   greenBeanLots        GreenBeanLot[]         @relation("GreenBeanLotCreator")
   priceSetGreenBeans   GreenBeanLot[]         @relation("PriceSetter")
@@ -75,31 +73,6 @@ model Farm {
 
   @@index([ownerId])
   @@index([archived])
-}
-
-model FarmRequest {
-  id          String            @id @default(uuid())
-  farmName    String
-  location    String
-  altitude    String?
-  size        String?
-  latitude    Float?
-  longitude   Float?
-  ownerName   String
-  requesterId String
-  requestDate DateTime          @default(now())
-  status      FarmRequestStatus @default(Pending)
-  reason      String
-  adminNotes  String?
-  reviewDate  DateTime?
-  reviewedBy  String?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  requester   User              @relation(fields: [requesterId], references: [id], onDelete: Cascade)
-  reviewer    User?             @relation("FarmRequestReviewer", fields: [reviewedBy], references: [id])
-
-  @@index([requesterId])
-  @@index([status])
 }
 
 model CropYear {
@@ -225,6 +198,8 @@ model GreenBeanLot {
   priceSetBy         String?
   createdById        String?
   externalSource     Json?
+  publicTraceId      String?                     @unique
+  qrGeneratedAt      DateTime?
   createdAt          DateTime                    @default(now())
   updatedAt          DateTime                    @updatedAt
   cuppingSamples     CuppingSample[]
@@ -648,15 +623,9 @@ enum ProcessingBatchStatus {
   Completed
 }
 
-enum FarmRequestStatus {
-  Pending
-  Approved
-  Rejected
-}
-
 enum HarvestLotStatus {
   ReadyForProcessing
-  Processing
+  Complete
 }
 
 enum ParchmentLotStatus {
