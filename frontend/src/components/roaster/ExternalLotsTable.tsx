@@ -72,7 +72,7 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({ lots, onClaim, on
                   className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
                 >
                   <td className="px-5 py-4">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-gray-100 text-sm font-mono font-semibold text-gray-900" title={lot.id}>
+                    <span className="text-sm font-mono font-semibold text-gray-900" title={lot.id}>
                       #{lot.id.substring(0, 6).toUpperCase()}
                     </span>
                   </td>

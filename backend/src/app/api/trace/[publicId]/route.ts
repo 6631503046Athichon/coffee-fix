@@ -96,14 +96,7 @@ export async function GET(
       traceId: publicId
     }
 
-    // Add CORS headers for public access
-    return NextResponse.json(publicData, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Cache-Control': 'public, max-age=60'
-      }
-    })
+    return NextResponse.json(publicData)
   } catch (error) {
     return handleApiError(error)
   }
@@ -111,12 +104,5 @@ export async function GET(
 
 // OPTIONS handler for CORS preflight
 export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-    }
-  })
+  return new NextResponse(null, { status: 204 })
 }

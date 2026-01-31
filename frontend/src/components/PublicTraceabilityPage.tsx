@@ -56,6 +56,24 @@ const PublicTraceabilityPage: React.FC = () => {
     fetchData();
   }, [publicId]);
 
+  // Extract data (must be before early returns to keep hooks order consistent)
+  const lot = data?.lot;
+  const parchmentLot = lot?.parchmentLot;
+  const processingBatch = parchmentLot?.processingBatch;
+  const harvestLot = parchmentLot?.harvestLot;
+  const farm = processingBatch?.harvestLot?.farm;
+  const roastBatches = lot?.roastBatches || [];
+  const cuppingScore = lot?.cuppingScores?.[0]?.score;
+
+  // Flavor notes from roast batches (useMemo must be called before early returns)
+  const flavorNotes = useMemo(() => {
+    const allNotes = roastBatches.flatMap(rb =>
+      rb.flavorNotes ? rb.flavorNotes.split(',').map((n: string) => n.trim().toLowerCase()) : []
+    );
+    const uniqueNotes = [...new Set(allNotes)].filter(Boolean);
+    return uniqueNotes.map((note: string) => note.charAt(0).toUpperCase() + note.slice(1));
+  }, [roastBatches]);
+
   // Loading state
   if (loading) {
     return (
@@ -69,7 +87,7 @@ const PublicTraceabilityPage: React.FC = () => {
   }
 
   // Error state
-  if (error || !data) {
+  if (error || !data || !lot) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center max-w-md mx-auto p-8">
@@ -82,25 +100,6 @@ const PublicTraceabilityPage: React.FC = () => {
       </div>
     );
   }
-
-  const { lot } = data;
-  const parchmentLot = lot.parchmentLot;
-  const processingBatch = parchmentLot?.processingBatch;
-  const harvestLot = parchmentLot?.harvestLot;
-  const farm = processingBatch?.harvestLot?.farm;
-  const roastBatches = lot.roastBatches || [];
-
-  // Get cupping score
-  const cuppingScore = lot.cuppingScores?.[0]?.score;
-
-  // Flavor notes from roast batches
-  const flavorNotes = useMemo(() => {
-    const allNotes = roastBatches.flatMap(rb =>
-      rb.flavorNotes ? rb.flavorNotes.split(',').map((n: string) => n.trim().toLowerCase()) : []
-    );
-    const uniqueNotes = [...new Set(allNotes)].filter(Boolean);
-    return uniqueNotes.map((note: string) => note.charAt(0).toUpperCase() + note.slice(1));
-  }, [roastBatches]);
 
   // Drying metrics
   const dryingDuration = processingBatch?.dryingStartDate && processingBatch?.dryingEndDate
@@ -131,18 +130,39 @@ const PublicTraceabilityPage: React.FC = () => {
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(pageUrl)}`;
 
   const handlePrint = () => {
-    const qrCodeElement = document.getElementById('qr-code-container');
-    if (qrCodeElement) {
-      const printWindow = window.open('', '', 'height=400,width=400');
-      if (printWindow) {
-        printWindow.document.write('<html><head><title>Print QR Code</title></head><body style="text-align: center; margin-top: 50px;">');
-        printWindow.document.write(qrCodeElement.innerHTML);
-        printWindow.document.write('</body></html>');
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
-        printWindow.close();
-      }
+    const printWindow = window.open('', '', 'height=500,width=500');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Print QR Code</title>
+            <style>
+              body {
+                text-align: center;
+                padding: 40px;
+                font-family: system-ui, -apple-system, sans-serif;
+              }
+              img {
+                width: 300px;
+                height: 300px;
+                border: 2px solid #333;
+                border-radius: 8px;
+              }
+              p {
+                margin-top: 20px;
+                font-size: 12px;
+                color: #666;
+                word-break: break-all;
+              }
+            </style>
+          </head>
+          <body>
+            <img id="qr-img" src="${qrCodeUrl}" alt="QR Code" onload="window.print(); window.close();" />
+            <p>${pageUrl}</p>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
     }
   };
 

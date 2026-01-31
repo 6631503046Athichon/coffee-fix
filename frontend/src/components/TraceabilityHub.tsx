@@ -249,14 +249,6 @@ const TraceabilityHub: React.FC = () => {
                     <table className="min-w-full">
                         <thead>
                             <tr className="bg-gray-900 border-b border-gray-200">
-                                <th className="px-4 py-4 text-left">
-                                    <input
-                                        type="checkbox"
-                                        checked={isAllSelected}
-                                        onChange={handleSelectAll}
-                                        className="w-4 h-4 text-indigo-600 bg-gray-100 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
-                                    />
-                                </th>
                                 <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Lot ID</th>
                                 <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Variety</th>
                                 <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Process</th>
@@ -270,7 +262,7 @@ const TraceabilityHub: React.FC = () => {
                         <tbody className="bg-white divide-y divide-gray-100">
                             {paginatedLots.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} className="px-6 py-12 text-center">
+                                    <td colSpan={8} className="px-6 py-12 text-center">
                                         <Search className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                                         <p className="text-sm font-medium text-gray-500">
                                             {enrichedLots.length === 0
@@ -282,25 +274,16 @@ const TraceabilityHub: React.FC = () => {
                             ) : (
                                 paginatedLots.map(lot => {
                                     if (!lot || !lot.id) return null;
-                                    const isSelected = selectedLots.has(lot.id);
                                     const hasPublicId = !!lot.publicTraceId;
 
                                     return (
                                         <tr
                                             key={lot.id}
-                                            className={`hover:bg-gray-50 transition-colors duration-200 ${isSelected ? 'bg-indigo-50' : ''}`}
+                                            className="hover:bg-gray-50 transition-colors duration-200"
                                         >
                                             <td className="px-4 py-4 whitespace-nowrap">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isSelected}
-                                                    onChange={() => handleSelectLot(lot.id)}
-                                                    className="w-4 h-4 text-indigo-600 bg-gray-100 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
-                                                />
-                                            </td>
-                                            <td className="px-4 py-4 whitespace-nowrap">
-                                                <span className="text-sm font-mono font-medium text-gray-900">
-                                                    {lot.id.substring(0, 8)}...
+                                                <span className="text-sm font-mono font-semibold text-gray-900" title={lot.id}>
+                                                    #{lot.id.substring(0, 6).toUpperCase()}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-4 whitespace-nowrap">

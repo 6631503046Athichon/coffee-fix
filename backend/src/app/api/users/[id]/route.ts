@@ -97,6 +97,44 @@ export async function PUT(
     }
 
     // Admin updates
+    // First, get the target user to check their role/permissions
+    const targetUser = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        roles: true,
+        isSuperAdmin: true,
+      },
+    })
+
+    if (!targetUser) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check admin hierarchy - only Super Admin can modify other admins
+    const targetIsAdmin = targetUser.roles.includes('Admin')
+    const targetIsSuperAdmin = targetUser.isSuperAdmin
+
+    if (!currentUser.isSuperAdmin) {
+      // Regular admin cannot modify Super Admin
+      if (targetIsSuperAdmin) {
+        return NextResponse.json(
+          { error: 'ไม่สามารถแก้ไขข้อมูล Super Admin ได้ ต้องใช้สิทธิ์ Super Admin' },
+          { status: 403 }
+        )
+      }
+      // Regular admin cannot modify other admins
+      if (targetIsAdmin && currentUser.id !== id) {
+        return NextResponse.json(
+          { error: 'ไม่สามารถแก้ไขข้อมูล Admin คนอื่นได้ ต้องใช้สิทธิ์ Super Admin' },
+          { status: 403 }
+        )
+      }
+    }
+
     // Check for duplicate email/username before updating
     if (email !== undefined && email) {
       const existingUser = await prisma.user.findFirst({
@@ -175,6 +213,43 @@ export async function DELETE(
       return NextResponse.json(
         { error: 'Cannot delete your own account' },
         { status: 400 }
+      )
+    }
+
+    // Get target user to check their role/permissions
+    const targetUser = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        roles: true,
+        isSuperAdmin: true,
+      },
+    })
+
+    if (!targetUser) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check admin hierarchy for deletion
+    const targetIsAdmin = targetUser.roles.includes('Admin')
+    const targetIsSuperAdmin = targetUser.isSuperAdmin
+
+    // Cannot delete Super Admin
+    if (targetIsSuperAdmin) {
+      return NextResponse.json(
+        { error: 'ไม่สามารถลบ Super Admin ได้' },
+        { status: 403 }
+      )
+    }
+
+    // Only Super Admin can delete other admins
+    if (targetIsAdmin && !currentUser.isSuperAdmin) {
+      return NextResponse.json(
+        { error: 'ไม่สามารถลบ Admin คนอื่นได้ ต้องใช้สิทธิ์ Super Admin' },
+        { status: 403 }
       )
     }
 
