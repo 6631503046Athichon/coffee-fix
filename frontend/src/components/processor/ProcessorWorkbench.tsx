@@ -1210,6 +1210,24 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           );
           return;
         }
+
+        // Validate against remaining weight in harvest lot
+        const availableWeight =
+          selectedHarvestLot.remainingWeightKg ?? selectedHarvestLot.weightKg;
+
+        console.log("Validation check:", {
+          parchmentWeightKg,
+          availableWeight,
+          remainingWeightKg: selectedHarvestLot.remainingWeightKg,
+          originalWeightKg: selectedHarvestLot.weightKg,
+        });
+
+        if (parchmentWeightKg > availableWeight) {
+          setFormError(
+            `Parchment weight (${parchmentWeightKg} kg) cannot exceed available harvest lot weight (${availableWeight.toFixed(2)} kg).`,
+          );
+          return;
+        }
         if (
           isNaN(moistureContent) ||
           moistureContent < 0 ||
@@ -1221,6 +1239,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           return;
         }
 
+        if (!dryingStartDate || !dryingEndDate) {
+          setFormError("Please select both drying start and end dates.");
+          return;
+        }
+
         if (new Date(dryingEndDate) < new Date(dryingStartDate)) {
           setFormError("Drying End Date cannot be before Drying Start Date.");
           return;
@@ -1229,7 +1252,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         setIsSubmitting(true);
         try {
           // Create processing batch via API with status Completed
-          await addProcessingBatch({
+          const batchPayload = {
             harvestLotId: selectedHarvestLot.id,
             status: ProcessingBatchStatus.Completed,
             processType,
@@ -1240,10 +1263,22 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             dryingStartDate,
             dryingEndDate,
             baggingDate: dryingEndDate,
-          });
+          };
+
+          console.log("Creating processing batch with payload:", batchPayload);
+
+          await addProcessingBatch(batchPayload);
+
+          console.log("Processing batch created successfully!");
 
           // Refresh data from backend to get the updated batch and parchment lot
           await refreshData();
+
+          console.log("Data refreshed successfully!");
+
+          // Update selected harvest lot with fresh data from context
+          // Note: After refreshData(), the context will be updated automatically
+          // We just need to close the modal and the table will show updated data
 
           // Show success toast
           addToast({
@@ -1260,10 +1295,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           setFormError(null);
         } catch (error: any) {
           console.error("Failed to create processing batch:", error);
-          setFormError(
+          const errorMessage =
+            error?.response?.data?.error ||
             error?.message ||
-              "Failed to create processing batch. Please try again.",
-          );
+            "Failed to create processing batch. Please try again.";
+          setFormError(errorMessage);
         } finally {
           setIsSubmitting(false);
         }
@@ -1309,7 +1345,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               availabilityStatus: "Available",
               processorScore: score,
               pricePerKg: price,
-              currency: "THB",
+              currency: price !== undefined ? "THB" : undefined,
             });
 
             if (createdLot?.id) {
@@ -1328,9 +1364,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           );
 
           // Update parchment lot status based on remaining weight
-          // If remaining_weight > 0 → status = AwaitingHulling
+          // If remaining_weight > 0 → status = Awaiting Hulling
           // If remaining_weight == 0 → status = Hulled
-          const newStatus = remainingWeight > 0 ? "AwaitingHulling" : "Hulled";
+          const newStatus: "Awaiting Hulling" | "Hulled" =
+            remainingWeight > 0 ? "Awaiting Hulling" : "Hulled";
           await updateParchmentLot(selectedParchment.id, {
             status: newStatus,
             currentWeightKg: Math.round(remainingWeight * 100) / 100,
@@ -1487,7 +1524,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   };
 
   const readyForProcessingLots = data.harvestLots.filter(
-    (lot) => lot.status === "Ready for Processing",
+    (lot) =>
+      lot.status === "Ready for Processing" || lot.status === "Processing",
   );
 
   const filteredHarvestLots = useMemo(() => {
@@ -1707,7 +1745,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       {lot.cherryVariety}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-green-600">
-                      {lot.weightKg} kg
+                      {lot.remainingWeightKg !== undefined &&
+                      lot.remainingWeightKg !== lot.weightKg
+                        ? `${lot.remainingWeightKg.toFixed(2)} kg (of ${lot.weightKg} kg)`
+                        : `${lot.weightKg} kg`}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                       {lot.farmerName}
@@ -2585,7 +2626,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       <div className="flex justify-between">
                         <span>Weight</span>
                         <span className="font-medium text-green-600">
-                          {lot.weightKg} kg
+                          {lot.remainingWeightKg !== undefined &&
+                          lot.remainingWeightKg !== lot.weightKg
+                            ? `${lot.remainingWeightKg.toFixed(2)} kg (of ${lot.weightKg} kg)`
+                            : `${lot.weightKg} kg`}
                         </span>
                       </div>
                     </div>
@@ -2940,6 +2984,16 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
     return filtered.sort((a, b) => {
       const key = parchmentSortConfig.key;
+
+      // Default sort by createdAt (newest first) if sorting by id
+      if (key === "id") {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return parchmentSortConfig.direction === "desc"
+          ? dateB - dateA
+          : dateA - dateB;
+      }
+
       if (a[key] < b[key])
         return parchmentSortConfig.direction === "asc" ? -1 : 1;
       if (a[key] > b[key])
@@ -2993,6 +3047,16 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
     return filtered.sort((a, b) => {
       const key = greenBeanSortConfig.key as keyof typeof a;
+
+      // Default sort by createdAt (newest first) if sorting by id
+      if (key === "id") {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return greenBeanSortConfig.direction === "desc"
+          ? dateB - dateA
+          : dateA - dateB;
+      }
+
       const aValue = a[key] ?? -1;
       const bValue = b[key] ?? -1;
       if (aValue < bValue)
@@ -3433,11 +3497,22 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </div>
                         <div className="text-center sm:border-l-2 sm:border-gray-300">
                           <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">
-                            Weight
+                            {selectedHarvestLot.remainingWeightKg !== undefined
+                              ? "Remaining Weight"
+                              : "Weight"}
                           </p>
                           <p className="text-2xl font-bold text-green-600">
-                            {selectedHarvestLot.weightKg} kg
+                            {selectedHarvestLot.remainingWeightKg !== undefined
+                              ? `${selectedHarvestLot.remainingWeightKg.toFixed(2)} kg`
+                              : `${selectedHarvestLot.weightKg} kg`}
                           </p>
+                          {selectedHarvestLot.remainingWeightKg !== undefined &&
+                            selectedHarvestLot.remainingWeightKg <
+                              selectedHarvestLot.weightKg && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                of {selectedHarvestLot.weightKg} kg original
+                              </p>
+                            )}
                         </div>
                         <div className="text-center sm:border-l-2 sm:border-gray-300">
                           <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">
@@ -3560,6 +3635,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             label="Drying Start Date"
                             required
                           />
+                          <input
+                            type="hidden"
+                            name="dryingStartDate"
+                            value={dryingStartDate}
+                          />
                         </div>
                         <div>
                           <DatePicker
@@ -3567,6 +3647,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             onChange={setDryingEndDate}
                             label="Drying End Date"
                             required
+                          />
+                          <input
+                            type="hidden"
+                            name="dryingEndDate"
+                            value={dryingEndDate}
                           />
                         </div>
                       </div>

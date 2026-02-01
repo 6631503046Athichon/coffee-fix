@@ -72,6 +72,7 @@ export interface HarvestLot {
   farmerName: string;
   cherryVariety: string;
   weightKg: number;
+  remainingWeightKg?: number;
   farmPlotLocation: string;
   harvestDate: string;
   status: "Ready for Processing" | "Processing" | "Complete";

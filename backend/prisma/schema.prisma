@@ -119,6 +119,7 @@ model HarvestLot {
   farmerName        String
   cherryVariety     String
   weightKg          Float
+  remainingWeightKg Float?
   farmPlotLocation  String
   harvestDate       DateTime
   status            HarvestLotStatus  @default(ReadyForProcessing)
