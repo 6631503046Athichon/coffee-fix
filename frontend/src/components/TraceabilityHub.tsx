@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../hooks/useDataContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Search, ExternalLink, CheckCircle, Archive, AlertCircle, ChevronLeft, ChevronRight, QrCode, Package, X } from 'lucide-react';
+import { Search, ExternalLink, CheckCircle, Archive, AlertCircle, ChevronLeft, ChevronRight, QrCode, Package, X, Star } from 'lucide-react';
 import { UserRole, GreenBeanLot } from '../types';
 import { QRCodeModal } from './modals/QRCodeModal';
 import { BulkQRGeneratorModal } from './modals/BulkQRGeneratorModal';
@@ -158,7 +158,6 @@ const TraceabilityHub: React.FC = () => {
     };
 
     const handlePublicIdGenerated = (publicTraceId: string) => {
-        // Refresh data to get updated lot info
         if (refreshData) {
             refreshData();
         }
@@ -275,6 +274,9 @@ const TraceabilityHub: React.FC = () => {
                                 paginatedLots.map(lot => {
                                     if (!lot || !lot.id) return null;
                                     const hasPublicId = !!lot.publicTraceId;
+                                    const displayScore = lot.processorScore
+                                        ? lot.processorScore.toFixed(1)
+                                        : lot.finalScore;
 
                                     return (
                                         <tr
@@ -296,7 +298,12 @@ const TraceabilityHub: React.FC = () => {
                                                 <span className="text-sm text-gray-700">{lot.grade || 'N/A'}</span>
                                             </td>
                                             <td className="px-4 py-4 whitespace-nowrap">
-                                                <span className="text-sm font-bold text-indigo-600">{lot.finalScore || 'N/A'}</span>
+                                                <div className="flex items-center gap-1.5">
+                                                    {lot.processorScore && lot.processorScore >= 80 && (
+                                                        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                                                    )}
+                                                    <span className="text-sm font-bold text-indigo-600">{displayScore}</span>
+                                                </div>
                                             </td>
                                             <td className="px-4 py-4 whitespace-nowrap">
                                                 <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border ${

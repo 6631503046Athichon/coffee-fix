@@ -92,6 +92,7 @@ model HarvestLot {
   farmerName        String
   cherryVariety     String
   weightKg          Float
+  remainingWeightKg Float?
   farmPlotLocation  String
   harvestDate       DateTime
   status            HarvestLotStatus  @default(ReadyForProcessing)
@@ -198,8 +199,12 @@ model GreenBeanLot {
   priceSetBy         String?
   createdById        String?
   externalSource     Json?
+<<<<<<< HEAD
   publicTraceId      String?                     @unique
   qrGeneratedAt      DateTime?
+=======
+  processorScore     Float?
+>>>>>>> feature/fix-processor
   createdAt          DateTime                    @default(now())
   updatedAt          DateTime                    @updatedAt
   cuppingSamples     CuppingSample[]
@@ -625,6 +630,10 @@ enum ProcessingBatchStatus {
 
 enum HarvestLotStatus {
   ReadyForProcessing
+<<<<<<< HEAD
+=======
+  Processing
+>>>>>>> feature/fix-processor
   Complete
 }
 

@@ -1,15 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
+import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/lib/prisma";
+import { requireAuth, handleApiError } from "@/lib/middleware";
 
 // GET /api/green-bean-lots/:id
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await requireAuth(request)
-    const { id } = await params
+    await requireAuth(request);
+    const { id } = await params;
 
     const greenBeanLot = await prisma.greenBeanLot.findUnique({
       where: { id },
@@ -56,7 +56,7 @@ export async function GET(
               },
             },
           },
-          orderBy: { date: 'desc' },
+          orderBy: { date: "desc" },
         },
         roasterInventory: {
           include: {
@@ -69,45 +69,110 @@ export async function GET(
           },
         },
         roastBatches: {
-          orderBy: { roastDate: 'desc' },
+          orderBy: { roastDate: "desc" },
         },
       },
-    })
+    });
 
     if (!greenBeanLot) {
       return NextResponse.json(
-        { error: 'Green bean lot not found' },
-        { status: 404 }
-      )
+        { error: "Green bean lot not found" },
+        { status: 404 },
+      );
     }
 
-    return NextResponse.json({ greenBeanLot })
+    return NextResponse.json({ greenBeanLot });
   } catch (error) {
-    return handleApiError(error)
+    return handleApiError(error);
+  }
+}
+
+// PATCH /api/green-bean-lots/:id (for processorScore updates)
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    await requireAuth(request);
+    const { id } = await params;
+
+    const body = await request.json();
+    const { processorScore } = body;
+
+    if (processorScore === undefined) {
+      return NextResponse.json(
+        { error: "processorScore is required" },
+        { status: 400 },
+      );
+    }
+
+    const updatedLot = await prisma.greenBeanLot.update({
+      where: { id },
+      data: { processorScore: parseFloat(processorScore) },
+      include: {
+        parchmentLot: {
+          include: {
+            processingBatch: {
+              select: {
+                id: true,
+                processType: true,
+              },
+            },
+            harvestLot: {
+              select: {
+                id: true,
+                farmerName: true,
+                cherryVariety: true,
+              },
+            },
+          },
+        },
+        priceSetter: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    return NextResponse.json({ greenBeanLot: updatedLot });
+  } catch (error) {
+    return handleApiError(error);
   }
 }
 
 // PUT /api/green-bean-lots/:id
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const user = await requireAuth(request)
-    const { id } = await params
+    const user = await requireAuth(request);
+    const { id } = await params;
 
-    const body = await request.json()
-    const { grade, currentWeightKg, availabilityStatus, pricePerKg, currency, priceSetDate } = body
+    const body = await request.json();
+    const {
+      grade,
+      currentWeightKg,
+      availabilityStatus,
+      pricePerKg,
+      currency,
+      priceSetDate,
+    } = body;
 
-    const updateData: any = {}
-    if (grade !== undefined) updateData.grade = grade
-    if (currentWeightKg !== undefined) updateData.currentWeightKg = parseFloat(currentWeightKg)
-    if (availabilityStatus !== undefined) updateData.availabilityStatus = availabilityStatus
-    if (pricePerKg !== undefined) updateData.pricePerKg = pricePerKg ? parseFloat(pricePerKg) : null
-    if (currency !== undefined) updateData.currency = currency
+    const updateData: any = {};
+    if (grade !== undefined) updateData.grade = grade;
+    if (currentWeightKg !== undefined)
+      updateData.currentWeightKg = parseFloat(currentWeightKg);
+    if (availabilityStatus !== undefined)
+      updateData.availabilityStatus = availabilityStatus;
+    if (pricePerKg !== undefined)
+      updateData.pricePerKg = pricePerKg ? parseFloat(pricePerKg) : null;
+    if (currency !== undefined) updateData.currency = currency;
     if (priceSetDate !== undefined) {
-      updateData.priceSetDate = priceSetDate ? new Date(priceSetDate) : null
-      updateData.priceSetBy = user.id
+      updateData.priceSetDate = priceSetDate ? new Date(priceSetDate) : null;
+      updateData.priceSetBy = user.id;
     }
 
     const updatedLot = await prisma.greenBeanLot.update({
@@ -138,7 +203,7 @@ export async function PUT(
           },
         },
       },
-    })
+    });
 
     // Create pricing history entry if price was set
     if (pricePerKg && currency) {
@@ -150,23 +215,23 @@ export async function PUT(
           effectiveDate: priceSetDate ? new Date(priceSetDate) : new Date(),
           setBy: user.id,
         },
-      })
+      });
     }
 
-    return NextResponse.json({ greenBeanLot: updatedLot })
+    return NextResponse.json({ greenBeanLot: updatedLot });
   } catch (error) {
-    return handleApiError(error)
+    return handleApiError(error);
   }
 }
 
 // DELETE /api/green-bean-lots/:id
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await requireAuth(request)
-    const { id } = await params
+    await requireAuth(request);
+    const { id } = await params;
 
     // Check if lot exists
     const lot = await prisma.greenBeanLot.findUnique({
@@ -175,42 +240,49 @@ export async function DELETE(
         roasterInventory: true,
         roastBatches: true,
       },
-    })
+    });
 
     if (!lot) {
       return NextResponse.json(
-        { error: 'Green bean lot not found' },
-        { status: 404 }
-      )
+        { error: "Green bean lot not found" },
+        { status: 404 },
+      );
     }
 
     // Check if there are roaster inventory or roast batches linked
-    if ((lot.roasterInventory && lot.roasterInventory.length > 0) ||
-        (lot.roastBatches && lot.roastBatches.length > 0)) {
+    if (
+      (lot.roasterInventory && lot.roasterInventory.length > 0) ||
+      (lot.roastBatches && lot.roastBatches.length > 0)
+    ) {
       return NextResponse.json(
-        { error: 'Cannot delete green bean lot with linked roaster inventory or roast batches.' },
-        { status: 400 }
-      )
+        {
+          error:
+            "Cannot delete green bean lot with linked roaster inventory or roast batches.",
+        },
+        { status: 400 },
+      );
     }
 
     // Delete related data first
     await prisma.cuppingScore.deleteMany({
       where: { greenBeanLotId: id },
-    })
+    });
     await prisma.withdrawalHistory.deleteMany({
       where: { greenBeanLotId: id },
-    })
+    });
     await prisma.pricingHistory.deleteMany({
       where: { greenBeanLotId: id },
-    })
+    });
 
     // Delete the lot
     await prisma.greenBeanLot.delete({
       where: { id },
-    })
+    });
 
-    return NextResponse.json({ message: 'Green bean lot deleted successfully' })
+    return NextResponse.json({
+      message: "Green bean lot deleted successfully",
+    });
   } catch (error) {
-    return handleApiError(error)
+    return handleApiError(error);
   }
 }

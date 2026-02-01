@@ -1,9 +1,9 @@
-import { GreenBeanLot } from '../types';
-import { api } from './api';
-import { handleApiErrorWithFallback } from '../utils/errorHandler';
+import { GreenBeanLot } from "../types";
+import { api } from "./api";
+import { handleApiErrorWithFallback } from "../utils/errorHandler";
 
 export interface CreateGreenBeanLotInput {
-  sourceType: 'Internal' | 'External';
+  sourceType: "Internal" | "External";
   parchmentLotId?: string;
   grade: string;
   initialWeightKg: number;
@@ -11,6 +11,7 @@ export interface CreateGreenBeanLotInput {
   availabilityStatus?: string;
   pricePerKg?: number;
   currency?: string;
+  processorScore?: number;
   externalSource?: {
     originName?: string;
     variety?: string;
@@ -25,8 +26,13 @@ export interface CreateGreenBeanLotInput {
 /**
  * Create a new green bean lot
  */
-export const createGreenBeanLot = async (input: CreateGreenBeanLotInput): Promise<GreenBeanLot> => {
-  const response = await api.post<{ greenBeanLot: any }>('/green-bean-lots', input);
+export const createGreenBeanLot = async (
+  input: CreateGreenBeanLotInput,
+): Promise<GreenBeanLot> => {
+  const response = await api.post<{ greenBeanLot: any }>(
+    "/green-bean-lots",
+    input,
+  );
   return transformGreenBeanLotFromBackend(response.greenBeanLot);
 };
 
@@ -38,12 +44,26 @@ export const deleteGreenBeanLot = async (id: string): Promise<void> => {
 };
 
 /**
+ * Update green bean lot processor score
+ */
+export const updateGreenBeanLotScore = async (
+  id: string,
+  processorScore: number,
+): Promise<GreenBeanLot> => {
+  const response = await api.patch<{ greenBeanLot: any }>(
+    `/green-bean-lots/${id}`,
+    { processorScore },
+  );
+  return transformGreenBeanLotFromBackend(response.greenBeanLot);
+};
+
+/**
  * Fetch all green bean lots, optionally filtered by sourceType, availabilityStatus, or parchmentLotId
  */
 export const getAllGreenBeanLots = async (
   sourceType?: string,
   availabilityStatus?: string,
-  parchmentLotId?: string
+  parchmentLotId?: string,
 ): Promise<GreenBeanLot[]> => {
   try {
     const params: Record<string, string> = {};
@@ -52,13 +72,13 @@ export const getAllGreenBeanLots = async (
     if (parchmentLotId) params.parchmentLotId = parchmentLotId;
 
     const response = await api.get<{ greenBeanLots: any[] }>(
-      '/green-bean-lots',
-      Object.keys(params).length > 0 ? params : undefined
+      "/green-bean-lots",
+      Object.keys(params).length > 0 ? params : undefined,
     );
     return response.greenBeanLots.map(transformGreenBeanLotFromBackend);
   } catch (error) {
     return handleApiErrorWithFallback<GreenBeanLot[]>(error, {
-      operation: 'fetch green bean lots',
+      operation: "fetch green bean lots",
       fallbackValue: [],
     });
   }
@@ -70,7 +90,7 @@ export const getAllGreenBeanLots = async (
 function transformGreenBeanLotFromBackend(backendLot: any): GreenBeanLot {
   return {
     id: backendLot.id,
-    sourceType: backendLot.sourceType || 'Internal',
+    sourceType: backendLot.sourceType || "Internal",
     parchmentLotId: backendLot.parchmentLotId,
     externalSource: backendLot.externalSource,
     grade: backendLot.grade,
@@ -79,8 +99,14 @@ function transformGreenBeanLotFromBackend(backendLot: any): GreenBeanLot {
     availabilityStatus: backendLot.availabilityStatus,
     cuppingScores: backendLot.cuppingScores || [],
     withdrawalHistory: backendLot.withdrawalHistory || [],
+<<<<<<< HEAD
     publicTraceId: backendLot.publicTraceId,
     qrGeneratedAt: backendLot.qrGeneratedAt,
+=======
+    processorScore: backendLot.processorScore,
+    pricePerKg: backendLot.pricePerKg,
+    currency: backendLot.currency,
+>>>>>>> feature/fix-processor
   };
 }
 

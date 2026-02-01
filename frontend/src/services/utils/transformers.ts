@@ -4,66 +4,92 @@
 
 // Farm transformations
 export const transformFarmFromBackend = (farm: any) => {
-  const ownerNamesFromBackend = Array.isArray(farm.ownerNames) ? farm.ownerNames : []
-  const ownerNamesFallback = farm.owner?.name ? [farm.owner.name] : []
-  const caretakerNamesFromBackend = Array.isArray(farm.caretakerNames) ? farm.caretakerNames : []
-  const caretakerNamesFallback = typeof farm.caretakerName === 'string'
-    ? farm.caretakerName.split(',').map((name: string) => name.trim()).filter(Boolean)
-    : []
+  const ownerNamesFromBackend = Array.isArray(farm.ownerNames)
+    ? farm.ownerNames
+    : [];
+  const ownerNamesFallback = farm.owner?.name ? [farm.owner.name] : [];
+  const caretakerNamesFromBackend = Array.isArray(farm.caretakerNames)
+    ? farm.caretakerNames
+    : [];
+  const caretakerNamesFallback =
+    typeof farm.caretakerName === "string"
+      ? farm.caretakerName
+          .split(",")
+          .map((name: string) => name.trim())
+          .filter(Boolean)
+      : [];
 
   return {
-  id: farm.id,
-  name: farm.farmName || undefined,
-  location: farm.location,
-  farmerName: farm.owner?.name || '',
-  ownerNames: ownerNamesFromBackend.length > 0 ? ownerNamesFromBackend : ownerNamesFallback,
-  ownerName: farm.owner?.name || undefined,
-  googleMapsUrl: farm.googleMapsUrl || farm.googleMapsLink || undefined,
-  latitude: farm.latitude || undefined,
-  longitude: farm.longitude || undefined,
-  altitudeMeters: farm.altitude || undefined,
-  sizeHectares: farm.sizeHectares || undefined,
-  varieties: farm.varieties || [],
-  caretakerNames: caretakerNamesFromBackend.length > 0 ? caretakerNamesFromBackend : caretakerNamesFallback,
-  caretakerName: farm.caretakerName || undefined,
-  createdAt: farm.createdAt,
-  updatedAt: farm.updatedAt,
-  archived: farm.archived || false,
-  archivedAt: farm.archivedAt || undefined,
-  ownerUserId: farm.ownerId,
-  }
+    id: farm.id,
+    name: farm.farmName || undefined,
+    location: farm.location,
+    farmerName: farm.owner?.name || "",
+    ownerNames:
+      ownerNamesFromBackend.length > 0
+        ? ownerNamesFromBackend
+        : ownerNamesFallback,
+    ownerName: farm.owner?.name || undefined,
+    googleMapsUrl: farm.googleMapsUrl || farm.googleMapsLink || undefined,
+    latitude: farm.latitude || undefined,
+    longitude: farm.longitude || undefined,
+    altitudeMeters: farm.altitude || undefined,
+    sizeHectares: farm.sizeHectares || undefined,
+    varieties: farm.varieties || [],
+    caretakerNames:
+      caretakerNamesFromBackend.length > 0
+        ? caretakerNamesFromBackend
+        : caretakerNamesFallback,
+    caretakerName: farm.caretakerName || undefined,
+    createdAt: farm.createdAt,
+    updatedAt: farm.updatedAt,
+    archived: farm.archived || false,
+    archivedAt: farm.archivedAt || undefined,
+    ownerUserId: farm.ownerId,
+  };
 };
 
 export const transformFarmToBackend = (farmData: any) => {
-  const ownerNamesFromArray = Array.isArray(farmData.ownerNames) ? farmData.ownerNames : []
-  const ownerNamesFromString = typeof farmData.ownerName === 'string'
-    ? farmData.ownerName
-        .split(',')
-        .map((name: string) => name.trim())
-        .filter(Boolean)
-    : []
-  const caretakerNamesFromArray = Array.isArray(farmData.caretakerNames) ? farmData.caretakerNames : []
-  const caretakerNamesFromString = typeof farmData.caretakerName === 'string'
-    ? farmData.caretakerName
-        .split(',')
-        .map((name: string) => name.trim())
-        .filter(Boolean)
-    : []
+  const ownerNamesFromArray = Array.isArray(farmData.ownerNames)
+    ? farmData.ownerNames
+    : [];
+  const ownerNamesFromString =
+    typeof farmData.ownerName === "string"
+      ? farmData.ownerName
+          .split(",")
+          .map((name: string) => name.trim())
+          .filter(Boolean)
+      : [];
+  const caretakerNamesFromArray = Array.isArray(farmData.caretakerNames)
+    ? farmData.caretakerNames
+    : [];
+  const caretakerNamesFromString =
+    typeof farmData.caretakerName === "string"
+      ? farmData.caretakerName
+          .split(",")
+          .map((name: string) => name.trim())
+          .filter(Boolean)
+      : [];
 
   return {
-    farmName: farmData.name || '',
-    ownerNames: ownerNamesFromArray.length > 0 ? ownerNamesFromArray : ownerNamesFromString,
-    location: farmData.location || '',
+    farmName: farmData.name || "",
+    ownerNames:
+      ownerNamesFromArray.length > 0
+        ? ownerNamesFromArray
+        : ownerNamesFromString,
+    location: farmData.location || "",
     googleMapsUrl: farmData.googleMapsUrl || null,
     latitude: farmData.latitude?.toString() || null,
     longitude: farmData.longitude?.toString() || null,
     altitude: farmData.altitudeMeters?.toString() || null,
     sizeHectares: farmData.sizeHectares?.toString() || null,
     varieties: farmData.varieties || [],
-    caretakerNames: caretakerNamesFromArray.length > 0 ? caretakerNamesFromArray : caretakerNamesFromString,
+    caretakerNames:
+      caretakerNamesFromArray.length > 0
+        ? caretakerNamesFromArray
+        : caretakerNamesFromString,
     caretakerName: null,
     archived: farmData.archived || false,
-  }
+  };
 };
 
 // Soil Analysis transformations
@@ -89,8 +115,9 @@ export const transformSoilAnalysisFromBackend = (analysis: any) => ({
   boron: analysis.boron || undefined,
   notes: analysis.notes || undefined,
   recommendations: analysis.recommendations || undefined,
-  createdBy: analysis.createdBy || analysis.creator?.id || '',
-  createdByRole: analysis.createdByRole || analysis.creator?.roles?.[0] || 'Farmer',
+  createdBy: analysis.createdBy || analysis.creator?.id || "",
+  createdByRole:
+    analysis.createdByRole || analysis.creator?.roles?.[0] || "Farmer",
   attachmentUrl: analysis.attachmentUrl || undefined,
   createdAt: analysis.createdAt,
   updatedAt: analysis.updatedAt,
@@ -98,16 +125,16 @@ export const transformSoilAnalysisFromBackend = (analysis: any) => ({
 
 export const transformSoilAnalysisToBackend = (analysisData: any) => ({
   farmId: analysisData.farmId,
-  farmPlotLocation: analysisData.farmPlotLocation || '',
+  farmPlotLocation: analysisData.farmPlotLocation || "",
   testDate: analysisData.testDate,
   labName: analysisData.labName || null,
   certificateNumber: analysisData.certificateNumber || null,
-  pH: analysisData.pH?.toString() || '0',
-  phosphorus: analysisData.phosphorus?.toString() || '0',
-  potassium: analysisData.potassium?.toString() || '0',
-  nitrogen: analysisData.nitrogen?.toString() || '0',
-  calcium: analysisData.calcium?.toString() || '0',
-  magnesium: analysisData.magnesium?.toString() || '0',
+  pH: analysisData.pH?.toString() || "0",
+  phosphorus: analysisData.phosphorus?.toString() || "0",
+  potassium: analysisData.potassium?.toString() || "0",
+  nitrogen: analysisData.nitrogen?.toString() || "0",
+  calcium: analysisData.calcium?.toString() || "0",
+  magnesium: analysisData.magnesium?.toString() || "0",
   organicMatter: analysisData.organicMatter?.toString() || null,
   sulfur: analysisData.sulfur?.toString() || null,
   zinc: analysisData.zinc?.toString() || null,
@@ -131,7 +158,7 @@ export const transformWeatherRecordFromBackend = (record: any) => ({
   temperatureAvg: record.temperatureAvg,
   rainfall: record.rainfall,
   humidity: record.humidity,
-  source: record.source || 'Manual',
+  source: record.source || "Manual",
   notes: record.notes || undefined,
   createdAt: record.createdAt,
   updatedAt: record.updatedAt,
@@ -139,14 +166,14 @@ export const transformWeatherRecordFromBackend = (record: any) => ({
 
 export const transformWeatherRecordToBackend = (recordData: any) => ({
   farmId: recordData.farmId,
-  farmPlotLocation: recordData.farmPlotLocation || '',
+  farmPlotLocation: recordData.farmPlotLocation || "",
   recordDate: recordData.recordDate,
-  temperatureMin: recordData.temperatureMin?.toString() || '0',
-  temperatureMax: recordData.temperatureMax?.toString() || '0',
-  temperatureAvg: recordData.temperatureAvg?.toString() || '0',
-  rainfall: recordData.rainfall?.toString() || '0',
-  humidity: recordData.humidity?.toString() || '0',
-  source: recordData.source || 'Manual',
+  temperatureMin: recordData.temperatureMin?.toString() || "0",
+  temperatureMax: recordData.temperatureMax?.toString() || "0",
+  temperatureAvg: recordData.temperatureAvg?.toString() || "0",
+  rainfall: recordData.rainfall?.toString() || "0",
+  humidity: recordData.humidity?.toString() || "0",
+  source: recordData.source || "Manual",
   notes: recordData.notes || null,
 });
 
@@ -155,7 +182,7 @@ export const transformGAPLogFromBackend = (log: any) => ({
   id: log.id,
   farmId: log.farmId || undefined,
   farmPlotLocation: log.farmPlotLocation,
-  activityType: log.activityTypeName || log.activityType?.name || '',
+  activityType: log.activityTypeName || log.activityType?.name || "",
   date: log.date,
   productUsed: log.productUsed,
   quantity: log.quantity,
@@ -166,6 +193,7 @@ export const transformGAPLogFromBackend = (log: any) => ({
 
 // Harvest Lot transformations
 const HARVEST_STATUS_MAP = {
+<<<<<<< HEAD
   ReadyForProcessing: 'Ready for Processing',
   Complete: 'Complete',
 } as const;
@@ -173,6 +201,15 @@ const HARVEST_STATUS_MAP = {
 const HARVEST_STATUS_REVERSE_MAP = {
   'Ready for Processing': 'ReadyForProcessing',
   'Complete': 'Complete',
+=======
+  ReadyForProcessing: "Ready for Processing",
+  Processing: "Processing",
+} as const;
+
+const HARVEST_STATUS_REVERSE_MAP = {
+  "Ready for Processing": "ReadyForProcessing",
+  Processing: "Processing",
+>>>>>>> feature/fix-processor
 } as const;
 
 export const transformHarvestLotFromBackend = (lot: any) => ({
@@ -181,22 +218,38 @@ export const transformHarvestLotFromBackend = (lot: any) => ({
   farmerName: lot.farmerName,
   cherryVariety: lot.cherryVariety,
   weightKg: lot.weightKg,
+  remainingWeightKg: lot.remainingWeightKg,
   farmPlotLocation: lot.farmPlotLocation,
+<<<<<<< HEAD
   harvestDate: lot.harvestDate ? new Date(lot.harvestDate).toISOString().substring(0, 10) : '',
   status: (HARVEST_STATUS_MAP[lot.status as keyof typeof HARVEST_STATUS_MAP] || lot.status) as 'Ready for Processing' | 'Complete',
+=======
+  harvestDate: lot.harvestDate
+    ? new Date(lot.harvestDate).toISOString().substring(0, 10)
+    : "",
+  status: (HARVEST_STATUS_MAP[lot.status as keyof typeof HARVEST_STATUS_MAP] ||
+    lot.status) as "Ready for Processing" | "Processing",
+>>>>>>> feature/fix-processor
   cropYearId: lot.cropYearId || undefined,
   createdAt: lot.createdAt,
   updatedAt: lot.updatedAt,
 });
 
 export const transformHarvestLotToBackend = (lotData: any) => ({
-  farmerName: lotData.farmerName || '',
-  cherryVariety: lotData.cherryVariety || '',
-  weightKg: lotData.weightKg?.toString() || '0',
-  farmPlotLocation: lotData.farmPlotLocation || '',
+  farmerName: lotData.farmerName || "",
+  cherryVariety: lotData.cherryVariety || "",
+  weightKg: lotData.weightKg?.toString() || "0",
+  farmPlotLocation: lotData.farmPlotLocation || "",
   harvestDate: lotData.harvestDate,
-  status: (HARVEST_STATUS_REVERSE_MAP[lotData.status as keyof typeof HARVEST_STATUS_REVERSE_MAP] || lotData.status) || 'ReadyForProcessing',
-  cropYearId: (lotData.cropYearId && lotData.cropYearId.trim() !== '') ? lotData.cropYearId : null,
+  status:
+    HARVEST_STATUS_REVERSE_MAP[
+      lotData.status as keyof typeof HARVEST_STATUS_REVERSE_MAP
+    ] ||
+    lotData.status ||
+    "ReadyForProcessing",
+  cropYearId:
+    lotData.cropYearId && lotData.cropYearId.trim() !== ""
+      ? lotData.cropYearId
+      : null,
   farmId: lotData.farmId || null,
 });
-
