@@ -44,6 +44,20 @@ export const deleteGreenBeanLot = async (id: string): Promise<void> => {
 };
 
 /**
+ * Update green bean lot processor score
+ */
+export const updateGreenBeanLotScore = async (
+  id: string,
+  processorScore: number,
+): Promise<GreenBeanLot> => {
+  const response = await api.patch<{ greenBeanLot: any }>(
+    `/green-bean-lots/${id}`,
+    { processorScore },
+  );
+  return transformGreenBeanLotFromBackend(response.greenBeanLot);
+};
+
+/**
  * Fetch all green bean lots, optionally filtered by sourceType, availabilityStatus, or parchmentLotId
  */
 export const getAllGreenBeanLots = async (

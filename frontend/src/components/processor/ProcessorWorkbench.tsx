@@ -71,7 +71,10 @@ import {
   addProcessingBatch,
   updateProcessingBatch,
 } from "../../services/processingBatchService";
-import { createGreenBeanLot } from "../../services/greenBeanLotService";
+import {
+  createGreenBeanLot,
+  updateGreenBeanLotScore,
+} from "../../services/greenBeanLotService";
 import { updateParchmentLot } from "../../services/parchmentLotService";
 import DatePicker from "../common/DatePicker";
 import InvoiceReceipt from "./InvoiceReceipt";
@@ -664,10 +667,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const [completedCardPage, setCompletedCardPage] = useState(1);
   const CARD_PAGE_SIZE = 3;
 
-  const processorUser = useMemo(
-    () => data.users.find((u) => u.roles?.includes(UserRole.Processor)),
-    [data.users],
-  );
+  // Use the currently logged-in user for QC scoring
+  const processorUser = currentUser;
 
   // (Removed) Top-of-workbench stat tiles were deprecated; relying on detailed sections below.
 
@@ -877,8 +878,20 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     return { subtotal, defectsTotal, finalScore };
   }, [sensoryScores, cupScores, defects]);
 
-  const handleSaveScore = () => {
-    if (!processorUser || !scoringLot) return;
+  const handleSaveScore = async () => {
+    console.log("handleSaveScore called", { processorUser, scoringLot });
+
+    if (!processorUser) {
+      alert(
+        "Error: No processor user found. Please ensure you are logged in as a processor.",
+      );
+      return;
+    }
+
+    if (!scoringLot) {
+      alert("Error: No scoring lot selected.");
+      return;
+    }
 
     let totalScore: number;
     let scoresToSave: { [attribute: string]: number };
@@ -999,7 +1012,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               sessionId: qcSessionId,
               score: totalScore,
             });
-          return { ...gbl, cuppingScores: newCuppingScores };
+          // Update processorScore field for display in green bean stock
+          return {
+            ...gbl,
+            cuppingScores: newCuppingScores,
+            processorScore: totalScore,
+          };
         }
         return gbl;
       });
@@ -1010,6 +1028,21 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         greenBeanLots: updatedGreenBeanLots,
       };
     });
+
+    // Save processor score to backend
+    try {
+      await updateGreenBeanLotScore(scoringLot.id, totalScore);
+      addToast({
+        type: "success",
+        message: `QC Score ${totalScore.toFixed(1)} saved successfully!`,
+      });
+    } catch (error) {
+      console.error("Failed to save QC score to backend:", error);
+      addToast({
+        type: "error",
+        message: "Score saved locally but failed to sync to server.",
+      });
+    }
 
     setScoringLot(null);
   };
@@ -2441,12 +2474,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       <td className="px-4 py-3 whitespace-nowrap">
                         {displayScore ? (
                           <div className="flex items-center gap-1.5">
-                            {scoreValue >= 80 && (
-                              <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                            )}
                             <span className="text-sm font-semibold text-gray-900">
                               {displayScore}
                             </span>
+                            {scoreValue >= 80 && (
+                              <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                            )}
                           </div>
                         ) : (
                           <span className="text-sm text-gray-400">-</span>
@@ -3382,12 +3415,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           </span>
                           {displayScore ? (
                             <div className="flex items-center gap-1.5">
-                              {scoreValue >= 80 && (
-                                <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
-                              )}
                               <span className="font-medium text-gray-900">
                                 {displayScore}
                               </span>
+                              {scoreValue >= 80 && (
+                                <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
+                              )}
                             </div>
                           ) : (
                             <span className="text-gray-400">N/A</span>
@@ -4507,22 +4540,36 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 {scoringMode === "simple" ? (
                   <div className="max-w-md mx-auto">
                     <label className="block text-base font-bold text-gray-700 mb-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 justify-center">
                         <Star className="h-5 w-5 text-amber-600" />
                         Total Score (0-100)
                       </div>
                     </label>
-                    <input
-                      type="number"
-                      step="0.25"
-                      value={simpleQcScore}
-                      onChange={(e) => setSimpleQcScore(e.target.value)}
-                      required
-                      placeholder="Enter score"
-                      className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-lg font-semibold text-center focus:ring-2 focus:ring-amber-500 focus:border-amber-500 shadow-sm transition-all"
-                    />
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.25"
+                        min="0"
+                        max="100"
+                        value={simpleQcScore}
+                        onChange={(e) => setSimpleQcScore(e.target.value)}
+                        required
+                        placeholder="Enter score"
+                        className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-lg font-semibold text-center focus:ring-2 focus:ring-amber-500 focus:border-amber-500 shadow-sm transition-all"
+                      />
+                      {parseFloat(simpleQcScore) >= 80 && (
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                          <Star className="h-6 w-6 text-yellow-500 fill-yellow-500" />
+                        </div>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-500 mt-2 text-center">
                       Score from 0 to 100 (increments of 0.25)
+                      {parseFloat(simpleQcScore) >= 80 && (
+                        <span className="text-yellow-600 font-semibold ml-2">
+                          ⭐ Excellent Quality!
+                        </span>
+                      )}
                     </p>
                   </div>
                 ) : (
