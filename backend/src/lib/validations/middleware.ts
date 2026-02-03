@@ -33,7 +33,7 @@ export async function validateBody<T>(
           {
             error: 'Validation Error',
             message: 'ข้อมูลไม่ถูกต้อง',
-            details: error.errors.map((e) => ({
+            details: error.issues.map((e: any) => ({
               field: e.path.join('.'),
               message: e.message,
               code: e.code,
@@ -95,7 +95,7 @@ export function validateQuery<T>(
           {
             error: 'Validation Error',
             message: 'พารามิเตอร์ไม่ถูกต้อง',
-            details: error.errors.map((e) => ({
+            details: error.issues.map((e: any) => ({
               field: e.path.join('.'),
               message: e.message,
               code: e.code,
@@ -127,7 +127,7 @@ export function validateParams<T>(
           {
             error: 'Validation Error',
             message: 'พารามิเตอร์ไม่ถูกต้อง',
-            details: error.errors.map((e) => ({
+            details: error.issues.map((e: any) => ({
               field: e.path.join('.'),
               message: e.message,
               code: e.code,

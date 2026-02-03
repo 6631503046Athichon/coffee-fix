@@ -99,14 +99,11 @@ function transformGreenBeanLotFromBackend(backendLot: any): GreenBeanLot {
     availabilityStatus: backendLot.availabilityStatus,
     cuppingScores: backendLot.cuppingScores || [],
     withdrawalHistory: backendLot.withdrawalHistory || [],
-<<<<<<< HEAD
     publicTraceId: backendLot.publicTraceId,
     qrGeneratedAt: backendLot.qrGeneratedAt,
-=======
     processorScore: backendLot.processorScore,
     pricePerKg: backendLot.pricePerKg,
     currency: backendLot.currency,
->>>>>>> feature/fix-processor
   };
 }
 

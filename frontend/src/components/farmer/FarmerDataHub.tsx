@@ -131,7 +131,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                         weightKg: parseFloat(editFormData.weightKg),
                         harvestDate: editFormData.harvestDate,
                         farmPlotLocation: editFormData.farmPlotLocation,
-                        status: editFormData.status as 'Ready for Processing' | 'Processing'
+                        status: editFormData.status as 'Ready for Processing' | 'Complete'
                     }
                     : lot
             )

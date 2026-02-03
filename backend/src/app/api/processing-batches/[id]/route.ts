@@ -138,7 +138,7 @@ export async function DELETE(
     }
 
     // Delete drying logs first
-    await prisma.dryingLog.deleteMany({
+    await prisma.dryingLogEntry.deleteMany({
       where: { processingBatchId: id },
     })
 

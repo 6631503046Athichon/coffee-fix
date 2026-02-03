@@ -63,7 +63,7 @@ export async function GET(
         margin: 1,
         width: validSize
       })
-      return new NextResponse(pngBuffer, {
+      return new NextResponse(new Uint8Array(pngBuffer), {
         headers: {
           'Content-Type': 'image/png',
           'Content-Disposition': `inline; filename="qr-${lot.publicTraceId}.png"`,

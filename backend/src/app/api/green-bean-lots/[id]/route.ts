@@ -267,7 +267,7 @@ export async function DELETE(
     await prisma.cuppingScore.deleteMany({
       where: { greenBeanLotId: id },
     });
-    await prisma.withdrawalHistory.deleteMany({
+    await prisma.greenBeanWithdrawal.deleteMany({
       where: { greenBeanLotId: id },
     });
     await prisma.pricingHistory.deleteMany({

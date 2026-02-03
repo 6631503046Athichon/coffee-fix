@@ -75,11 +75,7 @@ export interface HarvestLot {
   remainingWeightKg?: number;
   farmPlotLocation: string;
   harvestDate: string;
-<<<<<<< HEAD
-  status: 'Ready for Processing' | 'Complete';
-=======
-  status: "Ready for Processing" | "Processing" | "Complete";
->>>>>>> feature/fix-processor
+  status: "Ready for Processing" | "Complete";
   cropYearId?: string;
 }
 
@@ -126,6 +122,7 @@ export interface ParchmentLot {
   processType: string;
   status: "Awaiting Hulling" | "Hulled";
   physicalTestResults?: PhysicalTestResults;
+  createdAt?: string;
 }
 
 export enum GreenBeanSourceType {
@@ -150,35 +147,6 @@ export interface GreenBeanLot {
     score?: number; // Optional: declared score at purchase time
     tasteNote?: string; // Optional: declared taste note at purchase time
   };
-<<<<<<< HEAD
-    grade: string;
-    initialWeightKg: number;
-    currentWeightKg: number;
-    availabilityStatus: 'Available' | 'Withdrawn';
-    cuppingScores: { sessionId: string; score: number }[];
-    withdrawalHistory?: {
-        amountKg: number;
-        withdrawalType: 'Sale' | 'Roasting Stock' | 'Sample' | 'Export' | 'Other';
-        purpose: string; // Legacy field / additional description
-        notes?: string; // Admin-editable notes
-        date: string;
-        withdrawnBy?: string; // User ID who performed withdrawal
-        withdrawnByName?: string; // User name for display
-        salePrice?: number; // Only for Sale type
-        currency?: string; // Only for Sale type (e.g., 'THB', 'USD')
-        customerName?: string; // Only for Sale type
-        invoiceNumber?: string; // Auto-generated for Sale type (e.g., "INV-2025-001")
-        deliveryAddress?: string; // Optional delivery address for Sale type
-        totalAmount?: number; // Calculated: amountKg * salePrice
-    }[];
-    pricePerKg?: number;
-    currency?: string;
-    priceSetDate?: string;
-    priceSetBy?: string;
-    // QR Code & Traceability
-    publicTraceId?: string;
-    qrGeneratedAt?: string;
-=======
   grade: string;
   initialWeightKg: number;
   currentWeightKg: number;
@@ -204,7 +172,10 @@ export interface GreenBeanLot {
   currency?: string;
   priceSetDate?: string;
   priceSetBy?: string;
->>>>>>> feature/fix-processor
+  // QR Code & Traceability
+  publicTraceId?: string;
+  qrGeneratedAt?: string;
+  createdAt?: string;
 }
 
 export enum RoastLevel {

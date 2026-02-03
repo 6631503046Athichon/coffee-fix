@@ -39,7 +39,7 @@ export const updateCuppingSessionSchema = z.object({
   date: dateStringSchema.optional(),
   type: cuppingSessionTypeSchema.optional(),
   status: cuppingSessionStatusSchema.optional(),
-  finalResults: z.record(z.unknown()).optional().nullable(),
+  finalResults: z.record(z.string(), z.unknown()).optional().nullable(),
 });
 
 // ============================================

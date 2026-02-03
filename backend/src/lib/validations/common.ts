@@ -123,33 +123,33 @@ export const userRoleSchema = z.enum([
   'HeadJudge',
   'Cupper',
   'Admin',
-], { errorMap: () => ({ message: 'บทบาทไม่ถูกต้อง' }) });
+], { message: 'บทบาทไม่ถูกต้อง' });
 
 export const processingBatchStatusSchema = z.enum([
   'ToProcess',
   'Drying',
   'Completed',
-], { errorMap: () => ({ message: 'สถานะไม่ถูกต้อง' }) });
+], { message: 'สถานะไม่ถูกต้อง' });
 
 export const harvestLotStatusSchema = z.enum([
   'ReadyForProcessing',
-  'Processing',
-], { errorMap: () => ({ message: 'สถานะไม่ถูกต้อง' }) });
+  'Complete',
+], { message: 'สถานะไม่ถูกต้อง' });
 
 export const parchmentLotStatusSchema = z.enum([
   'AwaitingHulling',
   'Hulled',
-], { errorMap: () => ({ message: 'สถานะไม่ถูกต้อง' }) });
+], { message: 'สถานะไม่ถูกต้อง' });
 
 export const greenBeanSourceTypeSchema = z.enum([
   'Internal',
   'External',
-], { errorMap: () => ({ message: 'ประเภทแหล่งที่มาไม่ถูกต้อง' }) });
+], { message: 'ประเภทแหล่งที่มาไม่ถูกต้อง' });
 
 export const greenBeanAvailabilityStatusSchema = z.enum([
   'Available',
   'Withdrawn',
-], { errorMap: () => ({ message: 'สถานะไม่ถูกต้อง' }) });
+], { message: 'สถานะไม่ถูกต้อง' });
 
 export const withdrawalTypeSchema = z.enum([
   'Sale',
@@ -157,51 +157,51 @@ export const withdrawalTypeSchema = z.enum([
   'Sample',
   'Export',
   'Other',
-], { errorMap: () => ({ message: 'ประเภทการถอนไม่ถูกต้อง' }) });
+], { message: 'ประเภทการถอนไม่ถูกต้อง' });
 
 export const cuppingSessionTypeSchema = z.enum([
   'QC',
   'Competition',
-], { errorMap: () => ({ message: 'ประเภท session ไม่ถูกต้อง' }) });
+], { message: 'ประเภท session ไม่ถูกต้อง' });
 
 export const cuppingSessionStatusSchema = z.enum([
   'Setup',
   'Scoring',
   'Adjudication',
   'Finalized',
-], { errorMap: () => ({ message: 'สถานะไม่ถูกต้อง' }) });
+], { message: 'สถานะไม่ถูกต้อง' });
 
 export const saleOrderStatusSchema = z.enum([
   'Draft',
   'Confirmed',
   'Delivered',
   'Cancelled',
-], { errorMap: () => ({ message: 'สถานะไม่ถูกต้อง' }) });
+], { message: 'สถานะไม่ถูกต้อง' });
 
 export const invoiceStatusSchema = z.enum([
   'Draft',
   'Sent',
   'Paid',
   'Overdue',
-], { errorMap: () => ({ message: 'สถานะไม่ถูกต้อง' }) });
+], { message: 'สถานะไม่ถูกต้อง' });
 
 export const customerTypeSchema = z.enum([
   'Roaster',
   'Distributor',
   'Retailer',
   'Other',
-], { errorMap: () => ({ message: 'ประเภทลูกค้าไม่ถูกต้อง' }) });
+], { message: 'ประเภทลูกค้าไม่ถูกต้อง' });
 
 export const weatherSourceSchema = z.enum([
   'Manual',
   'API',
-], { errorMap: () => ({ message: 'แหล่งข้อมูลไม่ถูกต้อง' }) });
+], { message: 'แหล่งข้อมูลไม่ถูกต้อง' });
 
 export const roastLevelSchema = z.enum([
   'Light',
   'Medium',
   'Dark',
-], { errorMap: () => ({ message: 'ระดับการคั่วไม่ถูกต้อง' }) });
+], { message: 'ระดับการคั่วไม่ถูกต้อง' });
 
 // ============================================
 // Currency Schema
@@ -213,7 +213,7 @@ export const currencySchema = z.enum([
   'EUR',
   'JPY',
   'CNY',
-], { errorMap: () => ({ message: 'สกุลเงินไม่ถูกต้อง' }) });
+], { message: 'สกุลเงินไม่ถูกต้อง' });
 
 // ============================================
 // Pagination Schema

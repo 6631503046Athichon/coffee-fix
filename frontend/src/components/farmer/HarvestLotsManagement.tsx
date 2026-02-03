@@ -146,8 +146,8 @@ const HarvestLotsManagement: React.FC = () => {
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">In Processing</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.inProcessing}</p>
+              <p className="text-sm text-gray-600">Completed</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.completed}</p>
             </div>
             <Coffee className="h-8 w-8 text-amber-600" />
           </div>

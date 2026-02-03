@@ -121,7 +121,7 @@ export async function DELETE(
     }
 
     // Delete physical test results first
-    await prisma.physicalTestResult.deleteMany({
+    await prisma.physicalTestResults.deleteMany({
       where: { parchmentLotId: id },
     })
 

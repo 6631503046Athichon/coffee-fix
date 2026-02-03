@@ -1539,11 +1539,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     setModal(type);
   };
 
-<<<<<<< HEAD
-  // Only show lots that are ready for processing (not yet processed)
-  const readyForProcessingLots = data.harvestLots.filter(lot =>
-    lot.status === 'Ready for Processing'
-=======
   const handleToggleAvailability = (lotId: string) => {
     setData((prev) => ({
       ...prev,
@@ -1561,10 +1556,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     }));
   };
 
+  // Only show lots that are ready for processing (not yet processed)
   const readyForProcessingLots = data.harvestLots.filter(
-    (lot) =>
-      lot.status === "Ready for Processing" || lot.status === "Processing",
->>>>>>> feature/fix-processor
+    (lot) => lot.status === "Ready for Processing",
   );
 
   const filteredHarvestLots = useMemo(() => {
@@ -1726,58 +1720,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-900">
               <tr>
-<<<<<<< HEAD
                 <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Lot ID</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Variety</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Weight (kg)</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Farmer</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Actions</th>
-=======
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
-                >
-                  Lot ID
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
-                >
-                  Variety
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
-                >
-                  Weight (kg)
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
-                >
-                  Farmer
-                </th>
-                <th
-                  scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
-                >
-                  Actions
-                </th>
->>>>>>> feature/fix-processor
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
               {filteredHarvestLots.length === 0 ? (
                 <tr>
-<<<<<<< HEAD
                   <td colSpan={6} className="px-6 py-8 text-center text-gray-400">
-=======
-                  <td
-                    colSpan={5}
-                    className="px-6 py-8 text-center text-gray-400"
-                  >
->>>>>>> feature/fix-processor
                     <Coffee className="h-12 w-12 mx-auto mb-2 opacity-30" />
                     <p className="text-sm font-medium">
                       No harvest lots available
@@ -3073,6 +3027,14 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     parchmentCurrentPage * ITEMS_PER_PAGE,
   );
 
+  // For Kanban view - only show lots awaiting hulling
+  const kanbanParchmentLots = processedParchmentLots.filter(p => p.status !== "Hulled");
+  const kanbanParchmentPageCount = Math.ceil(kanbanParchmentLots.length / ITEMS_PER_PAGE);
+  const paginatedKanbanParchmentLots = kanbanParchmentLots.slice(
+    (parchmentCurrentPage - 1) * ITEMS_PER_PAGE,
+    parchmentCurrentPage * ITEMS_PER_PAGE,
+  );
+
   const enrichedGreenBeanLots = useMemo(() => {
     const qcSessionId = processorUser ? `CS-QC-${processorUser.id}` : "";
     return data.greenBeanLots.map((gbl) => {
@@ -3217,7 +3179,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               </div>
             </div>
             <div className="p-3 space-y-2 h-[400px] overflow-y-auto">
-              {paginatedParchmentLots.length === 0 ? (
+              {paginatedKanbanParchmentLots.length === 0 ? (
                 <div className="text-center py-8 text-gray-400">
                   <Box className="h-10 w-10 mx-auto mb-2 opacity-30" />
                   <p className="text-sm font-medium">
@@ -3225,7 +3187,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   </p>
                 </div>
               ) : (
-                paginatedParchmentLots.map((p) => (
+                paginatedKanbanParchmentLots.map((p) => (
                   <div
                     key={p.id}
                     className={`bg-white border-l-4 ${p.status === "Hulled" ? "border-l-gray-300" : "border-l-amber-500"} rounded-lg p-3 border border-gray-200 hover:shadow-md transition-all`}
@@ -3296,7 +3258,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             <div className="mt-auto">
               <Pagination
                 currentPage={parchmentCurrentPage}
-                totalPages={parchmentPageCount}
+                totalPages={kanbanParchmentPageCount}
                 onPageChange={setParchmentCurrentPage}
               />
             </div>

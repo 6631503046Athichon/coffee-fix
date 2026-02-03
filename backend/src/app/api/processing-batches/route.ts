@@ -136,44 +136,10 @@ export async function POST(request: NextRequest) {
         });
       }
 
-<<<<<<< HEAD
       // Update harvest lot status to Complete when processing batch is created
       await tx.harvestLot.update({
         where: { id: harvestLotId },
-        data: { status: 'Complete' },
-=======
-      // Update harvest lot status and remaining weight
-      // Get the original harvest weight and current remaining weight
-      const harvestLot = await tx.harvestLot.findUnique({
-        where: { id: harvestLotId },
-        select: { weightKg: true, remainingWeightKg: true },
-      });
-
-      if (!harvestLot) {
-        throw new Error("Harvest lot not found");
-      }
-
-      // Initialize remainingWeightKg if it's null (first time processing)
-      const currentRemaining =
-        harvestLot.remainingWeightKg ?? harvestLot.weightKg;
-
-      // Subtract the parchment weight (which represents cherry consumed) from remaining
-      const newRemaining = Math.max(
-        0,
-        currentRemaining -
-          (parchmentWeightKg ? parseFloat(parchmentWeightKg) : 0),
-      );
-
-      // If remaining weight is near zero (less than 1 kg), mark as Complete
-      const shouldBeComplete = newRemaining < 1;
-
-      await tx.harvestLot.update({
-        where: { id: harvestLotId },
-        data: {
-          remainingWeightKg: newRemaining,
-          status: shouldBeComplete ? "Complete" : "Processing",
-        },
->>>>>>> feature/fix-processor
+        data: { status: "Complete" },
       });
 
       return batch;

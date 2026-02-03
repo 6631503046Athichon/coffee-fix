@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
       password = await hashPassword(plainPassword)
     } else {
       // Manual credentials (for backward compatibility)
-      const { username: manualUsername, password: manualPassword } = body
+      const { username: manualUsername, password: manualPassword } = validation.data as any
 
       if (!manualUsername || !manualPassword) {
         return NextResponse.json(
