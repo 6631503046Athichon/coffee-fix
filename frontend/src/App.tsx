@@ -24,6 +24,7 @@ import { getAllCropYears } from './services/cropYearService';
 import { getAllProcessingBatches } from './services/processingBatchService';
 import { getAllParchmentLots } from './services/parchmentLotService';
 import { getAllGreenBeanLots } from './services/greenBeanLotService';
+import { batchedPromiseAll } from './utils/batchedFetch';
 import { Sidebar, Header } from './components/layout';
 import Login from './components/auth/Login';
 import ForgotPassword from './components/auth/ForgotPassword';
@@ -114,34 +115,36 @@ const ProtectedRoutes: React.FC = () => {
   // Load data from backend API
   const loadDataFromBackend = useCallback(async () => {
     try {
-      // Load all data from backend API
+      // localStorage reads (no network, instant)
+      const storedActivityTypes = getAllActivityTypes();
+      const storedSaleOrders = getAllSaleOrders();
+      const storedInvoices = getAllInvoices();
+      const storedPricingHistory = getAllPricingHistory();
+
       // Try to get customers from backend, fallback to localStorage if backend fails
       let storedCustomers: Customer[] = [];
       try {
         storedCustomers = await getAllCustomersFromBackend();
       } catch (err) {
         console.warn('Failed to load customers from backend, using localStorage:', err);
-        // Fallback to localStorage
         const { getAllCustomers: getAllCustomersFromStorage } = await import('./services/salesService');
         storedCustomers = getAllCustomersFromStorage();
       }
-      
-      const [storedFarms, storedSoilAnalyses, storedWeatherRecords, storedHarvestLots, storedGAPLogs, storedActivityTypes, storedProcessTypes, storedSaleOrders, storedInvoices, storedPricingHistory, storedCropYears, storedProcessingBatches, storedParchmentLots, storedGreenBeanLots] = await Promise.all([
-        getAllFarms(),
-        getAllSoilAnalyses(),
-        getAllWeatherRecords(),
-        getAllHarvestLots(),
-        getAllGAPLogs(),
-        getAllActivityTypes(),
-        getAllProcessTypes(),
-        getAllSaleOrders(),
-        getAllInvoices(),
-        getAllPricingHistory(),
-        getAllCropYears(),
-        getAllProcessingBatches(),
-        getAllParchmentLots(),
-        getAllGreenBeanLots(),
-      ]);
+
+      // Batch API calls in groups of 2 to avoid exhausting the DB connection pool
+      // Uses Promise.allSettled internally so individual failures don't break the whole load
+      const [storedFarms, storedSoilAnalyses, storedWeatherRecords, storedHarvestLots, storedGAPLogs, storedProcessTypes, storedCropYears, storedProcessingBatches, storedParchmentLots, storedGreenBeanLots] = await batchedPromiseAll([
+        () => getAllFarms(),
+        () => getAllSoilAnalyses(),
+        () => getAllWeatherRecords(),
+        () => getAllHarvestLots(),
+        () => getAllGAPLogs(),
+        () => getAllProcessTypes(),
+        () => getAllCropYears(),
+        () => getAllProcessingBatches(),
+        () => getAllParchmentLots(),
+        () => getAllGreenBeanLots(),
+      ], 2, [] as any);
 
       // Helper function to merge backend data with mock data (backend data takes priority for same IDs)
       const mergeArrays = <T extends { id: string }>(backendData: T[], mockData: T[]): T[] => {
@@ -198,6 +201,17 @@ const ProtectedRoutes: React.FC = () => {
     };
   }, [isAuthenticated, isAuthLoading]);
 
+  // Debounced refresh to prevent burst reloads from rapid events
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedRefresh = useCallback(() => {
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+    refreshTimerRef.current = setTimeout(() => {
+      loadDataFromBackend();
+    }, 2000);
+  }, [loadDataFromBackend]);
+
   // Load data from backend API on mount
   useEffect(() => {
     if (!isAuthenticated || isAuthLoading) {
@@ -208,12 +222,12 @@ const ProtectedRoutes: React.FC = () => {
     // Initial load
     loadDataFromBackend();
 
-    // Auto-refresh every 30 seconds (paused while editing)
+    // Auto-refresh every 2 minutes (paused while editing)
     const refreshInterval = setInterval(() => {
       if (!isEditingRef.current) {
         loadDataFromBackend();
       }
-    }, 30000);
+    }, 120000);
 
     // Listen for localStorage changes from other components (for activity types and process types that still use localStorage)
     const handleStorageChange = (e: StorageEvent) => {
@@ -221,21 +235,18 @@ const ProtectedRoutes: React.FC = () => {
         e.key === 'coffee_lab_process_types' ||
         e.key === 'coffee_lab_activity_types'
       )) {
-        // Reload only activity types and process types from localStorage
-        // Other data will be reloaded from backend on next mount
-        loadDataFromBackend();
+        debouncedRefresh();
       }
     };
 
     // Custom event for same-window localStorage changes
     const handleCustomStorageUpdate = () => {
-      // Reload data from backend when localStorage is updated
-      loadDataFromBackend();
+      debouncedRefresh();
     };
 
     // Custom event for data refresh
     const handleDataRefresh = () => {
-      loadDataFromBackend();
+      debouncedRefresh();
     };
 
     window.addEventListener('storage', handleStorageChange);
@@ -244,11 +255,14 @@ const ProtectedRoutes: React.FC = () => {
 
     return () => {
       clearInterval(refreshInterval);
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('localStorageUpdate', handleCustomStorageUpdate);
       window.removeEventListener('dataRefresh', handleDataRefresh);
     };
-  }, [isAuthenticated, isAuthLoading, loadDataFromBackend]);
+  }, [isAuthenticated, isAuthLoading, loadDataFromBackend, debouncedRefresh]);
 
   const contextValue = useMemo(() => ({ data, setData, refreshData, setIsEditing, isEditing }), [data, setData, setIsEditing, isEditing]);
 
