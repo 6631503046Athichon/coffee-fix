@@ -1775,10 +1775,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       {lot.cherryVariety}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-green-600">
-                      {lot.remainingWeightKg !== undefined &&
+                      {typeof lot.remainingWeightKg === "number" &&
+                      typeof lot.weightKg === "number" &&
                       lot.remainingWeightKg !== lot.weightKg
                         ? `${lot.remainingWeightKg.toFixed(2)} kg (of ${lot.weightKg} kg)`
-                        : `${lot.weightKg} kg`}
+                        : typeof lot.weightKg === "number"
+                          ? `${lot.weightKg} kg`
+                          : "-"}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                       {lot.farmerName}
@@ -3526,16 +3529,21 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </div>
                         <div className="text-center sm:border-l-2 sm:border-gray-300">
                           <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">
-                            {selectedHarvestLot.remainingWeightKg !== undefined
+                            {selectedHarvestLot.remainingWeightKg !== undefined &&
+                            selectedHarvestLot.remainingWeightKg !== null
                               ? "Remaining Weight"
                               : "Weight"}
                           </p>
                           <p className="text-2xl font-bold text-green-600">
-                            {selectedHarvestLot.remainingWeightKg !== undefined
+                            {selectedHarvestLot.remainingWeightKg !== undefined &&
+                            selectedHarvestLot.remainingWeightKg !== null
                               ? `${selectedHarvestLot.remainingWeightKg.toFixed(2)} kg`
-                              : `${selectedHarvestLot.weightKg} kg`}
+                              : typeof selectedHarvestLot.weightKg === "number"
+                                ? `${selectedHarvestLot.weightKg} kg`
+                                : "-"}
                           </p>
                           {selectedHarvestLot.remainingWeightKg !== undefined &&
+                            selectedHarvestLot.remainingWeightKg !== null &&
                             selectedHarvestLot.remainingWeightKg <
                               selectedHarvestLot.weightKg && (
                               <p className="text-xs text-gray-500 mt-1">
