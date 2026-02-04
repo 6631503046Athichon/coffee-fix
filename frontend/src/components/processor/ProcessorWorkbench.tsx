@@ -3911,9 +3911,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                     #{index + 1}
                                   </span>
                                 </div>
-                                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.75fr_1fr_1fr_1fr] gap-3">
+                                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.75fr_1fr_1fr] gap-3">
                                   <div>
-                                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">
+                                    <label className="flex items-center h-5 text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">
                                       Grade
                                     </label>
                                     <GradeDropdown
@@ -3934,7 +3934,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                     />
                                   </div>
                                   <div>
-                                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">
+                                    <label className="flex items-center h-5 text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">
                                       Weight (kg)
                                     </label>
                                     <input
@@ -3956,43 +3956,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                     />
                                   </div>
                                   <div>
-                                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">
-                                      <div className="flex items-center gap-1">
-                                        <Star
-                                          size={12}
-                                          className="text-gray-500"
-                                        />
-                                        Score
-                                      </div>
-                                    </label>
-                                    <input
-                                      type="number"
-                                      step="0.1"
-                                      min="0"
-                                      max="100"
-                                      placeholder="Optional"
-                                      value={lot.score}
-                                      onChange={(e) =>
-                                        setGradedLots(
-                                          gradedLots.map((l, i) =>
-                                            i === index
-                                              ? { ...l, score: e.target.value }
-                                              : l,
-                                          ),
-                                        )
-                                      }
-                                      className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">
-                                      <div className="flex items-center gap-1">
-                                        <DollarSign
-                                          size={12}
-                                          className="text-gray-500"
-                                        />
-                                        Price/kg (THB)
-                                      </div>
+                                    <label className="flex items-center h-5 text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide gap-1">
+                                      <DollarSign
+                                        size={12}
+                                        className="text-gray-500"
+                                      />
+                                      Price/kg (THB)
                                     </label>
                                     <input
                                       type="number"
@@ -5040,7 +5009,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             {entry.withdrawnByName && (
                               <div className="mb-3">
                                 <p className="text-xs text-gray-500">
-                                  Withdrawn by:{" "}
+                                  Withdrawn:{" "}
                                   <span className="font-semibold text-gray-700">
                                     {entry.withdrawnByName}
                                   </span>
