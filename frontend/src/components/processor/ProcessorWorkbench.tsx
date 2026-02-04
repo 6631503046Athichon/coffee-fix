@@ -97,6 +97,15 @@ type GreenBeanSortKeys = keyof GreenBeanLot | "id" | "qcScore";
 
 const ITEMS_PER_PAGE = 3;
 const MAX_VISIBLE_PAGES = 5;
+const NEW_TAG_DAYS = 3;
+
+const isRecentItem = (dateString?: string | null): boolean => {
+  if (!dateString) return false;
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return false;
+  const diffDays = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
+  return diffDays >= 0 && diffDays <= NEW_TAG_DAYS;
+};
 
 // Custom Dropdown Component for Process Type Selection
 const ProcessTypeDropdown: React.FC<{
@@ -452,6 +461,9 @@ const KanbanCard: React.FC<{ batch: ProcessingBatch }> = ({ batch }) => {
   const colors =
     processColors[batch.processType as keyof typeof processColors] ||
     processColors["Washed"];
+  const isNewBatch = isRecentItem(
+    batch.createdAt ?? batch.dryingEndDate ?? batch.baggingDate,
+  );
 
   return (
     <div
@@ -459,9 +471,16 @@ const KanbanCard: React.FC<{ batch: ProcessingBatch }> = ({ batch }) => {
     >
       {/* Card Header */}
       <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-semibold text-gray-900">
-          {formatProcessingBatchId(batch)}
-        </p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-gray-900">
+            {formatProcessingBatchId(batch)}
+          </p>
+          {isNewBatch && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+              NEW
+            </span>
+          )}
+        </div>
         <span
           className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors.badge}`}
         >
@@ -1763,14 +1782,23 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   </td>
                 </tr>
               ) : (
-                paginatedHarvestLots.map((lot) => (
-                  <tr
-                    key={lot.id}
-                    className="hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
-                      {formatHarvestLotId(lot)}
-                    </td>
+                paginatedHarvestLots.map((lot) => {
+                  const isNewLot = isRecentItem(lot.createdAt ?? lot.harvestDate);
+                  return (
+                    <tr
+                      key={lot.id}
+                      className="hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
+                        <div className="flex items-center gap-2">
+                          <span>{formatHarvestLotId(lot)}</span>
+                            {isNewLot && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+                              NEW
+                            </span>
+                          )}
+                        </div>
+                      </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
                       {lot.cherryVariety}
                     </td>
@@ -1800,8 +1828,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         <PlayCircle size={18} />
                       </button>
                     </td>
-                  </tr>
-                ))
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -1968,6 +1997,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   </tr>
                 ) : (
                   paginatedBatches.map((batch) => {
+                    const isNewBatch = isRecentItem(
+                      batch.createdAt ?? batch.dryingEndDate ?? batch.baggingDate,
+                    );
                     const duration =
                       batch.dryingStartDate && batch.dryingEndDate
                         ? `${Math.max(1, Math.round((new Date(batch.dryingEndDate).getTime() - new Date(batch.dryingStartDate).getTime()) / (1000 * 3600 * 24)))} days`
@@ -1978,7 +2010,14 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         className="hover:bg-gray-50 transition-colors"
                       >
                         <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
-                          {formatProcessingBatchId(batch)}
+                          <div className="flex items-center gap-2">
+                            <span>{formatProcessingBatchId(batch)}</span>
+                            {isNewBatch && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+                                NEW
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                           #{batch.harvestLotId.substring(0, 6).toUpperCase()}
@@ -2206,11 +2245,20 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   </td>
                 </tr>
               ) : (
-                paginatedParchmentLots.map((p) => (
-                  <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
-                      {formatParchmentId(p)}
-                    </td>
+                paginatedParchmentLots.map((p) => {
+                  const isNewParchment = isRecentItem(p.createdAt);
+                  return (
+                    <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
+                        <div className="flex items-center gap-2">
+                          <span>{formatParchmentId(p)}</span>
+                          {isNewParchment && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+                              NEW
+                            </span>
+                          )}
+                        </div>
+                      </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                       #{p.processingBatchId.substring(0, 6).toUpperCase()}
                     </td>
@@ -2257,8 +2305,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         <PlayCircle size={18} />
                       </button>
                     </td>
-                  </tr>
-                ))
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -2410,6 +2459,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 </tr>
               ) : (
                 paginatedGreenBeanLots.map((g) => {
+                  const isNewGreenBean = isRecentItem(g.createdAt);
                   // Prioritize processor score over cupping scores
                   const displayScore = g.processorScore
                     ? g.processorScore.toFixed(1)
@@ -2432,7 +2482,14 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       className="hover:bg-gray-50 transition-colors"
                     >
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
-                        {formatGreenBeanId(g)}
+                        <div className="flex items-center gap-2">
+                          <span>{formatGreenBeanId(g)}</span>
+                          {isNewGreenBean && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+                              NEW
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
                         {g.grade}
@@ -2620,21 +2677,30 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           <div className="p-3 h-[400px] overflow-y-auto">
             {readyForProcessingLots.length > 0 ? (
               <div className="space-y-2">
-                {paginatedHarvestCards.map((lot) => (
-                  <div
-                    key={lot.id}
-                    className="bg-white border-l-4 border-l-green-500 rounded-lg p-3 border border-gray-200 hover:shadow-md transition-all"
-                  >
-                    {/* Card Header */}
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-semibold text-gray-900">
-                        {formatHarvestLotId(lot)}
-                      </p>
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                        Ready
-                      </span>
-                    </div>
+                {paginatedHarvestCards.map((lot) => {
+                  const isNewLot = isRecentItem(lot.createdAt ?? lot.harvestDate);
+                  return (
+                    <div
+                      key={lot.id}
+                      className="bg-white border-l-4 border-l-green-500 rounded-lg p-3 border border-gray-200 hover:shadow-md transition-all"
+                    >
+                      {/* Card Header */}
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-gray-900">
+                            {formatHarvestLotId(lot)}
+                          </p>
+                          {isNewLot && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+                              NEW
+                            </span>
+                          )}
+                        </div>
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                          Ready
+                        </span>
+                      </div>
 
                     {/* Card Body - Compact */}
                     <div className="text-xs space-y-1.5 text-gray-500 mb-3">
@@ -2666,8 +2732,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       <PlayCircle size={14} />
                       Record Process
                     </button>
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-8 text-gray-400">
@@ -3200,16 +3267,25 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   </p>
                 </div>
               ) : (
-                paginatedKanbanParchmentLots.map((p) => (
-                  <div
-                    key={p.id}
-                    className={`bg-white border-l-4 ${p.status === "Hulled" ? "border-l-gray-300" : "border-l-amber-500"} rounded-lg p-3 border border-gray-200 hover:shadow-md transition-all`}
-                  >
-                    {/* Card Header */}
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-semibold text-gray-900">
-                        {formatParchmentId(p)}
-                      </p>
+                paginatedKanbanParchmentLots.map((p) => {
+                  const isNewParchment = isRecentItem(p.createdAt);
+                  return (
+                    <div
+                      key={p.id}
+                      className={`bg-white border-l-4 ${p.status === "Hulled" ? "border-l-gray-300" : "border-l-amber-500"} rounded-lg p-3 border border-gray-200 hover:shadow-md transition-all`}
+                    >
+                      {/* Card Header */}
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-gray-900">
+                            {formatParchmentId(p)}
+                          </p>
+                          {isNewParchment && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+                              NEW
+                            </span>
+                          )}
+                        </div>
                       <span
                         className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${p.status === "Hulled" ? "bg-gray-100 text-gray-600" : "bg-emerald-50 text-emerald-700"}`}
                       >
@@ -3264,8 +3340,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       <PlayCircle size={14} />
                       Hull & Grade
                     </button>
-                  </div>
-                ))
+                    </div>
+                  );
+                })
               )}
             </div>
             <div className="mt-auto">
@@ -3315,6 +3392,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 </div>
               ) : (
                 paginatedGreenBeanLots.map((g) => {
+                  const isNewGreenBean = isRecentItem(g.createdAt);
                   // Prioritize processor score over cupping scores
                   const displayScore = g.processorScore
                     ? g.processorScore.toFixed(1)
@@ -3343,9 +3421,16 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             <Coffee className="h-4 w-4 text-white" />
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-gray-900">
-                              {formatGreenBeanId(g)}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-semibold text-gray-900">
+                                {formatGreenBeanId(g)}
+                              </p>
+                              {isNewGreenBean && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+                                  NEW
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-teal-600">
                               Green Bean Lot
                             </p>

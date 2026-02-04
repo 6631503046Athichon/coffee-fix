@@ -77,6 +77,7 @@ export interface HarvestLot {
   harvestDate: string;
   status: "Ready for Processing" | "Complete";
   cropYearId?: string;
+  createdAt?: string;
 }
 
 export interface DryingLogEntry {
@@ -100,6 +101,7 @@ export interface ProcessingBatch {
   dryingStartDate?: string;
   dryingEndDate?: string;
   dryingLog?: DryingLogEntry[];
+  createdAt?: string;
 }
 
 export interface PhysicalTestResults {

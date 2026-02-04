@@ -104,6 +104,9 @@ function transformGreenBeanLotFromBackend(backendLot: any): GreenBeanLot {
     processorScore: backendLot.processorScore,
     pricePerKg: backendLot.pricePerKg,
     currency: backendLot.currency,
+    createdAt: backendLot.createdAt
+      ? new Date(backendLot.createdAt).toISOString()
+      : undefined,
   };
 }
 
