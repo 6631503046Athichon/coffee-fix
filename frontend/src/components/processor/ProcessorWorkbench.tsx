@@ -2644,10 +2644,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       <div className="flex justify-between">
                         <span>Weight</span>
                         <span className="font-medium text-green-600">
-                          {lot.remainingWeightKg !== undefined &&
+                          {typeof lot.remainingWeightKg === "number" &&
+                          typeof lot.weightKg === "number" &&
                           lot.remainingWeightKg !== lot.weightKg
                             ? `${lot.remainingWeightKg.toFixed(2)} kg (of ${lot.weightKg} kg)`
-                            : `${lot.weightKg} kg`}
+                            : typeof lot.weightKg === "number"
+                              ? `${lot.weightKg} kg`
+                              : "-"}
                         </span>
                       </div>
                     </div>
