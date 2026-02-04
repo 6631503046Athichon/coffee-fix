@@ -223,7 +223,7 @@ export const transformHarvestLotFromBackend = (lot: any) => ({
 export const transformHarvestLotToBackend = (lotData: any) => ({
   farmerName: lotData.farmerName || "",
   cherryVariety: lotData.cherryVariety || "",
-  weightKg: lotData.weightKg?.toString() || "0",
+  weightKg: Number(lotData.weightKg) || 0,
   farmPlotLocation: lotData.farmPlotLocation || "",
   harvestDate: lotData.harvestDate,
   status:
