@@ -659,6 +659,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const HARVEST_LOT_PAGE_SIZE = 5;
 
   const [completedBatchSearch, setCompletedBatchSearch] = useState("");
+  const [completedBatchProcessFilter, setCompletedBatchProcessFilter] =
+    useState<string>("all");
   const [completedBatchPage, setCompletedBatchPage] = useState(1);
   const COMPLETED_BATCH_PAGE_SIZE = 5;
 
@@ -1602,6 +1604,28 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     );
   }, [readyForProcessingLots, harvestCardPage]);
 
+  const filteredCompletedBatches = useMemo(() => {
+    const searchValue = completedBatchSearch.toLowerCase();
+    return data.processingBatches
+      .filter((b) => b.status === ProcessingBatchStatus.Completed)
+      .filter((b) =>
+        completedBatchProcessFilter === "all"
+          ? true
+          : b.processType === completedBatchProcessFilter,
+      )
+      .filter(
+        (b) =>
+          b.id.toLowerCase().includes(searchValue) ||
+          b.harvestLotId.toLowerCase().includes(searchValue) ||
+          b.processType.toLowerCase().includes(searchValue) ||
+          (b.processNotes || "").toLowerCase().includes(searchValue),
+      );
+  }, [
+    data.processingBatches,
+    completedBatchSearch,
+    completedBatchProcessFilter,
+  ]);
+
   // Card View pagination for Completed Batches
   const completedBatchesForCard = useMemo(
     () =>
@@ -1851,17 +1875,34 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               Completed Batches
             </h3>
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search batches..."
-              value={completedBatchSearch}
-              onChange={(e) => {
-                setCompletedBatchSearch(e.target.value);
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search batches..."
+                value={completedBatchSearch}
+                onChange={(e) => {
+                  setCompletedBatchSearch(e.target.value);
+                  setCompletedBatchPage(1);
+                }}
+                className="pl-10 w-full border border-sky-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-sky-300 focus:border-sky-300 outline-none"
+              />
+            </div>
+            <Select
+              options={[
+                { value: "all", label: "All Process" },
+                { value: "Washed", label: "Washed" },
+                { value: "Honey", label: "Honey" },
+                { value: "Natural", label: "Natural" },
+              ]}
+              value={completedBatchProcessFilter}
+              onChange={(v) => {
+                setCompletedBatchProcessFilter(v as string);
                 setCompletedBatchPage(1);
               }}
-              className="pl-10 w-full border border-sky-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-sky-300 focus:border-sky-300 outline-none"
+              placeholder="Process"
+              className="w-[160px]"
             />
           </div>
         </div>
@@ -1903,27 +1944,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
               {(() => {
-                const filteredBatches = data.processingBatches
-                  .filter((b) => b.status === ProcessingBatchStatus.Completed)
-                  .filter(
-                    (b) =>
-                      b.id
-                        .toLowerCase()
-                        .includes(completedBatchSearch.toLowerCase()) ||
-                      b.harvestLotId
-                        .toLowerCase()
-                        .includes(completedBatchSearch.toLowerCase()) ||
-                      b.processType
-                        .toLowerCase()
-                        .includes(completedBatchSearch.toLowerCase()) ||
-                      (b.processNotes || "")
-                        .toLowerCase()
-                        .includes(completedBatchSearch.toLowerCase()),
-                  );
                 const totalPages = Math.ceil(
-                  filteredBatches.length / COMPLETED_BATCH_PAGE_SIZE,
+                  filteredCompletedBatches.length / COMPLETED_BATCH_PAGE_SIZE,
                 );
-                const paginatedBatches = filteredBatches.slice(
+                const paginatedBatches = filteredCompletedBatches.slice(
                   (completedBatchPage - 1) * COMPLETED_BATCH_PAGE_SIZE,
                   completedBatchPage * COMPLETED_BATCH_PAGE_SIZE,
                 );
@@ -1992,25 +2016,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         </div>
         {/* Pagination */}
         {(() => {
-          const filteredBatches = data.processingBatches
-            .filter((b) => b.status === ProcessingBatchStatus.Completed)
-            .filter(
-              (b) =>
-                b.id
-                  .toLowerCase()
-                  .includes(completedBatchSearch.toLowerCase()) ||
-                b.harvestLotId
-                  .toLowerCase()
-                  .includes(completedBatchSearch.toLowerCase()) ||
-                b.processType
-                  .toLowerCase()
-                  .includes(completedBatchSearch.toLowerCase()) ||
-                (b.processNotes || "")
-                  .toLowerCase()
-                  .includes(completedBatchSearch.toLowerCase()),
-            );
           const totalPages = Math.ceil(
-            filteredBatches.length / COMPLETED_BATCH_PAGE_SIZE,
+            filteredCompletedBatches.length / COMPLETED_BATCH_PAGE_SIZE,
           );
           if (totalPages <= 1) return null;
           const TOTAL_SLOTS = 7;
