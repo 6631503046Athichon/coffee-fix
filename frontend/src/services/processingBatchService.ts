@@ -108,6 +108,9 @@ function transformProcessingBatchFromBackend(backendBatch: any): ProcessingBatch
     baggingDate: backendBatch.baggingDate ? new Date(backendBatch.baggingDate).toISOString().split('T')[0] : undefined,
     dryingStartDate: backendBatch.dryingStartDate ? new Date(backendBatch.dryingStartDate).toISOString().split('T')[0] : undefined,
     dryingEndDate: backendBatch.dryingEndDate ? new Date(backendBatch.dryingEndDate).toISOString().split('T')[0] : undefined,
+    createdAt: backendBatch.createdAt
+      ? new Date(backendBatch.createdAt).toISOString()
+      : undefined,
     dryingLog: backendBatch.dryingLogs?.map((log: any) => ({
       date: typeof log.date === 'string' ? log.date.split('T')[0] : new Date(log.date).toISOString().split('T')[0],
       moistureContent: log.moistureContent,

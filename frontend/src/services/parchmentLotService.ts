@@ -58,5 +58,8 @@ function transformParchmentLotFromBackend(backendLot: any): ParchmentLot {
     moistureContent: backendLot.moistureContent,
     processType: backendLot.processType,
     status: backendLot.status,
+    createdAt: backendLot.createdAt
+      ? new Date(backendLot.createdAt).toISOString()
+      : undefined,
   };
 }
