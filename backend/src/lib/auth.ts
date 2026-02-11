@@ -1,16 +1,18 @@
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 
-// JWT_SECRET is required - fail fast if not configured
-if (!process.env.JWT_SECRET) {
-  throw new Error(
-    'FATAL: JWT_SECRET environment variable is not set. ' +
-    'Please configure JWT_SECRET in your .env file for security.'
-  )
-}
-
-const JWT_SECRET: string = process.env.JWT_SECRET
 const JWT_EXPIRES_IN = '7d'
+
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET
+  if (!secret) {
+    throw new Error(
+      'FATAL: JWT_SECRET environment variable is not set. ' +
+      'Please configure JWT_SECRET in your .env file for security.'
+    )
+  }
+  return secret
+}
 
 export interface JWTPayload {
   userId: string
@@ -38,7 +40,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
  * Generate JWT token
  */
 export function generateToken(payload: JWTPayload): string {
-  return jwt.sign(payload, JWT_SECRET, {
+  return jwt.sign(payload, getJwtSecret(), {
     expiresIn: JWT_EXPIRES_IN,
   })
 }
@@ -48,7 +50,7 @@ export function generateToken(payload: JWTPayload): string {
  */
 export function verifyToken(token: string): JWTPayload {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload
+    const decoded = jwt.verify(token, getJwtSecret()) as JWTPayload
     return decoded
   } catch (error) {
     throw new Error('Invalid or expired token')
