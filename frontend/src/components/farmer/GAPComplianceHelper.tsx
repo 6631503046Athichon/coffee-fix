@@ -302,13 +302,27 @@ const GAPComplianceHelper: React.FC = () => {
 
     const handlePrint = () => {
         const printContents = reportContentRef.current?.innerHTML;
-        const originalContents = document.body.innerHTML;
-        const printWindow = window.open('', '', 'height=600,width=800');
-        
+        const printWindow = window.open('', '', 'height=800,width=900');
+
         if (printWindow && printContents) {
-            printWindow.document.write('<html><head><title>GAP Compliance Report</title>');
-            printWindow.document.write('<style>body{font-family:sans-serif;line-height:1.5;}h1,h2,h3{margin-bottom:0.5rem;}table{width:100%;border-collapse:collapse;margin-top:1rem;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}th{background-color:#f2f2f2;}</style>');
-            printWindow.document.write('</head><body >');
+            printWindow.document.write(`<html><head><title>GAP Compliance Report</title>
+<style>
+  @page { margin: 20mm 15mm; }
+  body { font-family: 'Sarabun', 'Segoe UI', sans-serif; line-height: 1.6; color: #1a1a1a; font-size: 13px; }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  h2 { font-size: 15px; font-weight: 600; margin: 16px 0 8px; }
+  h3 { font-size: 13px; font-weight: 600; margin: 12px 0 6px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { border: 1px solid #d1d5db; padding: 6px 10px; text-align: left; font-size: 12px; }
+  th { background-color: #f3f4f6; font-weight: 600; }
+  .report-header { text-align: center; border-bottom: 2px solid #1a1a1a; padding-bottom: 12px; margin-bottom: 20px; }
+  .report-header h1 { font-size: 22px; letter-spacing: 1px; }
+  .meta-table { width: auto; border: none; margin: 0 auto; }
+  .meta-table td { border: none; padding: 2px 12px; font-size: 12px; }
+  .section { margin-bottom: 20px; page-break-inside: avoid; }
+  .section-title { font-size: 14px; font-weight: 600; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin-bottom: 8px; }
+  .badge { display: inline-block; background: #e0e7ff; color: #3730a3; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+</style></head><body>`);
             printWindow.document.write(printContents);
             printWindow.document.write('</body></html>');
             printWindow.document.close();
@@ -481,15 +495,15 @@ const GAPComplianceHelper: React.FC = () => {
                         <div className="overflow-hidden">
                             <div className="overflow-x-auto overflow-y-hidden">
                                 <table className="w-full divide-y divide-gray-200 table-fixed">
-                                    <thead className="bg-gray-900">
+                                    <thead className="bg-slate-50 border-b border-slate-200">
                                     <tr>
-                                        <th scope="col" className="w-[18%] px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Farm/Plot</th>
-                                        <th scope="col" className="w-[10%] px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Date</th>
-                                        <th scope="col" className="w-[12%] px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Type</th>
-                                        <th scope="col" className="w-[18%] px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Product/Method</th>
-                                        <th scope="col" className="w-[10%] px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Quantity</th>
-                                        <th scope="col" className="w-[20%] px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider">Notes</th>
-                                        <th scope="col" className="w-[12%] px-4 py-3 text-center text-xs font-semibold text-white uppercase tracking-wider">Actions</th>
+                                        <th scope="col" className="w-[18%] px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Farm/Plot</th>
+                                        <th scope="col" className="w-[10%] px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Date</th>
+                                        <th scope="col" className="w-[12%] px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Type</th>
+                                        <th scope="col" className="w-[18%] px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Product/Method</th>
+                                        <th scope="col" className="w-[10%] px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Quantity</th>
+                                        <th scope="col" className="w-[20%] px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Notes</th>
+                                        <th scope="col" className="w-[12%] px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
@@ -620,72 +634,103 @@ const GAPComplianceHelper: React.FC = () => {
                 </div>
 
                 <div ref={reportContentRef} className="overflow-y-auto pr-2 max-h-[70vh]">
-                            <div className="bg-indigo-50 rounded-lg p-6 mb-6 border border-indigo-200">
-                                <h1 className="text-xl font-bold text-gray-900 mb-2">Summary of Agricultural Practices</h1>
-                                <p className="text-sm text-gray-600 flex items-center gap-2">
-                                    <span className="font-semibold">Report generated on:</span>
-                                    <span className="bg-white px-3 py-1 rounded-md border border-gray-200 text-gray-700">
-                                        {new Date().toLocaleDateString()}
-                                    </span>
-                                </p>
-                            </div>
+                    {/* Document Header */}
+                    <div className="text-center border-b-2 border-gray-800 pb-4 mb-6">
+                        <h1 className="text-2xl font-bold text-gray-900 tracking-wide uppercase">
+                            GAP Compliance Report
+                        </h1>
+                        <p className="text-sm text-gray-600 mt-1">Summary of Agricultural Practices</p>
 
-                            {Object.entries(reportData).map(([groupKey, logs]: [string, GAPLogEntry[]]) => {
-                                const reportFarm = farmMap.get(groupKey);
-                                const displayLabel = reportFarm ? buildFarmLabel(reportFarm) : groupKey;
-                                return (
-                                <div key={groupKey} className="mb-6 bg-white rounded-lg shadow-sm p-6 border-l-4 border-indigo-500">
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
-                                            <span className="text-indigo-600 font-bold text-lg">📍</span>
-                                        </div>
-                                        <h2 className="text-lg font-bold text-gray-900">
-                                            Plot: <span className="text-indigo-600">{displayLabel}</span>
-                                        </h2>
-                                    </div>
-
-                                    {data.activityTypes.map(actType => {
-                                        const typeLogs = logs.filter((l: GAPLogEntry) => l.activityType === actType.name);
-                                        if (typeLogs.length === 0) return null;
-                                        return (
-                                            <div key={actType.id} className="mt-4 bg-gray-50 rounded-lg p-4 border border-gray-200">
-                                                <div className="flex items-center gap-2 mb-3">
-                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
-                                                        {actType.name}
-                                                    </span>
-                                                    <span className="text-xs text-gray-500 font-medium">
-                                                        ({typeLogs.length} {typeLogs.length === 1 ? 'entry' : 'entries'})
-                                                    </span>
-                                                </div>
-                                                <div className="overflow-hidden rounded-lg border border-gray-200">
-                                                    <div className="overflow-x-auto">
-                                                        <table className="min-w-full text-sm">
-                                                        <thead className="bg-gray-900">
-                                                            <tr>
-                                                                <th className="text-left px-4 py-4 font-bold text-white w-1/4 border-b border-gray-200 tracking-wider">Date</th>
-                                                                <th className="text-left px-4 py-4 font-bold text-white w-1/2 border-b border-gray-200 tracking-wider">Product/Method</th>
-                                                                <th className="text-left px-4 py-4 font-bold text-white w-1/4 border-b border-gray-200 tracking-wider">Quantity</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody className="bg-white">
-                                                            {typeLogs.map((log, idx) => (
-                                                                <tr key={log.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-indigo-50 transition-colors`}>
-                                                                    <td className="px-4 py-2 border-b border-gray-100 text-gray-700">{new Date(log.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
-                                                                    <td className="px-4 py-2 border-b border-gray-100 text-gray-800 font-medium">{log.productUsed}</td>
-                                                                    <td className="px-4 py-2 border-b border-gray-100 text-gray-700 font-medium">{log.quantity}</td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            );
-                            })}
+                        <div className="mt-4 inline-block text-left">
+                            <table className="text-sm">
+                                <tbody>
+                                    <tr>
+                                        <td className="pr-4 py-0.5 text-gray-500 font-medium">Document No.</td>
+                                        <td className="py-0.5 text-gray-800 font-semibold">
+                                            GAP-{new Date().getFullYear()}-{String(new Date().getMonth() + 1).padStart(2, '0')}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td className="pr-4 py-0.5 text-gray-500 font-medium">Date Issued</td>
+                                        <td className="py-0.5 text-gray-800 font-semibold">
+                                            {new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td className="pr-4 py-0.5 text-gray-500 font-medium">Total Records</td>
+                                        <td className="py-0.5 text-gray-800 font-semibold">
+                                            {filteredLogs.length} {filteredLogs.length === 1 ? 'entry' : 'entries'}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
+                    </div>
+
+                    {/* Report Body */}
+                    {Object.entries(reportData).map(([groupKey, logs]: [string, GAPLogEntry[]], farmIdx) => {
+                        const reportFarm = farmMap.get(groupKey);
+                        const displayLabel = reportFarm ? buildFarmLabel(reportFarm) : groupKey;
+                        return (
+                            <div key={groupKey} className="mb-8">
+                                {/* Farm Section Header */}
+                                <div className="flex items-center gap-3 mb-3 pb-2 border-b border-gray-300">
+                                    <span className="flex items-center justify-center w-7 h-7 rounded-full bg-gray-800 text-white text-xs font-bold">
+                                        {farmIdx + 1}
+                                    </span>
+                                    <h2 className="text-base font-bold text-gray-900">
+                                        {displayLabel}
+                                    </h2>
+                                </div>
+
+                                {/* Activity Type Tables */}
+                                {data.activityTypes.map(actType => {
+                                    const typeLogs = logs.filter((l: GAPLogEntry) => l.activityType === actType.name);
+                                    if (typeLogs.length === 0) return null;
+                                    return (
+                                        <div key={actType.id} className="mb-4 ml-2">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <h3 className="text-sm font-semibold text-gray-700">{actType.name}</h3>
+                                                <span className="text-xs text-gray-400">
+                                                    ({typeLogs.length} {typeLogs.length === 1 ? 'record' : 'records'})
+                                                </span>
+                                            </div>
+                                            <div className="overflow-hidden rounded border border-gray-300">
+                                                <table className="min-w-full text-sm">
+                                                    <thead>
+                                                        <tr className="bg-gray-100">
+                                                            <th className="text-left px-4 py-2.5 font-semibold text-gray-700 w-[15%] border-b border-gray-300 text-xs uppercase tracking-wide">No.</th>
+                                                            <th className="text-left px-4 py-2.5 font-semibold text-gray-700 w-[25%] border-b border-gray-300 text-xs uppercase tracking-wide">Date</th>
+                                                            <th className="text-left px-4 py-2.5 font-semibold text-gray-700 w-[40%] border-b border-gray-300 text-xs uppercase tracking-wide">Product / Method</th>
+                                                            <th className="text-left px-4 py-2.5 font-semibold text-gray-700 w-[20%] border-b border-gray-300 text-xs uppercase tracking-wide">Quantity</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {typeLogs.map((log, idx) => (
+                                                            <tr key={log.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                                                <td className="px-4 py-2 border-b border-gray-200 text-gray-500 text-xs">{idx + 1}</td>
+                                                                <td className="px-4 py-2 border-b border-gray-200 text-gray-700">{new Date(log.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+                                                                <td className="px-4 py-2 border-b border-gray-200 text-gray-800">{log.productUsed}</td>
+                                                                <td className="px-4 py-2 border-b border-gray-200 text-gray-700">{log.quantity}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })}
+
+                    {/* Footer */}
+                    <div className="mt-8 pt-4 border-t border-gray-300 text-center">
+                        <p className="text-xs text-gray-400">
+                            This report was generated automatically from the GAP Compliance system.
+                        </p>
+                    </div>
+                </div>
             </Modal>
         </div>
     );

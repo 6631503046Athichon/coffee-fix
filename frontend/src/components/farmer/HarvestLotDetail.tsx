@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { ArrowLeft, User, MapPin, Weight, Calendar, Tag, Info, CheckCircle, Award, ExternalLink, Package, Coffee, Star } from 'lucide-react';
 import { formatHarvestLotId } from '../../utils/formatHarvestLotId';
@@ -30,6 +30,7 @@ const TimelineStep: React.FC<{ icon: React.ElementType; title: string; isComplet
 
 const HarvestLotDetail: React.FC = () => {
     const { lotId } = useParams<{ lotId: string }>();
+    const navigate = useNavigate();
     const { data } = useDataContext();
 
     const lot = data.harvestLots.find(h => h.id === lotId);
@@ -37,10 +38,10 @@ const HarvestLotDetail: React.FC = () => {
         return (
             <div className="max-w-5xl mx-auto text-center">
                 <h1 className="text-2xl font-bold">Harvest Lot Not Found</h1>
-                <Link to="/farmer-data-hub" className="mt-4 inline-flex items-center text-indigo-600 hover:text-indigo-800">
+                <button onClick={() => navigate(-1)} className="mt-4 inline-flex items-center text-indigo-600 hover:text-indigo-800">
                     <ArrowLeft className="h-4 w-4 mr-2" />
-                    Back to Data Hub
-                </Link>
+                    Back
+                </button>
             </div>
         );
     }
@@ -75,10 +76,10 @@ const HarvestLotDetail: React.FC = () => {
 
     return (
         <div className="max-w-5xl mx-auto">
-            <Link to="/farmer-data-hub" className="inline-flex items-center text-sm font-semibold text-indigo-600 hover:text-indigo-800 mb-4">
+            <button onClick={() => navigate(-1)} className="inline-flex items-center text-sm font-semibold text-indigo-600 hover:text-indigo-800 mb-4">
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Data Hub
-            </Link>
+                Back
+            </button>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2">
                     <div className="bg-white shadow-sm rounded-xl overflow-hidden border border-gray-200">

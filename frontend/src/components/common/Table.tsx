@@ -59,12 +59,12 @@ const Table = <T extends Record<string, any>>({
 
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-900">
+          <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
               {columns.map((column, index) => (
                 <th
                   key={index}
-                  className={`px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider ${column.headerClassName || ''}`}
+                  className={`px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider ${column.headerClassName || ''}`}
                 >
                   {column.header}
                 </th>

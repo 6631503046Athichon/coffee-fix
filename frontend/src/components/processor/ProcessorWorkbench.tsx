@@ -317,16 +317,12 @@ const GradeDropdown: React.FC<{
   );
 };
 
-// Crop Year Chips Component (เหมือนใน HarvestLotModal)
+// Crop Year Chips Component - แสดงแค่ 3 ปี
 const CropYearChips: React.FC<{
   years: CropYear[];
   value: string;
   onChange: (value: string) => void;
-  maxVisible?: number;
-}> = ({ years, value, onChange, maxVisible = 5 }) => {
-  const [offset, setOffset] = useState(0);
-  const initializedRef = useRef(false);
-
+}> = ({ years, value, onChange }) => {
   // หาปีปัจจุบันจาก today
   const currentYearId = useMemo(() => {
     const today = new Date();
@@ -339,31 +335,6 @@ const CropYearChips: React.FC<{
     );
   }, [years]);
 
-  // Initialize offset ให้อยู่รอบๆ ปีปัจจุบัน (แค่ครั้งแรกเท่านั้น)
-  useEffect(() => {
-    if (initializedRef.current) return; // ไม่ reset ถ้า initialize แล้ว
-    if (years.length > maxVisible && currentYearId) {
-      const currentIndex = years.findIndex((y) => y.id === currentYearId);
-      const halfRange = Math.floor(maxVisible / 2);
-      let startIndex = Math.max(0, currentIndex - halfRange);
-      if (startIndex + maxVisible > years.length) {
-        startIndex = Math.max(0, years.length - maxVisible);
-      }
-      setOffset(startIndex);
-      initializedRef.current = true;
-    }
-  }, [years, currentYearId, maxVisible]);
-
-  // คำนวณปีที่แสดง
-  const visibleYears = useMemo(() => {
-    if (years.length <= maxVisible) return years;
-    return years.slice(offset, offset + maxVisible);
-  }, [years, offset, maxVisible]);
-
-  const canGoBack = offset > 0;
-  const canGoForward = offset + maxVisible < years.length;
-  const hasNavigation = years.length > maxVisible;
-
   const baseChipClass =
     "relative flex items-center justify-center py-3 px-4 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer";
   const selectedClass = "bg-blue-600 text-white border-blue-600 shadow-lg";
@@ -371,75 +342,34 @@ const CropYearChips: React.FC<{
     "bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50";
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-3">
-        {/* ปุ่ม "None" */}
-        <button
-          type="button"
-          onClick={() => onChange("")}
-          className={`${baseChipClass} ${!value ? selectedClass : unselectedClass}`}
-        >
-          <span className="text-sm font-semibold">None</span>
-        </button>
+    <div className="grid grid-cols-3 gap-3">
+      {years.map((year) => {
+        const isSelected = value === year.id;
+        const isCurrent = year.id === currentYearId;
 
-        {/* ปุ่มแต่ละปี (จำกัดจำนวน) */}
-        {visibleYears.map((year) => {
-          const isSelected = value === year.id;
-          const isCurrent = year.id === currentYearId;
-
-          return (
-            <button
-              key={year.id}
-              type="button"
-              onClick={() => onChange(year.id)}
-              className={`${baseChipClass} ${isSelected ? selectedClass : unselectedClass}`}
-              title={year.description || year.year}
-            >
-              {isCurrent && (
-                <span
-                  className={`absolute -top-2 -right-2 px-2 py-0.5 text-[10px] font-bold rounded-full shadow-sm ${
-                    isSelected
-                      ? "bg-white text-blue-600"
-                      : "bg-blue-500 text-white"
-                  }`}
-                >
-                  Current
-                </span>
-              )}
-              <span className="text-sm font-semibold">{year.year}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Navigation arrows - ด้านล่าง */}
-      {/* ซ้าย = ไปปีใหม่ (offset-1), ขวา = ไปปีเก่า (offset+1) เพราะ years เรียง descending */}
-      {hasNavigation && (
-        <div className="flex items-center justify-center gap-4">
+        return (
           <button
+            key={year.id}
             type="button"
-            onClick={() => setOffset(Math.max(0, offset - 1))}
-            disabled={!canGoBack}
-            className={`p-2 rounded-full transition-all duration-200 ${canGoBack ? "hover:bg-blue-100 text-gray-700" : "text-gray-300 cursor-not-allowed"}`}
+            onClick={() => onChange(year.id)}
+            className={`${baseChipClass} ${isSelected ? selectedClass : unselectedClass}`}
+            title={year.description || year.year}
           >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-              <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
-            </svg>
+            {isCurrent && (
+              <span
+                className={`absolute -top-2 -right-2 px-2 py-0.5 text-[10px] font-bold rounded-full shadow-sm ${
+                  isSelected
+                    ? "bg-white text-blue-600"
+                    : "bg-blue-500 text-white"
+                }`}
+              >
+                Current
+              </span>
+            )}
+            <span className="text-sm font-semibold">{year.year}</span>
           </button>
-          <button
-            type="button"
-            onClick={() =>
-              setOffset(Math.min(years.length - maxVisible, offset + 1))
-            }
-            disabled={!canGoForward}
-            className={`p-2 rounded-full transition-all duration-200 ${canGoForward ? "hover:bg-blue-100 text-gray-700" : "text-gray-300 cursor-not-allowed"}`}
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-              <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z" />
-            </svg>
-          </button>
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 };
@@ -1702,11 +1632,17 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const openModal = (type: string, item: any) => {
     if (type === "startProcessing") {
       setSelectedHarvestLot(item);
-      // Auto-select crop year from harvest lot if available
+      // Auto-select crop year from harvest lot if available, otherwise default to current
       if (item?.cropYearId) {
         setCropYearId(item.cropYearId);
       } else {
-        setCropYearId("");
+        const today = new Date();
+        const currentCropYear = data.cropYears.find(y => {
+          const start = new Date(y.startDate);
+          const end = new Date(y.endDate);
+          return today >= start && today <= end;
+        });
+        setCropYearId(currentCropYear?.id || "");
       }
     }
     if (type === "hullAndGrade") setSelectedParchment(item);
@@ -2055,14 +1991,14 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-900">
+            <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Lot ID</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Variety</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Weight (kg)</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Farmer</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Actions</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Lot ID</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Variety</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Weight (kg)</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Farmer</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
@@ -2231,35 +2167,35 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-900">
+            <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Batch ID
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Harvest Lot
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Process
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Notes
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Drying Duration
                 </th>
@@ -2458,47 +2394,47 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-900">
+            <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Lot ID
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Batch ID
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Weight (kg)
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Moisture (%)
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Process
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Status
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Actions
                 </th>
@@ -2660,53 +2596,53 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-900">
+            <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Lot ID
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Grade
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Weight (kg)
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Price/kg
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Total Amount
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   QC Score
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Availability
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Actions
                 </th>
@@ -3669,7 +3605,20 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           Crop Year (Optional)
                         </label>
                         <CropYearChips
-                          years={data.cropYears}
+                          years={(() => {
+                            const today = new Date();
+                            const cm = today.getMonth() + 1;
+                            const cy = today.getFullYear();
+                            const active = cm >= 10 ? cy : cy - 1;
+                            const targets = [
+                              `${active - 1}/${active}`,
+                              `${active}/${active + 1}`,
+                              `${active + 1}/${active + 2}`,
+                            ];
+                            return [...data.cropYears]
+                              .filter(c => targets.includes(c.year))
+                              .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+                          })()}
                           value={cropYearId}
                           onChange={setCropYearId}
                         />

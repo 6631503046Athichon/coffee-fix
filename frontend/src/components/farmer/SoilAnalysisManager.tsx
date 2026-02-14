@@ -585,17 +585,17 @@ const SoilAnalysisManager: React.FC<SoilAnalysisManagerProps> = ({ currentUser }
 
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-900">
+                        <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Test Date</th>
-                                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Farm / Plot</th>
-                                <th scope="col" className="px-6 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">pH</th>
-                                <th scope="col" className="px-6 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">P (ppm)</th>
-                                <th scope="col" className="px-6 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">K (ppm)</th>
-                                <th scope="col" className="px-6 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">N (%)</th>
-                                <th scope="col" className="px-6 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">Ca (ppm)</th>
-                                <th scope="col" className="px-6 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">Mg (ppm)</th>
-                                <th scope="col" className="px-6 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">Actions</th>
+                                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Test Date</th>
+                                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Farm / Plot</th>
+                                <th scope="col" className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">pH</th>
+                                <th scope="col" className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">P (ppm)</th>
+                                <th scope="col" className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">K (ppm)</th>
+                                <th scope="col" className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">N (%)</th>
+                                <th scope="col" className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Ca (ppm)</th>
+                                <th scope="col" className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Mg (ppm)</th>
+                                <th scope="col" className="px-6 py-4 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-100">

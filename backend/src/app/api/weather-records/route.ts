@@ -33,8 +33,11 @@ export async function GET(request: NextRequest) {
       where.farmId = { in: farms.map(f => f.id) }
     }
 
+    const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '100', 10), 200)
+
     const weatherRecords = await prisma.weatherRecord.findMany({
       where,
+      take: limit,
       include: {
         farm: {
           select: {

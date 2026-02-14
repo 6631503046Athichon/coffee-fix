@@ -460,7 +460,7 @@ const FarmerDashboard: React.FC = () => {
                   onClick={() => navigate('/harvest-lots')}
                   className="mt-3 text-sm text-blue-600 hover:text-blue-700 font-medium"
                 >
-                  Add your first harvest lot →
+                  Add your first harvest lot <ArrowRight className="inline h-4 w-4 ml-1" />
                 </button>
               </div>
             ) : (

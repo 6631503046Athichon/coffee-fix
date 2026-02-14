@@ -422,14 +422,14 @@ const UserManagement: React.FC = () => {
             <div className="bg-white shadow-md rounded-lg overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-900">
+                        <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
-                                <th className="w-[15%] px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Name</th>
-                                <th className="w-[18%] px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Username</th>
-                                <th className="w-[25%] px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Email</th>
-                                <th className="w-[17%] px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Roles</th>
-                                <th className="w-[10%] px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
-                                <th className="w-[15%] px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Actions</th>
+                                <th className="w-[15%] px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Name</th>
+                                <th className="w-[18%] px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Username</th>
+                                <th className="w-[25%] px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Email</th>
+                                <th className="w-[17%] px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Roles</th>
+                                <th className="w-[10%] px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
+                                <th className="w-[15%] px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">

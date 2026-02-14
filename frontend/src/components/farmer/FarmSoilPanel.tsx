@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FlaskConical, Microscope, X, CheckCircle, Edit3, Trash2, Sparkles, Loader2 } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FlaskConical, Microscope, X, CheckCircle, Edit3, Trash2, Sparkles, Loader2, Upload, ImageIcon } from 'lucide-react';
 import { Button, Input, Modal } from '../common';
 import DatePicker from '../common/DatePicker';
 import { useDataContext } from '../../hooks/useDataContext';
@@ -8,7 +8,7 @@ import { Farm, SoilAnalysis, UserRole } from '../../types';
 import { generateSoilAnalysisId } from '../../utils/idGenerator';
 import { formatDateDisplay } from '../../utils/formatters';
 import { addSoilAnalysis, updateSoilAnalysis } from '../../services/soilAnalysisService';
-import { generateSoilRecommendations } from '../../services/geminiService';
+import { generateSoilRecommendations, extractSoilDataFromImage } from '../../services/geminiService';
 
 export type SoilFormState = {
   farmPlotLocation: string;
@@ -72,6 +72,12 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeneratingRecommendations, setIsGeneratingRecommendations] = useState(false);
 
+  // Image upload states
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [isExtractingFromImage, setIsExtractingFromImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Refs for auto-resizing textareas
   const recommendationsRef = useRef<HTMLTextAreaElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
@@ -114,6 +120,90 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
 
   const handleSoilFieldChange = (field: keyof SoilFormState, value: string) => {
     setSoilForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Image upload handlers
+  const handleImageSelect = useCallback((file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setSoilFormError('กรุณาเลือกไฟล์รูปภาพ (JPG, PNG, WEBP)');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setSoilFormError('ไฟล์ใหญ่เกินไป (สูงสุด 10MB)');
+      return;
+    }
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setImagePreview(e.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+    setSoilFormError(null);
+  }, []);
+
+  const handleImageDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) handleImageSelect(file);
+  }, [handleImageSelect]);
+
+  const handleExtractFromImage = async () => {
+    if (!imageFile) return;
+
+    setIsExtractingFromImage(true);
+    setSoilFormError(null);
+
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64Data = result.split(',')[1];
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(imageFile);
+      });
+
+      const extracted = await extractSoilDataFromImage(base64, imageFile.type);
+
+      // Auto-fill form with extracted data
+      setSoilForm(prev => ({
+        ...prev,
+        pH: extracted.pH || prev.pH,
+        phosphorus: extracted.phosphorus || prev.phosphorus,
+        potassium: extracted.potassium || prev.potassium,
+        nitrogen: extracted.nitrogen || prev.nitrogen,
+        calcium: extracted.calcium || prev.calcium,
+        magnesium: extracted.magnesium || prev.magnesium,
+        organicMatter: extracted.organicMatter || prev.organicMatter,
+        sulfur: extracted.sulfur || prev.sulfur,
+        zinc: extracted.zinc || prev.zinc,
+        iron: extracted.iron || prev.iron,
+        manganese: extracted.manganese || prev.manganese,
+        copper: extracted.copper || prev.copper,
+        boron: extracted.boron || prev.boron,
+        labName: extracted.labName || prev.labName,
+        certificateNumber: extracted.certificateNumber || prev.certificateNumber,
+      }));
+
+      // ลบรูปออกหลัง extract สำเร็จ เพื่อให้เห็นฟอร์มที่ fill ค่ามาทันที
+      clearImage();
+
+      setSoilToast({ type: 'success', message: 'อ่านค่าจากรูปสำเร็จ! กรุณาตรวจสอบค่าก่อนบันทึก' });
+      setTimeout(() => setSoilToast(null), 5000);
+    } catch (error: any) {
+      console.error('Failed to extract soil data from image:', error);
+      setSoilFormError(error?.message || 'ไม่สามารถอ่านค่าจากรูปได้ กรุณาลองอีกครั้ง');
+    } finally {
+      setIsExtractingFromImage(false);
+    }
+  };
+
+  const clearImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleSoilCancelEdit = () => {
@@ -426,6 +516,88 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
           </div>
 
 
+          {/* Image Upload Section */}
+          <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-emerald-100 rounded-lg">
+                <ImageIcon className="h-5 w-5 text-emerald-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-emerald-900">อัพโหลดรูปใบวิเคราะห์ดิน</p>
+                <p className="text-xs text-emerald-700">อัพโหลดรูปใบผลวิเคราะห์ดินจากแล็บ แล้ว AI จะอ่านค่าให้อัตโนมัติ</p>
+              </div>
+            </div>
+
+            {!imagePreview ? (
+              <div
+                onDrop={handleImageDrop}
+                onDragOver={(e) => e.preventDefault()}
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-emerald-300 rounded-xl p-6 text-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-100/50 transition-all"
+              >
+                <Upload className="h-8 w-8 text-emerald-400 mx-auto mb-2" />
+                <p className="text-sm text-emerald-700 font-medium">คลิกเพื่อเลือกรูป หรือลากไฟล์มาวาง</p>
+                <p className="text-xs text-emerald-600 mt-1">รองรับ JPG, PNG, WEBP (สูงสุด 10MB)</p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImageSelect(file);
+                  }}
+                  className="hidden"
+                />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="relative">
+                  <img
+                    src={imagePreview}
+                    alt="ใบวิเคราะห์ดิน"
+                    className="w-full max-h-64 object-contain rounded-lg border border-emerald-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={clearImage}
+                    className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={handleExtractFromImage}
+                    disabled={isExtractingFromImage}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 border-emerald-600"
+                  >
+                    {isExtractingFromImage ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        กำลังอ่านค่า...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        อ่านค่าจากรูป (AI)
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={clearImage}
+                    disabled={isExtractingFromImage}
+                  >
+                    เปลี่ยนรูป
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <form onSubmit={handleSoilSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input
@@ -651,7 +823,9 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                 )}
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">บันทึกเพิ่มเติม</label>
+                <div className="flex items-center mb-2" style={{ minHeight: '36px' }}>
+                  <label className="block text-sm font-semibold text-gray-700">บันทึกเพิ่มเติม</label>
+                </div>
                 <textarea
                   ref={notesRef}
                   value={soilForm.notes}
@@ -749,15 +923,15 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
               <div className="overflow-hidden rounded-lg border border-gray-200">
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead className="bg-gray-900 text-white">
+                    <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
-                      <th className="px-4 py-3 text-left font-semibold">วันที่ตรวจ</th>
-                      <th className="px-4 py-3 text-left font-semibold">แปลง</th>
-                      <th className="px-4 py-3 text-center font-semibold">pH</th>
-                      <th className="px-4 py-3 text-center font-semibold">N (%)</th>
-                      <th className="px-4 py-3 text-center font-semibold">P (ppm)</th>
-                      <th className="px-4 py-3 text-center font-semibold">K (ppm)</th>
-                      <th className="px-4 py-3 text-center font-semibold">Actions</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">วันที่ตรวจ</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">แปลง</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">pH</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">N (%)</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">P (ppm)</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">K (ppm)</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">

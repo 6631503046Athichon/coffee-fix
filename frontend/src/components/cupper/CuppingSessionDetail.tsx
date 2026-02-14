@@ -1,7 +1,7 @@
 
 
 import React from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { ArrowLeft, Calendar, Users, FlaskConical, CheckCircle } from 'lucide-react';
 import { CuppingSession, SCA_ATTRIBUTES, User } from '../../types';
@@ -27,11 +27,11 @@ const ScoreTable: React.FC<{ session: CuppingSession, sampleId: string }> = ({ s
         <div className="overflow-hidden rounded-lg mt-4">
             <div className="overflow-x-auto">
                 <table className="min-w-full border-collapse border border-gray-200">
-                <thead className="bg-gray-900">
+                <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
-                        <th className="px-3 py-4 text-left text-xs font-bold text-white uppercase tracking-wider border border-gray-200">Judge</th>
-                        {SCA_ATTRIBUTES.map(attr => <th key={attr} className="px-2 py-4 text-center text-xs font-bold text-white uppercase tracking-wider border border-gray-200" title={attr}>{attr.split('/')[0]}</th>)}
-                        <th className="px-3 py-4 text-center text-xs font-bold text-white uppercase tracking-wider border border-gray-200">Total</th>
+                        <th className="px-3 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider border border-gray-200">Judge</th>
+                        {SCA_ATTRIBUTES.map(attr => <th key={attr} className="px-2 py-4 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider border border-gray-200" title={attr}>{attr.split('/')[0]}</th>)}
+                        <th className="px-3 py-4 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider border border-gray-200">Total</th>
                     </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -54,6 +54,7 @@ const ScoreTable: React.FC<{ session: CuppingSession, sampleId: string }> = ({ s
 
 const CuppingSessionDetail: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
     const { data } = useDataContext();
     const session = data.cuppingSessions.find(s => s.id === id);
 
@@ -71,10 +72,10 @@ const CuppingSessionDetail: React.FC<{ currentUser: User }> = ({ currentUser }) 
 
     return (
         <div>
-            <Link to="/cupping" className="inline-flex items-center text-sm font-semibold text-indigo-600 hover:text-indigo-800 mb-4">
+            <button onClick={() => navigate(-1)} className="inline-flex items-center text-sm font-semibold text-indigo-600 hover:text-indigo-800 mb-4">
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Cupping Hub
-            </Link>
+                Back
+            </button>
 
             <div className="bg-white shadow-lg rounded-lg p-6 mb-8 border border-gray-200">
                 <div className="flex flex-col md:flex-row justify-between md:items-center">

@@ -39,8 +39,11 @@ export async function GET(request: NextRequest) {
     }
     // Admins see all logs (no filter applied)
 
+    const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '100', 10), 200)
+
     const gapLogs = await prisma.gAPLogEntry.findMany({
       where,
+      take: limit,
       include: {
         farm: {
           select: {

@@ -460,3 +460,121 @@ export const getPlatformTrends = async (appData: AppData): Promise<PlatformInsig
         throw new Error("Failed to generate AI-powered platform trends. Please try again.");
     }
 };
+
+/**
+ * Extract soil analysis data from an uploaded image using Gemini Vision
+ */
+export interface ExtractedSoilData {
+  pH?: string;
+  phosphorus?: string;
+  potassium?: string;
+  nitrogen?: string;
+  calcium?: string;
+  magnesium?: string;
+  organicMatter?: string;
+  sulfur?: string;
+  zinc?: string;
+  iron?: string;
+  manganese?: string;
+  copper?: string;
+  boron?: string;
+  labName?: string;
+  certificateNumber?: string;
+}
+
+export const extractSoilDataFromImage = async (
+  imageBase64: string,
+  mimeType: string
+): Promise<ExtractedSoilData> => {
+  const prompt = `You are a soil analysis report reader. Analyze this soil analysis certificate/report image and extract the nutrient values.
+
+Extract the following values from the image. Return ONLY the numeric values (no units). If a value is not found, return null for that field.
+
+Fields to extract:
+- pH: soil pH value
+- phosphorus: Phosphorus (P) in ppm
+- potassium: Potassium (K) in ppm
+- nitrogen: Nitrogen (N) in percentage (%)
+- calcium: Calcium (Ca) in ppm
+- magnesium: Magnesium (Mg) in ppm
+- organicMatter: Organic Matter (OM) in percentage (%)
+- sulfur: Sulfur (S) in ppm
+- zinc: Zinc (Zn) in ppm
+- iron: Iron (Fe) in ppm
+- manganese: Manganese (Mn) in ppm
+- copper: Copper (Cu) in ppm
+- boron: Boron (B) in ppm
+- labName: Name of the laboratory that performed the analysis
+- certificateNumber: Certificate or report number
+
+Important: Look for Thai or English labels. Common Thai labels: pH, ฟอสฟอรัส (P), โพแทสเซียม (K), ไนโตรเจน (N), แคลเซียม (Ca), แมกนีเซียม (Mg), อินทรีย์วัตถุ (OM).`;
+
+  if (!API_KEY) {
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    return {
+      pH: '6.2',
+      phosphorus: '25',
+      potassium: '180',
+      nitrogen: '0.15',
+      calcium: '1200',
+      magnesium: '350',
+      organicMatter: '3.5',
+      sulfur: '12',
+      zinc: '2.8',
+      iron: '45',
+      manganese: '15',
+      copper: '1.5',
+      boron: '0.8',
+      labName: 'Mock Laboratory',
+      certificateNumber: 'MOCK-2025-001',
+    };
+  }
+
+  try {
+    const response = await ai!.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                mimeType,
+                data: imageBase64,
+              },
+            },
+          ],
+        },
+      ],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            pH: { type: Type.STRING, nullable: true },
+            phosphorus: { type: Type.STRING, nullable: true },
+            potassium: { type: Type.STRING, nullable: true },
+            nitrogen: { type: Type.STRING, nullable: true },
+            calcium: { type: Type.STRING, nullable: true },
+            magnesium: { type: Type.STRING, nullable: true },
+            organicMatter: { type: Type.STRING, nullable: true },
+            sulfur: { type: Type.STRING, nullable: true },
+            zinc: { type: Type.STRING, nullable: true },
+            iron: { type: Type.STRING, nullable: true },
+            manganese: { type: Type.STRING, nullable: true },
+            copper: { type: Type.STRING, nullable: true },
+            boron: { type: Type.STRING, nullable: true },
+            labName: { type: Type.STRING, nullable: true },
+            certificateNumber: { type: Type.STRING, nullable: true },
+          },
+        },
+      },
+    });
+
+    return JSON.parse(response.text);
+  } catch (error) {
+    console.error('Error calling Gemini Vision for soil OCR:', error);
+    throw new Error('ไม่สามารถอ่านค่าจากรูปได้ กรุณาลองอีกครั้ง');
+  }
+};

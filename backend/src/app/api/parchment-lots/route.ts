@@ -21,8 +21,11 @@ export async function GET(request: NextRequest) {
       where.status = status
     }
 
+    const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '100', 10), 200)
+
     const parchmentLots = await prisma.parchmentLot.findMany({
       where,
+      take: limit,
       include: {
         processingBatch: {
           select: {

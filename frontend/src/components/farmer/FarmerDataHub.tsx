@@ -208,16 +208,16 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
             <div className="bg-white shadow-sm rounded-xl border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto overflow-y-hidden">
                     <table className="w-full divide-y divide-gray-200 table-fixed">
-                        <thead className="bg-gray-900">
+                        <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
-                                <th scope="col" className="w-[12%] px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Lot ID</th>
-                                <th scope="col" className="w-[14%] px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Farmer</th>
-                                <th scope="col" className="w-[14%] px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Variety</th>
-                                <th scope="col" className="w-[10%] px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Weight</th>
-                                <th scope="col" className="w-[12%] px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Harvest Date</th>
-                                <th scope="col" className="w-[14%] px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
-                                <th scope="col" className="w-[12%] px-4 py-3 text-center text-xs font-bold text-white uppercase tracking-wider">Actions</th>
-                                <th scope="col" className="w-[12%] px-4 py-3 text-center text-xs font-bold text-white uppercase tracking-wider">Details</th>
+                                <th scope="col" className="w-[12%] px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Lot ID</th>
+                                <th scope="col" className="w-[14%] px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Farmer</th>
+                                <th scope="col" className="w-[14%] px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Variety</th>
+                                <th scope="col" className="w-[10%] px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Weight</th>
+                                <th scope="col" className="w-[12%] px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Harvest Date</th>
+                                <th scope="col" className="w-[14%] px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
+                                <th scope="col" className="w-[12%] px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
+                                <th scope="col" className="w-[12%] px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Details</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-100">

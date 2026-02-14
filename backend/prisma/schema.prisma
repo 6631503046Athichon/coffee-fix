@@ -64,8 +64,10 @@ model Farm {
   caretakerNames String[]        @default([])
   caretakerName  String?
   sizeHectares   Float?
-  varieties      String[]
-  owner          User            @relation("FarmOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  varieties                String[]
+  weatherAutoFetchEnabled  Boolean         @default(false)
+  weatherAutoFetchInterval Int             @default(5)
+  owner                    User            @relation("FarmOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   gapLogs        GAPLogEntry[]
   harvestLots    HarvestLot[]
   soilAnalyses   SoilAnalysis[]

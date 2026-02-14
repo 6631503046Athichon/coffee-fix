@@ -29,9 +29,9 @@ interface SidebarProps {
 const SECTIONS: NavSection[] = [
   { id: 'farmer', label: 'Farmer', icon: Sprout, roles: [UserRole.Farmer, UserRole.Admin] },
   { id: 'processor', label: 'Processor', icon: Factory, roles: [UserRole.Processor, UserRole.Admin] },
-  { id: 'cupping', label: 'Quality & Cupping', icon: FlaskConical, roles: [UserRole.Processor, UserRole.Roaster, UserRole.HeadJudge, UserRole.Cupper, UserRole.Admin] },
+  { id: 'cupping', label: 'Quality & Cupping', icon: FlaskConical, roles: [UserRole.HeadJudge, UserRole.Cupper, UserRole.Admin] },
   { id: 'roaster', label: 'Roaster', icon: Flame, roles: [UserRole.Roaster, UserRole.Admin] },
-  { id: 'admin', label: 'Administration', icon: Shield, roles: [UserRole.Admin, UserRole.Processor, UserRole.Roaster] },
+  { id: 'admin', label: 'Administration', icon: Shield, roles: [UserRole.Admin] },
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ navItems, currentUserRoles }) => {

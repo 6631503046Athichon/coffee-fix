@@ -246,16 +246,16 @@ const TraceabilityHub: React.FC = () => {
             <div className="bg-white shadow-lg rounded-2xl overflow-hidden border border-gray-100">
                 <div className="overflow-x-auto">
                     <table className="min-w-full">
-                        <thead>
-                            <tr className="bg-gray-900 border-b border-gray-200">
-                                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Lot ID</th>
-                                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Variety</th>
-                                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Process</th>
-                                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Grade</th>
-                                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Score</th>
-                                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
-                                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">QR</th>
-                                <th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Action</th>
+                        <thead className="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Lot ID</th>
+                                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Variety</th>
+                                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Process</th>
+                                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Grade</th>
+                                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Score</th>
+                                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
+                                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">QR</th>
+                                <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Action</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-100">

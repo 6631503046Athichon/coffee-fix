@@ -523,11 +523,11 @@ const AddFarmPage: React.FC = () => {
 					<Button
 						type="button"
 						variant="outline"
-						onClick={() => navigate('/farmer-farms')}
+						onClick={() => navigate(-1)}
 						icon={<ArrowLeft className="h-4 w-4" />}
 						className="bg-white hover:bg-gray-50"
 					>
-						Back to Farms
+						Back
 					</Button>
 					<div className="flex-1 flex items-center gap-3">
 						<div className="p-3 bg-emerald-100 rounded-xl">

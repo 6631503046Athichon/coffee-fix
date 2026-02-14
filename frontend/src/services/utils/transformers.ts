@@ -42,6 +42,8 @@ export const transformFarmFromBackend = (farm: any) => {
     caretakerName: farm.caretakerName || undefined,
     createdAt: farm.createdAt,
     updatedAt: farm.updatedAt,
+    weatherAutoFetchEnabled: farm.weatherAutoFetchEnabled || false,
+    weatherAutoFetchInterval: farm.weatherAutoFetchInterval || 5,
     archived: farm.archived || false,
     archivedAt: farm.archivedAt || undefined,
     ownerUserId: farm.ownerId,

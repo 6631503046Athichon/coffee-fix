@@ -21,8 +21,11 @@ export async function GET(request: NextRequest) {
       where.status = status;
     }
 
+    const limit = Math.min(parseInt(request.nextUrl.searchParams.get("limit") || "50", 10), 200);
+
     const processingBatches = await prisma.processingBatch.findMany({
       where,
+      take: limit,
       include: {
         harvestLot: {
           select: {
@@ -39,9 +42,19 @@ export async function GET(request: NextRequest) {
           },
         },
         dryingLogs: {
-          orderBy: { date: "asc" },
+          orderBy: { date: "desc" },
+          take: 10,
         },
-        parchmentLots: true,
+        parchmentLots: {
+          select: {
+            id: true,
+            status: true,
+            initialWeightKg: true,
+            currentWeightKg: true,
+            moistureContent: true,
+            processType: true,
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
     });
