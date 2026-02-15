@@ -78,10 +78,13 @@ export const transformFarmToBackend = (farmData: any) => {
         : ownerNamesFromString,
     location: farmData.location || "",
     googleMapsUrl: farmData.googleMapsUrl || null,
-    latitude: farmData.latitude?.toString() || null,
-    longitude: farmData.longitude?.toString() || null,
+    latitude:
+      typeof farmData.latitude === "number" ? farmData.latitude : null,
+    longitude:
+      typeof farmData.longitude === "number" ? farmData.longitude : null,
     altitude: farmData.altitudeMeters?.toString() || null,
-    sizeHectares: farmData.sizeHectares?.toString() || null,
+    sizeHectares:
+      typeof farmData.sizeHectares === "number" ? farmData.sizeHectares : null,
     varieties: farmData.varieties || [],
     caretakerNames:
       caretakerNamesFromArray.length > 0
