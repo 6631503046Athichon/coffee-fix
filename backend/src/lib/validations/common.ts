@@ -97,10 +97,12 @@ export const phoneSchema = z.string()
   .optional()
   .nullable();
 
-export const urlSchema = z.string()
-  .url('รูปแบบ URL ไม่ถูกต้อง')
-  .optional()
-  .nullable();
+export const urlSchema = z.union([
+  z.string().url('รูปแบบ URL ไม่ถูกต้อง'),
+  z.literal(''),
+  z.null(),
+  z.undefined()
+]).transform(val => val === '' ? null : val);
 
 // ============================================
 // Array Validators
