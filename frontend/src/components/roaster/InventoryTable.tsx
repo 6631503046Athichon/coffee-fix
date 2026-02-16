@@ -18,6 +18,15 @@ interface InventoryTableProps {
 }
 
 const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast, currentPage = 1, totalPages = 1, onPageChange }) => {
+  // Debug: Log the items to see what we're receiving
+  React.useEffect(() => {
+    console.log('[InventoryTable] Items received:', items);
+    if (items.length > 0) {
+      console.log('[InventoryTable] First item:', items[0]);
+      console.log('[InventoryTable] First item inventoryId:', items[0].inventoryId);
+    }
+  }, [items]);
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {/* Header */}
@@ -38,6 +47,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast, curr
         <table className="w-full">
           <thead>
             <tr className="bg-gray-800">
+              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Inventory ID</th>
               <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Lot ID</th>
               <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Details</th>
               <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Remaining</th>
@@ -64,8 +74,13 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast, curr
                   className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
                 >
                   <td className="px-5 py-4">
+                    <span className="text-sm font-medium text-gray-900">
+                      {item.inventoryId || 'N/A'}
+                    </span>
+                  </td>
+                  <td className="px-5 py-4">
                     <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-gray-100 text-sm font-mono font-medium text-gray-800" title={item.greenBeanLotId}>
-                      {item.greenBeanLotId.length > 10 ? `${item.greenBeanLotId.substring(0, 10)}...` : item.greenBeanLotId}
+                      #{item.greenBeanLotId.substring(0, 6).toUpperCase()}
                     </span>
                   </td>
                   <td className="px-5 py-4">

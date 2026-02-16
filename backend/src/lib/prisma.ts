@@ -1,13 +1,17 @@
+// Load environment variables before importing PrismaClient
+import { config } from 'dotenv';
+import { resolve } from 'path';
+
+// Load .env file from backend directory
+config({ path: resolve(process.cwd(), '.env') });
+
 import { PrismaClient } from '@prisma/client'
+
+console.log('DEBUG: process.env.DATABASE_URL =', process.env.DATABASE_URL);
 
 const prismaClientSingleton = () => {
   return new PrismaClient({
     log: ['error', 'warn'],
-    datasources: {
-      db: {
-        url: process.env.DATABASE_URL,
-      },
-    },
   })
 }
 

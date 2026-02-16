@@ -135,6 +135,7 @@ export enum GreenBeanSourceType {
 }
 
 export interface GreenBeanLot {
+  lotId: string; // Human-readable lot code, e.g., GBL-001
   id: string;
   sourceType: GreenBeanSourceType;
   parchmentLotId?: string;
@@ -386,6 +387,7 @@ export interface RoasterInventoryItem {
   greenBeanLotId: string;
   claimedWeightKg: number;
   remainingWeightKg: number;
+  inventoryId?: string; // Human-readable inventory code, e.g., INV-001
 }
 
 export interface RoastBatch {

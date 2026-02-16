@@ -163,22 +163,31 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         [data]
     );
 
-    const myInventory = useMemo(() =>
-        data.roasterInventory
-            .filter(item => item.roasterId === currentUser.id && item.remainingWeightKg > 0.01)
-            .map(item => {
-                const gbl = data.greenBeanLots.find(lot => lot.id === item.greenBeanLotId);
-                const parchmentLot = data.parchmentLots.find(p => p.id === gbl?.parchmentLotId);
-                const harvestLot = data.harvestLots.find(h => h.id === parchmentLot?.harvestLotId);
-                return {
-                    ...item,
-                    variety: harvestLot?.cherryVariety || 'N/A',
-                    process: parchmentLot?.processType || 'N/A',
-                };
-            })
-            .sort((a, b) => b.id.localeCompare(a.id)),
-        [data, currentUser.id]
-    );
+    const myInventory = useMemo(() => {
+        const filteredItems = data.roasterInventory
+            .filter(item => item.roasterId === currentUser.id && item.remainingWeightKg > 0.01);
+        
+        // Sort by creation date first (oldest first)
+        const sortedByDate = [...filteredItems].sort((a, b) => {
+            const dateA = new Date(a.createdAt || 0).getTime();
+            const dateB = new Date(b.createdAt || 0).getTime();
+            return dateA - dateB;
+        });
+
+        // Generate INV-XXX IDs for all items in order
+        return sortedByDate.map((item, index) => {
+            const gbl = data.greenBeanLots.find(lot => lot.id === item.greenBeanLotId);
+            const parchmentLot = data.parchmentLots.find(p => p.id === gbl?.parchmentLotId);
+            const harvestLot = data.harvestLots.find(h => h.id === parchmentLot?.harvestLotId);
+            const invNumber = String(index + 1).padStart(3, '0');
+            return {
+                ...item,
+                inventoryId: `INV-${invNumber}`,
+                variety: harvestLot?.cherryVariety || 'N/A',
+                process: parchmentLot?.processType || 'N/A',
+            };
+        });
+    }, [data, currentUser.id]);
 
     const myRoasts = useMemo(() =>
         data.roastBatches

@@ -20,7 +20,12 @@ export async function GET(request: NextRequest) {
 
     const inventoryItems = await prisma.roasterInventoryItem.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        inventoryId: true,
+        greenBeanLotId: true,
+        claimedWeightKg: true,
+        remainingWeightKg: true,
         roaster: {
           select: {
             id: true,
@@ -53,9 +58,10 @@ export async function GET(request: NextRequest) {
           take: 5,
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: 'asc' },
     })
 
+    console.log('[RoasterInventory API] Returning items:', inventoryItems.map(item => ({ id: item.id, inventoryId: item.inventoryId, greenBeanLotId: item.greenBeanLotId })));
     return NextResponse.json({ inventoryItems })
   } catch (error) {
     return handleApiError(error)
@@ -122,37 +128,49 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Generate next inventoryId (INV-001, etc.)
+    const allItems = await prisma.roasterInventoryItem.findMany({
+      select: { inventoryId: true },
+      where: { inventoryId: { not: null } }
+    });
+    
+    let maxNumber = 0;
+    allItems.forEach(item => {
+      if (item.inventoryId) {
+        const match = item.inventoryId.match(/INV-(\d+)/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNumber) maxNumber = num;
+        }
+      }
+    });
+    
+    const nextNumber = maxNumber + 1;
+    const inventoryId = `INV-${String(nextNumber).padStart(3, '0')}`;
+
     const inventoryItem = await prisma.roasterInventoryItem.create({
       data: {
+        inventoryId,
         roasterId: user.id,
         greenBeanLotId,
         claimedWeightKg: parseFloat(claimedWeightKg),
         remainingWeightKg: parseFloat(claimedWeightKg),
       },
       include: {
-        roaster: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        roaster: { select: { id: true, name: true } },
         greenBeanLot: {
           include: {
             parchmentLot: {
               include: {
-                harvestLot: {
-                  select: {
-                    id: true,
-                    farmerName: true,
-                    cherryVariety: true,
-                  },
-                },
-              },
+                harvestLot: { select: { id: true, farmerName: true, cherryVariety: true } }
+              }
             },
+            priceSetter: { select: { id: true, name: true } },
           },
         },
+        roastBatches: { orderBy: { roastDate: 'desc' }, take: 5 },
       },
-    })
+    });
 
     return NextResponse.json(
       { inventoryItem, message: 'Green bean lot claimed successfully' },

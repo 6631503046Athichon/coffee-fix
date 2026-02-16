@@ -102,8 +102,23 @@ export async function POST(request: NextRequest) {
       currency,
     } = validation.data as any;
 
+    // Generate next lotId (GBL-001, etc.)
+    const lastLot = await prisma.greenBeanLot.findFirst({
+      orderBy: { createdAt: 'desc' },
+      select: { lotId: true },
+    });
+    let nextNumber = 1;
+    if (lastLot?.lotId) {
+      const match = lastLot.lotId.match(/GBL-(\d+)/);
+      if (match) {
+        nextNumber = parseInt(match[1], 10) + 1;
+      }
+    }
+    const lotId = `GBL-${String(nextNumber).padStart(3, '0')}`;
+
     const greenBeanLot = await prisma.greenBeanLot.create({
       data: {
+        lotId,
         sourceType,
         parchmentLotId: parchmentLotId || null,
         grade,

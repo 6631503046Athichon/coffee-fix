@@ -8,39 +8,38 @@ datasource db {
 }
 
 model User {
-  id                   String                 @id @default(uuid())
-  email                String?                @unique
-  username             String?                @unique
-  password             String
-  name                 String
-  roles                UserRole[]
-  isActive             Boolean                @default(true)
-  isSuperAdmin         Boolean                @default(false)
-  mustChangePassword   Boolean                @default(true)
-  mustChangeUsername   Boolean                @default(false)
-  mustChangeEmail      Boolean                @default(false)
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  lastLogin            DateTime?
-  temporaryPassword    String?
-  cuppingSessions      CuppingSession[]       @relation("SessionCreator")
-  cuppingJudges        CuppingSessionJudge[]
-  createdFarms         Farm[]                 @relation("FarmOwner")
-  gapLogs              GAPLogEntry[]
-  greenBeanLots        GreenBeanLot[]         @relation("GreenBeanLotCreator")
-  priceSetGreenBeans   GreenBeanLot[]         @relation("PriceSetter")
-  withdrawalHistory    GreenBeanWithdrawal[]  @relation("WithdrawalUser")
-  harvestLots          HarvestLot[]           @relation("HarvestLotCreator")
-  invoices             Invoice[]
-  judgeScores          JudgeScore[]
-  passwordResetTokens  PasswordResetToken[]
-  pricingHistory       PricingHistory[]
-  processingBatches    ProcessingBatch[]      @relation("ProcessingBatchCreator")
-  roastBatches         RoastBatch[]
-  roasterInventory     RoasterInventoryItem[]
-  saleOrders           SaleOrder[]
-  soilAnalyses         SoilAnalysis[]
-  weatherRecords       WeatherRecord[]
+  id                  String                 @id @default(uuid())
+  email               String?                @unique
+  username            String?                @unique
+  password            String
+  name                String
+  roles               UserRole[]
+  isActive            Boolean                @default(true)
+  isSuperAdmin        Boolean                @default(false)
+  mustChangePassword  Boolean                @default(true)
+  mustChangeUsername  Boolean                @default(false)
+  mustChangeEmail     Boolean                @default(false)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  lastLogin           DateTime?
+  cuppingSessions     CuppingSession[]       @relation("SessionCreator")
+  cuppingJudges       CuppingSessionJudge[]
+  createdFarms        Farm[]                 @relation("FarmOwner")
+  gapLogs             GAPLogEntry[]
+  greenBeanLots       GreenBeanLot[]         @relation("GreenBeanLotCreator")
+  priceSetGreenBeans  GreenBeanLot[]         @relation("PriceSetter")
+  withdrawalHistory   GreenBeanWithdrawal[]  @relation("WithdrawalUser")
+  harvestLots         HarvestLot[]           @relation("HarvestLotCreator")
+  invoices            Invoice[]
+  judgeScores         JudgeScore[]
+  passwordResetTokens PasswordResetToken[]
+  pricingHistory      PricingHistory[]
+  processingBatches   ProcessingBatch[]      @relation("ProcessingBatchCreator")
+  roastBatches        RoastBatch[]
+  roasterInventory    RoasterInventoryItem[]
+  saleOrders          SaleOrder[]
+  soilAnalyses        SoilAnalysis[]
+  weatherRecords      WeatherRecord[]
 
   @@index([email])
   @@index([username])
@@ -48,30 +47,30 @@ model User {
 }
 
 model Farm {
-  id             String          @id @default(uuid())
-  farmName       String
-  ownerNames     String[]        @default([])
-  location       String
-  latitude       Float?
-  longitude      Float?
-  altitude       String?
-  googleMapsUrl  String?
-  ownerId        String
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  archived       Boolean         @default(false)
-  archivedAt     DateTime?
-  caretakerNames String[]        @default([])
-  caretakerName  String?
-  sizeHectares   Float?
+  id                       String          @id @default(uuid())
+  farmName                 String
+  ownerNames               String[]        @default([])
+  location                 String
+  latitude                 Float?
+  longitude                Float?
+  altitude                 String?
+  googleMapsUrl            String?
+  ownerId                  String
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+  archived                 Boolean         @default(false)
+  archivedAt               DateTime?
+  caretakerNames           String[]        @default([])
+  caretakerName            String?
+  sizeHectares             Float?
   varieties                String[]
   weatherAutoFetchEnabled  Boolean         @default(false)
   weatherAutoFetchInterval Int             @default(5)
   owner                    User            @relation("FarmOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  gapLogs        GAPLogEntry[]
-  harvestLots    HarvestLot[]
-  soilAnalyses   SoilAnalysis[]
-  weatherRecords WeatherRecord[]
+  gapLogs                  GAPLogEntry[]
+  harvestLots              HarvestLot[]
+  soilAnalyses             SoilAnalysis[]
+  weatherRecords           WeatherRecord[]
 
   @@index([ownerId])
   @@index([archived])
@@ -188,6 +187,7 @@ model ParchmentLot {
 }
 
 model GreenBeanLot {
+  lotId              String?                     @unique // Human-readable lot code, e.g., GBL-001
   id                 String                      @id @default(uuid())
   sourceType         GreenBeanSourceType
   parchmentLotId     String?
@@ -450,6 +450,7 @@ model CuppingScore {
 }
 
 model RoasterInventoryItem {
+  inventoryId       String?      @unique // Human-readable inventory code, e.g., INV-001
   id                String       @id @default(uuid())
   roasterId         String
   greenBeanLotId    String

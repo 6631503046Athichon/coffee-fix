@@ -24,6 +24,7 @@ import { getAllCropYears } from './services/cropYearService';
 import { getAllProcessingBatches } from './services/processingBatchService';
 import { getAllParchmentLots } from './services/parchmentLotService';
 import { getAllGreenBeanLots } from './services/greenBeanLotService';
+import { getAllRoasterInventory } from './services/roasterInventoryService';
 import { batchedPromiseAll } from './utils/batchedFetch';
 import { Sidebar, Header } from './components/layout';
 import Login from './components/auth/Login';
@@ -157,14 +158,15 @@ const ProtectedRoutes: React.FC = () => {
       }));
 
       // Phase 2: Load secondary data in background
-      const [storedSoilAnalyses, storedWeatherRecords, storedGAPLogs, storedProcessingBatches, storedParchmentLots, storedGreenBeanLots] = await batchedPromiseAll([
+      const [storedSoilAnalyses, storedWeatherRecords, storedGAPLogs, storedProcessingBatches, storedParchmentLots, storedGreenBeanLots, storedRoasterInventory] = await batchedPromiseAll([
         () => getAllSoilAnalyses(),
         () => getAllWeatherRecords(),
         () => getAllGAPLogs(),
         () => getAllProcessingBatches(),
         () => getAllParchmentLots(),
         () => getAllGreenBeanLots(),
-      ], 6, [] as any);
+        () => getAllRoasterInventory().catch(() => []),
+      ], 7, [] as any);
 
       // Update UI with secondary data
       setData(prev => ({
@@ -175,6 +177,7 @@ const ProtectedRoutes: React.FC = () => {
         processingBatches: mergeArrays(storedProcessingBatches, MOCK_DATA.processingBatches),
         parchmentLots: mergeArrays(storedParchmentLots, MOCK_DATA.parchmentLots),
         greenBeanLots: mergeArrays(storedGreenBeanLots, MOCK_DATA.greenBeanLots),
+        roasterInventory: mergeArrays(storedRoasterInventory, MOCK_DATA.roasterInventory),
       }));
     } catch (error) {
       console.error('Failed to load data from backend:', error);
