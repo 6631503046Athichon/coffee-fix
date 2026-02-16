@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireAuth, handleApiError } from "@/lib/middleware";
+import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
+import { safeParseFloat } from "@/lib/utils";
 
 // GET /api/green-bean-lots/:id
 export async function GET(
@@ -93,7 +94,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await requireAuth(request);
+    const user = await requireAuth(request);
+    // SECURITY: Only Processor and Admin can update processor scores
+    requireRole(user, ['Processor', 'Admin']);
     const { id } = await params;
 
     const body = await request.json();
@@ -106,9 +109,17 @@ export async function PATCH(
       );
     }
 
+    const score = safeParseFloat(processorScore);
+    if (score === null) {
+      return NextResponse.json(
+        { error: "Invalid processorScore value" },
+        { status: 400 },
+      );
+    }
+
     const updatedLot = await prisma.greenBeanLot.update({
       where: { id },
-      data: { processorScore: parseFloat(processorScore) },
+      data: { processorScore: score },
       include: {
         parchmentLot: {
           include: {
@@ -149,6 +160,8 @@ export async function PUT(
 ) {
   try {
     const user = await requireAuth(request);
+    // SECURITY: Only Processor and Admin can update green bean lots
+    requireRole(user, ['Processor', 'Admin']);
     const { id } = await params;
 
     const body = await request.json();
@@ -163,12 +176,15 @@ export async function PUT(
 
     const updateData: any = {};
     if (grade !== undefined) updateData.grade = grade;
-    if (currentWeightKg !== undefined)
-      updateData.currentWeightKg = parseFloat(currentWeightKg);
+    if (currentWeightKg !== undefined) {
+      const weight = safeParseFloat(currentWeightKg);
+      if (weight !== null) updateData.currentWeightKg = weight;
+    }
     if (availabilityStatus !== undefined)
       updateData.availabilityStatus = availabilityStatus;
-    if (pricePerKg !== undefined)
-      updateData.pricePerKg = pricePerKg ? parseFloat(pricePerKg) : null;
+    if (pricePerKg !== undefined) {
+      updateData.pricePerKg = safeParseFloat(pricePerKg);
+    }
     if (currency !== undefined) updateData.currency = currency;
     if (priceSetDate !== undefined) {
       updateData.priceSetDate = priceSetDate ? new Date(priceSetDate) : null;
@@ -207,15 +223,18 @@ export async function PUT(
 
     // Create pricing history entry if price was set
     if (pricePerKg && currency) {
-      await prisma.pricingHistory.create({
-        data: {
-          greenBeanLotId: id,
-          pricePerKg: parseFloat(pricePerKg),
-          currency,
-          effectiveDate: priceSetDate ? new Date(priceSetDate) : new Date(),
-          setBy: user.id,
-        },
-      });
+      const price = safeParseFloat(pricePerKg);
+      if (price !== null) {
+        await prisma.pricingHistory.create({
+          data: {
+            greenBeanLotId: id,
+            pricePerKg: price,
+            currency,
+            effectiveDate: priceSetDate ? new Date(priceSetDate) : new Date(),
+            setBy: user.id,
+          },
+        });
+      }
     }
 
     return NextResponse.json({ greenBeanLot: updatedLot });
@@ -230,7 +249,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await requireAuth(request);
+    const user = await requireAuth(request);
+    // SECURITY: Only Processor and Admin can delete green bean lots
+    requireRole(user, ['Processor', 'Admin']);
     const { id } = await params;
 
     // Check if lot exists

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { safeParseFloat } from '@/lib/utils'
 
 // PATCH /api/parchment-lots/:id - Update parchment lot
 export async function PATCH(
@@ -8,7 +9,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    // SECURITY: Only Processor and Admin can update parchment lots
+    requireRole(user, ['Processor', 'Admin'])
     const { id } = await params
     const body = await request.json()
 
@@ -16,7 +19,10 @@ export async function PATCH(
 
     const updateData: any = {}
     if (status !== undefined) updateData.status = status
-    if (currentWeightKg !== undefined) updateData.currentWeightKg = parseFloat(currentWeightKg)
+    if (currentWeightKg !== undefined) {
+      const weight = safeParseFloat(currentWeightKg)
+      if (weight !== null) updateData.currentWeightKg = weight
+    }
 
     const parchmentLot = await prisma.parchmentLot.update({
       where: { id },
@@ -94,7 +100,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    // SECURITY: Only Processor and Admin can delete parchment lots
+    requireRole(user, ['Processor', 'Admin'])
     const { id } = await params
 
     // Check if lot exists

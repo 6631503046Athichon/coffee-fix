@@ -175,7 +175,7 @@ export async function PUT(
     if (password) {
       updateData.password = await hashPassword(password)
       updateData.mustChangePassword = true
-      updateData.temporaryPassword = password // Store for admin view until user changes it
+      // SECURITY: Never store plaintext passwords
     }
 
     const updatedUser = await prisma.user.update({

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { verifyToken } from '@/lib/auth'
+import { requireAuth, handleApiError } from '@/lib/middleware'
 import bcrypt from 'bcryptjs'
 
 /**
@@ -10,24 +10,15 @@ import bcrypt from 'bcryptjs'
  */
 export async function POST(request: NextRequest) {
   try {
-    // Verify authentication
-    const token = request.cookies.get('token')?.value || request.headers.get('authorization')?.replace('Bearer ', '')
+    // SECURITY: Use requireAuth instead of manual token extraction
+    const currentUser = await requireAuth(request)
 
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const decoded = verifyToken(token)
-    if (!decoded) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
-    }
-
-    // Get current user
-    const currentUser = await prisma.user.findUnique({
-      where: { id: decoded.userId }
+    // Get full user details
+    const user = await prisma.user.findUnique({
+      where: { id: currentUser.id }
     })
 
-    if (!currentUser) {
+    if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
@@ -42,7 +33,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const isPasswordValid = await bcrypt.compare(currentPassword, currentUser.password)
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password)
     if (!isPasswordValid) {
       return NextResponse.json(
         { error: 'Current password is incorrect' },
@@ -56,13 +47,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Update username if provided and required
-    if (currentUser.mustChangeUsername && newUsername) {
+    if (user.mustChangeUsername && newUsername) {
       // Check if username already exists
       const existingUsername = await prisma.user.findUnique({
         where: { username: newUsername }
       })
 
-      if (existingUsername && existingUsername.id !== currentUser.id) {
+      if (existingUsername && existingUsername.id !== user.id) {
         return NextResponse.json(
           { error: 'Username already taken' },
           { status: 400 }
@@ -74,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update email if provided and required
-    if (currentUser.mustChangeEmail && newEmail) {
+    if (user.mustChangeEmail && newEmail) {
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!emailRegex.test(newEmail)) {
@@ -89,7 +80,7 @@ export async function POST(request: NextRequest) {
         where: { email: newEmail }
       })
 
-      if (existingEmail && existingEmail.id !== currentUser.id) {
+      if (existingEmail && existingEmail.id !== user.id) {
         return NextResponse.json(
           { error: 'Email already taken' },
           { status: 400 }
@@ -101,7 +92,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update password if provided and required
-    if (currentUser.mustChangePassword && newPassword) {
+    if (user.mustChangePassword && newPassword) {
       // Validate password strength
       if (newPassword.length < 8) {
         return NextResponse.json(
@@ -114,25 +105,24 @@ export async function POST(request: NextRequest) {
       const hashedPassword = await bcrypt.hash(newPassword, 10)
       updateData.password = hashedPassword
       updateData.mustChangePassword = false
-      updateData.temporaryPassword = null // Clear temp password so admin can't see it anymore
     }
 
     // Ensure all required changes are made
-    if (currentUser.mustChangeUsername && !newUsername) {
+    if (user.mustChangeUsername && !newUsername) {
       return NextResponse.json(
         { error: 'Username change is required' },
         { status: 400 }
       )
     }
 
-    if (currentUser.mustChangeEmail && !newEmail) {
+    if (user.mustChangeEmail && !newEmail) {
       return NextResponse.json(
         { error: 'Email is required' },
         { status: 400 }
       )
     }
 
-    if (currentUser.mustChangePassword && !newPassword) {
+    if (user.mustChangePassword && !newPassword) {
       return NextResponse.json(
         { error: 'Password change is required' },
         { status: 400 }
@@ -141,7 +131,7 @@ export async function POST(request: NextRequest) {
 
     // Update user
     const updatedUser = await prisma.user.update({
-      where: { id: currentUser.id },
+      where: { id: user.id },
       data: updateData
     })
 
@@ -164,10 +154,6 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('First login update error:', error)
-    return NextResponse.json(
-      { error: 'Failed to update profile' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }

@@ -89,8 +89,31 @@ export async function requireAuth(request: NextRequest): Promise<AuthenticatedUs
  */
 export function requireRole(user: AuthenticatedUser, allowedRoles: string[]): void {
   const hasRole = user.roles.some((role: string) => allowedRoles.includes(role))
-  
+
   if (!hasRole && !user.isSuperAdmin) {
+    throw new Error('Insufficient permissions')
+  }
+}
+
+/**
+ * Require ownership - throws error if user is not the owner and not an admin
+ * @param user - The authenticated user
+ * @param ownerId - The ID of the resource owner
+ * @param allowedRoles - Roles that can bypass ownership check (defaults to ['Admin'])
+ */
+export function requireOwnership(
+  user: AuthenticatedUser,
+  ownerId: string | null | undefined,
+  allowedRoles: string[] = ['Admin']
+): void {
+  // Admins and super admins can bypass ownership checks
+  if (user.isSuperAdmin) return
+
+  const hasAllowedRole = user.roles.some(role => allowedRoles.includes(role))
+  if (hasAllowedRole) return
+
+  // Check ownership
+  if (!ownerId || user.id !== ownerId) {
     throw new Error('Insufficient permissions')
   }
 }

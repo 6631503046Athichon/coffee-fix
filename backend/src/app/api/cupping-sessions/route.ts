@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
 // GET /api/cupping-sessions - List all cupping sessions
 export async function GET(request: NextRequest) {
@@ -61,6 +61,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request)
+    // SECURITY: Only HeadJudge, Cupper, and Admin can create cupping sessions
+    requireRole(user, ['HeadJudge', 'Cupper', 'Admin'])
 
     const body = await request.json()
     const { name, date, type, status, samples, judges } = body

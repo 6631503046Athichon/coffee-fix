@@ -59,7 +59,6 @@ export async function GET(request: NextRequest) {
         isSuperAdmin: true,
         createdAt: true,
         lastLogin: true,
-        temporaryPassword: true,
         mustChangePassword: true,
       },
       orderBy: { createdAt: 'desc' },
@@ -151,7 +150,6 @@ export async function POST(request: NextRequest) {
         mustChangePassword: autoGenerate,
         mustChangeUsername: autoGenerate,
         mustChangeEmail: autoGenerate && !email, // Don't require email change if already provided
-        temporaryPassword: plainPassword || null, // Store for admin view until user changes it
       },
       select: {
         id: true,

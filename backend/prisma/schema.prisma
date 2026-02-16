@@ -22,7 +22,6 @@ model User {
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
   lastLogin            DateTime?
-  temporaryPassword    String?
   cuppingSessions      CuppingSession[]       @relation("SessionCreator")
   cuppingJudges        CuppingSessionJudge[]
   createdFarms         Farm[]                 @relation("FarmOwner")

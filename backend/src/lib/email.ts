@@ -199,14 +199,15 @@ async function sendWithResend(options: EmailOptions): Promise<void> {
 
 /**
  * Send welcome email to new user
+ * SECURITY: Never send passwords via email
  */
-export async function sendWelcomeEmail(email: string, name: string, temporaryPassword?: string): Promise<void> {
+export async function sendWelcomeEmail(email: string, name: string): Promise<void> {
   const subject = 'Welcome to Coffee Lab Platform'
   const html = `
     <h1>Welcome, ${name}!</h1>
     <p>Your account has been created on the Coffee Lab Platform.</p>
-    ${temporaryPassword ? `<p>Your temporary password is: <strong>${temporaryPassword}</strong></p><p>Please change it after your first login.</p>` : ''}
-    <p>You can now log in and start using the platform.</p>
+    <p>Please contact your administrator for login credentials.</p>
+    <p>You will be required to change your password on first login.</p>
   `
 
   await sendEmail({ to: email, subject, html })
