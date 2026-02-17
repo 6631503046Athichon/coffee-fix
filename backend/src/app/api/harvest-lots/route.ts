@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { validateBody, createHarvestLotSchema } from '@/lib/validations'
+import { nextDisplayId } from '@/lib/utils'
 
 // This route depends on auth cookies/headers, so it must be dynamic.
 export const dynamic = 'force-dynamic'
@@ -99,8 +100,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const displayId = await nextDisplayId(prisma.harvestLot, 'HL')
+
     const harvestLot = await prisma.harvestLot.create({
       data: {
+        displayId,
         farmerName,
         cherryVariety,
         weightKg,

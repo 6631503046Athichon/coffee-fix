@@ -2262,7 +2262,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           </div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                          #{batch.harvestLotId.substring(0, 6).toUpperCase()}
+                          {formatHarvestLotId({ id: batch.harvestLotId })}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <span
@@ -2492,7 +2492,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </div>
                       </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                      #{p.processingBatchId.substring(0, 6).toUpperCase()}
+                      {formatProcessingBatchId({ id: p.processingBatchId })}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
                       {(p.status === "Hulled"
@@ -4756,6 +4756,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   const sourceHarvest = data.harvestLots.find(
                     (h) => h.id === sourceParchment?.harvestLotId,
                   );
+                  const sourceBatch = data.processingBatches.find(
+                    (b) => b.id === sourceParchment?.processingBatchId,
+                  );
                   const externalSource =
                     selectedGreenBeanForSource.sourceType === "External"
                       ? selectedGreenBeanForSource.externalSource
@@ -4833,7 +4836,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                   {formatParchmentId(sourceParchment)}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-1">
-                                  Batch #{sourceParchment.processingBatchId.substring(0, 6).toUpperCase()}
+                                  Batch {sourceBatch?.displayId || formatProcessingBatchId({ id: sourceParchment.processingBatchId })}
                                 </p>
                               </div>
                               <div>
@@ -4875,7 +4878,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                 Harvest Lot
                               </p>
                               <p className="font-semibold text-gray-900">
-                                {sourceHarvest?.id || "-"}
+                                {sourceHarvest?.displayId || sourceHarvest?.id?.substring(0, 8).toUpperCase() || "-"}
                               </p>
                             </div>
                             <div>

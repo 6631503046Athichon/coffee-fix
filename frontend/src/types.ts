@@ -70,6 +70,7 @@ export interface Farm {
 
 export interface HarvestLot {
   id: string;
+  displayId?: string;
   farmId?: string;
   farmerName: string;
   cherryVariety: string;
@@ -91,6 +92,7 @@ export interface DryingLogEntry {
 
 export interface ProcessingBatch {
   id: string;
+  displayId?: string;
   harvestLotId: string;
   status: ProcessingBatchStatus;
   processType: string;
@@ -118,6 +120,7 @@ export interface PhysicalTestResults {
 
 export interface ParchmentLot {
   id: string;
+  displayId?: string;
   processingBatchId: string;
   harvestLotId: string;
   initialWeightKg: number;
@@ -136,6 +139,7 @@ export enum GreenBeanSourceType {
 
 export interface GreenBeanLot {
   id: string;
+  displayId?: string;
   sourceType: GreenBeanSourceType;
   parchmentLotId?: string;
   /** External source details when sourceType is External */

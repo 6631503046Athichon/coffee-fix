@@ -112,6 +112,7 @@ function transformGreenBeanLotFromBackend(backendLot: any): GreenBeanLot {
 
   return {
     id: backendLot.id,
+    displayId: backendLot.displayId || undefined,
     sourceType: backendLot.sourceType || "Internal",
     parchmentLotId: backendLot.parchmentLotId,
     externalSource: backendLot.externalSource,

@@ -3,6 +3,7 @@ import { Package, PlusCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../common/Button';
 import type { ExternalDisplayLot } from '../../types/displayTypes';
 import { toFixed2 } from '../../utils/formatters';
+import { formatGreenBeanId } from '../../utils/formatDisplayId';
 
 interface ExternalLotsTableProps {
   lots: ExternalDisplayLot[];
@@ -73,7 +74,7 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({ lots, onClaim, on
                 >
                   <td className="px-5 py-4">
                     <span className="text-sm font-mono font-semibold text-gray-900" title={lot.id}>
-                      #{lot.id.substring(0, 6).toUpperCase()}
+                      {formatGreenBeanId(lot)}
                     </span>
                   </td>
                   <td className="px-5 py-4">

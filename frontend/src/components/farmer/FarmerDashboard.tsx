@@ -15,7 +15,7 @@ import { Alert } from '../common/Alert';
 import { StatCard } from '../common/StatCard';
 import { generateHarvestLotId } from '../../utils/idGenerator';
 import { toFixed2 } from '../../utils/formatters';
-import { formatHarvestLotId } from '../../utils/formatHarvestLotId';
+
 
 
 // Coffee varieties list
@@ -473,7 +473,7 @@ const FarmerDashboard: React.FC = () => {
                   >
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-gray-900">{formatHarvestLotId(lot.id, 'short', lot.harvestDate)}</span>
+                        <span className="font-semibold text-gray-900">{lot.displayId || lot.id.substring(0, 8).toUpperCase()}</span>
                         <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
                           lot.status === 'Complete'
                             ? 'bg-purple-100 text-purple-800'
@@ -557,7 +557,7 @@ const FarmerDashboard: React.FC = () => {
                                         <div className="text-sm font-bold text-gray-900">
                                           {(() => {
                                             const lot = data.harvestLots.find(l => l.id === item.lotId);
-                                            return lot ? formatHarvestLotId(item.lotId, 'short', lot.harvestDate) : item.lotId;
+                                            return lot?.displayId || item.lotId.substring(0, 8).toUpperCase();
                                           })()}
                                         </div>
                                     </td>

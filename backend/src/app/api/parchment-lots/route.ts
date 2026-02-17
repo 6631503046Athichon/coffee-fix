@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, handleApiError } from '@/lib/middleware'
+import { nextDisplayId } from '@/lib/utils'
 
 // GET /api/parchment-lots - List all parchment lots
 export async function GET(request: NextRequest) {
@@ -68,8 +69,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const displayId = await nextDisplayId(prisma.parchmentLot, 'PCH')
+
     const parchmentLot = await prisma.parchmentLot.create({
       data: {
+        displayId,
         processingBatchId,
         harvestLotId,
         initialWeightKg: parseFloat(initialWeightKg),

@@ -11,7 +11,7 @@ import { Input } from '../common/Input';
 import { PageHeader } from '../common/PageHeader';
 import { Badge } from '../common/Badge';
 import { exportToCSV } from '../../utils/exportCSV';
-import { formatHarvestLotId } from '../../utils/formatHarvestLotId';
+
 import { formatDateDisplay } from '../../utils/formatters';
 
 // Removed inline CustomFilterDropdown in favor of shared Select
@@ -237,7 +237,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                                         className="hover:bg-gray-50 transition-colors cursor-pointer"
                                     >
                                         <td className="px-4 py-3 text-sm font-semibold text-gray-900 truncate">
-                                            {formatHarvestLotId(lot.id, 'short', lot.harvestDate)}
+                                            {lot.displayId || lot.id.substring(0, 8).toUpperCase()}
                                         </td>
                                         <td className="px-4 py-3 text-sm text-gray-700 truncate">
                                             {lot.farmerName}
@@ -364,7 +364,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                                 </div>
                                 <div>
                                     <p className="text-xs font-medium text-blue-600 uppercase tracking-wide">Lot ID</p>
-                                    <p className="text-sm font-mono font-semibold text-gray-900">{formatHarvestLotId(editingLot.id, 'short', editingLot.harvestDate)}</p>
+                                    <p className="text-sm font-mono font-semibold text-gray-900">{editingLot.displayId || editingLot.id.substring(0, 8).toUpperCase()}</p>
                                 </div>
                             </div>
                         </div>

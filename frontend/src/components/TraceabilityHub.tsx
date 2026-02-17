@@ -4,6 +4,7 @@ import { useDataContext } from '../hooks/useDataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Search, ExternalLink, CheckCircle, Archive, AlertCircle, ChevronLeft, ChevronRight, QrCode, Package, X, Star } from 'lucide-react';
 import { UserRole, GreenBeanLot } from '../types';
+import { formatGreenBeanId } from '../utils/formatDisplayId';
 import { QRCodeModal } from './modals/QRCodeModal';
 import { BulkQRGeneratorModal } from './modals/BulkQRGeneratorModal';
 
@@ -285,7 +286,7 @@ const TraceabilityHub: React.FC = () => {
                                         >
                                             <td className="px-4 py-4 whitespace-nowrap">
                                                 <span className="text-sm font-mono font-semibold text-gray-900" title={lot.id}>
-                                                    #{lot.id.substring(0, 6).toUpperCase()}
+                                                    {formatGreenBeanId(lot)}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-4 whitespace-nowrap">

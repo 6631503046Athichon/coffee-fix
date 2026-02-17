@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
+import { nextDisplayId } from "@/lib/utils";
 
 // GET /api/processing-batches - List all processing batches
 export async function GET(request: NextRequest) {
@@ -93,11 +94,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Pre-generate display IDs outside the transaction
+    const batchDisplayId = await nextDisplayId(prisma.processingBatch, "PB")
+    const parchmentDisplayId =
+      status === "Completed" && parchmentWeightKg && moistureContent
+        ? await nextDisplayId(prisma.parchmentLot, "PCH")
+        : null
+
     // Use transaction to create batch and update harvest lot status atomically
     const processingBatch = await prisma.$transaction(async (tx) => {
       // Create processing batch
       const batch = await tx.processingBatch.create({
         data: {
+          displayId: batchDisplayId,
           harvestLotId,
           status: status || "ToProcess",
           processType,
@@ -138,6 +147,7 @@ export async function POST(request: NextRequest) {
       if (status === "Completed" && parchmentWeightKg && moistureContent) {
         await tx.parchmentLot.create({
           data: {
+            displayId: parchmentDisplayId,
             processingBatchId: batch.id,
             harvestLotId: harvestLotId,
             initialWeightKg: parseFloat(parchmentWeightKg),

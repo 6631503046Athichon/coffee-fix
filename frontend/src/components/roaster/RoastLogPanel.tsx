@@ -2,6 +2,7 @@ import React from 'react';
 import { BookText, Flame, ChevronLeft, ChevronRight, Calendar, Scale, TrendingDown } from 'lucide-react';
 import { RoastBatch } from '../../types';
 import { toFixed2 } from '../../utils/formatters';
+import { formatGreenBeanId } from '../../utils/formatDisplayId';
 
 const RoastLogPanel: React.FC<{
   roasts: RoastBatch[];
@@ -94,7 +95,7 @@ const RoastLogPanel: React.FC<{
                   </div>
                   <span className="text-gray-300">|</span>
                   <span className="text-sm font-mono font-semibold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">
-                    #{roast.greenBeanLotId.substring(0, 6).toUpperCase()}
+                    {formatGreenBeanId({ id: roast.greenBeanLotId })}
                   </span>
                   {roast.roastLevel && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700">

@@ -90,6 +90,7 @@ model CropYear {
 
 model HarvestLot {
   id                String            @id @default(uuid())
+  displayId         String?           @unique
   farmerName        String
   cherryVariety     String
   weightKg          Float
@@ -115,6 +116,7 @@ model HarvestLot {
 
 model ProcessingBatch {
   id                String                @id @default(uuid())
+  displayId         String?               @unique
   harvestLotId      String
   createdById       String?
   status            ProcessingBatchStatus @default(ToProcess)
@@ -168,6 +170,7 @@ model PhysicalTestResults {
 
 model ParchmentLot {
   id                  String               @id @default(uuid())
+  displayId           String?              @unique
   processingBatchId   String
   harvestLotId        String
   initialWeightKg     Float
@@ -188,6 +191,7 @@ model ParchmentLot {
 
 model GreenBeanLot {
   id                 String                      @id @default(uuid())
+  displayId          String?                     @unique
   sourceType         GreenBeanSourceType
   parchmentLotId     String?
   grade              String

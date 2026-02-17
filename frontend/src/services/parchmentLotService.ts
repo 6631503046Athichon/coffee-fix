@@ -51,6 +51,7 @@ export const deleteParchmentLot = async (id: string): Promise<void> => {
 function transformParchmentLotFromBackend(backendLot: any): ParchmentLot {
   return {
     id: backendLot.id,
+    displayId: backendLot.displayId || undefined,
     processingBatchId: backendLot.processingBatchId,
     harvestLotId: backendLot.harvestLotId,
     initialWeightKg: backendLot.initialWeightKg,

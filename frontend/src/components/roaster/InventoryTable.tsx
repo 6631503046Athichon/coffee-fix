@@ -3,6 +3,7 @@ import { Flame, PlusCircle, Archive, ChevronLeft, ChevronRight } from 'lucide-re
 import { Button } from '../common/Button';
 import { RoasterInventoryItem } from '../../types';
 import { toFixed2 } from '../../utils/formatters';
+import { formatGreenBeanId } from '../../utils/formatDisplayId';
 
 export type InventoryDisplayItem = RoasterInventoryItem & {
   variety: string;
@@ -68,7 +69,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast, show
                 >
                   <td className="px-5 py-4">
                     <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-gray-100 text-sm font-mono font-medium text-gray-800" title={item.greenBeanLotId}>
-                      {item.greenBeanLotId.length > 10 ? `${item.greenBeanLotId.substring(0, 10)}...` : item.greenBeanLotId}
+                      {formatGreenBeanId({ id: item.greenBeanLotId })}
                     </span>
                   </td>
                   {showRoasterName && (

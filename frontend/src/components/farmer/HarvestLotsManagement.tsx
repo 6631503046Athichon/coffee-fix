@@ -7,7 +7,7 @@ import { ChevronRight, ArrowUp, ArrowDown, Coffee, PlusCircle, ChevronLeft } fro
 import { PageHeader } from '../common/PageHeader';
 import { Button } from '../common/Button';
 import HarvestLotModal from '../modals/HarvestLotModal';
-import { formatHarvestLotId } from '../../utils/formatHarvestLotId';
+
 
 type SortableKeys = keyof HarvestLot;
 
@@ -210,7 +210,7 @@ const HarvestLotsManagement: React.FC = () => {
                 <div className="flex items-start justify-between gap-6">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-4">
-                      <h4 className="text-xl font-bold text-gray-900">{formatHarvestLotId(lot.id, 'short', lot.harvestDate)}</h4>
+                      <h4 className="text-xl font-bold text-gray-900">{lot.displayId || lot.id.substring(0, 8).toUpperCase()}</h4>
                       <span className={`px-3 py-1 text-xs font-medium rounded-full ${
                         lot.status === 'Complete'
                           ? 'bg-purple-100 text-purple-800'

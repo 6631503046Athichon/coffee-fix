@@ -16,6 +16,7 @@ import RoastLogPanel from './RoastLogPanel';
 import { toFixed2, clamp } from '../../utils/formatters';
 import { claimGreenBeanLot, createRoastBatch } from '../../services/roasterService';
 import { createGreenBeanLot } from '../../services/greenBeanLotService';
+import { formatGreenBeanId } from '../../utils/formatDisplayId';
 import { useToast } from '../../contexts/ToastContext';
 
 
@@ -509,7 +510,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                         <div className="bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 rounded-2xl p-5 mb-6">
                             <div className="flex items-center justify-between mb-4">
                                 <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-white text-sm font-mono font-bold text-gray-900 shadow-sm border border-gray-200" title={selectedLot.id}>
-                                    #{selectedLot.id.substring(0, 6).toUpperCase()}
+                                    {formatGreenBeanId(selectedLot)}
                                 </span>
                                 <span className={`px-3 py-1.5 text-xs font-semibold rounded-full ${
                                     selectedLot.finalScore !== 'N/A' && Number(selectedLot.finalScore) >= 85

@@ -206,6 +206,7 @@ const HARVEST_STATUS_REVERSE_MAP = {
 
 export const transformHarvestLotFromBackend = (lot: any) => ({
   id: lot.id,
+  displayId: lot.displayId || undefined,
   farmId: lot.farmId || undefined,
   farmerName: lot.farmerName,
   cherryVariety: lot.cherryVariety,

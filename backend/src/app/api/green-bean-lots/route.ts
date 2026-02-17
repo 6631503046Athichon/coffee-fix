@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuth, handleApiError } from "@/lib/middleware";
 import { validateBody, createGreenBeanLotSchema } from "@/lib/validations";
+import { nextDisplayId } from "@/lib/utils";
 
 // GET /api/green-bean-lots - List all green bean lots
 export async function GET(request: NextRequest) {
@@ -102,8 +103,11 @@ export async function POST(request: NextRequest) {
       currency,
     } = validation.data as any;
 
+    const displayId = await nextDisplayId(prisma.greenBeanLot, "GBL")
+
     const greenBeanLot = await prisma.greenBeanLot.create({
       data: {
+        displayId,
         sourceType,
         parchmentLotId: parchmentLotId || null,
         grade,

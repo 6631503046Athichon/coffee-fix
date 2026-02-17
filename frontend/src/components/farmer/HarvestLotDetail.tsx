@@ -3,7 +3,7 @@ import React from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { ArrowLeft, User, MapPin, Weight, Calendar, Tag, Info, CheckCircle, Award, ExternalLink, Package, Coffee, Star } from 'lucide-react';
-import { formatHarvestLotId } from '../../utils/formatHarvestLotId';
+
 
 const DetailItem: React.FC<{ icon: React.ElementType; label: string; value: string | number | React.ReactNode; }> = ({ icon: Icon, label, value }) => (
     <div className="flex items-start py-3">
@@ -85,7 +85,7 @@ const HarvestLotDetail: React.FC = () => {
                     <div className="bg-white shadow-sm rounded-xl overflow-hidden border border-gray-200">
                         <div className="p-6 border-b border-gray-200">
                             <h1 className="text-2xl font-bold text-gray-900">Harvest Lot Details</h1>
-                            <p className="text-gray-600 text-sm">Lot ID: {formatHarvestLotId(lot.id, 'short', lot.harvestDate)}</p>
+                            <p className="text-gray-600 text-sm">Lot ID: {lot.displayId || lot.id.substring(0, 8).toUpperCase()}</p>
                         </div>
                         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 divide-y md:divide-y-0">
                             <DetailItem icon={User} label="Farmer Name" value={lot.farmerName} />
