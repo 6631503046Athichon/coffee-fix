@@ -7,17 +7,19 @@ import { toFixed2 } from '../../utils/formatters';
 export type InventoryDisplayItem = RoasterInventoryItem & {
   variety: string;
   process: string;
+  roasterName?: string;
 };
 
 interface InventoryTableProps {
   items: InventoryDisplayItem[];
   onLogRoast: (item: InventoryDisplayItem) => void;
+  showRoasterName?: boolean;
   currentPage?: number;
   totalPages?: number;
   onPageChange?: (page: number) => void;
 }
 
-const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast, currentPage = 1, totalPages = 1, onPageChange }) => {
+const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast, showRoasterName = false, currentPage = 1, totalPages = 1, onPageChange }) => {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {/* Header */}
@@ -39,6 +41,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast, curr
           <thead>
             <tr className="bg-gray-800">
               <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Lot ID</th>
+              {showRoasterName && <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Roaster</th>}
               <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Details</th>
               <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Remaining</th>
               <th className="px-5 py-3 text-right text-xs font-semibold text-gray-200 uppercase tracking-wide">Action</th>
@@ -47,7 +50,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast, curr
           <tbody className="divide-y divide-gray-100">
             {items.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-5 py-12 text-center">
+                <td colSpan={showRoasterName ? 5 : 4} className="px-5 py-12 text-center">
                   <div className="flex flex-col items-center">
                     <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
                       <Archive className="h-6 w-6 text-gray-400" />
@@ -68,6 +71,11 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast, curr
                       {item.greenBeanLotId.length > 10 ? `${item.greenBeanLotId.substring(0, 10)}...` : item.greenBeanLotId}
                     </span>
                   </td>
+                  {showRoasterName && (
+                    <td className="px-5 py-4">
+                      <span className="text-sm font-medium text-gray-900">{item.roasterName || '—'}</span>
+                    </td>
+                  )}
                   <td className="px-5 py-4">
                     <div className="text-sm">
                       <span className="font-medium text-gray-900">{item.variety}</span>

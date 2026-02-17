@@ -25,6 +25,7 @@ import { getAllProcessingBatches } from './services/processingBatchService';
 import { getAllParchmentLots } from './services/parchmentLotService';
 import { getAllGreenBeanLots } from './services/greenBeanLotService';
 import { getAllRoasterInventory, getAllRoastBatches } from './services/roasterService';
+import { getAllUsers } from './services/userService';
 import { batchedPromiseAll } from './utils/batchedFetch';
 import { Sidebar, Header } from './components/layout';
 import Login from './components/auth/Login';
@@ -131,8 +132,8 @@ const ProtectedRoutes: React.FC = () => {
       const storedInvoices = getAllInvoices();
       const storedPricingHistory = getAllPricingHistory();
 
-      // Phase 1: Load essential data + customers in parallel
-      const [storedFarms, storedHarvestLots, storedCropYears, storedProcessTypes, storedCustomers] = await batchedPromiseAll([
+      // Phase 1: Load essential data + customers + users in parallel
+      const [storedFarms, storedHarvestLots, storedCropYears, storedProcessTypes, storedCustomers, storedUsers] = await batchedPromiseAll([
         () => getAllFarms(),
         () => getAllHarvestLots(),
         () => getAllCropYears(),
@@ -141,7 +142,8 @@ const ProtectedRoutes: React.FC = () => {
           const stored = localStorage.getItem('coffee_lab_customers');
           return stored ? JSON.parse(stored) : [];
         }),
-      ], 5, [] as any);
+        () => getAllUsers(),
+      ], 6, [] as any);
 
       // Update UI immediately with essential data
       setData(prev => ({
@@ -152,6 +154,7 @@ const ProtectedRoutes: React.FC = () => {
         processTypes: storedProcessTypes.length > 0 ? storedProcessTypes : prev.processTypes,
         activityTypes: storedActivityTypes.length > 0 ? storedActivityTypes : prev.activityTypes,
         customers: mergeArrays(storedCustomers, MOCK_DATA.customers),
+        users: storedUsers.length > 0 ? storedUsers : prev.users,
         saleOrders: storedSaleOrders.length > 0 ? storedSaleOrders : prev.saleOrders,
         invoices: storedInvoices.length > 0 ? storedInvoices : prev.invoices,
         pricingHistory: storedPricingHistory.length > 0 ? storedPricingHistory : prev.pricingHistory,

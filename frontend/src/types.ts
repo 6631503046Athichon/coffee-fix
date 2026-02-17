@@ -124,7 +124,7 @@ export interface ParchmentLot {
   currentWeightKg: number;
   moistureContent: number;
   processType: string;
-  status: "Awaiting Hulling" | "Hulled";
+  status: "AwaitingHulling" | "Hulled";
   physicalTestResults?: PhysicalTestResults;
   createdAt?: string;
 }

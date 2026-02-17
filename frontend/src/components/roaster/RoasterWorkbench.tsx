@@ -7,7 +7,7 @@ import { Input } from '../common/Input';
 import { PageHeader } from '../common/PageHeader';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
-import { User, GreenBeanLot, RoasterInventoryItem, RoastLevel, GreenBeanSourceType } from '../../types';
+import { User, GreenBeanLot, RoasterInventoryItem, RoastLevel, GreenBeanSourceType, UserRole } from '../../types';
 import { PlusCircle, Package, Flame, Coffee } from 'lucide-react';
 import ExternalLotsTable from './ExternalLotsTable';
 import InternalLotsTable from './InternalLotsTable';
@@ -56,7 +56,7 @@ const COFFEE_VARIETIES = [
 
 
 const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
-    const { data, setData } = useDataContext();
+    const { data, setData, refreshData } = useDataContext();
     const location = useLocation();
     const navigate = useNavigate();
     const { addToast } = useToast();
@@ -93,6 +93,12 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         tasteNote: '',
     });
 
+    const isAdmin = currentUser.roles?.includes(UserRole.Admin);
+
+    // Refresh data on mount to ensure latest inventory is loaded
+    useEffect(() => {
+        refreshData();
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const getFinalScore = (gbl: GreenBeanLot) => {
         let finalScore: string | number = 'N/A';
@@ -168,19 +174,21 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
 
     const myInventory = useMemo(() =>
         data.roasterInventory
-            .filter(item => item.roasterId === currentUser.id && item.remainingWeightKg > 0.01)
+            .filter(item => (isAdmin || item.roasterId === currentUser.id) && item.remainingWeightKg > 0.01)
             .map(item => {
                 const gbl = data.greenBeanLots.find(lot => lot.id === item.greenBeanLotId);
                 const parchmentLot = data.parchmentLots.find(p => p.id === gbl?.parchmentLotId);
                 const harvestLot = data.harvestLots.find(h => h.id === parchmentLot?.harvestLotId);
+                const roasterUser = data.users.find(u => u.id === item.roasterId);
                 return {
                     ...item,
                     variety: harvestLot?.cherryVariety || 'N/A',
                     process: parchmentLot?.processType || 'N/A',
+                    roasterName: roasterUser?.name || 'Unknown',
                 };
             })
             .sort((a, b) => b.id.localeCompare(a.id)),
-        [data, currentUser.id]
+        [data, currentUser.id, isAdmin]
     );
 
     const myRoasts = useMemo(() =>
@@ -454,6 +462,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                       <InventoryTable
                         items={pagedInventory as any}
                         onLogRoast={(item) => openLogRoastModal(item as any)}
+                        showRoasterName={isAdmin}
                         currentPage={inventoryPage}
                         totalPages={inventoryTotalPages}
                         onPageChange={setInventoryPage}

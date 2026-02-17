@@ -12,21 +12,40 @@ const createUserWithOptionsSchema = createUserSchema.extend({
 })
 
 // GET /api/users - List all users
+// Admin: full access with search/filter
+// Non-admin: returns basic user list (id, name, roles) for features like roaster selection
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request)
-    requireRole(user, ['Admin'])
 
-    // Get query parameters for filtering
     const searchParams = request.nextUrl.searchParams
     const search = searchParams.get('search')
     const role = searchParams.get('role')
     const status = searchParams.get('status')
 
-    // Build where clause
+    // Non-admin users get a limited view (only active users, basic fields)
+    if (!user.roles.includes('Admin')) {
+      const where: Record<string, unknown> = { isActive: true }
+      if (role) {
+        where.roles = { has: role }
+      }
+
+      const users = await prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          roles: true,
+        },
+        orderBy: { name: 'asc' },
+      })
+
+      return NextResponse.json({ users })
+    }
+
+    // Admin: full access with search/filter
     const where: Record<string, unknown> = {}
 
-    // Search by name, email, or username
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -35,12 +54,10 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    // Filter by role
     if (role) {
       where.roles = { has: role }
     }
 
-    // Filter by active status
     if (status === 'active') {
       where.isActive = true
     } else if (status === 'inactive') {

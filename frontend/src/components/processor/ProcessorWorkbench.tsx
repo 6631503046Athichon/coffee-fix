@@ -63,6 +63,12 @@ import {
   Pencil,
   Eye,
   Flame,
+  Send,
+  Beaker,
+  Globe,
+  MoreHorizontal,
+  ArrowRight,
+  Minus,
 } from "lucide-react";
 import { addPricingHistory } from "../../services/salesService";
 import { getAllCustomers } from "../../services/customerService";
@@ -691,6 +697,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const [withdrawalType, setWithdrawalType] = useState<
     "Sale" | "Roasting Stock" | "Sample" | "Export" | "Other"
   >("Sample");
+  const [withdrawalAmount, setWithdrawalAmount] = useState("");
   const [withdrawalSalePrice, setWithdrawalSalePrice] = useState("");
   const [withdrawalCurrency, setWithdrawalCurrency] = useState("THB");
   const [withdrawalCustomerId, setWithdrawalCustomerId] = useState<string>("");
@@ -1309,6 +1316,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     setEditingWithdrawalLotId(null);
     setEditingWithdrawalIndex(null);
     setWithdrawalType("Sample");
+    setWithdrawalAmount("");
     setWithdrawalSalePrice("");
     setWithdrawalCurrency("THB");
     setWithdrawalCustomerName("");
@@ -1512,8 +1520,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           // Update parchment lot status based on remaining weight
           // If remaining_weight > 0 → status = Awaiting Hulling
           // If remaining_weight == 0 → status = Hulled
-          const newStatus: "Awaiting Hulling" | "Hulled" =
-            remainingWeight > 0 ? "Awaiting Hulling" : "Hulled";
+          const newStatus =
+            remainingWeight > 0 ? "AwaitingHulling" : "Hulled";
           await updateParchmentLot(selectedParchment.id, {
             status: newStatus,
             currentWeightKg: Math.round(remainingWeight * 100) / 100,
@@ -1611,6 +1619,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           });
           // Reset withdrawal form state
           setWithdrawalType("Sample");
+          setWithdrawalAmount("");
           setWithdrawalSalePrice("");
           setWithdrawalCurrency("THB");
           setWithdrawalCustomerId("");
@@ -1656,6 +1665,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     if (type === "withdrawStock") {
       setSelectedGreenBean(item);
       setWithdrawalType("Sample");
+      setWithdrawalAmount("");
       setWithdrawalTargetRoasterId("");
     }
     setModal(type);
@@ -3567,89 +3577,64 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
                 {modal === "startProcessing" && selectedHarvestLot && (
                   <>
-                    <div className="flex items-center gap-4 mb-8">
-                      <div className="p-4 bg-blue-100 rounded-xl shadow-md">
-                        <PlayCircle className="h-10 w-10 text-blue-600" />
-                      </div>
-                      <div>
-                        <h2 className="text-3xl font-bold text-gray-900">
-                          Record Process
-                        </h2>
-                        <p className="text-base text-gray-600 mt-1">
-                          Lot #{selectedHarvestLot.id}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="bg-gray-50 rounded-2xl p-8 mb-8 border border-gray-200 shadow-sm">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-8">
-                        <div className="text-center">
-                          <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">
-                            Variety
-                          </p>
-                          <p className="text-2xl font-bold text-gray-900">
-                            {selectedHarvestLot.cherryVariety}
+                    {/* Compact Header */}
+                    <div className="flex items-center justify-between mb-5">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-md">
+                          <PlayCircle className="h-6 w-6 text-white" />
+                        </div>
+                        <div>
+                          <h2 className="text-xl font-bold text-gray-900">Record Process</h2>
+                          <p className="text-xs text-gray-500">
+                            Lot #{formatHarvestLotId(selectedHarvestLot)}
                           </p>
                         </div>
-                        <div className="text-center sm:border-l-2 sm:border-gray-300">
-                          <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">
-                            {selectedHarvestLot.remainingWeightKg !== undefined &&
-                            selectedHarvestLot.remainingWeightKg !== null
-                              ? "Remaining Weight"
-                              : "Weight"}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                            {selectedHarvestLot.remainingWeightKg != null ? "Remaining" : "Weight"}
                           </p>
-                          <p className="text-2xl font-bold text-green-600">
-                            {selectedHarvestLot.remainingWeightKg !== undefined &&
-                            selectedHarvestLot.remainingWeightKg !== null
-                              ? `${selectedHarvestLot.remainingWeightKg.toFixed(2)} kg`
+                          <p className="text-lg font-bold text-green-600 leading-tight">
+                            {selectedHarvestLot.remainingWeightKg != null
+                              ? selectedHarvestLot.remainingWeightKg.toFixed(2)
                               : typeof selectedHarvestLot.weightKg === "number"
-                                ? `${selectedHarvestLot.weightKg} kg`
+                                ? selectedHarvestLot.weightKg
                                 : "-"}
+                            <span className="text-xs font-normal text-gray-400 ml-1">kg</span>
                           </p>
-                          {selectedHarvestLot.remainingWeightKg !== undefined &&
-                            selectedHarvestLot.remainingWeightKg !== null &&
-                            selectedHarvestLot.remainingWeightKg <
-                              selectedHarvestLot.weightKg && (
-                              <p className="text-xs text-gray-500 mt-1">
-                                of {selectedHarvestLot.weightKg} kg original
-                              </p>
-                            )}
                         </div>
-                        <div className="text-center sm:border-l-2 sm:border-gray-300">
-                          <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">
-                            Farmer
-                          </p>
-                          <p className="text-2xl font-bold text-gray-900">
-                            {selectedHarvestLot.farmerName}
-                          </p>
+                        <div className="w-px h-8 bg-gray-200" />
+                        <div className="text-right">
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Variety</p>
+                          <p className="text-sm font-bold text-gray-800 leading-tight">{selectedHarvestLot.cherryVariety}</p>
+                        </div>
+                        <div className="w-px h-8 bg-gray-200" />
+                        <div className="text-right">
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Farmer</p>
+                          <p className="text-sm font-bold text-gray-800 leading-tight">{selectedHarvestLot.farmerName}</p>
                         </div>
                       </div>
                     </div>
-                    <div className="mb-6 space-y-4">
+
+                    <div className="space-y-4">
+                      {/* Process Type */}
                       <div>
-                        <label
-                          htmlFor="processType"
-                          className="block text-base font-bold text-gray-700 mb-3"
-                        >
-                          Select Process Type
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                          Process Type
                         </label>
                         <ProcessTypeDropdown
                           value={selectedProcessType}
                           onChange={setSelectedProcessType}
                           processTypes={processTypeOptions}
                         />
-                        <input
-                          type="hidden"
-                          name="processType"
-                          value={selectedProcessType}
-                        />
+                        <input type="hidden" name="processType" value={selectedProcessType} />
                       </div>
 
+                      {/* Crop Year */}
                       <div>
-                        <label
-                          htmlFor="cropYear"
-                          className="block text-base font-bold text-gray-700 mb-3"
-                        >
-                          Crop Year (Optional)
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                          Crop Year
                         </label>
                         <CropYearChips
                           years={(() => {
@@ -3669,41 +3654,27 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           value={cropYearId}
                           onChange={setCropYearId}
                         />
-                        <p className="mt-2 text-xs text-gray-500">
-                          Associate this batch with a crop year for tracking and
-                          reporting
-                        </p>
                       </div>
 
-                      {/* Optional special instructions/note for the chosen process */}
+                      {/* Process Notes */}
                       <div>
-                        <label
-                          htmlFor="processNotes"
-                          className="block text-sm font-semibold text-gray-700 mb-2"
-                        >
-                          Process Notes (Optional)
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                          Process Notes
                         </label>
                         <textarea
                           id="processNotes"
                           name="processNotes"
                           rows={2}
-                          placeholder="e.g., Ferment 24h in sealed tank, raised-bed drying, frequent turning"
-                          className="w-full border border-gray-300 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-blue-500 shadow-sm transition-all resize-none"
+                          placeholder="e.g., Ferment 24h in sealed tank, raised-bed drying..."
+                          className="w-full border-2 border-gray-200 rounded-xl py-2.5 px-4 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all resize-none"
                         />
-                        <p className="mt-1 text-xs text-gray-500">
-                          Use this to capture special steps or parameters for
-                          this batch.
-                        </p>
                       </div>
 
-                      {/* Parchment Weight and Moisture */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Parchment Weight + Moisture Row */}
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-base font-bold text-gray-700 mb-3">
-                            <div className="flex items-center gap-2">
-                              <Scale className="h-5 w-5 text-green-600" />
-                              Parchment Weight (kg)
-                            </div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            Parchment Weight (kg)
                           </label>
                           <input
                             type="number"
@@ -3712,15 +3683,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             name="parchmentWeightKg"
                             placeholder="e.g., 85.0"
                             required
-                            className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-base focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 shadow-sm"
+                            className="block w-full h-[46px] border-2 border-gray-200 rounded-xl px-4 text-lg font-bold text-gray-800 focus:ring-2 focus:ring-green-500 focus:border-green-400 transition-all"
                           />
                         </div>
                         <div>
-                          <label className="block text-base font-bold text-gray-700 mb-3">
-                            <div className="flex items-center gap-2">
-                              <Droplet className="h-5 w-5 text-blue-600" />
-                              Coffee Moisture (%)
-                            </div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            Coffee Moisture (%)
                           </label>
                           <input
                             type="number"
@@ -3730,17 +3698,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             name="moistureContent"
                             placeholder="e.g., 12.0"
                             required
-                            className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
+                            className="block w-full h-[46px] border-2 border-gray-200 rounded-xl px-4 text-lg font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all"
                           />
-                          <p className="mt-2 text-xs text-gray-500">
-                            Measured on parchment at end of drying (workers
-                            input).
-                          </p>
                         </div>
                       </div>
 
-                      {/* Drying Dates */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Drying Dates Row */}
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
                           <DatePicker
                             value={dryingStartDate}
@@ -3748,11 +3712,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             label="Drying Start Date"
                             required
                           />
-                          <input
-                            type="hidden"
-                            name="dryingStartDate"
-                            value={dryingStartDate}
-                          />
+                          <input type="hidden" name="dryingStartDate" value={dryingStartDate} />
                         </div>
                         <div>
                           <DatePicker
@@ -3761,11 +3721,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             label="Drying End Date"
                             required
                           />
-                          <input
-                            type="hidden"
-                            name="dryingEndDate"
-                            value={dryingEndDate}
-                          />
+                          <input type="hidden" name="dryingEndDate" value={dryingEndDate} />
                         </div>
                       </div>
                     </div>
@@ -3791,206 +3747,142 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
                     return (
                       <>
-                        {/* Modal Header */}
-                        <div className="flex items-center gap-4 mb-6">
-                          <div className="p-4 bg-amber-500 rounded-2xl shadow-lg">
-                            <PlayCircle className="h-10 w-10 text-white" />
-                          </div>
-                          <div>
-                            <h2 className="text-3xl font-bold text-gray-900">
-                              Hull & Grade
-                            </h2>
-                            <p className="text-base text-gray-600 mt-1">
-                              Parchment Lot #{selectedParchment.id}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Parchment Info Card */}
-                        <div className="bg-amber-50 rounded-2xl p-6 mb-6 border border-amber-200">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
-                                Parchment Weight
-                              </p>
-                              <p className="text-3xl font-bold text-amber-600">
-                                {selectedParchment.currentWeightKg.toFixed(2)}
-                              </p>
-                              <p className="text-xs text-gray-500 mt-1">
-                                kilograms
-                              </p>
+                        {/* Compact Header */}
+                        <div className="flex items-center justify-between mb-5">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl shadow-md">
+                              <PackageCheck className="h-6 w-6 text-white" />
                             </div>
                             <div>
-                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
-                                Moisture
+                              <h2 className="text-xl font-bold text-gray-900">Hull & Grade</h2>
+                              <p className="text-xs text-gray-500">
+                                Parchment #{formatParchmentId(selectedParchment)}
                               </p>
-                              <p className="text-3xl font-bold text-blue-600">
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Weight</p>
+                              <p className="text-lg font-bold text-amber-600 leading-tight">
+                                {selectedParchment.currentWeightKg.toFixed(2)}
+                                <span className="text-xs font-normal text-gray-400 ml-1">kg</span>
+                              </p>
+                            </div>
+                            <div className="w-px h-8 bg-gray-200" />
+                            <div className="text-right">
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Moisture</p>
+                              <p className="text-lg font-bold text-blue-600 leading-tight">
                                 {selectedParchment.moistureContent}%
                               </p>
-                              <p className="text-xs text-gray-500 mt-1">
-                                content
-                              </p>
                             </div>
                           </div>
                         </div>
 
-                        {/* Total Green Bean Weight Input */}
-                        <div className="mb-6">
-                          <label className="block text-base font-bold text-gray-700 mb-3">
-                            <div className="flex items-center gap-2">
-                              <Scale className="h-5 w-5 text-green-600" />
-                              Total Green Bean Weight
-                              <span className="text-xs font-normal text-gray-500">
-                                (auto-calculated)
+                        {/* Green Bean Weight (auto) + Hulling Loss */}
+                        <div className="mb-4">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                              Total Green Bean Weight <span className="font-normal normal-case tracking-normal text-gray-400">(auto)</span>
+                            </label>
+                            {totalGreenWeight && !exceedsParchmentWeight && (
+                              <span className="text-xs font-bold text-blue-600">
+                                Hulling loss: {weightLossPercent}%
                               </span>
-                            </div>
-                          </label>
+                            )}
+                          </div>
                           <input
                             type="number"
                             step="0.1"
                             value={totalGreenWeight}
                             readOnly
                             placeholder="Enter weights below"
-                            className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-lg font-semibold bg-gray-50 text-green-700 cursor-not-allowed shadow-sm"
+                            className="block w-full h-[46px] border-2 border-gray-200 rounded-xl px-4 text-lg font-bold bg-gray-50 text-green-700 cursor-not-allowed"
                           />
-                          {totalGreenWeight && !exceedsParchmentWeight && (
-                            <div className="mt-3 flex items-center justify-between bg-blue-50 rounded-xl p-4 border border-blue-200">
-                              <span className="text-sm font-semibold text-gray-700">
-                                Weight Loss from Hulling
-                              </span>
-                              <span className="text-2xl font-bold text-blue-600">
-                                {weightLossPercent}%
-                              </span>
-                            </div>
-                          )}
                           {exceedsParchmentWeight && (
-                            <div className="mt-3 flex items-start gap-2 bg-red-50 rounded-xl p-4 border border-red-200">
-                              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-                              <div>
-                                <p className="text-sm font-semibold text-red-800">
-                                  น้ำหนักเกินกว่า Parchment Weight
-                                </p>
-                                <p className="text-xs text-red-600 mt-1">
-                                  Total Green Bean Weight (
-                                  {totalWeightNum.toFixed(2)} kg) ไม่สามารถเกิน
-                                  Parchment Weight (
-                                  {selectedParchment.currentWeightKg.toFixed(2)}{" "}
-                                  kg)
-                                </p>
-                              </div>
+                            <div className="mt-2 flex items-center gap-2 bg-red-50 rounded-lg p-2.5 border border-red-200">
+                              <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                              <p className="text-xs font-semibold text-red-700">
+                                Exceeds parchment weight ({selectedParchment.currentWeightKg.toFixed(2)} kg)
+                              </p>
                             </div>
                           )}
                         </div>
 
                         {/* Divider */}
-                        <div className="relative my-6">
+                        <div className="relative my-5">
                           <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t-2 border-gray-300"></div>
+                            <div className="w-full border-t border-gray-200"></div>
                           </div>
                           <div className="relative flex justify-center">
-                            <span className="bg-white px-4 text-sm font-bold text-gray-500 uppercase tracking-wider">
-                              Create Graded Lots
+                            <span className="bg-white px-3 text-[11px] font-bold text-gray-400 uppercase tracking-widest">
+                              Graded Lots
                             </span>
                           </div>
                         </div>
 
-                        {/* Graded Lots Section */}
-                        <div className="space-y-3 mb-4">
+                        {/* Graded Lots */}
+                        <div className="space-y-2 mb-3">
                           {gradedLots.map((lot, index) => (
                             <div
                               key={index}
-                              className="bg-green-50 rounded-xl p-4 border border-green-200"
+                              className="flex items-center gap-2 bg-gray-50 rounded-xl p-3 border border-gray-200"
                             >
-                              <div className="flex items-center gap-3">
-                                <div className="flex-shrink-0 w-10 h-10 bg-green-600 rounded-xl flex items-center justify-center">
-                                  <span className="text-white font-bold text-lg">
-                                    #{index + 1}
-                                  </span>
-                                </div>
-                                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.75fr_1fr_1fr] gap-3">
-                                  <div>
-                                    <label className="flex items-center h-5 text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">
-                                      Grade
-                                    </label>
-                                    <GradeDropdown
-                                      value={lot.grade}
-                                      onChange={(value) =>
-                                        setGradedLots(
-                                          gradedLots.map((l, i) =>
-                                            i === index
-                                              ? { ...l, grade: value }
-                                              : l,
-                                          ),
-                                        )
-                                      }
-                                      index={index}
-                                      usedGrades={gradedLots
-                                        .map((l) => l.grade)
-                                        .filter((g) => g)}
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="flex items-center h-5 text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">
-                                      Weight (kg)
-                                    </label>
-                                    <input
-                                      type="number"
-                                      step="0.1"
-                                      placeholder="0.00"
-                                      value={lot.weight}
-                                      onChange={(e) =>
-                                        setGradedLots(
-                                          gradedLots.map((l, i) =>
-                                            i === index
-                                              ? { ...l, weight: e.target.value }
-                                              : l,
-                                          ),
-                                        )
-                                      }
-                                      required
-                                      className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="flex items-center h-5 text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide gap-1">
-                                      <DollarSign
-                                        size={12}
-                                        className="text-gray-500"
-                                      />
-                                      Price/kg (THB)
-                                    </label>
-                                    <input
-                                      type="number"
-                                      step="0.01"
-                                      placeholder="Optional"
-                                      value={lot.price}
-                                      onChange={(e) =>
-                                        setGradedLots(
-                                          gradedLots.map((l, i) =>
-                                            i === index
-                                              ? { ...l, price: e.target.value }
-                                              : l,
-                                          ),
-                                        )
-                                      }
-                                      className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                    />
-                                  </div>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() =>
+                              <div className="flex-shrink-0 w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
+                                <span className="text-white font-bold text-sm">
+                                  {index + 1}
+                                </span>
+                              </div>
+                              <div className="flex-1 grid grid-cols-[1.5fr_1fr_1fr] gap-2">
+                                <GradeDropdown
+                                  value={lot.grade}
+                                  onChange={(value) =>
                                     setGradedLots(
-                                      gradedLots.filter((_, i) => i !== index),
+                                      gradedLots.map((l, i) =>
+                                        i === index ? { ...l, grade: value } : l,
+                                      ),
                                     )
                                   }
-                                  disabled={gradedLots.length <= 1}
-                                  className="flex-shrink-0 p-2.5 rounded-lg text-red-600 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                                  title="Remove this grade"
-                                >
-                                  <Trash2 size={20} />
-                                </button>
+                                  index={index}
+                                  usedGrades={gradedLots.map((l) => l.grade).filter((g) => g)}
+                                />
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  placeholder="kg"
+                                  value={lot.weight}
+                                  onChange={(e) =>
+                                    setGradedLots(
+                                      gradedLots.map((l, i) =>
+                                        i === index ? { ...l, weight: e.target.value } : l,
+                                      ),
+                                    )
+                                  }
+                                  required
+                                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                />
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  placeholder="THB/kg"
+                                  value={lot.price}
+                                  onChange={(e) =>
+                                    setGradedLots(
+                                      gradedLots.map((l, i) =>
+                                        i === index ? { ...l, price: e.target.value } : l,
+                                      ),
+                                    )
+                                  }
+                                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                />
                               </div>
+                              <button
+                                type="button"
+                                onClick={() => setGradedLots(gradedLots.filter((_, i) => i !== index))}
+                                disabled={gradedLots.length <= 1}
+                                className="flex-shrink-0 p-2 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+                              >
+                                <Trash2 size={16} />
+                              </button>
                             </div>
                           ))}
                         </div>
@@ -4004,168 +3896,150 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               { grade: "", weight: "", price: "", score: "" },
                             ])
                           }
-                          className="w-full py-3 px-4 border border-dashed border-green-300 rounded-xl text-sm font-bold text-green-600 hover:bg-green-50 hover:border-green-400 transition-all flex items-center justify-center gap-2"
+                          className="w-full py-2.5 border border-dashed border-green-300 rounded-xl text-xs font-bold text-green-600 hover:bg-green-50 hover:border-green-400 transition-all flex items-center justify-center gap-1.5"
                         >
-                          <Plus size={18} /> Add Another Grade
+                          <Plus size={14} /> Add Grade
                         </button>
 
-                        {/* Total Summary Card */}
-                        <div
-                          className={`mt-6 rounded-2xl p-6 border shadow-lg transition-all ${weightMismatch || exceedsParchmentWeight ? "bg-red-50 border-red-300" : "bg-green-50 border-green-300"}`}
-                        >
-                          <div className="flex items-center justify-between mb-3">
-                            <span className="text-sm font-bold text-gray-700 uppercase tracking-wide">
-                              Total Accounted For
-                            </span>
-                            {weightMismatch || exceedsParchmentWeight ? (
-                              <AlertCircle className="h-6 w-6 text-red-600" />
-                            ) : (
-                              <Check className="h-6 w-6 text-green-600" />
-                            )}
-                          </div>
-                          <div className="flex items-baseline gap-2 mb-2">
-                            <span
-                              className={`text-4xl font-extrabold ${weightMismatch || exceedsParchmentWeight ? "text-red-600" : "text-green-600"}`}
-                            >
-                              {gradedWeightSum.toFixed(2)}
-                            </span>
-                            <span className="text-2xl font-bold text-gray-400">
-                              /
-                            </span>
-                            <span className="text-2xl font-bold text-gray-600">
-                              {totalWeightNum.toFixed(2)} kg
-                            </span>
-                          </div>
-                          {weightMismatch && (
-                            <div className="mt-3 flex items-start gap-2 bg-red-100 rounded-lg p-3 border border-red-200">
-                              <AlertCircle
-                                size={16}
-                                className="text-red-600 flex-shrink-0 mt-0.5"
-                              />
-                              <p className="text-xs font-semibold text-red-800">
-                                The sum of graded lots must exactly match the
-                                total green bean weight.
-                              </p>
-                            </div>
-                          )}
-                          {exceedsParchmentWeight && !weightMismatch && (
-                            <div className="mt-3 flex items-start gap-2 bg-red-100 rounded-lg p-3 border border-red-200">
-                              <AlertCircle
-                                size={16}
-                                className="text-red-600 flex-shrink-0 mt-0.5"
-                              />
-                              <p className="text-xs font-semibold text-red-800">
-                                น้ำหนักรวมเกินกว่า Parchment Weight (
-                                {selectedParchment.currentWeightKg.toFixed(2)}{" "}
-                                kg)
-                              </p>
-                            </div>
-                          )}
-                          {!weightMismatch &&
-                            !exceedsParchmentWeight &&
-                            totalWeightNum > 0 && (
-                              <div className="mt-3 flex items-center gap-2 bg-green-100 rounded-lg p-3 border border-green-200">
-                                <Check
-                                  size={16}
-                                  className="text-green-600 flex-shrink-0"
+                        {/* Summary Bar */}
+                        {(() => {
+                          const pct = totalWeightNum > 0
+                            ? (gradedWeightSum / totalWeightNum) * 100
+                            : 0;
+                          const hasError = weightMismatch || exceedsParchmentWeight;
+                          const isComplete = !hasError && totalWeightNum > 0;
+                          return (
+                            <div className={`mt-4 rounded-xl p-3 border transition-colors ${hasError ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"}`}>
+                              {/* Progress bar */}
+                              <div className="h-1.5 w-full bg-gray-200 rounded-full mb-2.5 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-300 ${hasError ? "bg-red-400" : isComplete ? "bg-green-400" : "bg-yellow-400"}`}
+                                  style={{ width: `${Math.min(100, pct)}%` }}
                                 />
-                                <p className="text-xs font-semibold text-green-800">
-                                  Perfect! All weights are accounted for.
-                                </p>
                               </div>
-                            )}
-                        </div>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-baseline gap-1.5">
+                                  <span className={`text-2xl font-extrabold ${hasError ? "text-red-600" : "text-green-600"}`}>
+                                    {gradedWeightSum.toFixed(2)}
+                                  </span>
+                                  <span className="text-sm text-gray-400">/</span>
+                                  <span className="text-sm font-bold text-gray-600">
+                                    {totalWeightNum.toFixed(2)} kg
+                                  </span>
+                                </div>
+                                {isComplete && <Check className="h-5 w-5 text-green-500" />}
+                                {hasError && <AlertCircle className="h-5 w-5 text-red-500" />}
+                              </div>
+                              {weightMismatch && (
+                                <p className="text-[11px] font-semibold text-red-600 mt-1">
+                                  Sum of grades must match total weight
+                                </p>
+                              )}
+                              {exceedsParchmentWeight && !weightMismatch && (
+                                <p className="text-[11px] font-semibold text-red-600 mt-1">
+                                  Exceeds parchment weight ({selectedParchment.currentWeightKg.toFixed(2)} kg)
+                                </p>
+                              )}
+                              {isComplete && (
+                                <p className="text-[11px] font-semibold text-green-600 mt-1">
+                                  All weights accounted for
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </>
                     );
                   })()}
                 {modal === "withdrawStock" && selectedGreenBean && (
                   <>
-                    {/* Modal Header */}
-                    <div className="flex items-center gap-4 mb-6">
-                      <div className="p-4 bg-blue-600 rounded-2xl shadow-lg">
-                        <PlayCircle className="h-10 w-10 text-white" />
-                      </div>
-                      <div>
-                        <h2 className="text-3xl font-bold text-gray-900">
-                          Withdraw Stock
-                        </h2>
-                        <p className="text-base text-gray-600 mt-1">
-                          Green Bean Lot #{selectedGreenBean.id}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Current Stock Info Card */}
-                    <div className="bg-green-50 rounded-2xl p-6 mb-6 border border-green-200">
-                      <div className="flex items-center justify-between">
+                    {/* Compact Header */}
+                    <div className="flex items-center justify-between mb-5">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-indigo-600 rounded-xl shadow-md">
+                          <Minus className="h-6 w-6 text-white" />
+                        </div>
                         <div>
-                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
-                            Current Stock
-                          </p>
-                          <p className="text-4xl font-bold text-green-600">
-                            {selectedGreenBean.currentWeightKg.toFixed(2)}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            kilograms available
+                          <h2 className="text-xl font-bold text-gray-900">
+                            Withdraw Stock
+                          </h2>
+                          <p className="text-xs text-gray-500">
+                            Lot #{formatGreenBeanId(selectedGreenBean)}
                           </p>
                         </div>
+                      </div>
+                      <div className="flex items-center gap-3">
                         <div className="text-right">
-                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
-                            Grade
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Stock</p>
+                          <p className="text-lg font-bold text-green-600 leading-tight">
+                            {selectedGreenBean.currentWeightKg.toFixed(2)}
+                            <span className="text-xs font-normal text-gray-400 ml-1">kg</span>
                           </p>
-                          <p className="text-2xl font-bold text-gray-900">
-                            {selectedGreenBean.grade}
-                          </p>
+                        </div>
+                        <div className="w-px h-8 bg-gray-200" />
+                        <div className="text-right">
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Grade</p>
+                          <p className="text-lg font-bold text-gray-800 leading-tight">{selectedGreenBean.grade}</p>
                         </div>
                       </div>
                     </div>
 
-                    {/* Withdrawal Type Dropdown */}
-                    <div className="mb-6">
-                      <label className="block text-base font-bold text-gray-700 mb-3">
-                        <div className="flex items-center gap-2">
-                          <Activity className="h-5 w-5 text-indigo-600" />
-                          Withdrawal Type
-                        </div>
+                    {/* Withdrawal Type - Visual Cards */}
+                    <div className="mb-5">
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2.5">
+                        Withdrawal Type
                       </label>
-                      <Select
-                        value={withdrawalType}
-                        onChange={(v) =>
-                          setWithdrawalType(v as typeof withdrawalType)
-                        }
-                        options={[
-                          "Sale",
-                          "Roasting Stock",
-                          "Sample",
-                          "Export",
-                          "Other",
-                        ]}
-                        placeholder="Select withdrawal type..."
-                        colorTheme="blue"
-                      />
+                      <div className="grid grid-cols-5 gap-2">
+                        {([
+                          { value: "Sale", icon: DollarSign, color: "blue", label: "Sale" },
+                          { value: "Roasting Stock", icon: Flame, color: "orange", label: "Roast" },
+                          { value: "Sample", icon: Beaker, color: "purple", label: "Sample" },
+                          { value: "Export", icon: Globe, color: "emerald", label: "Export" },
+                          { value: "Other", icon: MoreHorizontal, color: "gray", label: "Other" },
+                        ] as const).map((type) => {
+                          const isActive = withdrawalType === type.value;
+                          const colorMap: Record<string, { active: string; ring: string }> = {
+                            blue: { active: "bg-blue-50 border-blue-400 text-blue-700", ring: "ring-blue-200" },
+                            orange: { active: "bg-orange-50 border-orange-400 text-orange-700", ring: "ring-orange-200" },
+                            purple: { active: "bg-purple-50 border-purple-400 text-purple-700", ring: "ring-purple-200" },
+                            emerald: { active: "bg-emerald-50 border-emerald-400 text-emerald-700", ring: "ring-emerald-200" },
+                            gray: { active: "bg-gray-100 border-gray-400 text-gray-700", ring: "ring-gray-200" },
+                          };
+                          const c = colorMap[type.color];
+                          return (
+                            <button
+                              key={type.value}
+                              type="button"
+                              onClick={() => setWithdrawalType(type.value as typeof withdrawalType)}
+                              className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all text-center ${
+                                isActive
+                                  ? `${c.active} ring-2 ${c.ring} shadow-sm`
+                                  : "border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600"
+                              }`}
+                            >
+                              <type.icon className="h-5 w-5" />
+                              <span className="text-[11px] font-semibold leading-tight">{type.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     {/* Conditional Sale Fields */}
                     {withdrawalType === "Sale" && (
-                      <div className="mb-6 p-5 bg-blue-50 rounded-xl border border-blue-200">
-                        <h3 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
-                          <DollarSign className="h-4 w-4 text-blue-600" />
-                          Sale Information
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="mb-5 p-4 bg-blue-50/70 rounded-xl border border-blue-200 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">
-                              Customer (Optional)
+                            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                              Customer
                             </label>
                             {customers.length > 0 ? (
-                              <div className="space-y-2">
+                              <div className="space-y-1.5">
                                 <Select
                                   value={withdrawalCustomerId}
-                                  onChange={(v) =>
-                                    handleCustomerSelect(v as string)
-                                  }
+                                  onChange={(v) => handleCustomerSelect(v as string)}
                                   options={customerOptions}
-                                  placeholder="Select customer or type name below..."
+                                  placeholder="Select customer..."
                                   colorTheme="blue"
                                 />
                                 <input
@@ -4173,9 +4047,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                   value={withdrawalCustomerName}
                                   onChange={(e) => {
                                     setWithdrawalCustomerName(e.target.value);
-                                    setWithdrawalCustomerId(""); // Clear selection when typing manually
+                                    setWithdrawalCustomerId("");
                                   }}
-                                  placeholder="Or type customer name manually..."
+                                  placeholder="Or type name..."
                                   className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                 />
                               </div>
@@ -4183,69 +4057,44 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               <input
                                 type="text"
                                 value={withdrawalCustomerName}
-                                onChange={(e) =>
-                                  setWithdrawalCustomerName(e.target.value)
-                                }
-                                placeholder="e.g., Roaster ABC"
+                                onChange={(e) => setWithdrawalCustomerName(e.target.value)}
+                                placeholder="Customer name..."
                                 className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               />
                             )}
-                            {customers.length === 0 &&
-                              !customersLoading &&
-                              (currentUser.roles?.includes(UserRole.Admin) ||
-                                currentUser.roles?.includes(
-                                  UserRole.Roaster,
-                                )) && (
-                                <p className="mt-1 text-xs text-gray-500">
-                                  <a
-                                    href="/customers"
-                                    target="_blank"
-                                    className="text-blue-600 hover:underline"
-                                  >
-                                    Create customers
-                                  </a>{" "}
-                                  to use dropdown selection
-                                </p>
-                              )}
                           </div>
                           <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">
-                              Delivery Address (Optional)
+                            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                              Delivery Address
                             </label>
                             <input
                               type="text"
                               value={withdrawalDeliveryAddress}
-                              onChange={(e) =>
-                                setWithdrawalDeliveryAddress(e.target.value)
-                              }
-                              placeholder="e.g., 123 Main St, City"
+                              onChange={(e) => setWithdrawalDeliveryAddress(e.target.value)}
+                              placeholder="123 Main St, City"
                               className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             />
                           </div>
-                          <div>
-                            <label className="block text-sm font-semibold text-gray-700 mb-2">
-                              Price per kg
-                            </label>
-                            <div className="flex gap-2">
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={withdrawalSalePrice}
-                                onChange={(e) =>
-                                  setWithdrawalSalePrice(e.target.value)
-                                }
-                                placeholder="0.00"
-                                className="flex-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              />
-                              <Select
-                                value={withdrawalCurrency}
-                                onChange={(v) =>
-                                  setWithdrawalCurrency(v as string)
-                                }
-                                options={["THB", "USD", "EUR"]}
-                                colorTheme="blue"
-                              />
-                            </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                            Price per kg
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={withdrawalSalePrice}
+                              onChange={(e) => setWithdrawalSalePrice(e.target.value)}
+                              placeholder="0.00"
+                              className="flex-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                            <Select
+                              value={withdrawalCurrency}
+                              onChange={(v) => setWithdrawalCurrency(v as string)}
+                              options={["THB", "USD", "EUR"]}
+                              colorTheme="blue"
+                            />
                           </div>
                         </div>
                       </div>
@@ -4253,67 +4102,107 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
                     {/* Conditional Roasting Stock Fields */}
                     {withdrawalType === "Roasting Stock" && (
-                      <div className="mb-6 p-5 bg-orange-50 rounded-xl border border-orange-200">
-                        <h3 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
-                          <Flame className="h-4 w-4 text-orange-600" />
-                          ส่งให้ Roaster
-                        </h3>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                          เลือก Roaster <span className="text-red-500">*</span>
+                      <div className="mb-5 p-4 bg-orange-50/70 rounded-xl border border-orange-200">
+                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                          Target Roaster <span className="text-red-500">*</span>
                         </label>
                         <Select
                           value={withdrawalTargetRoasterId}
                           onChange={(v) => setWithdrawalTargetRoasterId(v as string)}
-                          options={[
-                            { value: "", label: "-- เลือก Roaster --" },
-                            ...data.users
-                              .filter(u => u.roles?.includes(UserRole.Roaster))
-                              .map(u => ({ value: u.id, label: u.name })),
-                          ]}
-                          placeholder="เลือก Roaster..."
+                          options={data.users
+                            .filter(u => u.roles?.includes(UserRole.Roaster))
+                            .map(u => ({ value: u.id, label: u.name }))}
+                          placeholder="Select Roaster..."
                           colorTheme="blue"
                         />
-                        <p className="text-xs text-orange-700 mt-2">
-                          stock จะถูก push เข้า Inventory ของ Roaster ที่เลือกโดยอัตโนมัติ
-                        </p>
+                        <div className="flex items-center gap-1.5 mt-2">
+                          <Send className="h-3 w-3 text-orange-500" />
+                          <p className="text-[11px] text-orange-600">
+                            Stock will be pushed to the roaster's inventory automatically
+                          </p>
+                        </div>
                       </div>
                     )}
 
-                    {/* Withdraw Amount Input */}
-                    <div className="mb-6">
-                      <label className="block text-base font-bold text-gray-700 mb-3">
-                        <div className="flex items-center gap-2">
-                          <Scale className="h-5 w-5 text-indigo-600" />
-                          Amount to Withdraw
-                        </div>
-                      </label>
-                      <input
-                        type="number"
-                        max={selectedGreenBean.currentWeightKg}
-                        step="0.1"
-                        name="amountKg"
-                        required
-                        placeholder="Enter amount in kg"
-                        className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-lg font-semibold focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm transition-all"
-                      />
-                      <p className="text-xs text-gray-500 mt-2">
-                        Maximum: {selectedGreenBean.currentWeightKg.toFixed(2)}{" "}
-                        kg
-                      </p>
+                    {/* Amount + Purpose Row */}
+                    <div className="grid grid-cols-5 gap-3 mb-5">
+                      <div className="col-span-2">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                          Amount (kg){" "}
+                          <span className="font-normal normal-case tracking-normal text-gray-400">
+                            max {selectedGreenBean.currentWeightKg.toFixed(2)}
+                          </span>
+                        </label>
+                        <input
+                          type="number"
+                          max={selectedGreenBean.currentWeightKg}
+                          step="0.1"
+                          name="amountKg"
+                          required
+                          value={withdrawalAmount}
+                          onChange={(e) => setWithdrawalAmount(e.target.value)}
+                          placeholder="0.0"
+                          className="block w-full h-[46px] border-2 border-gray-200 rounded-xl px-4 text-lg font-bold text-gray-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-400 transition-all"
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                          Purpose / Notes
+                        </label>
+                        <input
+                          type="text"
+                          name="purpose"
+                          placeholder="e.g., Order #123, Sample roast..."
+                          className="block w-full h-[46px] border-2 border-gray-200 rounded-xl px-4 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-400 transition-all"
+                        />
+                      </div>
                     </div>
 
-                    {/* Purpose Input */}
-                    <div className="mb-6">
-                      <label className="block text-base font-bold text-gray-700 mb-3">
-                        Purpose / Notes (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        name="purpose"
-                        placeholder="e.g., Sample Roast, Order #123, Customer request"
-                        className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-base focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm transition-all"
-                      />
-                    </div>
+                    {/* Live Preview Bar */}
+                    {(() => {
+                      const amt = parseFloat(withdrawalAmount) || 0;
+                      const remaining = Math.max(0, selectedGreenBean.currentWeightKg - amt);
+                      const pct = selectedGreenBean.currentWeightKg > 0
+                        ? (remaining / selectedGreenBean.currentWeightKg) * 100
+                        : 0;
+                      const price = parseFloat(withdrawalSalePrice) || 0;
+                      const total = amt * price;
+                      const isOver = amt > selectedGreenBean.currentWeightKg;
+                      return (
+                        <div className={`rounded-xl p-3 border transition-colors ${isOver ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"}`}>
+                          {/* Progress bar */}
+                          <div className="h-1.5 w-full bg-gray-200 rounded-full mb-3 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${isOver ? "bg-red-400" : pct > 30 ? "bg-green-400" : pct > 0 ? "bg-yellow-400" : "bg-red-400"}`}
+                              style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4 text-sm">
+                              <div>
+                                <span className="text-gray-400 text-[10px] uppercase tracking-wider">Before</span>
+                                <p className="font-bold text-gray-600">{selectedGreenBean.currentWeightKg.toFixed(2)} kg</p>
+                              </div>
+                              <ArrowRight className="h-3.5 w-3.5 text-gray-300" />
+                              <div>
+                                <span className="text-gray-400 text-[10px] uppercase tracking-wider">After</span>
+                                <p className={`font-bold ${isOver ? "text-red-600" : "text-green-600"}`}>
+                                  {isOver ? "Exceeds stock!" : `${remaining.toFixed(2)} kg`}
+                                </p>
+                              </div>
+                            </div>
+                            {withdrawalType === "Sale" && price > 0 && amt > 0 && (
+                              <div className="text-right">
+                                <span className="text-gray-400 text-[10px] uppercase tracking-wider">Total</span>
+                                <p className="font-bold text-blue-600">
+                                  {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {withdrawalCurrency}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </>
                 )}
                 {modal === "editWithdrawal" &&
@@ -4329,100 +4218,94 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
                     return (
                       <>
-                        {/* Modal Header */}
-                        <div className="flex items-center gap-4 mb-6">
-                          <div className="p-4 bg-orange-600 rounded-2xl shadow-lg">
-                            <FileText className="h-10 w-10 text-white" />
-                          </div>
-                          <div>
-                            <h2 className="text-3xl font-bold text-gray-900">
-                              Edit Withdrawal
-                            </h2>
-                            <p className="text-base text-gray-600 mt-1">
-                              Lot #{editingWithdrawalLotId} - Entry #
-                              {editingWithdrawalIndex + 1}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Info Card */}
-                        <div className="bg-yellow-50 rounded-2xl p-5 mb-6 border border-yellow-200">
-                          <div className="flex items-start gap-3">
-                            <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                        {/* Compact Header */}
+                        <div className="flex items-center justify-between mb-5">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl shadow-md">
+                              <Pencil className="h-6 w-6 text-white" />
+                            </div>
                             <div>
-                              <p className="text-sm font-semibold text-gray-900 mb-1">
-                                Edit Restrictions
-                              </p>
-                              <p className="text-xs text-gray-700">
-                                You can edit the withdrawal type, notes, and
-                                sale details. The withdrawal amount (
-                                {entry.amountKg.toFixed(2)} kg) and date (
-                                {entry.date}) cannot be changed.
+                              <h2 className="text-xl font-bold text-gray-900">
+                                Edit Withdrawal
+                              </h2>
+                              <p className="text-xs text-gray-500">
+                                Entry #{editingWithdrawalIndex + 1}
                               </p>
                             </div>
                           </div>
+                          <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-1.5">
+                            <Scale className="h-3.5 w-3.5 text-gray-500" />
+                            <span className="text-sm font-bold text-gray-700">{entry.amountKg.toFixed(2)} kg</span>
+                            <span className="text-xs text-gray-400 ml-1">{entry.date}</span>
+                          </div>
                         </div>
 
-                        {/* Withdrawal Type Dropdown */}
-                        <div className="mb-6">
-                          <label className="block text-base font-bold text-gray-700 mb-3">
-                            <div className="flex items-center gap-2">
-                              <Activity className="h-5 w-5 text-orange-600" />
-                              Withdrawal Type
-                            </div>
+                        {/* Withdrawal Type - Visual Cards */}
+                        <div className="mb-5">
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2.5">
+                            Withdrawal Type
                           </label>
-                          <Select
-                            value={withdrawalType}
-                            onChange={(v) =>
-                              setWithdrawalType(v as typeof withdrawalType)
-                            }
-                            options={[
-                              "Sale",
-                              "Roasting Stock",
-                              "Sample",
-                              "Export",
-                              "Other",
-                            ]}
-                            placeholder="Select withdrawal type..."
-                            colorTheme="blue"
-                          />
+                          <div className="grid grid-cols-5 gap-2">
+                            {([
+                              { value: "Sale", icon: DollarSign, color: "blue", label: "Sale" },
+                              { value: "Roasting Stock", icon: Flame, color: "orange", label: "Roast" },
+                              { value: "Sample", icon: Beaker, color: "purple", label: "Sample" },
+                              { value: "Export", icon: Globe, color: "emerald", label: "Export" },
+                              { value: "Other", icon: MoreHorizontal, color: "gray", label: "Other" },
+                            ] as const).map((type) => {
+                              const isActive = withdrawalType === type.value;
+                              const colorMap: Record<string, { active: string; ring: string }> = {
+                                blue: { active: "bg-blue-50 border-blue-400 text-blue-700", ring: "ring-blue-200" },
+                                orange: { active: "bg-orange-50 border-orange-400 text-orange-700", ring: "ring-orange-200" },
+                                purple: { active: "bg-purple-50 border-purple-400 text-purple-700", ring: "ring-purple-200" },
+                                emerald: { active: "bg-emerald-50 border-emerald-400 text-emerald-700", ring: "ring-emerald-200" },
+                                gray: { active: "bg-gray-100 border-gray-400 text-gray-700", ring: "ring-gray-200" },
+                              };
+                              const c = colorMap[type.color];
+                              return (
+                                <button
+                                  key={type.value}
+                                  type="button"
+                                  onClick={() => setWithdrawalType(type.value as typeof withdrawalType)}
+                                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all text-center ${
+                                    isActive
+                                      ? `${c.active} ring-2 ${c.ring} shadow-sm`
+                                      : "border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600"
+                                  }`}
+                                >
+                                  <type.icon className="h-5 w-5" />
+                                  <span className="text-[11px] font-semibold leading-tight">{type.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
 
                         {/* Conditional Sale Fields */}
                         {withdrawalType === "Sale" && (
-                          <div className="mb-6 p-5 bg-blue-50 rounded-xl border border-blue-200">
-                            <h3 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
-                              <DollarSign className="h-4 w-4 text-blue-600" />
-                              Sale Information
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="mb-5 p-4 bg-blue-50/70 rounded-xl border border-blue-200 space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
                               <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                  Customer (Optional)
+                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                                  Customer
                                 </label>
                                 {customers.length > 0 ? (
-                                  <div className="space-y-2">
+                                  <div className="space-y-1.5">
                                     <Select
                                       value={withdrawalCustomerId}
-                                      onChange={(v) =>
-                                        handleCustomerSelect(v as string)
-                                      }
+                                      onChange={(v) => handleCustomerSelect(v as string)}
                                       options={customerOptions}
-                                      placeholder="Select customer or type name below..."
+                                      placeholder="Select customer..."
                                       colorTheme="blue"
                                     />
                                     <input
                                       type="text"
                                       value={withdrawalCustomerName}
-                                      onChange={(
-                                        e: React.ChangeEvent<HTMLInputElement>,
-                                      ) => {
-                                        setWithdrawalCustomerName(
-                                          e.target.value,
-                                        );
-                                        setWithdrawalCustomerId(""); // Clear selection when typing manually
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                        setWithdrawalCustomerName(e.target.value);
+                                        setWithdrawalCustomerId("");
                                       }}
-                                      placeholder="Or type customer name manually..."
+                                      placeholder="Or type name..."
                                       className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                     />
                                   </div>
@@ -4430,72 +4313,66 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                   <input
                                     type="text"
                                     value={withdrawalCustomerName}
-                                    onChange={(
-                                      e: React.ChangeEvent<HTMLInputElement>,
-                                    ) =>
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                                       setWithdrawalCustomerName(e.target.value)
                                     }
-                                    placeholder="e.g., Roaster ABC"
+                                    placeholder="Customer name..."
                                     className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                   />
                                 )}
                               </div>
                               <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                  Delivery Address (Optional)
+                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                                  Delivery Address
                                 </label>
                                 <input
                                   type="text"
                                   value={withdrawalDeliveryAddress}
-                                  onChange={(
-                                    e: React.ChangeEvent<HTMLInputElement>,
-                                  ) =>
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                                     setWithdrawalDeliveryAddress(e.target.value)
                                   }
-                                  placeholder="e.g., 123 Main St, City"
+                                  placeholder="123 Main St, City"
                                   className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                 />
                               </div>
-                              <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                  Price per kg
-                                </label>
-                                <div className="flex gap-2">
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    value={withdrawalSalePrice}
-                                    onChange={(
-                                      e: React.ChangeEvent<HTMLInputElement>,
-                                    ) => setWithdrawalSalePrice(e.target.value)}
-                                    placeholder="0.00"
-                                    className="flex-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                  />
-                                  <Select
-                                    value={withdrawalCurrency}
-                                    onChange={(v) =>
-                                      setWithdrawalCurrency(v as string)
-                                    }
-                                    options={["THB", "USD", "EUR"]}
-                                    colorTheme="blue"
-                                  />
-                                </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                                Price per kg
+                              </label>
+                              <div className="flex gap-2">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={withdrawalSalePrice}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                    setWithdrawalSalePrice(e.target.value)
+                                  }
+                                  placeholder="0.00"
+                                  className="flex-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                />
+                                <Select
+                                  value={withdrawalCurrency}
+                                  onChange={(v) => setWithdrawalCurrency(v as string)}
+                                  options={["THB", "USD", "EUR"]}
+                                  colorTheme="blue"
+                                />
                               </div>
                             </div>
                           </div>
                         )}
 
                         {/* Notes Input */}
-                        <div className="mb-6">
-                          <label className="block text-base font-bold text-gray-700 mb-3">
+                        <div className="mb-5">
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
                             Notes
                           </label>
                           <textarea
                             name="notes"
-                            rows={3}
+                            rows={2}
                             defaultValue={entry.notes || entry.purpose || ""}
-                            placeholder="Add or edit notes about this withdrawal..."
-                            className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-base focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm transition-all resize-none"
+                            placeholder="Add or edit notes..."
+                            className="block w-full border-2 border-gray-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-400 transition-all resize-none"
                           />
                         </div>
                       </>
