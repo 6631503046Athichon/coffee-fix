@@ -826,6 +826,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   >([{ grade: "Grade A", weight: "", price: "", score: "" }]);
   const [totalGreenWeight, setTotalGreenWeight] = useState("");
 
+  const resetHullAndGradeForm = useCallback(() => {
+    setSelectedParchment(null);
+    setTotalGreenWeight("");
+    setGradedLots([{ grade: "Grade A", weight: "", price: "", score: "" }]);
+  }, []);
+
   // Auto-calculate total green weight from graded lots
   useEffect(() => {
     const total = gradedLots.reduce((sum, lot) => {
@@ -4386,6 +4392,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       setFormError(null);
                       setSelectedHarvestLot(null);
                       setCropYearId("");
+                      if (modal === "hullAndGrade") {
+                        resetHullAndGradeForm();
+                      }
                     }}
                     className="px-6 py-2.5 border border-gray-300 rounded-xl shadow-sm text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
                     disabled={isSubmitting}
@@ -4993,7 +5002,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       </div>
 
                       {/* History List */}
-                      <div className="overflow-y-auto max-h-96">
+                      <div className="overflow-y-auto max-h-72 sm:max-h-80">
                         {relatedGreenBeans.length === 0 ? (
                           <div className="text-center py-10 text-gray-400">
                             <Coffee className="h-12 w-12 mx-auto mb-2 opacity-30" />
@@ -5158,7 +5167,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 })()}
 
                 {/* Close Button */}
-                <div className="mt-6 flex justify-end">
+                <div className="sticky bottom-4 mt-6 bg-white pt-4 border-t border-gray-100 flex justify-end">
                   <button
                     type="button"
                     onClick={() => setSelectedParchmentForHistory(null)}
