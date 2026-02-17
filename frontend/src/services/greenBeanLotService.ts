@@ -14,12 +14,14 @@ export interface CreateGreenBeanLotInput {
   processorScore?: number;
   externalSource?: {
     originName?: string;
+    producerName?: string;
     variety?: string;
     processType?: string;
     purchaseDate?: string;
     pricePerKg?: number;
     currency?: string;
     supplierNotes?: string;
+    tasteNote?: string;
   };
 }
 
@@ -58,6 +60,20 @@ export const updateGreenBeanLotScore = async (
 };
 
 /**
+ * Update green bean lot availability status
+ */
+export const updateGreenBeanLotAvailability = async (
+  id: string,
+  availabilityStatus: "Available" | "Withdrawn",
+): Promise<GreenBeanLot> => {
+  const response = await api.put<{ greenBeanLot: any }>(
+    `/green-bean-lots/${id}`,
+    { availabilityStatus },
+  );
+  return transformGreenBeanLotFromBackend(response.greenBeanLot);
+};
+
+/**
  * Fetch all green bean lots, optionally filtered by sourceType, availabilityStatus, or parchmentLotId
  */
 export const getAllGreenBeanLots = async (
@@ -88,6 +104,12 @@ export const getAllGreenBeanLots = async (
  * Transform green bean lot data from backend format to frontend format
  */
 function transformGreenBeanLotFromBackend(backendLot: any): GreenBeanLot {
+  const withdrawalHistory = (backendLot.withdrawalHistory || []).map((w: any) => ({
+    ...w,
+    withdrawalType: WITHDRAWAL_TYPE_FROM_API[w.withdrawalType] || w.withdrawalType,
+    date: w.date ? new Date(w.date).toISOString().substring(0, 10) : w.date,
+  }));
+
   return {
     id: backendLot.id,
     sourceType: backendLot.sourceType || "Internal",
@@ -98,7 +120,7 @@ function transformGreenBeanLotFromBackend(backendLot: any): GreenBeanLot {
     currentWeightKg: backendLot.currentWeightKg,
     availabilityStatus: backendLot.availabilityStatus,
     cuppingScores: backendLot.cuppingScores || [],
-    withdrawalHistory: backendLot.withdrawalHistory || [],
+    withdrawalHistory,
     publicTraceId: backendLot.publicTraceId,
     qrGeneratedAt: backendLot.qrGeneratedAt,
     processorScore: backendLot.processorScore,
@@ -109,6 +131,46 @@ function transformGreenBeanLotFromBackend(backendLot: any): GreenBeanLot {
       : undefined,
   };
 }
+
+export interface CreateWithdrawalInput {
+  amountKg: number;
+  withdrawalType: string;
+  purpose: string;
+  notes?: string;
+  salePrice?: number;
+  currency?: string;
+  customerName?: string;
+  invoiceNumber?: string;
+  deliveryAddress?: string;
+}
+
+// Map frontend display values → Prisma enum values
+const WITHDRAWAL_TYPE_TO_API: Record<string, string> = {
+  'Roasting Stock': 'RoastingStock',
+};
+
+// Map Prisma enum values → frontend display values
+const WITHDRAWAL_TYPE_FROM_API: Record<string, string> = {
+  'RoastingStock': 'Roasting Stock',
+};
+
+/**
+ * Create a withdrawal for a green bean lot
+ */
+export const createWithdrawal = async (
+  lotId: string,
+  input: CreateWithdrawalInput,
+): Promise<GreenBeanLot> => {
+  const apiInput = {
+    ...input,
+    withdrawalType: WITHDRAWAL_TYPE_TO_API[input.withdrawalType] || input.withdrawalType,
+  };
+  const response = await api.post<{ greenBeanLot: any }>(
+    `/green-bean-lots/${lotId}/withdrawals`,
+    apiInput,
+  );
+  return transformGreenBeanLotFromBackend(response.greenBeanLot);
+};
 
 // ============================================
 // QR Code & Traceability Functions

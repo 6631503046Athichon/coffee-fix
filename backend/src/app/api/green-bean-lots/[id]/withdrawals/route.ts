@@ -77,11 +77,13 @@ export async function POST(
         },
       })
 
-      // Update lot weight
+      // Update lot weight; round to 6dp to avoid float residuals, auto-mark Withdrawn when weight hits 0
+      const newWeight = Math.max(0, parseFloat((lot.currentWeightKg - amount).toFixed(6)))
       await tx.greenBeanLot.update({
         where: { id },
         data: {
-          currentWeightKg: lot.currentWeightKg - amount,
+          currentWeightKg: newWeight,
+          ...(newWeight <= 0 && { availabilityStatus: 'Withdrawn' }),
         },
       })
     })

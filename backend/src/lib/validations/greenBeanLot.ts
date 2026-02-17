@@ -20,11 +20,23 @@ const gradeSchema = z.string()
   .max(50, 'เกรดต้องไม่เกิน 50 ตัวอักษร');
 
 const externalSourceSchema = z.object({
-  supplierName: nonEmptyStringSchema.optional(),
+  // Frontend field names
+  originName: z.string().optional(),
+  producerName: z.string().optional(),
+  variety: z.string().optional(),
+  processType: z.string().optional(),
+  purchaseDate: z.string().optional(),
+  tasteNote: z.string().optional(),
+  supplierNotes: z.string().optional(),
+  // Legacy/alternative field names (kept for backward compat)
+  supplierName: z.string().optional(),
   origin: z.string().optional(),
   importDate: dateStringSchema.optional(),
   certificateNumber: z.string().optional(),
   notes: z.string().optional(),
+  // Pricing (can be stored in externalSource as well)
+  pricePerKg: z.number().optional(),
+  currency: z.string().optional(),
 }).optional().nullable();
 
 export const createGreenBeanLotSchema = z.object({

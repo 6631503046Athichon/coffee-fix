@@ -72,6 +72,8 @@ import {
 import {
   createGreenBeanLot,
   updateGreenBeanLotScore,
+  updateGreenBeanLotAvailability,
+  createWithdrawal,
 } from "../../services/greenBeanLotService";
 import { updateParchmentLot } from "../../services/parchmentLotService";
 import DatePicker from "../common/DatePicker";
@@ -1549,78 +1551,57 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         }
         break;
 
-      case "withdrawStock":
+      case "withdrawStock": {
         if (!selectedGreenBean) return;
         const amountKg = parseFloat(formData.get("amountKg") as string);
-        const purpose = (formData.get("purpose") as string) || "";
+        const purpose =
+          (formData.get("purpose") as string) || withdrawalType;
 
-        setData((prev) => ({
-          ...prev,
-          greenBeanLots: prev.greenBeanLots.map((gbl) => {
-            if (gbl.id !== selectedGreenBean.id) return gbl;
-
-            // Generate invoice number for Sale type
-            const invoiceNumber =
-              withdrawalType === "Sale"
-                ? (() => {
-                    const year = new Date().getFullYear();
-                    const allWithdrawals = prev.greenBeanLots.flatMap(
-                      (g) => g.withdrawalHistory || [],
-                    );
-                    const invoicesThisYear = allWithdrawals.filter((w) =>
-                      w.invoiceNumber?.startsWith(`INV-${year}-`),
-                    );
-                    const nextNum = invoicesThisYear.length + 1;
-                    return `INV-${year}-${String(nextNum).padStart(3, "0")}`;
-                  })()
-                : undefined;
-
-            // Calculate total amount for Sale type
-            const salePrice = withdrawalSalePrice
-              ? parseFloat(withdrawalSalePrice)
-              : 0;
-            const totalAmount =
-              withdrawalType === "Sale" && salePrice > 0
-                ? amountKg * salePrice
-                : undefined;
-
-            const withdrawal = {
-              amountKg,
-              withdrawalType,
-              purpose,
-              date: new Date().toISOString().substring(0, 10),
-              withdrawnBy: currentUser.id,
-              withdrawnByName: currentUser.name,
-              // Add sale-specific fields only if type is Sale
-              ...(withdrawalType === "Sale" && {
-                salePrice: salePrice || undefined,
-                currency: withdrawalCurrency,
-                customerName: withdrawalCustomerName || undefined,
-                deliveryAddress: withdrawalDeliveryAddress || undefined,
-                invoiceNumber,
-                totalAmount,
-              }),
-            };
-            return {
-              ...gbl,
-              currentWeightKg: gbl.currentWeightKg - amountKg,
-              withdrawalHistory: [...(gbl.withdrawalHistory || []), withdrawal],
-            };
-          }),
-        }));
-        // Show success toast
-        addToast({
-          type: "success",
-          message: `Withdraw ${amountKg} kg สำเร็จ!`,
-        });
-        // Reset withdrawal form state
-        setWithdrawalType("Sample");
-        setWithdrawalSalePrice("");
-        setWithdrawalCurrency("THB");
-        setWithdrawalCustomerId("");
-        setWithdrawalCustomerName("");
-        setWithdrawalDeliveryAddress("");
+        setIsSubmitting(true);
+        try {
+          const updatedLot = await createWithdrawal(selectedGreenBean.id, {
+            amountKg,
+            withdrawalType,
+            purpose,
+            ...(withdrawalType === "Sale" && {
+              salePrice: withdrawalSalePrice
+                ? parseFloat(withdrawalSalePrice)
+                : undefined,
+              currency: withdrawalCurrency,
+              customerName: withdrawalCustomerName || undefined,
+              deliveryAddress: withdrawalDeliveryAddress || undefined,
+            }),
+          });
+          setData((prev) => ({
+            ...prev,
+            greenBeanLots: prev.greenBeanLots.map((gbl) =>
+              gbl.id === updatedLot.id
+                ? { ...gbl, currentWeightKg: updatedLot.currentWeightKg, withdrawalHistory: updatedLot.withdrawalHistory }
+                : gbl,
+            ),
+          }));
+          addToast({
+            type: "success",
+            message: `Withdraw ${amountKg} kg สำเร็จ!`,
+          });
+          // Reset withdrawal form state
+          setWithdrawalType("Sample");
+          setWithdrawalSalePrice("");
+          setWithdrawalCurrency("THB");
+          setWithdrawalCustomerId("");
+          setWithdrawalCustomerName("");
+          setWithdrawalDeliveryAddress("");
+        } catch (err: any) {
+          const msg =
+            err?.message || "เกิดข้อผิดพลาดในการ Withdraw Stock";
+          setFormError(msg);
+          addToast({ type: "error", message: msg });
+          return;
+        } finally {
+          setIsSubmitting(false);
+        }
         break;
+      }
 
       case "editWithdrawal":
         handleSaveEditWithdrawal(formData);
@@ -1650,21 +1631,21 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     setModal(type);
   };
 
-  const handleToggleAvailability = (lotId: string) => {
-    setData((prev) => ({
-      ...prev,
-      greenBeanLots: prev.greenBeanLots.map((lot) =>
-        lot.id === lotId
-          ? {
-              ...lot,
-              availabilityStatus:
-                lot.availabilityStatus === "Available"
-                  ? "Withdrawn"
-                  : "Available",
-            }
-          : lot,
-      ),
-    }));
+  const handleToggleAvailability = async (lotId: string) => {
+    const lot = data.greenBeanLots.find((g) => g.id === lotId);
+    if (!lot) return;
+    const newStatus = lot.availabilityStatus === "Available" ? "Withdrawn" : "Available";
+    try {
+      const updatedLot = await updateGreenBeanLotAvailability(lotId, newStatus);
+      setData((prev) => ({
+        ...prev,
+        greenBeanLots: prev.greenBeanLots.map((g) =>
+          g.id === lotId ? updatedLot : g,
+        ),
+      }));
+    } catch (err: any) {
+      addToast({ type: "error", message: err?.message || "ไม่สามารถเปลี่ยนสถานะ lot ได้" });
+    }
   };
 
   // Only show lots that are ready for processing (not yet processed)

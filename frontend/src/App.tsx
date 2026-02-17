@@ -24,6 +24,7 @@ import { getAllCropYears } from './services/cropYearService';
 import { getAllProcessingBatches } from './services/processingBatchService';
 import { getAllParchmentLots } from './services/parchmentLotService';
 import { getAllGreenBeanLots } from './services/greenBeanLotService';
+import { getAllRoasterInventory, getAllRoastBatches } from './services/roasterService';
 import { batchedPromiseAll } from './utils/batchedFetch';
 import { Sidebar, Header } from './components/layout';
 import Login from './components/auth/Login';
@@ -157,13 +158,15 @@ const ProtectedRoutes: React.FC = () => {
       }));
 
       // Phase 2: Load secondary data in background
-      const [storedSoilAnalyses, storedWeatherRecords, storedGAPLogs, storedProcessingBatches, storedParchmentLots, storedGreenBeanLots] = await batchedPromiseAll([
+      const [storedSoilAnalyses, storedWeatherRecords, storedGAPLogs, storedProcessingBatches, storedParchmentLots, storedGreenBeanLots, storedRoasterInventory, storedRoastBatches] = await batchedPromiseAll([
         () => getAllSoilAnalyses(),
         () => getAllWeatherRecords(),
         () => getAllGAPLogs(),
         () => getAllProcessingBatches(),
         () => getAllParchmentLots(),
         () => getAllGreenBeanLots(),
+        () => getAllRoasterInventory(),
+        () => getAllRoastBatches(),
       ], 6, [] as any);
 
       // Update UI with secondary data
@@ -175,6 +178,8 @@ const ProtectedRoutes: React.FC = () => {
         processingBatches: mergeArrays(storedProcessingBatches, MOCK_DATA.processingBatches),
         parchmentLots: mergeArrays(storedParchmentLots, MOCK_DATA.parchmentLots),
         greenBeanLots: mergeArrays(storedGreenBeanLots, MOCK_DATA.greenBeanLots),
+        roasterInventory: storedRoasterInventory.length > 0 ? storedRoasterInventory : prev.roasterInventory,
+        roastBatches: storedRoastBatches.length > 0 ? storedRoastBatches : prev.roastBatches,
       }));
     } catch (error) {
       console.error('Failed to load data from backend:', error);
