@@ -826,6 +826,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   >([{ grade: "Grade A", weight: "", price: "", score: "" }]);
   const [totalGreenWeight, setTotalGreenWeight] = useState("");
 
+  const resetHullAndGradeForm = useCallback(() => {
+    setSelectedParchment(null);
+    setTotalGreenWeight("");
+    setGradedLots([{ grade: "Grade A", weight: "", price: "", score: "" }]);
+  }, []);
+
   // Auto-calculate total green weight from graded lots
   useEffect(() => {
     const total = gradedLots.reduce((sum, lot) => {
@@ -4386,6 +4392,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       setFormError(null);
                       setSelectedHarvestLot(null);
                       setCropYearId("");
+                      if (modal === "hullAndGrade") {
+                        resetHullAndGradeForm();
+                      }
                     }}
                     className="px-6 py-2.5 border border-gray-300 rounded-xl shadow-sm text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
                     disabled={isSubmitting}
