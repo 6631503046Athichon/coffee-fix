@@ -135,15 +135,8 @@ export const authService = {
                            errorMessage.includes('timeout') ||
                            errorMessage.includes('not responding');
 
-      // If not authenticated (401), check if we have stored user
-      // Don't clear immediately - might be a temporary issue or cookie not sent
+      // If not authenticated (401), clear token and logout
       if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
-        // If we have a stored user, return it as fallback
-        // This prevents logout on refresh when cookie isn't sent but user was logged in
-        if (storedUserParsed) {
-          return storedUserParsed;
-        }
-        // Only clear if we don't have stored user (truly not logged in)
         localStorage.removeItem(STORAGE_KEY);
         localStorage.removeItem('auth-token');
         return null;
