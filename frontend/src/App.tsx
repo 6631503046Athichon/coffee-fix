@@ -127,17 +127,17 @@ const ProtectedRoutes: React.FC = () => {
   const loadDataFromBackend = useCallback(async () => {
     try {
       // localStorage reads (no network, instant)
-      const storedActivityTypes = getAllActivityTypes();
       const storedSaleOrders = getAllSaleOrders();
       const storedInvoices = getAllInvoices();
       const storedPricingHistory = getAllPricingHistory();
 
       // Phase 1: Load essential data + customers + users in parallel
-      const [storedFarms, storedHarvestLots, storedCropYears, storedProcessTypes, storedCustomers, storedUsers] = await batchedPromiseAll([
+      const [storedFarms, storedHarvestLots, storedCropYears, storedProcessTypes, storedActivityTypes, storedCustomers, storedUsers] = await batchedPromiseAll([
         () => getAllFarms(),
         () => getAllHarvestLots(),
         () => getAllCropYears(),
         () => getAllProcessTypes(),
+        () => getAllActivityTypes(),
         () => getAllCustomersFromBackend().catch(() => {
           const stored = localStorage.getItem('coffee_lab_customers');
           return stored ? JSON.parse(stored) : [];

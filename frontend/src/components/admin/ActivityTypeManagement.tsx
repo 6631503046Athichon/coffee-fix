@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { ActivityType } from '../../types';
-import { addActivityType, updateActivityType, deleteActivityType, activityTypeNameExists } from '../../services/activityTypeService';
+import { addActivityType, updateActivityType, deleteActivityType } from '../../services/activityTypeService';
 import { Plus, Edit, Trash2, CheckCircle, XCircle, AlertCircle, X, Save, Tag, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const PAGE_SIZE = 10;
@@ -16,7 +16,9 @@ const ActivityTypeManagement: React.FC = () => {
     isActive: true,
   });
   const [showSuccess, setShowSuccess] = useState(false);
+  const [successAction, setSuccessAction] = useState<'added' | 'updated'>('added');
   const [errorMessage, setErrorMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
   const resetForm = () => {
@@ -41,7 +43,7 @@ const ActivityTypeManagement: React.FC = () => {
     setShowModal(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
@@ -51,80 +53,92 @@ const ActivityTypeManagement: React.FC = () => {
       return;
     }
 
-    // Check duplicate name
-    if (activityTypeNameExists(formData.name.trim(), editingType?.id)) {
+    // Check duplicate name locally
+    const duplicate = data.activityTypes.some(
+      t => t.name.toLowerCase() === formData.name.trim().toLowerCase() && t.id !== editingType?.id
+    );
+    if (duplicate) {
       setErrorMessage('Activity type with this name already exists');
       return;
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    setIsSubmitting(true);
 
-    if (editingType) {
-      // Update existing
-      const updated: ActivityType = {
-        ...editingType,
-        name: formData.name.trim(),
-        description: formData.description.trim() || undefined,
-        isActive: formData.isActive,
-      };
-      updateActivityType(updated);
-      setData(prev => ({
-        ...prev,
-        activityTypes: prev.activityTypes.map(t => t.id === updated.id ? updated : t),
-      }));
-    } else {
-      // Create new
-      const newType: ActivityType = {
-        id: `AT${String(data.activityTypes.length + 1).padStart(3, '0')}`,
-        name: formData.name.trim(),
-        description: formData.description.trim() || undefined,
-        createdDate: today,
-        isActive: formData.isActive,
-      };
-      addActivityType(newType);
-      setData(prev => ({
-        ...prev,
-        activityTypes: [newType, ...prev.activityTypes],
-      }));
+    try {
+      if (editingType) {
+        // Update existing via API
+        const updated = await updateActivityType(editingType.id, {
+          name: formData.name.trim(),
+          description: formData.description.trim() || undefined,
+          isActive: formData.isActive,
+        });
+        if (updated) {
+          setData(prev => ({
+            ...prev,
+            activityTypes: prev.activityTypes.map(t => t.id === updated.id ? updated : t),
+          }));
+        }
+        setSuccessAction('updated');
+      } else {
+        // Create new via API
+        const created = await addActivityType({
+          name: formData.name.trim(),
+          description: formData.description.trim() || undefined,
+          isActive: formData.isActive,
+        });
+        if (created) {
+          setData(prev => ({
+            ...prev,
+            activityTypes: [created, ...prev.activityTypes],
+          }));
+        }
+        setSuccessAction('added');
+      }
+
+      setShowModal(false);
+      resetForm();
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (err: any) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to save activity type');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setShowModal(false);
-    resetForm();
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     const typeToDelete = data.activityTypes.find(t => t.id === id);
     if (!typeToDelete) return;
 
-    // Check if activity type is used in any GAP logs
-    const isUsed = data.gapLogs.some(log => log.activityType === typeToDelete.name);
-
-    if (isUsed) {
-      if (!confirm(`"${typeToDelete.name}" is currently used in GAP logs. Are you sure you want to delete it?`)) {
-        return;
-      }
-    } else {
-      if (!confirm(`Are you sure you want to delete "${typeToDelete.name}"?`)) {
-        return;
-      }
+    if (!confirm(`Are you sure you want to delete "${typeToDelete.name}"?`)) {
+      return;
     }
 
-    deleteActivityType(id);
-    setData(prev => ({
-      ...prev,
-      activityTypes: prev.activityTypes.filter(t => t.id !== id),
-    }));
+    try {
+      await deleteActivityType(id);
+      setData(prev => ({
+        ...prev,
+        activityTypes: prev.activityTypes.filter(t => t.id !== id),
+      }));
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : 'Failed to delete activity type');
+    }
   };
 
-  const handleToggleStatus = (activityType: ActivityType) => {
-    const updated = { ...activityType, isActive: !activityType.isActive };
-    updateActivityType(updated);
-    setData(prev => ({
-      ...prev,
-      activityTypes: prev.activityTypes.map(t => t.id === updated.id ? updated : t),
-    }));
+  const handleToggleStatus = async (activityType: ActivityType) => {
+    try {
+      const updated = await updateActivityType(activityType.id, {
+        isActive: !activityType.isActive,
+      });
+      if (updated) {
+        setData(prev => ({
+          ...prev,
+          activityTypes: prev.activityTypes.map(t => t.id === updated.id ? updated : t),
+        }));
+      }
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : 'Failed to update status');
+    }
   };
 
   const activeTypes = data.activityTypes.filter(t => t.isActive);
@@ -138,7 +152,7 @@ const ActivityTypeManagement: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-h-full">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -159,7 +173,7 @@ const ActivityTypeManagement: React.FC = () => {
         <div className="flex items-center gap-2 bg-green-50 text-green-700 px-4 py-3 rounded-lg border border-green-200">
           <CheckCircle className="h-5 w-5" />
           <span className="font-semibold">
-            Activity type {editingType ? 'updated' : 'added'} successfully!
+            Activity type {successAction} successfully!
           </span>
         </div>
       )}
@@ -423,10 +437,11 @@ const ActivityTypeManagement: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
+                  disabled={isSubmitting}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                   <Save className="h-4 w-4" />
-                  {editingType ? 'Update' : 'Create'}
+                  {isSubmitting ? 'Saving...' : editingType ? 'Update' : 'Create'}
                 </button>
               </div>
             </form>

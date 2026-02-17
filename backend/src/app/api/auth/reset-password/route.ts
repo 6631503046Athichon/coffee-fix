@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { hashPassword } from '@/lib/auth'
+import { hashPassword, verifyPassword } from '@/lib/auth'
 import { handleApiError } from '@/lib/middleware'
 
 export async function POST(request: NextRequest) {
@@ -59,6 +59,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Account is disabled' },
         { status: 403 }
+      )
+    }
+
+    // Check if new password is the same as old password
+    const isSamePassword = await verifyPassword(password, resetToken.user.password)
+    if (isSamePassword) {
+      return NextResponse.json(
+        { error: 'New password must be different from the current password' },
+        { status: 400 }
       )
     }
 

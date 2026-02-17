@@ -70,11 +70,11 @@ export async function POST(request: NextRequest) {
     } catch (emailError) {
       // Email failed - return error to user
       console.error('[FORGOT-PASSWORD] Failed to send email:', emailError)
+      const detail = emailError instanceof Error ? emailError.message : String(emailError)
       return NextResponse.json(
         {
-          error: emailError instanceof Error
-            ? emailError.message
-            : 'Failed to send password reset email. Please check email configuration.'
+          error: `Failed to send password reset email: ${detail}`,
+          emailError: true,
         },
         { status: 500 }
       )

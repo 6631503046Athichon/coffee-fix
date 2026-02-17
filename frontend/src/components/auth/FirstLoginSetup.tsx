@@ -83,7 +83,7 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
       // Redirect to dashboard
       navigate('/')
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to update profile')
+      setError(err instanceof Error ? err.message : 'Failed to update profile')
     } finally {
       setLoading(false)
     }

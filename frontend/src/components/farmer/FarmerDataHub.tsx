@@ -364,7 +364,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                                 </div>
                                 <div>
                                     <p className="text-xs font-medium text-blue-600 uppercase tracking-wide">Lot ID</p>
-                                    <p className="text-sm font-mono font-semibold text-gray-900">{editingLot.id.substring(0, 8)}...</p>
+                                    <p className="text-sm font-mono font-semibold text-gray-900">{formatHarvestLotId(editingLot.id, 'short', editingLot.harvestDate)}</p>
                                 </div>
                             </div>
                         </div>

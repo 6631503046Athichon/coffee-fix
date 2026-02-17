@@ -1,4 +1,4 @@
-// Email service supporting multiple providers (Gmail SMTP and Resend API)
+// Email service supporting multiple providers (Gmail SMTP, Brevo API, and Resend API)
 
 import nodemailer from 'nodemailer'
 import { Resend } from 'resend'
@@ -80,6 +80,8 @@ export async function sendEmail(options: EmailOptions): Promise<void> {
       await sendWithGmail(options)
     } else if (emailService === 'mailjet') {
       await sendWithMailjet(options)
+    } else if (emailService === 'brevo-api') {
+      await sendWithBrevoApi(options)
     } else if (emailService === 'brevo') {
       await sendWithBrevo(options)
     } else {
@@ -166,6 +168,43 @@ async function sendWithMailjet(options: EmailOptions): Promise<void> {
     html: options.html,
     text: options.text || options.html.replace(/<[^>]*>/g, ''),
   })
+}
+
+/**
+ * Send email using Brevo HTTP API (bypasses SMTP port blocking)
+ */
+async function sendWithBrevoApi(options: EmailOptions): Promise<void> {
+  const apiKey = process.env.BREVO_API_KEY
+  if (!apiKey) {
+    throw new Error('Brevo API key not configured. Please set BREVO_API_KEY in .env')
+  }
+
+  const fromName = process.env.EMAIL_FROM_NAME || 'Coffee Lab Platform'
+  const fromEmail = process.env.BREVO_FROM_EMAIL
+  if (!fromEmail) {
+    throw new Error('BREVO_FROM_EMAIL not configured')
+  }
+
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'api-key': apiKey,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sender: { name: fromName, email: fromEmail },
+      to: [{ email: options.to }],
+      subject: options.subject,
+      htmlContent: options.html,
+      textContent: options.text || options.html.replace(/<[^>]*>/g, ''),
+    }),
+  })
+
+  if (!response.ok) {
+    const errorBody = await response.text()
+    throw new Error(`Brevo API error (${response.status}): ${errorBody}`)
+  }
 }
 
 /**
