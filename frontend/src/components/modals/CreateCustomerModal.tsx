@@ -4,19 +4,24 @@ import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
 import { Input } from '../common/Input';
 import Select from '../common/Select';
-import { addCustomer } from '../../services/customerService';
+import { addCustomer, updateCustomer } from '../../services/customerService';
 
 interface CreateCustomerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCustomerCreated?: (customer: Customer) => void;
+  /** Pass a customer to switch to edit mode */
+  editCustomer?: Customer | null;
 }
 
 const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
   isOpen,
   onClose,
   onCustomerCreated,
+  editCustomer,
 }) => {
+  const isEditMode = !!editCustomer;
+
   const [name, setName] = useState('');
   const [type, setType] = useState<'Roaster' | 'Distributor' | 'Retailer' | 'Other'>('Roaster');
   const [contactEmail, setContactEmail] = useState('');
@@ -31,24 +36,32 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      // Reset form when modal opens
-      setName('');
-      setType('Roaster');
-      setContactEmail('');
-      setContactPhone('');
-      setAddress('');
-      setNotes('');
+      if (editCustomer) {
+        // Pre-fill form with existing customer data
+        setName(editCustomer.name);
+        setType(editCustomer.type as typeof type);
+        setContactEmail(editCustomer.contactEmail || '');
+        setContactPhone(editCustomer.contactPhone || '');
+        setAddress(editCustomer.address || '');
+        setNotes(editCustomer.notes || '');
+      } else {
+        setName('');
+        setType('Roaster');
+        setContactEmail('');
+        setContactPhone('');
+        setAddress('');
+        setNotes('');
+      }
       setError('');
       setSuccessMessage('');
     }
-  }, [isOpen]);
+  }, [isOpen, editCustomer]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccessMessage('');
 
-    // Validation
     if (!name.trim()) {
       setError('Customer name is required');
       return;
@@ -71,30 +84,26 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
         notes: notes.trim() || undefined,
       };
 
-      const newCustomer = await addCustomer(customerData);
-      
-      setSuccessMessage(`Customer "${newCustomer.name}" created successfully!`);
-      
-      // Notify parent component
-      if (onCustomerCreated) {
-        onCustomerCreated(newCustomer);
+      let savedCustomer: Customer;
+      if (isEditMode && editCustomer) {
+        savedCustomer = await updateCustomer(editCustomer.id, customerData);
+        setSuccessMessage(`Customer "${savedCustomer.name}" updated successfully!`);
+      } else {
+        savedCustomer = await addCustomer(customerData);
+        setSuccessMessage(`Customer "${savedCustomer.name}" created successfully!`);
       }
 
-      // Reset form after a short delay
+      if (onCustomerCreated) {
+        onCustomerCreated(savedCustomer);
+      }
+
       setTimeout(() => {
-        setName('');
-        setType('Roaster');
-        setContactEmail('');
-        setContactPhone('');
-        setAddress('');
-        setNotes('');
         setSuccessMessage('');
         setIsSubmitting(false);
         onClose();
-      }, 1500);
+      }, 1000);
     } catch (err: any) {
-      console.error('Failed to create customer:', err);
-      setError(err.message || 'Failed to create customer. Please try again.');
+      setError(err.message || `Failed to ${isEditMode ? 'update' : 'create'} customer.`);
       setIsSubmitting(false);
     }
   };
@@ -103,11 +112,10 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Create New Customer"
+      title={isEditMode ? `Edit Customer — ${editCustomer?.name}` : 'Create New Customer'}
       maxWidth="2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Success Message */}
         {successMessage && (
           <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-2">
             <span className="text-green-600 font-semibold">✓</span>
@@ -115,7 +123,6 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
           </div>
         )}
 
-        {/* Error Message */}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-2">
             <span className="text-red-600 font-semibold">⚠️</span>
@@ -123,7 +130,6 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
           </div>
         )}
 
-        {/* Name */}
         <div>
           <Input
             label="Customer Name *"
@@ -135,7 +141,6 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
           />
         </div>
 
-        {/* Type */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
             Customer Type *
@@ -149,7 +154,6 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
           />
         </div>
 
-        {/* Contact Information */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Input
@@ -172,7 +176,6 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
           </div>
         </div>
 
-        {/* Address */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
             Address
@@ -186,7 +189,6 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
           />
         </div>
 
-        {/* Notes */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
             Notes
@@ -200,13 +202,14 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
           />
         </div>
 
-        {/* Actions */}
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
           <Button variant="secondary" onClick={onClose} type="button" disabled={isSubmitting}>
             Cancel
           </Button>
           <Button variant="primary" type="submit" disabled={isSubmitting || !name.trim()}>
-            {isSubmitting ? 'Creating...' : 'Create Customer'}
+            {isSubmitting
+              ? isEditMode ? 'Saving...' : 'Creating...'
+              : isEditMode ? 'Save Changes' : 'Create Customer'}
           </Button>
         </div>
       </form>

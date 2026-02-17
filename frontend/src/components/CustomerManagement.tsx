@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Customer, UserRole } from '../types';
-import { Users as UsersIcon, UserPlus, Search, X, Building2, Mail, Phone, MapPin, FileText } from 'lucide-react';
+import { Users as UsersIcon, UserPlus, Search, X, Building2, Mail, Phone, MapPin, Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getAllCustomers, deleteCustomer } from '../services/customerService';
 import CreateCustomerModal from './modals/CreateCustomerModal';
@@ -14,6 +14,7 @@ const CustomerManagement: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 
   // Check if user has Admin or Roaster role
   const hasAccess = currentUser?.roles?.some(role => 
@@ -56,8 +57,13 @@ const CustomerManagement: React.FC = () => {
     }
   };
 
-  const handleCustomerCreated = (customer: Customer) => {
+  const handleCustomerSaved = (customer: Customer) => {
     fetchCustomers();
+  };
+
+  const handleEditCustomer = (customer: Customer) => {
+    setEditingCustomer(customer);
+    setShowCreateModal(true);
   };
 
   const getTypeBadgeColor = (type: string) => {
@@ -239,12 +245,22 @@ const CustomerManagement: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <button
-                        onClick={() => handleDeleteCustomer(customer)}
-                        className="text-red-600 hover:text-red-800 font-semibold transition-colors"
-                      >
-                        Delete
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleEditCustomer(customer)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 border border-indigo-200 font-medium transition-colors"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCustomer(customer)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 border border-red-200 font-medium transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -254,11 +270,12 @@ const CustomerManagement: React.FC = () => {
         )}
       </div>
 
-      {/* Create Customer Modal */}
+      {/* Create / Edit Customer Modal */}
       <CreateCustomerModal
         isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onCustomerCreated={handleCustomerCreated}
+        onClose={() => { setShowCreateModal(false); setEditingCustomer(null); }}
+        onCustomerCreated={handleCustomerSaved}
+        editCustomer={editingCustomer}
       />
     </div>
   );
