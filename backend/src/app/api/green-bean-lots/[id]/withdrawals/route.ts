@@ -15,11 +15,19 @@ export async function POST(
     const { id } = await params
 
     const body = await request.json()
-    const { amountKg, withdrawalType, purpose, notes, salePrice, currency, customerName, invoiceNumber, deliveryAddress } = body
+    const { amountKg, withdrawalType, purpose, notes, salePrice, currency, customerName, invoiceNumber, deliveryAddress, targetRoasterId } = body
 
     if (!amountKg || !withdrawalType || !purpose) {
       return NextResponse.json(
         { error: 'Amount, withdrawal type, and purpose are required' },
+        { status: 400 }
+      )
+    }
+
+    // Roasting Stock withdrawal requires a target roaster
+    if (withdrawalType === 'RoastingStock' && !targetRoasterId) {
+      return NextResponse.json(
+        { error: 'Target roaster is required for Roasting Stock withdrawal' },
         { status: 400 }
       )
     }
@@ -86,6 +94,39 @@ export async function POST(
           ...(newWeight <= 0 && { availabilityStatus: 'Withdrawn' }),
         },
       })
+
+      // For Roasting Stock: auto-create or update RoasterInventoryItem for the target roaster
+      if (withdrawalType === 'RoastingStock' && targetRoasterId) {
+        const existing = await tx.roasterInventoryItem.findUnique({
+          where: {
+            roasterId_greenBeanLotId: {
+              roasterId: targetRoasterId,
+              greenBeanLotId: id,
+            },
+          },
+        })
+
+        if (existing) {
+          // Add to existing inventory
+          await tx.roasterInventoryItem.update({
+            where: { id: existing.id },
+            data: {
+              claimedWeightKg: existing.claimedWeightKg + amount,
+              remainingWeightKg: existing.remainingWeightKg + amount,
+            },
+          })
+        } else {
+          // Create new inventory item for the roaster
+          await tx.roasterInventoryItem.create({
+            data: {
+              roasterId: targetRoasterId,
+              greenBeanLotId: id,
+              claimedWeightKg: amount,
+              remainingWeightKg: amount,
+            },
+          })
+        }
+      }
     })
 
     const updatedLot = await prisma.greenBeanLot.findUnique({
@@ -105,8 +146,25 @@ export async function POST(
       },
     })
 
+    // Fetch the created/updated inventory item if this was a Roasting Stock withdrawal
+    let roasterInventoryItem = null
+    if (withdrawalType === 'RoastingStock' && targetRoasterId) {
+      roasterInventoryItem = await prisma.roasterInventoryItem.findUnique({
+        where: {
+          roasterId_greenBeanLotId: {
+            roasterId: targetRoasterId,
+            greenBeanLotId: id,
+          },
+        },
+      })
+    }
+
     return NextResponse.json(
-      { greenBeanLot: updatedLot, message: 'Withdrawal created successfully' },
+      {
+        greenBeanLot: updatedLot,
+        roasterInventoryItem,
+        message: 'Withdrawal created successfully',
+      },
       { status: 201 }
     )
   } catch (error) {

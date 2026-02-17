@@ -62,6 +62,7 @@ import {
   ClipboardCheck,
   Pencil,
   Eye,
+  Flame,
 } from "lucide-react";
 import { addPricingHistory } from "../../services/salesService";
 import { getAllCustomers } from "../../services/customerService";
@@ -696,6 +697,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const [withdrawalCustomerName, setWithdrawalCustomerName] = useState("");
   const [withdrawalDeliveryAddress, setWithdrawalDeliveryAddress] =
     useState("");
+  const [withdrawalTargetRoasterId, setWithdrawalTargetRoasterId] = useState("");
 
   // Edit Withdrawal Modal State
   const [editingWithdrawalIndex, setEditingWithdrawalIndex] = useState<
@@ -1561,9 +1563,14 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         const purpose =
           (formData.get("purpose") as string) || withdrawalType;
 
+        if (withdrawalType === "Roasting Stock" && !withdrawalTargetRoasterId) {
+          setFormError("กรุณาเลือก Roaster ที่ต้องการส่ง stock ให้");
+          return;
+        }
+
         setIsSubmitting(true);
         try {
-          const updatedLot = await createWithdrawal(selectedGreenBean.id, {
+          const { greenBeanLot: updatedLot, roasterInventoryItem } = await createWithdrawal(selectedGreenBean.id, {
             amountKg,
             withdrawalType,
             purpose,
@@ -1575,18 +1582,32 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               customerName: withdrawalCustomerName || undefined,
               deliveryAddress: withdrawalDeliveryAddress || undefined,
             }),
+            ...(withdrawalType === "Roasting Stock" && {
+              targetRoasterId: withdrawalTargetRoasterId,
+            }),
           });
-          setData((prev) => ({
-            ...prev,
-            greenBeanLots: prev.greenBeanLots.map((gbl) =>
+          setData((prev) => {
+            const nextLots = prev.greenBeanLots.map((gbl) =>
               gbl.id === updatedLot.id
-                ? { ...gbl, currentWeightKg: updatedLot.currentWeightKg, withdrawalHistory: updatedLot.withdrawalHistory }
+                ? { ...gbl, currentWeightKg: updatedLot.currentWeightKg, availabilityStatus: updatedLot.availabilityStatus, withdrawalHistory: updatedLot.withdrawalHistory }
                 : gbl,
-            ),
-          }));
+            );
+            // If a RoasterInventoryItem was auto-created, add/update it in roasterInventory
+            if (roasterInventoryItem) {
+              const exists = prev.roasterInventory.some(inv => inv.id === roasterInventoryItem.id);
+              const nextInventory = exists
+                ? prev.roasterInventory.map(inv => inv.id === roasterInventoryItem.id ? roasterInventoryItem : inv)
+                : [...prev.roasterInventory, roasterInventoryItem];
+              return { ...prev, greenBeanLots: nextLots, roasterInventory: nextInventory };
+            }
+            return { ...prev, greenBeanLots: nextLots };
+          });
+          const roasterName = data.users.find(u => u.id === withdrawalTargetRoasterId)?.name;
           addToast({
             type: "success",
-            message: `Withdraw ${amountKg} kg สำเร็จ!`,
+            message: roasterInventoryItem
+              ? `ส่ง ${amountKg} kg ไปยัง Roaster${roasterName ? ` (${roasterName})` : ''} สำเร็จ!`
+              : `Withdraw ${amountKg} kg สำเร็จ!`,
           });
           // Reset withdrawal form state
           setWithdrawalType("Sample");
@@ -1595,6 +1616,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           setWithdrawalCustomerId("");
           setWithdrawalCustomerName("");
           setWithdrawalDeliveryAddress("");
+          setWithdrawalTargetRoasterId("");
         } catch (err: any) {
           const msg =
             err?.message || "เกิดข้อผิดพลาดในการ Withdraw Stock";
@@ -1631,7 +1653,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       }
     }
     if (type === "hullAndGrade") setSelectedParchment(item);
-    if (type === "withdrawStock") setSelectedGreenBean(item);
+    if (type === "withdrawStock") {
+      setSelectedGreenBean(item);
+      setWithdrawalType("Sample");
+      setWithdrawalTargetRoasterId("");
+    }
     setModal(type);
   };
 
@@ -4220,6 +4246,34 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             </div>
                           </div>
                         </div>
+                      </div>
+                    )}
+
+                    {/* Conditional Roasting Stock Fields */}
+                    {withdrawalType === "Roasting Stock" && (
+                      <div className="mb-6 p-5 bg-orange-50 rounded-xl border border-orange-200">
+                        <h3 className="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                          <Flame className="h-4 w-4 text-orange-600" />
+                          ส่งให้ Roaster
+                        </h3>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                          เลือก Roaster <span className="text-red-500">*</span>
+                        </label>
+                        <Select
+                          value={withdrawalTargetRoasterId}
+                          onChange={(v) => setWithdrawalTargetRoasterId(v as string)}
+                          options={[
+                            { value: "", label: "-- เลือก Roaster --" },
+                            ...data.users
+                              .filter(u => u.roles?.includes(UserRole.Roaster))
+                              .map(u => ({ value: u.id, label: u.name })),
+                          ]}
+                          placeholder="เลือก Roaster..."
+                          colorTheme="blue"
+                        />
+                        <p className="text-xs text-orange-700 mt-2">
+                          stock จะถูก push เข้า Inventory ของ Roaster ที่เลือกโดยอัตโนมัติ
+                        </p>
                       </div>
                     )}
 

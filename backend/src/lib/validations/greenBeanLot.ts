@@ -93,6 +93,8 @@ export const createWithdrawalSchema = z.object({
   customerName: z.string().max(100).optional().nullable(),
   invoiceNumber: z.string().max(50).optional().nullable(),
   deliveryAddress: z.string().max(500).optional().nullable(),
+  // For Roasting Stock withdrawals: target roaster to push inventory to
+  targetRoasterId: uuidSchema.optional().nullable(),
 });
 
 // ============================================

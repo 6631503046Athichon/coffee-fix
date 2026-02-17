@@ -1,4 +1,4 @@
-import { GreenBeanLot } from "../types";
+import { GreenBeanLot, RoasterInventoryItem } from "../types";
 import { api } from "./api";
 import { handleApiErrorWithFallback } from "../utils/errorHandler";
 
@@ -142,6 +142,7 @@ export interface CreateWithdrawalInput {
   customerName?: string;
   invoiceNumber?: string;
   deliveryAddress?: string;
+  targetRoasterId?: string;
 }
 
 // Map frontend display values → Prisma enum values
@@ -155,21 +156,33 @@ const WITHDRAWAL_TYPE_FROM_API: Record<string, string> = {
 };
 
 /**
- * Create a withdrawal for a green bean lot
+ * Create a withdrawal for a green bean lot.
+ * If withdrawalType is "Roasting Stock", also returns the created/updated RoasterInventoryItem.
  */
 export const createWithdrawal = async (
   lotId: string,
   input: CreateWithdrawalInput,
-): Promise<GreenBeanLot> => {
+): Promise<{ greenBeanLot: GreenBeanLot; roasterInventoryItem?: RoasterInventoryItem }> => {
   const apiInput = {
     ...input,
     withdrawalType: WITHDRAWAL_TYPE_TO_API[input.withdrawalType] || input.withdrawalType,
   };
-  const response = await api.post<{ greenBeanLot: any }>(
+  const response = await api.post<{ greenBeanLot: any; roasterInventoryItem?: any }>(
     `/green-bean-lots/${lotId}/withdrawals`,
     apiInput,
   );
-  return transformGreenBeanLotFromBackend(response.greenBeanLot);
+  return {
+    greenBeanLot: transformGreenBeanLotFromBackend(response.greenBeanLot),
+    roasterInventoryItem: response.roasterInventoryItem
+      ? {
+          id: response.roasterInventoryItem.id,
+          roasterId: response.roasterInventoryItem.roasterId,
+          greenBeanLotId: response.roasterInventoryItem.greenBeanLotId,
+          claimedWeightKg: response.roasterInventoryItem.claimedWeightKg,
+          remainingWeightKg: response.roasterInventoryItem.remainingWeightKg,
+        }
+      : undefined,
+  };
 };
 
 // ============================================
