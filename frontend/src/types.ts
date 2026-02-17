@@ -388,6 +388,7 @@ export interface RoasterInventoryItem {
   claimedWeightKg: number;
   remainingWeightKg: number;
   inventoryId?: string; // Human-readable inventory code, e.g., INV-001
+  createdAt?: string;
 }
 
 export interface RoastBatch {

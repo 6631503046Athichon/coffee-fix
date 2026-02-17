@@ -462,7 +462,6 @@ model RoasterInventoryItem {
   greenBeanLot      GreenBeanLot @relation(fields: [greenBeanLotId], references: [id])
   roaster           User         @relation(fields: [roasterId], references: [id], onDelete: Cascade)
 
-  @@unique([roasterId, greenBeanLotId])
   @@index([roasterId])
 }
 

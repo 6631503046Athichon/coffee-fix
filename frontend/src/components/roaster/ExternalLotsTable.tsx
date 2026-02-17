@@ -73,7 +73,7 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({ lots, onClaim, on
                 >
                   <td className="px-5 py-4">
                     <span className="text-sm font-mono font-semibold text-gray-900" title={lot.id}>
-                      #{lot.id.substring(0, 6).toUpperCase()}
+                      {lot.lotId || `#${lot.id.substring(0, 6).toUpperCase()}`}
                     </span>
                   </td>
                   <td className="px-5 py-4">

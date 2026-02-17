@@ -176,8 +176,8 @@ const ProtectedRoutes: React.FC = () => {
         gapLogs: storedGAPLogs.length > 0 ? storedGAPLogs : prev.gapLogs,
         processingBatches: mergeArrays(storedProcessingBatches, MOCK_DATA.processingBatches),
         parchmentLots: mergeArrays(storedParchmentLots, MOCK_DATA.parchmentLots),
-        greenBeanLots: mergeArrays(storedGreenBeanLots, MOCK_DATA.greenBeanLots),
-        roasterInventory: mergeArrays(storedRoasterInventory, MOCK_DATA.roasterInventory),
+        greenBeanLots: storedGreenBeanLots.length > 0 ? storedGreenBeanLots : prev.greenBeanLots,
+        roasterInventory: storedRoasterInventory.length > 0 ? storedRoasterInventory : prev.roasterInventory,
       }));
     } catch (error) {
       console.error('Failed to load data from backend:', error);

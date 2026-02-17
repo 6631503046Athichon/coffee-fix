@@ -7,6 +7,7 @@ import { toFixed2 } from '../../utils/formatters';
 export type InventoryDisplayItem = RoasterInventoryItem & {
   variety: string;
   process: string;
+  lotId?: string;
 };
 
 interface InventoryTableProps {
@@ -18,15 +19,6 @@ interface InventoryTableProps {
 }
 
 const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast, currentPage = 1, totalPages = 1, onPageChange }) => {
-  // Debug: Log the items to see what we're receiving
-  React.useEffect(() => {
-    console.log('[InventoryTable] Items received:', items);
-    if (items.length > 0) {
-      console.log('[InventoryTable] First item:', items[0]);
-      console.log('[InventoryTable] First item inventoryId:', items[0].inventoryId);
-    }
-  }, [items]);
-
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {/* Header */}
@@ -79,8 +71,8 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast, curr
                     </span>
                   </td>
                   <td className="px-5 py-4">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-gray-100 text-sm font-mono font-medium text-gray-800" title={item.greenBeanLotId}>
-                      #{item.greenBeanLotId.substring(0, 6).toUpperCase()}
+                    <span className="text-sm font-medium text-gray-900">
+                      {item.lotId || `#${item.greenBeanLotId.substring(0, 6).toUpperCase()}`}
                     </span>
                   </td>
                   <td className="px-5 py-4">

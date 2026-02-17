@@ -90,6 +90,7 @@ export const getAllGreenBeanLots = async (
 function transformGreenBeanLotFromBackend(backendLot: any): GreenBeanLot {
   return {
     id: backendLot.id,
+    lotId: backendLot.lotId || '',
     sourceType: backendLot.sourceType || "Internal",
     parchmentLotId: backendLot.parchmentLotId,
     externalSource: backendLot.externalSource,

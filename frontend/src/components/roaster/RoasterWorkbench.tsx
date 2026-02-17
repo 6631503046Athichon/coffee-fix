@@ -15,6 +15,9 @@ import InventoryTable from './InventoryTable';
 import RoastLogPanel from './RoastLogPanel';
 import { toFixed2, clamp } from '../../utils/formatters';
 import { generateRoastLogId } from '../../utils/idGenerator';
+import { claimInventory, getAllRoasterInventory } from '../../services/roasterInventoryService';
+import { getAllGreenBeanLots } from '../../services/greenBeanLotService';
+import { useToast } from '../../contexts/ToastContext';
 
 
 interface RoasterWorkbenchProps {
@@ -57,6 +60,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     const { data, setData } = useDataContext();
     const location = useLocation();
     const navigate = useNavigate();
+    const { addToast } = useToast();
+    const [isClaiming, setIsClaiming] = useState(false);
 
     const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
     const [isAddLotModalOpen, setIsAddLotModalOpen] = useState(false);
@@ -183,8 +188,9 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             return {
                 ...item,
                 inventoryId: `INV-${invNumber}`,
-                variety: harvestLot?.cherryVariety || 'N/A',
-                process: parchmentLot?.processType || 'N/A',
+                lotId: gbl?.lotId || `#${item.greenBeanLotId.substring(0, 6).toUpperCase()}`,
+                variety: harvestLot?.cherryVariety || gbl?.externalSource?.variety || 'N/A',
+                process: parchmentLot?.processType || gbl?.externalSource?.processType || 'N/A',
             };
         });
     }, [data, currentUser.id]);
@@ -256,26 +262,59 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     };
 
 
-    const handleClaimSubmit = (e: React.FormEvent) => {
+    const handleClaimSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const amount = parseFloat(claimAmount);
-        if (!selectedLot || !amount || amount <= 0 || amount > selectedLot.currentWeightKg) return alert('Invalid claim amount.');
+        if (!selectedLot || !amount || amount <= 0) {
+            addToast({ type: 'warning', message: 'Please enter a valid claim amount.' });
+            return;
+        }
 
-        setData(prev => {
-            const updatedGreenBeanLots = prev.greenBeanLots.map(gbl => gbl.id === selectedLot.id ? { ...gbl, currentWeightKg: gbl.currentWeightKg - amount } : gbl);
-            const existingInvIndex = prev.roasterInventory.findIndex(item => item.roasterId === currentUser.id && item.greenBeanLotId === selectedLot.id);
-            let updatedRoasterInventory;
+        const lotSnapshot = selectedLot;
+        setIsClaiming(true);
 
-            if (existingInvIndex > -1) {
-                updatedRoasterInventory = [...prev.roasterInventory];
-                const item = updatedRoasterInventory[existingInvIndex];
-                updatedRoasterInventory[existingInvIndex] = { ...item, claimedWeightKg: item.claimedWeightKg + amount, remainingWeightKg: item.remainingWeightKg + amount };
-            } else {
-                updatedRoasterInventory = [...prev.roasterInventory, { id: `RI${String(prev.roasterInventory.length + 1).padStart(3, '0')}`, roasterId: currentUser.id, greenBeanLotId: selectedLot.id, claimedWeightKg: amount, remainingWeightKg: amount }];
-            }
-            return { ...prev, greenBeanLots: updatedGreenBeanLots, roasterInventory: updatedRoasterInventory };
-        });
-        setIsClaimModalOpen(false);
+        try {
+            // Call backend API to create inventory claim
+            const claimedItem = await claimInventory(lotSnapshot.id, amount);
+
+            // Close modal immediately for snappy feel
+            setIsClaimModalOpen(false);
+
+            // Optimistic update: add claimed item to inventory + deduct weight from lot
+            setData(prev => ({
+                ...prev,
+                roasterInventory: [...prev.roasterInventory, claimedItem],
+                greenBeanLots: prev.greenBeanLots.map(lot =>
+                    lot.id === lotSnapshot.id
+                        ? { ...lot, currentWeightKg: Math.max(0, lot.currentWeightKg - amount) }
+                        : lot
+                ),
+            }));
+
+            addToast({ type: 'success', message: `Claimed ${amount} kg — added to your inventory!` });
+
+            // Background refresh to sync exact weights from server
+            Promise.all([
+                getAllGreenBeanLots(),
+                getAllRoasterInventory()
+            ]).then(([freshLots, freshInventory]) => {
+                setData(prev => ({
+                    ...prev,
+                    greenBeanLots: freshLots,
+                    roasterInventory: freshInventory,
+                }));
+            }).catch(() => { /* silent background sync */ });
+
+        } catch (error: any) {
+            console.error('Failed to claim inventory:', error);
+            addToast({ type: 'error', message: error?.message || 'Failed to claim inventory. Please try again.' });
+            // Refresh lot weights so UI isn't stale
+            getAllGreenBeanLots()
+                .then(freshLots => setData(prev => ({ ...prev, greenBeanLots: freshLots })))
+                .catch(() => {});
+        } finally {
+            setIsClaiming(false);
+        }
     };
 
     const handleLogRoastSubmit = (e: React.FormEvent) => {
@@ -509,7 +548,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                         <div className="bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 rounded-2xl p-5 mb-6">
                             <div className="flex items-center justify-between mb-4">
                                 <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-white text-sm font-mono font-bold text-gray-900 shadow-sm border border-gray-200" title={selectedLot.id}>
-                                    #{selectedLot.id.substring(0, 6).toUpperCase()}
+                                    {selectedLot.lotId || `#${selectedLot.id.substring(0, 6).toUpperCase()}`}
                                 </span>
                                 <span className={`px-3 py-1.5 text-xs font-semibold rounded-full ${
                                     selectedLot.finalScore !== 'N/A' && Number(selectedLot.finalScore) >= 85
@@ -585,8 +624,10 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                                 variant="success"
                                 size="lg"
                                 icon={<Package className="h-5 w-5" />}
+                                loading={isClaiming}
+                                disabled={isClaiming}
                             >
-                                Claim Stock
+                                {isClaiming ? 'Claiming...' : 'Claim Stock'}
                             </Button>
                         </div>
                     </form>

@@ -23,9 +23,11 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         inventoryId: true,
+        roasterId: true,
         greenBeanLotId: true,
         claimedWeightKg: true,
         remainingWeightKg: true,
+        createdAt: true,
         roaster: {
           select: {
             id: true,
@@ -77,8 +79,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { greenBeanLotId, claimedWeightKg } = body
 
+    console.log('[POST roaster-inventory] user:', user.id, 'roles:', user.roles, 'body:', JSON.stringify(body));
+
     // Validation
     if (!greenBeanLotId || !claimedWeightKg) {
+      console.log('[POST roaster-inventory] VALIDATION FAIL: greenBeanLotId=', greenBeanLotId, 'claimedWeightKg=', claimedWeightKg);
       return NextResponse.json(
         { error: 'Green bean lot ID and claimed weight are required' },
         { status: 400 }
@@ -111,24 +116,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if already claimed
-    const existing = await prisma.roasterInventoryItem.findUnique({
-      where: {
-        roasterId_greenBeanLotId: {
-          roasterId: user.id,
-          greenBeanLotId,
-        },
-      },
-    })
+    const weight = parseFloat(claimedWeightKg);
 
-    if (existing) {
-      return NextResponse.json(
-        { error: 'Already claimed. Update existing inventory item instead.' },
-        { status: 409 }
-      )
-    }
-
-    // Generate next inventoryId (INV-001, etc.)
+    // Generate next inventoryId BEFORE the transaction to keep transaction fast
     const allItems = await prisma.roasterInventoryItem.findMany({
       select: { inventoryId: true },
       where: { inventoryId: { not: null } }
@@ -144,18 +134,53 @@ export async function POST(request: NextRequest) {
         }
       }
     });
-    
-    const nextNumber = maxNumber + 1;
-    const inventoryId = `INV-${String(nextNumber).padStart(3, '0')}`;
 
-    const inventoryItem = await prisma.roasterInventoryItem.create({
-      data: {
-        inventoryId,
-        roasterId: user.id,
-        greenBeanLotId,
-        claimedWeightKg: parseFloat(claimedWeightKg),
-        remainingWeightKg: parseFloat(claimedWeightKg),
-      },
+    // Try up to 3 sequential IDs in case of collision
+    let inventoryItem;
+    let created = false;
+    
+    for (let attempt = 0; attempt < 3 && !created; attempt++) {
+      const inventoryId = `INV-${String(maxNumber + 1 + attempt).padStart(3, '0')}`;
+      
+      try {
+        inventoryItem = await prisma.$transaction(async (tx) => {
+          // Deduct weight from green bean lot
+          const currentLot = await tx.greenBeanLot.findUnique({ where: { id: greenBeanLotId } });
+          if (!currentLot || currentLot.currentWeightKg < weight) {
+            throw new Error('Insufficient weight available');
+          }
+
+          await tx.greenBeanLot.update({
+            where: { id: greenBeanLotId },
+            data: {
+              currentWeightKg: currentLot.currentWeightKg - weight,
+              availabilityStatus: (currentLot.currentWeightKg - weight) <= 0 ? 'Withdrawn' : 'Available',
+            },
+          });
+
+          // Create new inventory row
+          return tx.roasterInventoryItem.create({
+            data: {
+              inventoryId,
+              roasterId: user.id,
+              greenBeanLotId,
+              claimedWeightKg: weight,
+              remainingWeightKg: weight,
+            },
+          });
+        }, { timeout: 15000 });
+        created = true;
+      } catch (err: any) {
+        if (err.code === 'P2002' && attempt < 2) {
+          continue; // Retry with next ID
+        }
+        throw err;
+      }
+    }
+
+    // Fetch full item with relations separately (outside transaction)
+    const fullItem = await prisma.roasterInventoryItem.findUnique({
+      where: { id: inventoryItem!.id },
       include: {
         roaster: { select: { id: true, name: true } },
         greenBeanLot: {
@@ -173,7 +198,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(
-      { inventoryItem, message: 'Green bean lot claimed successfully' },
+      { inventoryItem: fullItem, message: 'Green bean lot claimed successfully' },
       { status: 201 }
     )
   } catch (error) {
