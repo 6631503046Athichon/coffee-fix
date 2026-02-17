@@ -403,7 +403,7 @@ const FarmManagement: React.FC = () => {
 									<p className="text-sm text-gray-500 leading-relaxed truncate">{farm.location}</p>
 									<div className="space-y-0.5">
 										<p className="text-xs text-gray-500 leading-relaxed">Owner: <span className="font-medium">{ownerDisplayName}</span></p>
-										{caretakerDisplayName && <p className="text-xs text-gray-500 leading-relaxed">Caretaker: <span className="font-medium">{caretakerDisplayName}</span></p>}
+										{caretakerDisplayName && <p className="text-xs text-gray-500 leading-relaxed">Farmer: <span className="font-medium">{caretakerDisplayName}</span></p>}
 										{farm.googleMapsUrl && (
 											<p className="text-xs text-gray-500 leading-relaxed">
 												Map: <a href={farm.googleMapsUrl} target="_blank" rel="noreferrer" className="text-emerald-700 font-medium hover:underline">Open Google Maps</a>
