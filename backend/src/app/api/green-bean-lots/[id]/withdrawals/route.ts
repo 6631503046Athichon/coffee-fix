@@ -97,35 +97,24 @@ export async function POST(
 
       // For Roasting Stock: auto-create or update RoasterInventoryItem for the target roaster
       if (withdrawalType === 'RoastingStock' && targetRoasterId) {
-        const existing = await tx.roasterInventoryItem.findUnique({
+        await tx.roasterInventoryItem.upsert({
           where: {
             roasterId_greenBeanLotId: {
               roasterId: targetRoasterId,
               greenBeanLotId: id,
             },
           },
+          update: {
+            claimedWeightKg: { increment: amount },
+            remainingWeightKg: { increment: amount },
+          },
+          create: {
+            roasterId: targetRoasterId,
+            greenBeanLotId: id,
+            claimedWeightKg: amount,
+            remainingWeightKg: amount,
+          },
         })
-
-        if (existing) {
-          // Add to existing inventory
-          await tx.roasterInventoryItem.update({
-            where: { id: existing.id },
-            data: {
-              claimedWeightKg: existing.claimedWeightKg + amount,
-              remainingWeightKg: existing.remainingWeightKg + amount,
-            },
-          })
-        } else {
-          // Create new inventory item for the roaster
-          await tx.roasterInventoryItem.create({
-            data: {
-              roasterId: targetRoasterId,
-              greenBeanLotId: id,
-              claimedWeightKg: amount,
-              remainingWeightKg: amount,
-            },
-          })
-        }
       }
     })
 

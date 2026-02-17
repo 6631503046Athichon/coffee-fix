@@ -105,29 +105,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if already claimed
-    const existing = await prisma.roasterInventoryItem.findUnique({
+    const weight = parseFloat(claimedWeightKg)
+
+    const inventoryItem = await prisma.roasterInventoryItem.upsert({
       where: {
         roasterId_greenBeanLotId: {
           roasterId: user.id,
           greenBeanLotId,
         },
       },
-    })
-
-    if (existing) {
-      return NextResponse.json(
-        { error: 'Already claimed. Update existing inventory item instead.' },
-        { status: 409 }
-      )
-    }
-
-    const inventoryItem = await prisma.roasterInventoryItem.create({
-      data: {
+      update: {
+        claimedWeightKg: { increment: weight },
+        remainingWeightKg: { increment: weight },
+      },
+      create: {
         roasterId: user.id,
         greenBeanLotId,
-        claimedWeightKg: parseFloat(claimedWeightKg),
-        remainingWeightKg: parseFloat(claimedWeightKg),
+        claimedWeightKg: weight,
+        remainingWeightKg: weight,
       },
       include: {
         roaster: {

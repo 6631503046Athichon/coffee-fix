@@ -1812,9 +1812,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           : dateA - dateB;
       }
 
-      if (a[key] < b[key])
+      const valA = a[key as keyof ParchmentLot];
+      const valB = b[key as keyof ParchmentLot];
+      if (valA != null && valB != null && valA < valB)
         return parchmentSortConfig.direction === "asc" ? -1 : 1;
-      if (a[key] > b[key])
+      if (valA != null && valB != null && valA > valB)
         return parchmentSortConfig.direction === "asc" ? 1 : -1;
       return 0;
     });
