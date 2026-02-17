@@ -22,6 +22,9 @@ const TraceabilityHub: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [currentPage, setCurrentPage] = useState(1);
+    const [varietyFilter, setVarietyFilter] = useState('All');
+    const [processFilter, setProcessFilter] = useState('All');
+    const [gradeFilter, setGradeFilter] = useState('All');
 
     // Selection state
     const [selectedLots, setSelectedLots] = useState<Set<string>>(new Set());
@@ -97,12 +100,15 @@ const TraceabilityHub: React.FC = () => {
             const searchLower = searchTerm.toLowerCase();
             return enrichedLots.filter(lot => {
                 if (!lot) return false;
+                const matchesVariety = varietyFilter === 'All' || lot.variety === varietyFilter;
+                const matchesProcess = processFilter === 'All' || lot.processType === processFilter;
+                const matchesGrade = gradeFilter === 'All' || lot.grade === gradeFilter;
                 return (
                     (lot.id?.toLowerCase() || '').includes(searchLower) ||
                     (lot.grade?.toLowerCase() || '').includes(searchLower) ||
                     (lot.processType?.toLowerCase() || '').includes(searchLower) ||
                     (lot.variety?.toLowerCase() || '').includes(searchLower)
-                );
+                ) && matchesVariety && matchesProcess && matchesGrade;
             }).sort((a, b) => {
                 const aId = a?.id || '';
                 const bId = b?.id || '';
@@ -112,12 +118,36 @@ const TraceabilityHub: React.FC = () => {
             console.error('Error filtering lots:', error);
             return [];
         }
-    }, [enrichedLots, searchTerm]);
+    }, [enrichedLots, searchTerm, varietyFilter, processFilter, gradeFilter]);
 
     // Reset page when search changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm]);
+    }, [searchTerm, varietyFilter, processFilter, gradeFilter]);
+
+    const varietyOptions = useMemo(() => {
+        const set = new Set<string>();
+        enrichedLots.forEach(lot => {
+            if (lot?.variety) set.add(lot.variety);
+        });
+        return ['All', ...Array.from(set).sort()];
+    }, [enrichedLots]);
+
+    const processOptions = useMemo(() => {
+        const set = new Set<string>();
+        enrichedLots.forEach(lot => {
+            if (lot?.processType) set.add(lot.processType);
+        });
+        return ['All', ...Array.from(set).sort()];
+    }, [enrichedLots]);
+
+    const gradeOptions = useMemo(() => {
+        const set = new Set<string>();
+        enrichedLots.forEach(lot => {
+            if (lot?.grade) set.add(lot.grade);
+        });
+        return ['All', ...Array.from(set).sort()];
+    }, [enrichedLots]);
 
     // Pagination logic
     const totalPages = Math.ceil(filteredLots.length / PAGE_SIZE);
@@ -227,7 +257,7 @@ const TraceabilityHub: React.FC = () => {
             )}
 
             {/* Search Bar */}
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200">
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200 space-y-4">
                 <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                         <Search className="h-5 w-5 text-gray-400" />
@@ -239,6 +269,50 @@ const TraceabilityHub: React.FC = () => {
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="block w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl bg-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm transition-all"
                     />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            Variety
+                        </label>
+                        <select
+                            value={varietyFilter}
+                            onChange={(e) => setVarietyFilter(e.target.value)}
+                            className="block w-full border border-gray-300 rounded-xl bg-white py-2.5 px-3 text-sm font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                        >
+                            {varietyOptions.map(option => (
+                                <option key={option} value={option}>{option}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            Process
+                        </label>
+                        <select
+                            value={processFilter}
+                            onChange={(e) => setProcessFilter(e.target.value)}
+                            className="block w-full border border-gray-300 rounded-xl bg-white py-2.5 px-3 text-sm font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                        >
+                            {processOptions.map(option => (
+                                <option key={option} value={option}>{option}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            Grade
+                        </label>
+                        <select
+                            value={gradeFilter}
+                            onChange={(e) => setGradeFilter(e.target.value)}
+                            className="block w-full border border-gray-300 rounded-xl bg-white py-2.5 px-3 text-sm font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                        >
+                            {gradeOptions.map(option => (
+                                <option key={option} value={option}>{option}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
             </div>
 
