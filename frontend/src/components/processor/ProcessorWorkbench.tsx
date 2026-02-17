@@ -672,6 +672,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     useState<GreenBeanLot | null>(null);
   const [selectedGreenBeanForHistory, setSelectedGreenBeanForHistory] =
     useState<GreenBeanLot | null>(null);
+  const [selectedParchmentForHistory, setSelectedParchmentForHistory] =
+    useState<ParchmentLot | null>(null);
+  const [selectedGreenBeanForSource, setSelectedGreenBeanForSource] =
+    useState<GreenBeanLot | null>(null);
   const [scoringLot, setScoringLot] = useState<GreenBeanLot | null>(null);
 
   // Form States
@@ -2484,16 +2488,25 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <button
-                        onClick={() => openModal("hullAndGrade", p)}
-                        disabled={
-                          p.status === "Hulled" || p.currentWeightKg <= 0
-                        }
-                        className="p-2 rounded-lg text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all"
-                        title="Hull & Grade"
-                      >
-                        <PlayCircle size={18} />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setSelectedParchmentForHistory(p)}
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
+                          title="View Green Bean Lots"
+                        >
+                          <History className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => openModal("hullAndGrade", p)}
+                          disabled={
+                            p.status === "Hulled" || p.currentWeightKg <= 0
+                          }
+                          className="p-2 rounded-lg text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all"
+                          title="Hull & Grade"
+                        >
+                          <PlayCircle size={18} />
+                        </button>
+                      </div>
                     </td>
                     </tr>
                   );
@@ -2725,6 +2738,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setSelectedGreenBeanForSource(g)}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
+                            title="View Source Lot"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
                           {g.withdrawalHistory &&
                             g.withdrawalHistory.length > 0 && (
                               <button
@@ -3249,14 +3269,25 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     </div>
 
                     {/* Actions */}
-                    <button
-                      onClick={() => openModal("hullAndGrade", p)}
-                      disabled={p.status === "Hulled" || p.currentWeightKg <= 0}
-                      className="w-full py-2 text-xs font-medium rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all inline-flex items-center justify-center gap-1.5"
-                    >
-                      <PlayCircle size={14} />
-                      Hull & Grade
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setSelectedParchmentForHistory(p)}
+                        className="flex-1 py-2 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 transition-all inline-flex items-center justify-center gap-1.5"
+                      >
+                        <History size={14} />
+                        History
+                      </button>
+                      <button
+                        onClick={() => openModal("hullAndGrade", p)}
+                        disabled={
+                          p.status === "Hulled" || p.currentWeightKg <= 0
+                        }
+                        className="flex-1 py-2 text-xs font-medium rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all inline-flex items-center justify-center gap-1.5"
+                      >
+                        <PlayCircle size={14} />
+                        Hull & Grade
+                      </button>
+                    </div>
                     </div>
                   );
                 })
@@ -3426,6 +3457,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
                       {/* Actions */}
                       <div className="flex gap-2">
+                        <button
+                          onClick={() => setSelectedGreenBeanForSource(g)}
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
+                          title="Source"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
                         {g.withdrawalHistory &&
                           g.withdrawalHistory.length > 0 && (
                             <button
@@ -4750,6 +4788,447 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   >
                     <Save className="h-4 w-4" />
                     Save Score
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
+      {selectedGreenBeanForSource && (
+        <ModalPortal>
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
+              <div className="p-6 sm:p-8">
+                {/* Modal Header */}
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="p-4 bg-teal-600 rounded-2xl shadow-lg">
+                    <Eye className="h-10 w-10 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-3xl font-bold text-gray-900">
+                      Green Bean Source
+                    </h2>
+                    <p className="text-base text-gray-600 mt-1">
+                      Lot {formatGreenBeanId(selectedGreenBeanForSource)}
+                    </p>
+                  </div>
+                </div>
+
+                {(() => {
+                  const sourceParchment = data.parchmentLots.find(
+                    (p) => p.id === selectedGreenBeanForSource.parchmentLotId,
+                  );
+                  const sourceHarvest = data.harvestLots.find(
+                    (h) => h.id === sourceParchment?.harvestLotId,
+                  );
+                  const externalSource =
+                    selectedGreenBeanForSource.sourceType === "External"
+                      ? selectedGreenBeanForSource.externalSource
+                      : null;
+
+                  return (
+                    <>
+                      {externalSource ? (
+                        <div className="bg-blue-50 rounded-2xl p-6 mb-6 border border-blue-200">
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+                            External Source
+                          </p>
+                          <div className="grid grid-cols-2 gap-4 text-sm text-gray-700">
+                            <div>
+                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                Origin
+                              </p>
+                              <p className="font-semibold text-gray-900">
+                                {externalSource.originName}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                Process
+                              </p>
+                              <p className="font-semibold text-gray-900">
+                                {externalSource.processType}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                Variety
+                              </p>
+                              <p className="font-semibold text-gray-900">
+                                {externalSource.variety}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                Purchase Date
+                              </p>
+                              <p className="font-semibold text-gray-900">
+                                {externalSource.purchaseDate}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                Price
+                              </p>
+                              <p className="font-semibold text-gray-900">
+                                {externalSource.pricePerKg.toFixed(2)} {externalSource.currency}
+                              </p>
+                            </div>
+                            {externalSource.producerName && (
+                              <div>
+                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                  Producer
+                                </p>
+                                <p className="font-semibold text-gray-900">
+                                  {externalSource.producerName}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : sourceParchment ? (
+                        <>
+                          <div className="bg-amber-50 rounded-2xl p-6 mb-6 border border-amber-200">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                  Parchment Lot
+                                </p>
+                                <p className="text-2xl font-bold text-amber-700">
+                                  {formatParchmentId(sourceParchment)}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Batch #{sourceParchment.processingBatchId.substring(0, 6).toUpperCase()}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                  Process
+                                </p>
+                                <p className="text-2xl font-bold text-amber-700">
+                                  {sourceParchment.processType}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {formatParchmentStatus(sourceParchment.status)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 text-sm text-gray-700">
+                            <div>
+                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                Weight (kg)
+                              </p>
+                              <p className="font-semibold text-gray-900">
+                                {(sourceParchment.status === "Hulled"
+                                  ? sourceParchment.initialWeightKg
+                                  : sourceParchment.currentWeightKg
+                                ).toFixed(2)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                Moisture
+                              </p>
+                              <p className="font-semibold text-gray-900">
+                                {sourceParchment.moistureContent}%
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                Harvest Lot
+                              </p>
+                              <p className="font-semibold text-gray-900">
+                                {sourceHarvest?.id || "-"}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                Farmer
+                              </p>
+                              <p className="font-semibold text-gray-900">
+                                {sourceHarvest?.farmerName || "-"}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-5 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedGreenBeanForSource(null);
+                                setSelectedParchmentForHistory(sourceParchment);
+                              }}
+                              className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-all"
+                            >
+                              <History className="h-4 w-4" />
+                              View Parchment History
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-center py-10 text-gray-400">
+                          <Box className="h-12 w-12 mx-auto mb-2 opacity-30" />
+                          <p className="text-sm font-medium">
+                            No parchment source found for this lot
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+
+                {/* Close Button */}
+                <div className="mt-6 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGreenBeanForSource(null)}
+                    className="px-6 py-2.5 border border-gray-300 rounded-xl shadow-sm text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
+      {selectedParchmentForHistory && (
+        <ModalPortal>
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
+              <div className="p-6 sm:p-8">
+                {/* Modal Header */}
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="p-4 bg-amber-500 rounded-2xl shadow-lg">
+                    <History className="h-10 w-10 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-3xl font-bold text-gray-900">
+                      Green Bean Split History
+                    </h2>
+                    <p className="text-base text-gray-600 mt-1">
+                      Lot {formatParchmentId(selectedParchmentForHistory)}
+                    </p>
+                  </div>
+                </div>
+
+                {(() => {
+                  const relatedGreenBeans = data.greenBeanLots.filter(
+                    (g) => g.parchmentLotId === selectedParchmentForHistory.id,
+                  );
+                  const totalCurrentWeight = relatedGreenBeans.reduce(
+                    (sum, g) => sum + g.currentWeightKg,
+                    0,
+                  );
+
+                  return (
+                    <>
+                      {/* Summary Card */}
+                      <div className="bg-amber-50 rounded-2xl p-6 mb-6 border border-amber-200">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                              Total Lots
+                            </p>
+                            <p className="text-3xl font-bold text-amber-700">
+                              {relatedGreenBeans.length}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              lots created
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                              Total Weight
+                            </p>
+                            <p className="text-3xl font-bold text-amber-700">
+                              {totalCurrentWeight.toFixed(2)}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              kilograms
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* History List */}
+                      <div className="overflow-y-auto max-h-96">
+                        {relatedGreenBeans.length === 0 ? (
+                          <div className="text-center py-10 text-gray-400">
+                            <Coffee className="h-12 w-12 mx-auto mb-2 opacity-30" />
+                            <p className="text-sm font-medium">
+                              No green bean lots found for this parchment lot
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {relatedGreenBeans.map((g, index) => {
+                              const displayScore = g.processorScore
+                                ? g.processorScore.toFixed(1)
+                                : g.cuppingScores?.length > 0
+                                  ? (
+                                      g.cuppingScores.reduce(
+                                        (sum, c) => sum + c.score,
+                                        0,
+                                      ) / g.cuppingScores.length
+                                    ).toFixed(1)
+                                  : null;
+                              const scoreValue = g.processorScore
+                                ? g.processorScore
+                                : g.cuppingScores?.length > 0
+                                  ? g.cuppingScores.reduce(
+                                      (sum, c) => sum + c.score,
+                                      0,
+                                    ) / g.cuppingScores.length
+                                  : 0;
+
+                              return (
+                                <div
+                                  key={g.id}
+                                  className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-amber-300 transition-all"
+                                >
+                                  <div className="flex items-start justify-between mb-3">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-8 h-8 bg-amber-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                        <span className="text-white font-bold text-sm">
+                                          #{index + 1}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                                          Lot ID
+                                        </p>
+                                        <p className="text-sm font-bold text-gray-900">
+                                          {formatGreenBeanId(g)}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                                        Weight
+                                      </p>
+                                      <p className="text-2xl font-bold text-amber-700">
+                                        {g.currentWeightKg.toFixed(2)} kg
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-3 text-sm text-gray-700">
+                                    <div>
+                                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                        Grade
+                                      </p>
+                                      <p className="font-semibold text-gray-900">
+                                        {g.grade}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                        Availability
+                                      </p>
+                                      <span className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+                                        <span
+                                          className={`w-1.5 h-1.5 rounded-full ${g.availabilityStatus === "Available" ? "bg-green-500" : "bg-gray-300"}`}
+                                        ></span>
+                                        {g.availabilityStatus}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                        QC Score
+                                      </p>
+                                      {displayScore ? (
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-sm font-semibold text-gray-900">
+                                            {displayScore}
+                                          </span>
+                                          {scoreValue >= 80 && (
+                                            <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="text-sm text-gray-400">-</span>
+                                      )}
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                        Price
+                                      </p>
+                                      {g.pricePerKg ? (
+                                        <span className="text-sm font-semibold text-gray-900">
+                                          {g.pricePerKg.toFixed(2)} {g.currency || "THB"}
+                                        </span>
+                                      ) : (
+                                        <span className="text-sm text-gray-400">-</span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="mt-3 pt-3 border-t border-gray-200 flex flex-wrap gap-2">
+                                    {g.withdrawalHistory &&
+                                      g.withdrawalHistory.length > 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setSelectedParchmentForHistory(null);
+                                            setSelectedGreenBeanForHistory(g);
+                                          }}
+                                          className="inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg text-gray-600 bg-white hover:bg-gray-50 border border-gray-200 transition-all"
+                                          title="View Withdrawal History"
+                                        >
+                                          <History className="h-3.5 w-3.5" />
+                                          History
+                                        </button>
+                                      )}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedParchmentForHistory(null);
+                                        setScoringLot(g);
+                                      }}
+                                      className="inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 transition-all"
+                                      title="QC Score"
+                                    >
+                                      <ClipboardCheck className="h-3.5 w-3.5" />
+                                      QC Score
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedParchmentForHistory(null);
+                                        openModal("withdrawStock", g);
+                                      }}
+                                      disabled={g.availabilityStatus === "Withdrawn"}
+                                      className="inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-all"
+                                      title="Withdraw"
+                                    >
+                                      <Download className="h-3.5 w-3.5" />
+                                      Withdraw
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
+
+                {/* Close Button */}
+                <div className="mt-6 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedParchmentForHistory(null)}
+                    className="px-6 py-2.5 border border-gray-300 rounded-xl shadow-sm text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
+                  >
+                    Close
                   </button>
                 </div>
               </div>
