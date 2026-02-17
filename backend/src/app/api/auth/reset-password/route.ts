@@ -62,6 +62,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if new password is the same as old password
+    const isSamePassword = await verifyPassword(password, resetToken.user.password)
+    if (isSamePassword) {
+      return NextResponse.json(
+        { error: 'New password must be different from the current password' },
+        { status: 400 }
+      )
+    }
+
     // Hash new password
     const hashedPassword = await hashPassword(password)
 

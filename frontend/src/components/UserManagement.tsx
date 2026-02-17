@@ -184,7 +184,7 @@ const UserManagement: React.FC = () => {
             await api.put(`/users/${resetPasswordUser.id}`, { password: generatedPassword });
             setNewPassword(generatedPassword);
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to reset password');
+            alert(err instanceof Error ? err.message : 'Failed to reset password');
             setResetPasswordUser(null);
         }
     };
@@ -216,7 +216,7 @@ const UserManagement: React.FC = () => {
             await api.delete(`/users/${user.id}`);
             fetchUsers();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to delete user');
+            alert(err instanceof Error ? err.message : 'Failed to delete user');
         }
     };
 

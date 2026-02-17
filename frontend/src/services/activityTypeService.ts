@@ -1,83 +1,104 @@
 /**
  * Activity Type Service
- * Manages GAP Activity Types in localStorage
+ * Fetches GAP Activity Types from Backend API
  */
 
 import { ActivityType } from '../types';
+import { api } from './api';
 
-const ACTIVITY_TYPES_STORAGE_KEY = 'coffee_lab_activity_types';
+interface ActivityTypeResponse {
+  activityTypes: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    isActive: boolean;
+    createdAt: string;
+  }>;
+}
+
+interface SingleActivityTypeResponse {
+  activityType: {
+    id: string;
+    name: string;
+    description: string | null;
+    isActive: boolean;
+    createdAt: string;
+  };
+}
 
 /**
- * Initialize activity types in localStorage with default values
+ * Map API response to frontend ActivityType format
  */
-export const initializeActivityTypes = (defaultTypes: ActivityType[]) => {
-  const stored = localStorage.getItem(ACTIVITY_TYPES_STORAGE_KEY);
-  if (!stored) {
-    localStorage.setItem(ACTIVITY_TYPES_STORAGE_KEY, JSON.stringify(defaultTypes));
+const mapActivityType = (at: any): ActivityType => ({
+  id: at.id,
+  name: at.name,
+  description: at.description || undefined,
+  isActive: at.isActive,
+  createdDate: at.createdAt?.split('T')[0] || new Date().toISOString().split('T')[0],
+});
+
+/**
+ * Get all activity types from API
+ */
+export const getAllActivityTypes = async (): Promise<ActivityType[]> => {
+  try {
+    const data = await api.get<ActivityTypeResponse>('/activity-types');
+    return (data.activityTypes || []).map(mapActivityType);
+  } catch (error) {
+    console.error('Error fetching activity types:', error);
+    return [];
   }
-};
-
-/**
- * Get all activity types from localStorage
- */
-export const getAllActivityTypes = (): ActivityType[] => {
-  const stored = localStorage.getItem(ACTIVITY_TYPES_STORAGE_KEY);
-  if (stored) {
-    try {
-      return JSON.parse(stored);
-    } catch (error) {
-      console.error('Error parsing activity types from localStorage:', error);
-      return [];
-    }
-  }
-  return [];
-};
-
-/**
- * Save all activity types to localStorage
- */
-const saveAllActivityTypes = (types: ActivityType[]) => {
-  localStorage.setItem(ACTIVITY_TYPES_STORAGE_KEY, JSON.stringify(types));
-};
-
-/**
- * Add a new activity type
- */
-export const addActivityType = (activityType: ActivityType) => {
-  const all = getAllActivityTypes();
-  all.unshift(activityType);
-  saveAllActivityTypes(all);
-};
-
-/**
- * Update an existing activity type
- */
-export const updateActivityType = (activityType: ActivityType) => {
-  const all = getAllActivityTypes();
-  const updated = all.map(t => t.id === activityType.id ? activityType : t);
-  saveAllActivityTypes(updated);
-};
-
-/**
- * Delete an activity type
- */
-export const deleteActivityType = (id: string) => {
-  const all = getAllActivityTypes();
-  const filtered = all.filter(t => t.id !== id);
-  saveAllActivityTypes(filtered);
 };
 
 /**
  * Get active activity types only
  */
-export const getActiveActivityTypes = (): ActivityType[] => {
-  return getAllActivityTypes().filter(t => t.isActive);
+export const getActiveActivityTypes = async (): Promise<ActivityType[]> => {
+  try {
+    const data = await api.get<ActivityTypeResponse>('/activity-types', { isActive: 'true' });
+    return (data.activityTypes || []).map(mapActivityType);
+  } catch (error) {
+    console.error('Error fetching active activity types:', error);
+    return [];
+  }
+};
+
+/**
+ * Add a new activity type
+ */
+export const addActivityType = async (activityType: { name: string; description?: string; isActive: boolean }): Promise<ActivityType> => {
+  const data = await api.post<SingleActivityTypeResponse>('/activity-types', {
+    name: activityType.name,
+    description: activityType.description || null,
+    isActive: activityType.isActive,
+  });
+  return mapActivityType(data.activityType);
+};
+
+/**
+ * Update an existing activity type
+ */
+export const updateActivityType = async (id: string, updates: { name?: string; description?: string; isActive?: boolean }): Promise<ActivityType> => {
+  const data = await api.put<SingleActivityTypeResponse>(`/activity-types/${id}`, updates);
+  return mapActivityType(data.activityType);
+};
+
+/**
+ * Delete an activity type
+ */
+export const deleteActivityType = async (id: string): Promise<void> => {
+  await api.delete(`/activity-types/${id}`);
 };
 
 /**
  * Check if activity type name already exists
  */
-export const activityTypeNameExists = (name: string, excludeId?: string): boolean => {
-  const all = getAllActivityTypes();
+export const activityTypeNameExists = async (name: string, excludeId?: string): Promise<boolean> => {
+  const all = await getAllActivityTypes();
   return all.some(t => t.name.toLowerCase() === name.toLowerCase() && t.id !== excludeId);
+};
+
+// Legacy functions for backward compatibility (no-op)
+export const initializeActivityTypes = (_defaultTypes: ActivityType[]) => {
+  // No-op: Data comes from API now
 };

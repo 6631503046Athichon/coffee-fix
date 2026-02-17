@@ -71,7 +71,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
         setGeneratedCredentials(response.credentials)
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to create user')
+      setError(err instanceof Error ? err.message : 'Failed to create user')
     } finally {
       setLoading(false)
     }

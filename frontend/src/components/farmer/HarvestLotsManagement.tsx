@@ -18,7 +18,7 @@ const HarvestLotsManagement: React.FC = () => {
 
   // Table State
   const [statusFilter, setStatusFilter] = useState<'All' | 'Ready for Processing' | 'Processing' | 'Complete'>('All');
-  const [sortColumn, setSortColumn] = useState<SortableKeys>('id');
+  const [sortColumn, setSortColumn] = useState<SortableKeys>('createdAt');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedFarm, setSelectedFarm] = useState<any>(null);

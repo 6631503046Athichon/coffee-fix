@@ -51,7 +51,7 @@ const TransferOwnershipModal: React.FC<TransferOwnershipModalProps> = ({
         setError('No eligible admin users found. Create an active admin account first.')
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load admin users')
+      setError(err instanceof Error ? err.message : 'Failed to load admin users')
     } finally {
       setLoadingAdmins(false)
     }
@@ -82,7 +82,7 @@ const TransferOwnershipModal: React.FC<TransferOwnershipModalProps> = ({
       resetForm()
       onClose()
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to transfer ownership')
+      setError(err instanceof Error ? err.message : 'Failed to transfer ownership')
     } finally {
       setLoading(false)
     }
