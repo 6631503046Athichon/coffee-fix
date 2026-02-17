@@ -49,6 +49,24 @@ export const updateFarm = async (farmId: string, farmData: Partial<Farm>): Promi
 };
 
 /**
+ * Update weather auto-fetch settings for a farm (Admin only)
+ */
+export const updateFarmWeatherSettings = async (
+  farmId: string,
+  settings: { weatherAutoFetchEnabled: boolean; weatherAutoFetchInterval: number }
+): Promise<Farm> => {
+  try {
+    const response = await api.put<{ farm: any }>(
+      `/farms/${farmId}`,
+      settings
+    );
+    return transformFarmFromBackend(response.farm);
+  } catch (error) {
+    throw new Error(handleApiError(error, 'update weather settings'));
+  }
+};
+
+/**
  * Delete a farm
  */
 export const deleteFarm = async (farmId: string): Promise<void> => {

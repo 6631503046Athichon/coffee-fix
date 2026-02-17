@@ -42,6 +42,8 @@ export const transformFarmFromBackend = (farm: any) => {
     caretakerName: farm.caretakerName || undefined,
     createdAt: farm.createdAt,
     updatedAt: farm.updatedAt,
+    weatherAutoFetchEnabled: farm.weatherAutoFetchEnabled || false,
+    weatherAutoFetchInterval: farm.weatherAutoFetchInterval || 5,
     archived: farm.archived || false,
     archivedAt: farm.archivedAt || undefined,
     ownerUserId: farm.ownerId,
@@ -78,13 +80,10 @@ export const transformFarmToBackend = (farmData: any) => {
         : ownerNamesFromString,
     location: farmData.location || "",
     googleMapsUrl: farmData.googleMapsUrl || null,
-    latitude:
-      typeof farmData.latitude === "number" ? farmData.latitude : null,
-    longitude:
-      typeof farmData.longitude === "number" ? farmData.longitude : null,
+    latitude: farmData.latitude || null,
+    longitude: farmData.longitude || null,
     altitude: farmData.altitudeMeters?.toString() || null,
-    sizeHectares:
-      typeof farmData.sizeHectares === "number" ? farmData.sizeHectares : null,
+    sizeHectares: farmData.sizeHectares || null,
     varieties: farmData.varieties || [],
     caretakerNames:
       caretakerNamesFromArray.length > 0

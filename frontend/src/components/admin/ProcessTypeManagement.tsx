@@ -290,24 +290,24 @@ const ProcessTypeManagement: React.FC = () => {
       <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-900">
+            <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">
+                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Name
                 </th>
-                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">
+                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Description
                 </th>
-                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">
+                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Color Preview
                 </th>
-                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">
+                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Created Date
                 </th>
-                <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">
+                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Status
                 </th>
-                <th scope="col" className="px-6 py-4 text-right text-xs font-bold text-white uppercase tracking-wider">
+                <th scope="col" className="px-6 py-4 text-right text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>

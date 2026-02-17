@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { hashPassword, generateToken } from '@/lib/auth'
-import { handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
 export async function POST(request: NextRequest) {
   try {
+    // SECURITY: Only admins can register new users
+    const user = await requireAuth(request)
+    requireRole(user, ['Admin'])
+
     const body = await request.json()
     const { email, username, password, name, roles } = body
 
@@ -50,6 +54,10 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await hashPassword(password)
 
+    // SECURITY: Never allow user-specified roles - admin sets roles explicitly
+    // Ignore roles from request if not provided or invalid
+    const allowedRoles = roles && Array.isArray(roles) ? roles : []
+
     // Create user
     const newUser = await prisma.user.create({
       data: {
@@ -57,9 +65,10 @@ export async function POST(request: NextRequest) {
         username: username || null,
         password: hashedPassword,
         name,
-        roles: roles || [],
+        roles: allowedRoles,
         isActive: true,
-        mustChangePassword: false,
+        mustChangePassword: true, // Force password change on first login
+        isSuperAdmin: false, // Never allow registration as super admin
       },
     })
 

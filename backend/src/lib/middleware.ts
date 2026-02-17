@@ -12,12 +12,36 @@ export interface AuthenticatedUser {
   isSuperAdmin: boolean
 }
 
+// In-memory cache for authenticated users (TTL: 2 minutes)
+const AUTH_CACHE_TTL = 2 * 60 * 1000
+const authCache = new Map<string, { user: AuthenticatedUser; expiresAt: number }>()
+
+function getCachedUser(userId: string): AuthenticatedUser | null {
+  const cached = authCache.get(userId)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.user
+  }
+  if (cached) {
+    authCache.delete(userId)
+  }
+  return null
+}
+
+function setCachedUser(userId: string, user: AuthenticatedUser): void {
+  // Limit cache size to prevent memory leaks
+  if (authCache.size > 1000) {
+    const firstKey = authCache.keys().next().value
+    if (firstKey) authCache.delete(firstKey)
+  }
+  authCache.set(userId, { user, expiresAt: Date.now() + AUTH_CACHE_TTL })
+}
+
 /**
  * Require authentication - throws error if not authenticated
  */
 export async function requireAuth(request: NextRequest): Promise<AuthenticatedUser> {
   const token = extractToken(request)
-  
+
   if (!token) {
     throw new Error('Unauthorized')
   }
@@ -30,7 +54,13 @@ export async function requireAuth(request: NextRequest): Promise<AuthenticatedUs
     throw error;
   }
 
-  // Get user from database
+  // Check cache first
+  const cachedUser = getCachedUser(payload.userId)
+  if (cachedUser) {
+    return cachedUser
+  }
+
+  // Get user from database (only on cache miss)
   const user = await prisma.user.findUnique({
     where: { id: payload.userId },
     select: {
@@ -48,6 +78,9 @@ export async function requireAuth(request: NextRequest): Promise<AuthenticatedUs
     throw new Error('User not found or inactive')
   }
 
+  // Cache the result
+  setCachedUser(user.id, user)
+
   return user
 }
 
@@ -56,8 +89,31 @@ export async function requireAuth(request: NextRequest): Promise<AuthenticatedUs
  */
 export function requireRole(user: AuthenticatedUser, allowedRoles: string[]): void {
   const hasRole = user.roles.some((role: string) => allowedRoles.includes(role))
-  
+
   if (!hasRole && !user.isSuperAdmin) {
+    throw new Error('Insufficient permissions')
+  }
+}
+
+/**
+ * Require ownership - throws error if user is not the owner and not an admin
+ * @param user - The authenticated user
+ * @param ownerId - The ID of the resource owner
+ * @param allowedRoles - Roles that can bypass ownership check (defaults to ['Admin'])
+ */
+export function requireOwnership(
+  user: AuthenticatedUser,
+  ownerId: string | null | undefined,
+  allowedRoles: string[] = ['Admin']
+): void {
+  // Admins and super admins can bypass ownership checks
+  if (user.isSuperAdmin) return
+
+  const hasAllowedRole = user.roles.some(role => allowedRoles.includes(role))
+  if (hasAllowedRole) return
+
+  // Check ownership
+  if (!ownerId || user.id !== ownerId) {
     throw new Error('Insufficient permissions')
   }
 }

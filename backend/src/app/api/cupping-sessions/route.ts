@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
 // GET /api/cupping-sessions - List all cupping sessions
 export async function GET(request: NextRequest) {
@@ -21,46 +21,37 @@ export async function GET(request: NextRequest) {
       where.status = status
     }
 
-    const cuppingSessions = await prisma.cuppingSession.findMany({
-      where,
-      include: {
-        creator: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        samples: {
-          include: {
-            greenBeanLot: {
-              select: {
-                id: true,
-                grade: true,
-              },
-            },
-          },
-        },
-        judges: {
-          include: {
-            judge: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
-        },
-        _count: {
-          select: {
-            samples: true,
-            judges: true,
-          },
-        },
-      },
-      orderBy: { date: 'desc' },
-    })
+    // Pagination
+    const page = parseInt(request.nextUrl.searchParams.get('page') || '1')
+    const limit = parseInt(request.nextUrl.searchParams.get('limit') || '50')
+    const skip = (page - 1) * limit
 
-    return NextResponse.json({ cuppingSessions })
+    const [cuppingSessions, total] = await Promise.all([
+      prisma.cuppingSession.findMany({
+        where,
+        include: {
+          creator: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          _count: {
+            select: {
+              samples: true,
+              judges: true,
+              scores: true,
+            },
+          },
+        },
+        orderBy: { date: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.cuppingSession.count({ where }),
+    ])
+
+    return NextResponse.json({ cuppingSessions, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } })
   } catch (error) {
     return handleApiError(error)
   }
@@ -70,6 +61,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request)
+    // SECURITY: Only HeadJudge, Cupper, and Admin can create cupping sessions
+    requireRole(user, ['HeadJudge', 'Cupper', 'Admin'])
 
     const body = await request.json()
     const { name, date, type, status, samples, judges } = body

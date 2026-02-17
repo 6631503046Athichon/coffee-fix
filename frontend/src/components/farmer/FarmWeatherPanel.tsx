@@ -4,10 +4,11 @@ import { Button, Input, Modal } from '../common';
 import Select from '../common/Select';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Farm, WeatherRecord } from '../../types';
+import { Farm, WeatherRecord, UserRole } from '../../types';
 import { addWeatherRecord, updateWeatherRecord, deleteWeatherRecord } from '../../services/weatherService';
 import { fetchWeatherData } from '../../services/weatherApiService';
-import { saveFarmConfig } from '../../services/weatherAutoFetchService';
+import { updateFarmConfig } from '../../services/weatherAutoFetchService';
+import { updateFarmWeatherSettings } from '../../services/farmService';
 import DatePicker from '../common/DatePicker';
 import { formatDateDisplay } from '../../utils/formatters';
 
@@ -37,9 +38,10 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
   const [isFetchingWeather, setIsFetchingWeather] = useState(false);
   const [fetchError, setFetchError] = useState('');
   
-  // Auto-fetch states
+  // Auto-fetch states (from database via farm data)
   const [autoFetchEnabled, setAutoFetchEnabled] = useState(false);
   const [autoFetchInterval, setAutoFetchInterval] = useState(5); // minutes
+  const isAdmin = currentUser?.roles?.includes(UserRole.Admin) || false;
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -110,40 +112,22 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
     setIsAutoFetchInitialized(false); // reset flag เพื่อให้โหลดค่าใหม่จาก farm ใหม่
   }, [farm]);
 
-  // โหลด auto-fetch settings จาก localStorage เมื่อ farm เปลี่ยน
+  // โหลด auto-fetch settings จาก farm data (database) เมื่อ farm เปลี่ยน
   useEffect(() => {
-    if (farm?.id && typeof window !== 'undefined') {
-      const savedEnabled = localStorage.getItem(`weatherAutoFetch_${farm.id}`);
-      const savedInterval = localStorage.getItem(`weatherAutoFetchInterval_${farm.id}`);
-
-      setAutoFetchEnabled(savedEnabled === 'true');
-      setAutoFetchInterval(savedInterval ? parseInt(savedInterval, 10) : 5);
-      setIsAutoFetchInitialized(true); // บอกว่าโหลดเสร็จแล้ว
+    if (farm?.id) {
+      setAutoFetchEnabled(farm.weatherAutoFetchEnabled || false);
+      setAutoFetchInterval(farm.weatherAutoFetchInterval || 5);
+      setIsAutoFetchInitialized(true);
     }
-  }, [farm?.id]);
+  }, [farm?.id, farm?.weatherAutoFetchEnabled, farm?.weatherAutoFetchInterval]);
 
-  // บันทึก auto-fetch settings และ register กับ background service
+  // Sync auto-fetch config with background service when farm data changes
   useEffect(() => {
-    if (typeof window !== 'undefined' && farm?.id && isAutoFetchInitialized && farm.latitude && farm.longitude) {
-      // Save to localStorage
-      localStorage.setItem(`weatherAutoFetch_${farm.id}`, autoFetchEnabled.toString());
-      localStorage.setItem(`weatherAutoFetchInterval_${farm.id}`, autoFetchInterval.toString());
-
-      // Register with background service (ทำงานแม้ปิด modal)
-      saveFarmConfig({
-        farmId: farm.id,
-        farmName: farm.name || farm.location,
-        latitude: farm.latitude,
-        longitude: farm.longitude,
-        location: farm.location,
-        interval: autoFetchInterval,
-        enabled: autoFetchEnabled,
-        userId: currentUser?.id,
-      });
-
+    if (farm?.id && isAutoFetchInitialized && farm.latitude && farm.longitude) {
+      updateFarmConfig(farm, currentUser?.id);
       console.log(`[FarmWeatherPanel] Auto-fetch ${autoFetchEnabled ? 'enabled' : 'disabled'} for farm ${farm.name || farm.id}`);
     }
-  }, [autoFetchEnabled, autoFetchInterval, farm?.id, farm?.latitude, farm?.longitude, farm?.location, farm?.name, isAutoFetchInitialized, currentUser?.id]);
+  }, [farm?.weatherAutoFetchEnabled, farm?.weatherAutoFetchInterval, farm?.id, isAutoFetchInitialized]);
 
   const resetForm = () => {
     setRecordDate(new Date().toISOString().substring(0, 10));
@@ -396,25 +380,57 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
               <div className="mt-4 pt-4 border-t border-blue-200">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <label className="relative inline-flex items-center cursor-pointer">
+                    <label className={`relative inline-flex items-center ${isAdmin ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
                       <input
                         type="checkbox"
                         checked={autoFetchEnabled}
-                        onChange={(e) => setAutoFetchEnabled(e.target.checked)}
+                        onChange={async (e) => {
+                          if (!isAdmin) return;
+                          const newEnabled = e.target.checked;
+                          // Optimistic update - update UI immediately
+                          setAutoFetchEnabled(newEnabled);
+                          setData(prev => ({
+                            ...prev,
+                            farms: prev.farms.map(f => f.id === farm.id ? { ...f, weatherAutoFetchEnabled: newEnabled } : f)
+                          }));
+                          // Save to API in background
+                          try {
+                            await updateFarmWeatherSettings(farm.id, {
+                              weatherAutoFetchEnabled: newEnabled,
+                              weatherAutoFetchInterval: autoFetchInterval,
+                            });
+                            updateFarmConfig({ ...farm, weatherAutoFetchEnabled: newEnabled, weatherAutoFetchInterval: autoFetchInterval }, currentUser?.id);
+                            setWeatherToast({ type: 'success', message: newEnabled ? 'เปิดดึงข้อมูลอัตโนมัติแล้ว' : 'ปิดดึงข้อมูลอัตโนมัติแล้ว' });
+                            setTimeout(() => setWeatherToast(null), 3000);
+                          } catch (error: any) {
+                            // Revert on failure
+                            setAutoFetchEnabled(!newEnabled);
+                            setData(prev => ({
+                              ...prev,
+                              farms: prev.farms.map(f => f.id === farm.id ? { ...f, weatherAutoFetchEnabled: !newEnabled } : f)
+                            }));
+                            setWeatherToast({ type: 'error', message: error?.message || 'ไม่สามารถบันทึกการตั้งค่าได้' });
+                            setTimeout(() => setWeatherToast(null), 3000);
+                          }
+                        }}
+                        disabled={!isAdmin}
                         className="sr-only peer"
                       />
                       <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
                     <div>
-                      <p className="text-sm font-medium text-blue-900">ดึงข้อมูลอัตโนมัติ</p>
+                      <p className="text-sm font-medium text-blue-900">
+                        ดึงข้อมูลอัตโนมัติ
+                        {!isAdmin && <span className="text-xs text-gray-500 ml-1">(เฉพาะแอดมิน)</span>}
+                      </p>
                       <p className="text-xs text-blue-700">
-                        {autoFetchEnabled 
+                        {autoFetchEnabled
                           ? `ดึงและบันทึกอัตโนมัติทุก ${autoFetchInterval} นาที`
                           : 'เปิดเพื่อดึงข้อมูลอัตโนมัติ'}
                       </p>
                     </div>
                   </div>
-                  {autoFetchEnabled && (
+                  {autoFetchEnabled && isAdmin && (
                     <Select
                       options={[
                         { value: 1, label: 'ทุก 1 นาที' },
@@ -425,9 +441,37 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                         { value: 60, label: 'ทุก 1 ชั่วโมง' },
                       ]}
                       value={autoFetchInterval}
-                      onChange={(val) => setAutoFetchInterval(Number(val))}
+                      onChange={async (val) => {
+                        const newInterval = Number(val);
+                        const oldInterval = autoFetchInterval;
+                        // Optimistic update
+                        setAutoFetchInterval(newInterval);
+                        setData(prev => ({
+                          ...prev,
+                          farms: prev.farms.map(f => f.id === farm.id ? { ...f, weatherAutoFetchInterval: newInterval } : f)
+                        }));
+                        try {
+                          await updateFarmWeatherSettings(farm.id, {
+                            weatherAutoFetchEnabled: autoFetchEnabled,
+                            weatherAutoFetchInterval: newInterval,
+                          });
+                          updateFarmConfig({ ...farm, weatherAutoFetchEnabled: autoFetchEnabled, weatherAutoFetchInterval: newInterval }, currentUser?.id);
+                        } catch (error: any) {
+                          // Revert on failure
+                          setAutoFetchInterval(oldInterval);
+                          setData(prev => ({
+                            ...prev,
+                            farms: prev.farms.map(f => f.id === farm.id ? { ...f, weatherAutoFetchInterval: oldInterval } : f)
+                          }));
+                          setWeatherToast({ type: 'error', message: error?.message || 'ไม่สามารถบันทึกการตั้งค่าได้' });
+                          setTimeout(() => setWeatherToast(null), 3000);
+                        }
+                      }}
                       className="w-36"
                     />
+                  )}
+                  {autoFetchEnabled && !isAdmin && (
+                    <span className="text-sm text-blue-700 font-medium">ทุก {autoFetchInterval} นาที</span>
                   )}
                 </div>
                 {autoFetchEnabled && nextAutoFetch && (
@@ -630,15 +674,15 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead className="bg-gray-900 text-white">
+                  <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
-                      <th className="px-4 py-3 text-left font-semibold">วันที่บันทึก</th>
-                      <th className="px-4 py-3 text-left font-semibold">เวลาที่บันทึก</th>
-                      <th className="px-4 py-3 text-center font-semibold">อุณหภูมิ (°C)</th>
-                      <th className="px-4 py-3 text-center font-semibold">ฝน (mm)</th>
-                      <th className="px-4 py-3 text-center font-semibold">ความชื้น (%)</th>
-                      <th className="px-4 py-3 text-left font-semibold">หมายเหตุ</th>
-                      <th className="px-4 py-3 text-center font-semibold">Actions</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">วันที่บันทึก</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">เวลาที่บันทึก</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">อุณหภูมิ (°C)</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">ฝน (mm)</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">ความชื้น (%)</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">หมายเหตุ</th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">

@@ -29,46 +29,50 @@ export async function GET(request: NextRequest) {
       where.parchmentLotId = parchmentLotId;
     }
 
-    const greenBeanLots = await prisma.greenBeanLot.findMany({
-      where,
-      include: {
-        parchmentLot: {
-          include: {
-            processingBatch: {
-              select: {
-                id: true,
-                processType: true,
-              },
-            },
-            harvestLot: {
-              select: {
-                id: true,
-                farmerName: true,
-                cherryVariety: true,
-              },
-            },
-          },
-        },
-        priceSetter: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        cuppingScores: {
-          include: {
-            greenBeanLot: {
-              select: {
-                id: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    // Pagination
+    const page = parseInt(request.nextUrl.searchParams.get("page") || "1");
+    const limit = parseInt(request.nextUrl.searchParams.get("limit") || "50");
+    const skip = (page - 1) * limit;
 
-    return NextResponse.json({ greenBeanLots });
+    const [greenBeanLots, total] = await Promise.all([
+      prisma.greenBeanLot.findMany({
+        where,
+        include: {
+          parchmentLot: {
+            include: {
+              processingBatch: {
+                select: {
+                  id: true,
+                  processType: true,
+                },
+              },
+              harvestLot: {
+                select: {
+                  id: true,
+                  farmerName: true,
+                  cherryVariety: true,
+                },
+              },
+            },
+          },
+          priceSetter: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          _count: {
+            select: { cuppingScores: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.greenBeanLot.count({ where }),
+    ]);
+
+    return NextResponse.json({ greenBeanLots, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
   } catch (error) {
     return handleApiError(error);
   }

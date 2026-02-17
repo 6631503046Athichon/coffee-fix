@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { safeParseFloat } from '@/lib/utils'
 
 // POST /api/green-bean-lots/:id/withdrawals - Create withdrawal
 export async function POST(
@@ -9,6 +10,8 @@ export async function POST(
 ) {
   try {
     const user = await requireAuth(request)
+    // SECURITY: Only Processor, Roaster, and Admin can create withdrawals
+    requireRole(user, ['Processor', 'Roaster', 'Admin'])
     const { id } = await params
 
     const body = await request.json()
@@ -33,7 +36,15 @@ export async function POST(
       )
     }
 
-    if (parseFloat(amountKg) > lot.currentWeightKg) {
+    const amount = safeParseFloat(amountKg);
+    if (amount === null || amount <= 0) {
+      return NextResponse.json(
+        { error: 'Invalid amount' },
+        { status: 400 }
+      )
+    }
+
+    if (amount > lot.currentWeightKg) {
       return NextResponse.json(
         { error: 'Insufficient weight available' },
         { status: 400 }
@@ -41,8 +52,9 @@ export async function POST(
     }
 
     // Calculate total amount for sales
-    const totalAmount = withdrawalType === 'Sale' && salePrice
-      ? parseFloat(amountKg) * parseFloat(salePrice)
+    const price = safeParseFloat(salePrice);
+    const totalAmount = withdrawalType === 'Sale' && price !== null
+      ? amount * price
       : null
 
     await prisma.$transaction(async (tx) => {
@@ -50,13 +62,13 @@ export async function POST(
       await tx.greenBeanWithdrawal.create({
         data: {
           greenBeanLotId: id,
-          amountKg: parseFloat(amountKg),
+          amountKg: amount,
           withdrawalType,
           purpose,
           notes: notes || null,
           withdrawnBy: user.id,
           withdrawnByName: user.name,
-          salePrice: salePrice ? parseFloat(salePrice) : null,
+          salePrice: price,
           currency: currency || null,
           customerName: customerName || null,
           invoiceNumber: invoiceNumber || null,
@@ -69,7 +81,7 @@ export async function POST(
       await tx.greenBeanLot.update({
         where: { id },
         data: {
-          currentWeightKg: lot.currentWeightKg - parseFloat(amountKg),
+          currentWeightKg: lot.currentWeightKg - amount,
         },
       })
     })

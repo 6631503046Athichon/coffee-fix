@@ -187,13 +187,13 @@ const CustomerManagement: React.FC = () => {
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full">
-              <thead>
-                <tr className="bg-gray-900 border-b border-gray-200">
-                  <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Name</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Type</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Contact</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Address</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Actions</th>
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Name</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Type</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Contact</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Address</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-100">

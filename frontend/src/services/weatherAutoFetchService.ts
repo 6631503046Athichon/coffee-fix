@@ -1,11 +1,12 @@
 /**
  * Weather Auto-Fetch Background Service
  * ทำงานที่ระดับ App เพื่อให้ auto-fetch ทำงานต่อแม้ปิด modal
+ * ใช้ค่า weatherAutoFetchEnabled/Interval จาก Farm model (database) แทน localStorage
  */
 
 import { fetchWeatherData } from './weatherApiService';
 import { addWeatherRecord } from './weatherService';
-import { WeatherRecord } from '../types';
+import { Farm, WeatherRecord } from '../types';
 
 interface FarmAutoFetchConfig {
   farmId: string;
@@ -31,47 +32,44 @@ const state: AutoFetchState = {
   lastFetchTimes: new Map(),
 };
 
-// Load configs from localStorage
-const loadConfigsFromStorage = (): void => {
-  if (typeof window === 'undefined') return;
-
-  const keys = Object.keys(localStorage);
-  keys.forEach(key => {
-    if (key.startsWith('weatherAutoFetch_') && !key.includes('Interval')) {
-      const farmId = key.replace('weatherAutoFetch_', '');
-      const enabled = localStorage.getItem(key) === 'true';
-      const interval = parseInt(localStorage.getItem(`weatherAutoFetchInterval_${farmId}`) || '5', 10);
-      const configJson = localStorage.getItem(`weatherAutoFetchConfig_${farmId}`);
-
-      if (enabled && configJson) {
-        try {
-          const config = JSON.parse(configJson) as FarmAutoFetchConfig;
-          config.enabled = enabled;
-          config.interval = interval;
-          state.configs.set(farmId, config);
-        } catch (e) {
-          console.error('[WeatherAutoFetch] Failed to parse config for farm:', farmId, e);
-        }
-      }
+// Load configs from Farm data (database)
+const loadConfigsFromFarms = (farms: Farm[], userId?: string): void => {
+  farms.forEach(farm => {
+    if (farm.weatherAutoFetchEnabled && farm.latitude && farm.longitude) {
+      const config: FarmAutoFetchConfig = {
+        farmId: farm.id,
+        farmName: farm.name || farm.location,
+        latitude: farm.latitude,
+        longitude: farm.longitude,
+        location: farm.location,
+        interval: farm.weatherAutoFetchInterval || 5,
+        enabled: true,
+        userId,
+      };
+      state.configs.set(farm.id, config);
     }
   });
 };
 
-// Save farm config to localStorage
-export const saveFarmConfig = (config: FarmAutoFetchConfig): void => {
-  if (typeof window === 'undefined') return;
+// Update config for a single farm (called after admin toggles)
+export const updateFarmConfig = (farm: Farm, userId?: string): void => {
+  const config: FarmAutoFetchConfig = {
+    farmId: farm.id,
+    farmName: farm.name || farm.location,
+    latitude: farm.latitude || 0,
+    longitude: farm.longitude || 0,
+    location: farm.location,
+    interval: farm.weatherAutoFetchInterval || 5,
+    enabled: farm.weatherAutoFetchEnabled || false,
+    userId,
+  };
 
-  localStorage.setItem(`weatherAutoFetchConfig_${config.farmId}`, JSON.stringify(config));
-  localStorage.setItem(`weatherAutoFetch_${config.farmId}`, config.enabled.toString());
-  localStorage.setItem(`weatherAutoFetchInterval_${config.farmId}`, config.interval.toString());
+  state.configs.set(farm.id, config);
 
-  state.configs.set(config.farmId, config);
-
-  // Restart interval if enabled
-  if (config.enabled) {
-    startFarmInterval(config.farmId);
+  if (config.enabled && farm.latitude && farm.longitude) {
+    startFarmInterval(farm.id);
   } else {
-    stopFarmInterval(config.farmId);
+    stopFarmInterval(farm.id);
   }
 };
 
@@ -148,12 +146,16 @@ const stopFarmInterval = (farmId: string): void => {
   }
 };
 
-// Initialize the service
-export const initWeatherAutoFetchService = (onRecordSaved?: (record: WeatherRecord) => void): void => {
+// Initialize the service with farm data from API
+export const initWeatherAutoFetchService = (
+  farms: Farm[],
+  onRecordSaved?: (record: WeatherRecord) => void,
+  userId?: string
+): void => {
   console.log('[WeatherAutoFetch] Initializing service...');
 
   state.onRecordSaved = onRecordSaved;
-  loadConfigsFromStorage();
+  loadConfigsFromFarms(farms, userId);
 
   // Start intervals for all enabled farms
   state.configs.forEach((config, farmId) => {

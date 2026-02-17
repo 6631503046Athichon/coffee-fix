@@ -7,7 +7,8 @@ interface RequestOptions extends RequestInit {
 
 async function request<T>(
   endpoint: string,
-  options: RequestOptions = {}
+  options: RequestOptions = {},
+  retries: number = 2
 ): Promise<T> {
   const { params, ...fetchOptions } = options
 
@@ -38,6 +39,13 @@ async function request<T>(
     })
     
     clearTimeout(timeoutId)
+
+    // Retry on 503 (connection pool exhausted) with exponential backoff
+    if (response.status === 503 && retries > 0) {
+      const backoffMs = (3 - retries) * 1000; // 1s, 2s
+      await new Promise(resolve => setTimeout(resolve, backoffMs));
+      return request<T>(endpoint, options, retries - 1);
+    }
 
     if (!response.ok) {
       // Handle 401 Unauthorized - token expired or invalid

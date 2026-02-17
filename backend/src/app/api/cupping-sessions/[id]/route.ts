@@ -50,6 +50,17 @@ export async function GET(
             },
           },
         },
+        scores: {
+          select: {
+            id: true,
+            sampleId: true,
+            judgeId: true,
+            judgeName: true,
+            scores: true,
+            notes: true,
+            totalScore: true,
+          },
+        },
       },
     })
 
@@ -60,24 +71,7 @@ export async function GET(
       )
     }
 
-    // Get all scores for this session
-    const scores = await prisma.judgeScore.findMany({
-      where: { cuppingSessionId: id },
-      include: {
-        judge: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        sample: {
-          select: {
-            id: true,
-            blindCode: true,
-          },
-        },
-      },
-    })
+    const scores = cuppingSession.scores
 
     // Organize scores by sample
     const scoresBySample: any = {}
@@ -94,9 +88,10 @@ export async function GET(
       })
     }
 
+    const { scores: _rawScores, ...sessionData } = cuppingSession
     return NextResponse.json({
       cuppingSession: {
-        ...cuppingSession,
+        ...sessionData,
         scores: scoresBySample,
       },
     })

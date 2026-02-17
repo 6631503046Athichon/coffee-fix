@@ -58,6 +58,8 @@ export interface Farm {
   altitudeMeters?: number;
   sizeHectares?: number;
   varieties?: string[];
+  weatherAutoFetchEnabled?: boolean;
+  weatherAutoFetchInterval?: number;
   createdAt?: string;
   updatedAt?: string;
   archived?: boolean;

@@ -168,7 +168,7 @@ const CompetitionDashboard: React.FC<{ currentUserRoles: UserRole[] }> = ({ curr
                 <div className="bg-white p-6 rounded-lg shadow">
                     <h2 className="text-2xl font-bold mb-4 flex items-center"><Clock className="mr-2 text-blue-500" /> Scoring in Progress</h2>
                     <div className="overflow-x-auto"><table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-900"><tr><th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Sample</th>{session.judges.map(j => <th key={j.id} className="px-4 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">{j.name}</th>)}</tr></thead>
+                        <thead className="bg-slate-50 border-b border-slate-200"><tr><th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Sample</th>{session.judges.map(j => <th key={j.id} className="px-4 py-4 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">{j.name}</th>)}</tr></thead>
                         <tbody className="bg-white divide-y divide-gray-200">{session.samples.map(sample => (
                             <tr key={sample.id}><td className="px-4 py-2 font-medium">{sample.blindCode}</td>{session.judges.map(judge => (
                                 <td key={judge.id} className="px-4 py-2 text-center">{(session.scores[sample.id] || []).some(s => s.judgeId === judge.id) && <Check className="h-5 w-5 text-green-500 mx-auto" />}</td>
@@ -202,7 +202,7 @@ const CompetitionDashboard: React.FC<{ currentUserRoles: UserRole[] }> = ({ curr
                 <div className="bg-white p-6 rounded-lg shadow">
                     <h2 className="text-2xl font-bold mb-4 flex items-center"><Trophy className="mr-2 text-yellow-500" /> Final Results</h2>
                     <div className="overflow-x-auto"><table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-900"><tr><th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Rank</th><th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Sample</th><th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Submitter</th><th className="px-4 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">Final Score</th></tr></thead>
+                        <thead className="bg-slate-50 border-b border-slate-200"><tr><th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Rank</th><th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Sample</th><th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Submitter</th><th className="px-4 py-4 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Final Score</th></tr></thead>
                         <tbody className="bg-white divide-y divide-gray-200">{rankedResults.map(result => {
                             const sample = session.samples.find(s => s.id === result.sampleId);
                             const rankColor = result.rank === 1 ? 'bg-yellow-100' : result.rank === 2 ? 'bg-gray-200' : result.rank === 3 ? 'bg-orange-100' : '';
@@ -232,7 +232,7 @@ const CompetitionDashboard: React.FC<{ currentUserRoles: UserRole[] }> = ({ curr
                 <div className="bg-white p-6 rounded-lg shadow mb-8">
                     <h2 className="text-2xl font-bold mb-4 flex items-center"><ShieldCheck className="mr-2 text-green-600" /> Adjudication & Finalization</h2>
                     <div className="overflow-x-auto"><table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-900"><tr><th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Sample</th><th className="px-4 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">Avg. Score</th><th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">Final Notes</th></tr></thead>
+                        <thead className="bg-slate-50 border-b border-slate-200"><tr><th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Sample</th><th className="px-4 py-4 text-center text-xs font-semibold text-slate-600 uppercase tracking-wider">Avg. Score</th><th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Final Notes</th></tr></thead>
                         <tbody className="bg-white divide-y divide-gray-200">{session.samples.map(sample => {
                             const { totalScore } = getAggregatedResults(sample);
                             const isEditing = editingNotes[sample.id];
@@ -262,7 +262,7 @@ const CompetitionDashboard: React.FC<{ currentUserRoles: UserRole[] }> = ({ curr
                     {session.samples.map(sample => (<div key={sample.id} className="mb-8">
                         <h3 className="text-lg font-semibold mb-2">Sample: {sample.blindCode}</h3>
                         <div className="overflow-x-auto"><table className="min-w-full border-collapse border border-gray-300">
-                            <thead className="bg-gray-900"><tr><th className="px-4 py-4 text-left text-xs font-bold text-white uppercase tracking-wider border-b border-gray-200">Judge</th>{SCA_ATTRIBUTES.map(attr => <th key={attr} className="px-4 py-4 text-xs font-bold text-white uppercase tracking-wider border-b border-gray-200 w-24">{attr}</th>)}<th className="px-4 py-4 text-xs font-bold text-white uppercase tracking-wider border-b border-gray-200">Total</th></tr></thead>
+                            <thead className="bg-slate-50 border-b border-slate-200"><tr><th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Judge</th>{SCA_ATTRIBUTES.map(attr => <th key={attr} className="px-4 py-4 text-xs font-semibold text-slate-600 uppercase tracking-wider w-24">{attr}</th>)}<th className="px-4 py-4 text-xs font-semibold text-slate-600 uppercase tracking-wider">Total</th></tr></thead>
                             <tbody className="bg-white divide-y divide-gray-200">{(session.scores[sample.id] || []).map((score: JudgeScore) => (<tr key={score.judgeId}><td className="px-4 py-3 font-medium border-r border-gray-200">{score.judgeName}</td>{SCA_ATTRIBUTES.map(attr => <ScoreCell key={attr} score={score.scores[attr] || 0} />)}<td className="px-4 py-3 font-bold text-center border-l border-gray-200">{score.totalScore.toFixed(2)}</td></tr>))}</tbody>
                         </table></div>
                     </div>))}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, requireOwnership, handleApiError } from '@/lib/middleware'
+import { safeParseFloat } from '@/lib/utils'
 
 // GET /api/harvest-lots/:id
 export async function GET(
@@ -53,7 +54,23 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
-    await requireAuth(request)
+    const user = await requireAuth(request)
+
+    // Get the harvest lot to check ownership
+    const harvestLot = await prisma.harvestLot.findUnique({
+      where: { id },
+      select: { createdById: true }
+    })
+
+    if (!harvestLot) {
+      return NextResponse.json(
+        { error: 'Harvest lot not found' },
+        { status: 404 }
+      )
+    }
+
+    // SECURITY: Check ownership - only the creator (Farmer) or Admin can update
+    requireOwnership(user, harvestLot.createdById, ['Admin'])
 
     const body = await request.json()
     const { farmerName, cherryVariety, weightKg, farmPlotLocation, harvestDate, status, cropYearId, farmId } = body
@@ -61,7 +78,10 @@ export async function PUT(
     const updateData: any = {}
     if (farmerName !== undefined) updateData.farmerName = farmerName
     if (cherryVariety !== undefined) updateData.cherryVariety = cherryVariety
-    if (weightKg !== undefined) updateData.weightKg = parseFloat(weightKg)
+    if (weightKg !== undefined) {
+      const weight = safeParseFloat(weightKg)
+      if (weight !== null) updateData.weightKg = weight
+    }
     if (farmPlotLocation !== undefined) updateData.farmPlotLocation = farmPlotLocation
     if (harvestDate !== undefined) updateData.harvestDate = new Date(harvestDate)
     if (status !== undefined) updateData.status = status
@@ -101,7 +121,23 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    await requireAuth(request)
+    const user = await requireAuth(request)
+
+    // Get the harvest lot to check ownership
+    const harvestLot = await prisma.harvestLot.findUnique({
+      where: { id },
+      select: { createdById: true }
+    })
+
+    if (!harvestLot) {
+      return NextResponse.json(
+        { error: 'Harvest lot not found' },
+        { status: 404 }
+      )
+    }
+
+    // SECURITY: Check ownership - only the creator (Farmer) or Admin can delete
+    requireOwnership(user, harvestLot.createdById, ['Admin'])
 
     await prisma.harvestLot.delete({
       where: { id },

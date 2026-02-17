@@ -24,6 +24,7 @@ import { getAllCropYears } from './services/cropYearService';
 import { getAllProcessingBatches } from './services/processingBatchService';
 import { getAllParchmentLots } from './services/parchmentLotService';
 import { getAllGreenBeanLots } from './services/greenBeanLotService';
+import { batchedPromiseAll } from './utils/batchedFetch';
 import { Sidebar, Header } from './components/layout';
 import Login from './components/auth/Login';
 import ForgotPassword from './components/auth/ForgotPassword';
@@ -111,60 +112,66 @@ const ProtectedRoutes: React.FC = () => {
     setIsEditingState(editing);
   }, []);
 
-  // Load data from backend API
+  // Helper function to merge backend data with mock data (backend data takes priority for same IDs)
+  const mergeArrays = useCallback(<T extends { id: string }>(backendData: T[], mockData: T[]): T[] => {
+    const backendIds = new Set(backendData.map(item => item.id));
+    const uniqueMockData = mockData.filter(item => !backendIds.has(item.id));
+    return [...backendData, ...uniqueMockData];
+  }, []);
+
+  // Load data from backend API in 2 phases:
+  // Phase 1: Essential data (farms, harvestLots, cropYears, processTypes) - UI renders fast
+  // Phase 2: Secondary data (soil, weather, GAP, processing, parchment, greenBean) - loads in background
   const loadDataFromBackend = useCallback(async () => {
     try {
-      // Load all data from backend API
-      // Try to get customers from backend, fallback to localStorage if backend fails
-      let storedCustomers: Customer[] = [];
-      try {
-        storedCustomers = await getAllCustomersFromBackend();
-      } catch (err) {
-        console.warn('Failed to load customers from backend, using localStorage:', err);
-        // Fallback to localStorage
-        const { getAllCustomers: getAllCustomersFromStorage } = await import('./services/salesService');
-        storedCustomers = getAllCustomersFromStorage();
-      }
-      
-      const [storedFarms, storedSoilAnalyses, storedWeatherRecords, storedHarvestLots, storedGAPLogs, storedActivityTypes, storedProcessTypes, storedSaleOrders, storedInvoices, storedPricingHistory, storedCropYears, storedProcessingBatches, storedParchmentLots, storedGreenBeanLots] = await Promise.all([
-        getAllFarms(),
-        getAllSoilAnalyses(),
-        getAllWeatherRecords(),
-        getAllHarvestLots(),
-        getAllGAPLogs(),
-        getAllActivityTypes(),
-        getAllProcessTypes(),
-        getAllSaleOrders(),
-        getAllInvoices(),
-        getAllPricingHistory(),
-        getAllCropYears(),
-        getAllProcessingBatches(),
-        getAllParchmentLots(),
-        getAllGreenBeanLots(),
-      ]);
+      // localStorage reads (no network, instant)
+      const storedActivityTypes = getAllActivityTypes();
+      const storedSaleOrders = getAllSaleOrders();
+      const storedInvoices = getAllInvoices();
+      const storedPricingHistory = getAllPricingHistory();
 
-      // Helper function to merge backend data with mock data (backend data takes priority for same IDs)
-      const mergeArrays = <T extends { id: string }>(backendData: T[], mockData: T[]): T[] => {
-        const backendIds = new Set(backendData.map(item => item.id));
-        const uniqueMockData = mockData.filter(item => !backendIds.has(item.id));
-        return [...backendData, ...uniqueMockData];
-      };
+      // Phase 1: Load essential data + customers in parallel
+      const [storedFarms, storedHarvestLots, storedCropYears, storedProcessTypes, storedCustomers] = await batchedPromiseAll([
+        () => getAllFarms(),
+        () => getAllHarvestLots(),
+        () => getAllCropYears(),
+        () => getAllProcessTypes(),
+        () => getAllCustomersFromBackend().catch(() => {
+          const stored = localStorage.getItem('coffee_lab_customers');
+          return stored ? JSON.parse(stored) : [];
+        }),
+      ], 5, [] as any);
 
-      // Merge backend data with MOCK_DATA (backend data comes first, mock data fills in the rest)
+      // Update UI immediately with essential data
       setData(prev => ({
         ...prev,
         farms: mergeArrays(storedFarms, MOCK_DATA.farms),
-        soilAnalyses: storedSoilAnalyses.length > 0 ? storedSoilAnalyses : prev.soilAnalyses,
-        weatherRecords: storedWeatherRecords.length > 0 ? storedWeatherRecords : prev.weatherRecords,
         harvestLots: mergeArrays(storedHarvestLots, MOCK_DATA.harvestLots),
-        gapLogs: storedGAPLogs.length > 0 ? storedGAPLogs : prev.gapLogs,
-        activityTypes: storedActivityTypes.length > 0 ? storedActivityTypes : prev.activityTypes,
+        cropYears: storedCropYears.length > 0 ? storedCropYears : prev.cropYears,
         processTypes: storedProcessTypes.length > 0 ? storedProcessTypes : prev.processTypes,
+        activityTypes: storedActivityTypes.length > 0 ? storedActivityTypes : prev.activityTypes,
         customers: mergeArrays(storedCustomers, MOCK_DATA.customers),
         saleOrders: storedSaleOrders.length > 0 ? storedSaleOrders : prev.saleOrders,
         invoices: storedInvoices.length > 0 ? storedInvoices : prev.invoices,
         pricingHistory: storedPricingHistory.length > 0 ? storedPricingHistory : prev.pricingHistory,
-        cropYears: storedCropYears.length > 0 ? storedCropYears : prev.cropYears,
+      }));
+
+      // Phase 2: Load secondary data in background
+      const [storedSoilAnalyses, storedWeatherRecords, storedGAPLogs, storedProcessingBatches, storedParchmentLots, storedGreenBeanLots] = await batchedPromiseAll([
+        () => getAllSoilAnalyses(),
+        () => getAllWeatherRecords(),
+        () => getAllGAPLogs(),
+        () => getAllProcessingBatches(),
+        () => getAllParchmentLots(),
+        () => getAllGreenBeanLots(),
+      ], 6, [] as any);
+
+      // Update UI with secondary data
+      setData(prev => ({
+        ...prev,
+        soilAnalyses: storedSoilAnalyses.length > 0 ? storedSoilAnalyses : prev.soilAnalyses,
+        weatherRecords: storedWeatherRecords.length > 0 ? storedWeatherRecords : prev.weatherRecords,
+        gapLogs: storedGAPLogs.length > 0 ? storedGAPLogs : prev.gapLogs,
         processingBatches: mergeArrays(storedProcessingBatches, MOCK_DATA.processingBatches),
         parchmentLots: mergeArrays(storedParchmentLots, MOCK_DATA.parchmentLots),
         greenBeanLots: mergeArrays(storedGreenBeanLots, MOCK_DATA.greenBeanLots),
@@ -173,30 +180,45 @@ const ProtectedRoutes: React.FC = () => {
       console.error('Failed to load data from backend:', error);
       // Fallback to MOCK_DATA if API fails
     }
-  }, []);
+  }, [mergeArrays]);
 
   // Refresh data function - can be called from any component
   const refreshData = useCallback(async () => {
     await loadDataFromBackend();
   }, [loadDataFromBackend]);
 
-  // Initialize weather auto-fetch service
+  // Initialize weather auto-fetch service using farm data from DB
   useEffect(() => {
-    if (!isAuthenticated || isAuthLoading) return;
+    if (!isAuthenticated || isAuthLoading || data.farms.length === 0) return;
 
-    // Initialize the service with callback to update weather records
-    initWeatherAutoFetchService((newRecord) => {
-      console.log('[App] Weather auto-fetch saved new record:', newRecord);
-      setData(prev => ({
-        ...prev,
-        weatherRecords: [newRecord, ...prev.weatherRecords.filter(r => r.id !== newRecord.id)]
-      }));
-    });
+    // Initialize the service with farm data and callback to update weather records
+    initWeatherAutoFetchService(
+      data.farms,
+      (newRecord) => {
+        console.log('[App] Weather auto-fetch saved new record:', newRecord);
+        setData(prev => ({
+          ...prev,
+          weatherRecords: [newRecord, ...prev.weatherRecords.filter(r => r.id !== newRecord.id)]
+        }));
+      },
+      currentUser?.id
+    );
 
     return () => {
       stopWeatherAutoFetchService();
     };
-  }, [isAuthenticated, isAuthLoading]);
+  }, [isAuthenticated, isAuthLoading, data.farms]);
+
+  // Debounced refresh to prevent burst reloads from rapid events
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedRefresh = useCallback(() => {
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+    refreshTimerRef.current = setTimeout(() => {
+      loadDataFromBackend();
+    }, 2000);
+  }, [loadDataFromBackend]);
 
   // Load data from backend API on mount
   useEffect(() => {
@@ -208,12 +230,12 @@ const ProtectedRoutes: React.FC = () => {
     // Initial load
     loadDataFromBackend();
 
-    // Auto-refresh every 30 seconds (paused while editing)
+    // Auto-refresh every 2 minutes (paused while editing)
     const refreshInterval = setInterval(() => {
       if (!isEditingRef.current) {
         loadDataFromBackend();
       }
-    }, 30000);
+    }, 120000);
 
     // Listen for localStorage changes from other components (for activity types and process types that still use localStorage)
     const handleStorageChange = (e: StorageEvent) => {
@@ -221,21 +243,18 @@ const ProtectedRoutes: React.FC = () => {
         e.key === 'coffee_lab_process_types' ||
         e.key === 'coffee_lab_activity_types'
       )) {
-        // Reload only activity types and process types from localStorage
-        // Other data will be reloaded from backend on next mount
-        loadDataFromBackend();
+        debouncedRefresh();
       }
     };
 
     // Custom event for same-window localStorage changes
     const handleCustomStorageUpdate = () => {
-      // Reload data from backend when localStorage is updated
-      loadDataFromBackend();
+      debouncedRefresh();
     };
 
     // Custom event for data refresh
     const handleDataRefresh = () => {
-      loadDataFromBackend();
+      debouncedRefresh();
     };
 
     window.addEventListener('storage', handleStorageChange);
@@ -244,11 +263,14 @@ const ProtectedRoutes: React.FC = () => {
 
     return () => {
       clearInterval(refreshInterval);
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('localStorageUpdate', handleCustomStorageUpdate);
       window.removeEventListener('dataRefresh', handleDataRefresh);
     };
-  }, [isAuthenticated, isAuthLoading, loadDataFromBackend]);
+  }, [isAuthenticated, isAuthLoading, loadDataFromBackend, debouncedRefresh]);
 
   const contextValue = useMemo(() => ({ data, setData, refreshData, setIsEditing, isEditing }), [data, setData, setIsEditing, isEditing]);
 
@@ -289,18 +311,20 @@ const ProtectedRoutes: React.FC = () => {
 
       // Processor Section
       { name: 'Processor Workbench', href: '/processor', icon: Droplets, roles: [UserRole.Processor, UserRole.Admin], section: 'processor' },
+      { name: 'Traceability Hub', href: '/traceability', icon: Search, roles: [UserRole.Admin, UserRole.Processor], section: 'processor' },
+      { name: 'Quality Insights', href: '/insights', icon: Lightbulb, roles: [UserRole.Processor], section: 'processor' },
 
       // Quality & Cupping Section
       { name: 'Competition Admin', href: competitionAdminHref, icon: Trophy, roles: [UserRole.HeadJudge, UserRole.Cupper, UserRole.Admin], section: 'cupping' },
-      { name: 'Quality Insights', href: '/insights', icon: Lightbulb, roles: [UserRole.Roaster, UserRole.Processor, UserRole.Admin], section: 'cupping' },
+      { name: 'Quality Insights', href: '/insights', icon: Lightbulb, roles: [UserRole.Admin], section: 'cupping' },
 
       // Roaster Section
       { name: 'Roaster Workbench', href: '/roaster', icon: Flame, roles: [UserRole.Roaster, UserRole.Admin], section: 'roaster' },
+      { name: 'Customer Management', href: '/customers', icon: Users, roles: [UserRole.Admin, UserRole.Roaster], section: 'roaster' },
+      { name: 'Quality Insights', href: '/insights', icon: Lightbulb, roles: [UserRole.Roaster], section: 'roaster' },
 
-      // Administration Section
-      { name: 'Traceability Hub', href: '/traceability', icon: Search, roles: [UserRole.Admin, UserRole.Processor], section: 'admin' },
+      // Administration Section (Admin only)
       { name: 'User Management', href: '/users', icon: Users, roles: [UserRole.Admin], section: 'admin' },
-      { name: 'Customer Management', href: '/customers', icon: Users, roles: [UserRole.Admin, UserRole.Roaster], section: 'admin' },
       { name: 'Activity Types', href: '/activity-types', icon: Tag, roles: [UserRole.Admin], section: 'admin' },
       { name: 'Process Types', href: '/process-types', icon: Coffee, roles: [UserRole.Admin], section: 'admin' },
       { name: 'Coffee Varieties', href: '/coffee-varieties', icon: Coffee, roles: [UserRole.Admin], section: 'admin' },

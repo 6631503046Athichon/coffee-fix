@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { verifyToken } from '@/lib/auth'
+import { requireAuth, handleApiError } from '@/lib/middleware'
 import { UserRole } from '@prisma/client'
 
 /**
@@ -9,26 +9,8 @@ import { UserRole } from '@prisma/client'
  */
 export async function POST(request: NextRequest) {
   try {
-    // Verify authentication
-    const token = request.cookies.get('token')?.value || request.headers.get('authorization')?.replace('Bearer ', '')
-
-    if (!token) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const decoded = verifyToken(token)
-    if (!decoded) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
-    }
-
-    // Get current user
-    const currentUser = await prisma.user.findUnique({
-      where: { id: decoded.userId }
-    })
-
-    if (!currentUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    }
+    // SECURITY: Use requireAuth instead of manual token extraction
+    const currentUser = await requireAuth(request)
 
     // Verify current user is super admin
     if (!currentUser.isSuperAdmin) {
@@ -116,10 +98,6 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Transfer ownership error:', error)
-    return NextResponse.json(
-      { error: 'Failed to transfer ownership' },
-      { status: 500 }
-    )
+    return handleApiError(error)
   }
 }

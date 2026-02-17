@@ -27,34 +27,40 @@ export async function GET(request: NextRequest) {
 
     // Farmers can only see their own farms' harvest lots
     if (user.roles.includes('Farmer') && !user.roles.includes('Admin')) {
-      const farms = await prisma.farm.findMany({
-        where: { ownerId: user.id },
-        select: { id: true },
-      })
-      where.farmId = { in: farms.map(f => f.id) }
+      where.farm = { ownerId: user.id }
     }
 
-    const harvestLots = await prisma.harvestLot.findMany({
-      where,
-      include: {
-        farm: {
-          select: {
-            id: true,
-            farmName: true,
-            location: true,
-          },
-        },
-        cropYear: {
-          select: {
-            id: true,
-            year: true,
-          },
-        },
-      },
-      orderBy: { harvestDate: 'desc' },
-    })
+    // Pagination
+    const page = parseInt(request.nextUrl.searchParams.get('page') || '1')
+    const limit = parseInt(request.nextUrl.searchParams.get('limit') || '50')
+    const skip = (page - 1) * limit
 
-    return NextResponse.json({ harvestLots })
+    const [harvestLots, total] = await Promise.all([
+      prisma.harvestLot.findMany({
+        where,
+        include: {
+          farm: {
+            select: {
+              id: true,
+              farmName: true,
+              location: true,
+            },
+          },
+          cropYear: {
+            select: {
+              id: true,
+              year: true,
+            },
+          },
+        },
+        orderBy: { harvestDate: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.harvestLot.count({ where }),
+    ])
+
+    return NextResponse.json({ harvestLots, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } })
   } catch (error) {
     return handleApiError(error)
   }

@@ -41,8 +41,6 @@ import {
   History,
   Save,
   Search,
-  ArrowUp,
-  ArrowDown,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -106,6 +104,46 @@ const isRecentItem = (dateString?: string | null): boolean => {
   const diffDays = (Date.now() - date.getTime()) / (1000 * 60 * 60 * 24);
   return diffDays >= 0 && diffDays <= NEW_TAG_DAYS;
 };
+
+// Isolated search input — manages its own state, never re-renders from parent.
+const DebouncedSearchInput = React.memo(
+  ({
+    placeholder,
+    className,
+    onSearch,
+    debounceMs = 300,
+  }: {
+    placeholder: string;
+    className: string;
+    onSearch: (value: string) => void;
+    debounceMs?: number;
+  }) => {
+    const [value, setValue] = useState("");
+    const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+    const handleChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        const v = e.target.value;
+        setValue(v);
+        clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => onSearch(v), debounceMs);
+      },
+      [onSearch, debounceMs],
+    );
+
+    useEffect(() => () => clearTimeout(timerRef.current), []);
+
+    return (
+      <input
+        type="text"
+        placeholder={placeholder}
+        value={value}
+        onChange={handleChange}
+        className={className}
+      />
+    );
+  },
+);
 
 // Custom Dropdown Component for Process Type Selection
 const ProcessTypeDropdown: React.FC<{
@@ -279,16 +317,12 @@ const GradeDropdown: React.FC<{
   );
 };
 
-// Crop Year Chips Component (เหมือนใน HarvestLotModal)
+// Crop Year Chips Component - แสดงแค่ 3 ปี
 const CropYearChips: React.FC<{
   years: CropYear[];
   value: string;
   onChange: (value: string) => void;
-  maxVisible?: number;
-}> = ({ years, value, onChange, maxVisible = 5 }) => {
-  const [offset, setOffset] = useState(0);
-  const initializedRef = useRef(false);
-
+}> = ({ years, value, onChange }) => {
   // หาปีปัจจุบันจาก today
   const currentYearId = useMemo(() => {
     const today = new Date();
@@ -301,31 +335,6 @@ const CropYearChips: React.FC<{
     );
   }, [years]);
 
-  // Initialize offset ให้อยู่รอบๆ ปีปัจจุบัน (แค่ครั้งแรกเท่านั้น)
-  useEffect(() => {
-    if (initializedRef.current) return; // ไม่ reset ถ้า initialize แล้ว
-    if (years.length > maxVisible && currentYearId) {
-      const currentIndex = years.findIndex((y) => y.id === currentYearId);
-      const halfRange = Math.floor(maxVisible / 2);
-      let startIndex = Math.max(0, currentIndex - halfRange);
-      if (startIndex + maxVisible > years.length) {
-        startIndex = Math.max(0, years.length - maxVisible);
-      }
-      setOffset(startIndex);
-      initializedRef.current = true;
-    }
-  }, [years, currentYearId, maxVisible]);
-
-  // คำนวณปีที่แสดง
-  const visibleYears = useMemo(() => {
-    if (years.length <= maxVisible) return years;
-    return years.slice(offset, offset + maxVisible);
-  }, [years, offset, maxVisible]);
-
-  const canGoBack = offset > 0;
-  const canGoForward = offset + maxVisible < years.length;
-  const hasNavigation = years.length > maxVisible;
-
   const baseChipClass =
     "relative flex items-center justify-center py-3 px-4 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer";
   const selectedClass = "bg-blue-600 text-white border-blue-600 shadow-lg";
@@ -333,75 +342,34 @@ const CropYearChips: React.FC<{
     "bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:bg-blue-50";
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-3">
-        {/* ปุ่ม "None" */}
-        <button
-          type="button"
-          onClick={() => onChange("")}
-          className={`${baseChipClass} ${!value ? selectedClass : unselectedClass}`}
-        >
-          <span className="text-sm font-semibold">None</span>
-        </button>
+    <div className="grid grid-cols-3 gap-3">
+      {years.map((year) => {
+        const isSelected = value === year.id;
+        const isCurrent = year.id === currentYearId;
 
-        {/* ปุ่มแต่ละปี (จำกัดจำนวน) */}
-        {visibleYears.map((year) => {
-          const isSelected = value === year.id;
-          const isCurrent = year.id === currentYearId;
-
-          return (
-            <button
-              key={year.id}
-              type="button"
-              onClick={() => onChange(year.id)}
-              className={`${baseChipClass} ${isSelected ? selectedClass : unselectedClass}`}
-              title={year.description || year.year}
-            >
-              {isCurrent && (
-                <span
-                  className={`absolute -top-2 -right-2 px-2 py-0.5 text-[10px] font-bold rounded-full shadow-sm ${
-                    isSelected
-                      ? "bg-white text-blue-600"
-                      : "bg-blue-500 text-white"
-                  }`}
-                >
-                  Current
-                </span>
-              )}
-              <span className="text-sm font-semibold">{year.year}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Navigation arrows - ด้านล่าง */}
-      {/* ซ้าย = ไปปีใหม่ (offset-1), ขวา = ไปปีเก่า (offset+1) เพราะ years เรียง descending */}
-      {hasNavigation && (
-        <div className="flex items-center justify-center gap-4">
+        return (
           <button
+            key={year.id}
             type="button"
-            onClick={() => setOffset(Math.max(0, offset - 1))}
-            disabled={!canGoBack}
-            className={`p-2 rounded-full transition-all duration-200 ${canGoBack ? "hover:bg-blue-100 text-gray-700" : "text-gray-300 cursor-not-allowed"}`}
+            onClick={() => onChange(year.id)}
+            className={`${baseChipClass} ${isSelected ? selectedClass : unselectedClass}`}
+            title={year.description || year.year}
           >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-              <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
-            </svg>
+            {isCurrent && (
+              <span
+                className={`absolute -top-2 -right-2 px-2 py-0.5 text-[10px] font-bold rounded-full shadow-sm ${
+                  isSelected
+                    ? "bg-white text-blue-600"
+                    : "bg-blue-500 text-white"
+                }`}
+              >
+                Current
+              </span>
+            )}
+            <span className="text-sm font-semibold">{year.year}</span>
           </button>
-          <button
-            type="button"
-            onClick={() =>
-              setOffset(Math.min(years.length - maxVisible, offset + 1))
-            }
-            disabled={!canGoForward}
-            className={`p-2 rounded-full transition-all duration-200 ${canGoForward ? "hover:bg-blue-100 text-gray-700" : "text-gray-300 cursor-not-allowed"}`}
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-              <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z" />
-            </svg>
-          </button>
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 };
@@ -581,6 +549,104 @@ const KanbanColumn: React.FC<{
   );
 };
 
+// Pagination component - defined outside ProcessorWorkbench to maintain stable identity across renders
+const Pagination = React.memo(({
+  currentPage,
+  totalPages,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}) => {
+  if (totalPages <= 1) return null;
+
+  const TOTAL_SLOTS = 7;
+
+  const getSlots = (): (number | "ellipsis")[] => {
+    if (totalPages <= TOTAL_SLOTS) {
+      return Array.from({ length: TOTAL_SLOTS }, (_, i) =>
+        i < totalPages ? i + 1 : 0,
+      ).filter((n) => n > 0) as number[];
+    }
+
+    const slots: (number | "ellipsis")[] = [];
+
+    if (currentPage <= 4) {
+      slots.push(1, 2, 3, 4, 5, "ellipsis", totalPages);
+    } else if (currentPage >= totalPages - 3) {
+      slots.push(
+        1,
+        "ellipsis",
+        totalPages - 4,
+        totalPages - 3,
+        totalPages - 2,
+        totalPages - 1,
+        totalPages,
+      );
+    } else {
+      slots.push(
+        1,
+        "ellipsis",
+        currentPage - 1,
+        currentPage,
+        currentPage + 1,
+        "ellipsis",
+        totalPages,
+      );
+    }
+
+    return slots;
+  };
+
+  const slots = getSlots();
+
+  return (
+    <div className="flex justify-center items-center px-4 py-2 bg-gray-50 border-t border-gray-200">
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+
+        {slots.map((slot, index) =>
+          slot === "ellipsis" ? (
+            <span
+              key={`ellipsis-${index}`}
+              className="w-8 h-8 flex items-center justify-center text-gray-400 text-xs"
+            >
+              ...
+            </span>
+          ) : (
+            <button
+              key={slot}
+              onClick={() => onPageChange(slot)}
+              className={`w-8 h-8 text-xs font-medium rounded-md transition-colors flex items-center justify-center ${
+                currentPage === slot
+                  ? "bg-blue-600 text-white"
+                  : "text-gray-700 hover:bg-gray-100"
+              }`}
+            >
+              {slot}
+            </button>
+          ),
+        )}
+
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+});
+
 interface ProcessorWorkbenchProps {
   currentUser: User;
 }
@@ -686,6 +752,24 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     useState<string>("all");
   const [completedBatchPage, setCompletedBatchPage] = useState(1);
   const COMPLETED_BATCH_PAGE_SIZE = 5;
+
+  // Stable callbacks for DebouncedSearchInput (must not change reference)
+  const onHarvestLotSearch = useCallback((v: string) => {
+    setHarvestLotSearch(v);
+    setHarvestLotPage(1);
+  }, []);
+  const onCompletedBatchSearch = useCallback((v: string) => {
+    setCompletedBatchSearch(v);
+    setCompletedBatchPage(1);
+  }, []);
+  const onParchmentSearch = useCallback((v: string) => {
+    setParchmentSearch(v);
+    setParchmentCurrentPage(1);
+  }, []);
+  const onGreenBeanSearch = useCallback((v: string) => {
+    setGreenBeanSearch(v);
+    setGreenBeanCurrentPage(1);
+  }, []);
 
   // Card View pagination state
   const [harvestCardPage, setHarvestCardPage] = useState(1);
@@ -1552,11 +1636,17 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const openModal = (type: string, item: any) => {
     if (type === "startProcessing") {
       setSelectedHarvestLot(item);
-      // Auto-select crop year from harvest lot if available
+      // Auto-select crop year from harvest lot if available, otherwise default to current
       if (item?.cropYearId) {
         setCropYearId(item.cropYearId);
       } else {
-        setCropYearId("");
+        const today = new Date();
+        const currentCropYear = data.cropYears.find(y => {
+          const start = new Date(y.startDate);
+          const end = new Date(y.endDate);
+          return today >= start && today <= end;
+        });
+        setCropYearId(currentCropYear?.id || "");
       }
     }
     if (type === "hullAndGrade") setSelectedParchment(item);
@@ -1582,8 +1672,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   };
 
   // Only show lots that are ready for processing (not yet processed)
-  const readyForProcessingLots = data.harvestLots.filter(
-    (lot) => lot.status === "Ready for Processing",
+  const readyForProcessingLots = useMemo(
+    () => data.harvestLots.filter((lot) => lot.status === "Ready for Processing"),
+    [data.harvestLots],
   );
 
   const filteredHarvestLots = useMemo(() => {
@@ -1649,6 +1740,20 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     completedBatchProcessFilter,
   ]);
 
+  const completedBatchTotalPages = useMemo(
+    () => Math.ceil(filteredCompletedBatches.length / COMPLETED_BATCH_PAGE_SIZE),
+    [filteredCompletedBatches.length],
+  );
+
+  const paginatedCompletedBatches = useMemo(
+    () =>
+      filteredCompletedBatches.slice(
+        (completedBatchPage - 1) * COMPLETED_BATCH_PAGE_SIZE,
+        completedBatchPage * COMPLETED_BATCH_PAGE_SIZE,
+      ),
+    [filteredCompletedBatches, completedBatchPage],
+  );
+
   // Card View pagination for Completed Batches
   const completedBatchesForCard = useMemo(
     () =>
@@ -1668,7 +1773,134 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     );
   }, [completedBatchesForCard, completedCardPage]);
 
-  const TableView = () => (
+
+  const processedParchmentLots = useMemo(() => {
+    let filtered = data.parchmentLots.filter(
+      (p) =>
+        p.id.toLowerCase().includes(parchmentSearch.toLowerCase()) ||
+        p.status.toLowerCase().includes(parchmentSearch.toLowerCase()),
+    );
+
+    // Apply status filter
+    if (parchmentStatusFilter !== "all") {
+      filtered = filtered.filter((p) => p.status === parchmentStatusFilter);
+    }
+
+    // Apply process type filter
+    if (parchmentProcessFilter !== "all") {
+      filtered = filtered.filter(
+        (p) => p.processType === parchmentProcessFilter,
+      );
+    }
+
+    return filtered.sort((a, b) => {
+      const key = parchmentSortConfig.key;
+
+      // Default sort by createdAt (newest first) if sorting by id
+      if (key === "id") {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return parchmentSortConfig.direction === "desc"
+          ? dateB - dateA
+          : dateA - dateB;
+      }
+
+      if (a[key] < b[key])
+        return parchmentSortConfig.direction === "asc" ? -1 : 1;
+      if (a[key] > b[key])
+        return parchmentSortConfig.direction === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [
+    data.parchmentLots,
+    parchmentSearch,
+    parchmentSortConfig,
+    parchmentStatusFilter,
+    parchmentProcessFilter,
+  ]);
+
+  const parchmentPageCount = Math.ceil(
+    processedParchmentLots.length / ITEMS_PER_PAGE,
+  );
+  const paginatedParchmentLots = processedParchmentLots.slice(
+    (parchmentCurrentPage - 1) * ITEMS_PER_PAGE,
+    parchmentCurrentPage * ITEMS_PER_PAGE,
+  );
+
+  // For Kanban view - only show lots awaiting hulling
+  const kanbanParchmentLots = processedParchmentLots.filter(p => p.status !== "Hulled");
+  const kanbanParchmentPageCount = Math.ceil(kanbanParchmentLots.length / ITEMS_PER_PAGE);
+  const paginatedKanbanParchmentLots = kanbanParchmentLots.slice(
+    (parchmentCurrentPage - 1) * ITEMS_PER_PAGE,
+    parchmentCurrentPage * ITEMS_PER_PAGE,
+  );
+
+  const enrichedGreenBeanLots = useMemo(() => {
+    const qcSessionId = processorUser ? `CS-QC-${processorUser.id}` : "";
+    return data.greenBeanLots.map((gbl) => {
+      const qcScoreData = gbl.cuppingScores.find(
+        (cs) => cs.sessionId === qcSessionId,
+      );
+      return { ...gbl, qcScore: qcScoreData?.score };
+    });
+  }, [data.greenBeanLots, processorUser]);
+
+  const processedGreenBeanLots = useMemo(() => {
+    let filtered = enrichedGreenBeanLots.filter(
+      (g) =>
+        g.id.toLowerCase().includes(greenBeanSearch.toLowerCase()) ||
+        g.grade.toLowerCase().includes(greenBeanSearch.toLowerCase()),
+    );
+
+    // Apply status filter (InStock = weight > 0, Depleted = weight <= 0)
+    if (greenBeanStatusFilter === "InStock") {
+      filtered = filtered.filter((g) => g.currentWeightKg > 0);
+    } else if (greenBeanStatusFilter === "Depleted") {
+      filtered = filtered.filter((g) => g.currentWeightKg <= 0);
+    }
+
+    // Apply grade filter
+    if (greenBeanGradeFilter !== "all") {
+      filtered = filtered.filter((g) => g.grade === greenBeanGradeFilter);
+    }
+
+    return filtered.sort((a, b) => {
+      const key = greenBeanSortConfig.key as keyof typeof a;
+
+      // Default sort by createdAt (newest first) if sorting by id
+      if (key === "id") {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return greenBeanSortConfig.direction === "desc"
+          ? dateB - dateA
+          : dateA - dateB;
+      }
+
+      const aValue = a[key] ?? -1;
+      const bValue = b[key] ?? -1;
+      if (aValue < bValue)
+        return greenBeanSortConfig.direction === "asc" ? -1 : 1;
+      if (aValue > bValue)
+        return greenBeanSortConfig.direction === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [
+    enrichedGreenBeanLots,
+    greenBeanSearch,
+    greenBeanSortConfig,
+    greenBeanStatusFilter,
+    greenBeanGradeFilter,
+  ]);
+
+  const greenBeanPageCount = Math.ceil(
+    processedGreenBeanLots.length / ITEMS_PER_PAGE,
+  );
+  const paginatedGreenBeanLots = processedGreenBeanLots.slice(
+    (greenBeanCurrentPage - 1) * ITEMS_PER_PAGE,
+    greenBeanCurrentPage * ITEMS_PER_PAGE,
+  );
+
+  const tableView = (
     <div className="space-y-4">
       {/* Processing Summary - Compact */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1752,11 +1984,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           </div>
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
+            <DebouncedSearchInput
               placeholder="Search lots..."
-              value={harvestLotSearch}
-              onChange={(e) => setHarvestLotSearch(e.target.value)}
+              onSearch={onHarvestLotSearch}
               className="pl-9 w-full border border-green-200 bg-white rounded-lg py-1.5 px-3 text-sm focus:ring-1 focus:ring-green-300 focus:border-green-300 outline-none"
             />
           </div>
@@ -1765,14 +1995,14 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-900">
+            <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Lot ID</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Variety</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Weight (kg)</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Farmer</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Status</th>
-                <th scope="col" className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider">Actions</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Lot ID</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Variety</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Weight (kg)</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Farmer</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
@@ -1810,7 +2040,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       {typeof lot.remainingWeightKg === "number" &&
                       typeof lot.weightKg === "number" &&
                       lot.remainingWeightKg !== lot.weightKg
-                        ? `${lot.remainingWeightKg.toFixed(2)} kg (of ${lot.weightKg} kg)`
+                        ? `${(lot.remainingWeightKg ?? 0).toFixed(2)} kg (of ${lot.weightKg} kg)`
                         : typeof lot.weightKg === "number"
                           ? `${lot.weightKg} kg`
                           : "-"}
@@ -1902,92 +2132,81 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
       {/* Completed Batches Table */}
       <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
-        <div className="p-4 bg-sky-50 border-b border-sky-200">
-          <div className="flex items-center gap-2.5 mb-3">
-            <div className="p-2 bg-sky-600 rounded-lg">
-              <PackageCheck className="h-5 w-5 text-white" />
+        <div className="px-4 py-3 bg-sky-50 border-b border-sky-200">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-sky-600 rounded-lg">
+                <PackageCheck className="h-5 w-5 text-white" />
+              </div>
+              <h3 className="text-base font-bold text-gray-900">
+                Completed Batches
+              </h3>
             </div>
-            <h3 className="text-lg font-bold text-gray-900">
-              Completed Batches
-            </h3>
-          </div>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search batches..."
-                value={completedBatchSearch}
-                onChange={(e) => {
-                  setCompletedBatchSearch(e.target.value);
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[180px] max-w-[260px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <DebouncedSearchInput
+                  placeholder="Search batches..."
+                  onSearch={onCompletedBatchSearch}
+                  className="pl-10 w-full border border-sky-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-sky-300 focus:border-sky-300 outline-none"
+                />
+              </div>
+              <Select
+                options={[
+                  { value: "all", label: "All Process" },
+                  { value: "Washed", label: "Washed" },
+                  { value: "Honey", label: "Honey" },
+                  { value: "Natural", label: "Natural" },
+                ]}
+                value={completedBatchProcessFilter}
+                onChange={(v) => {
+                  setCompletedBatchProcessFilter(v as string);
                   setCompletedBatchPage(1);
                 }}
-                className="pl-10 w-full border border-sky-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-sky-300 focus:border-sky-300 outline-none"
+                placeholder="Process"
+                className="w-[160px]"
               />
             </div>
-            <Select
-              options={[
-                { value: "all", label: "All Process" },
-                { value: "Washed", label: "Washed" },
-                { value: "Honey", label: "Honey" },
-                { value: "Natural", label: "Natural" },
-              ]}
-              value={completedBatchProcessFilter}
-              onChange={(v) => {
-                setCompletedBatchProcessFilter(v as string);
-                setCompletedBatchPage(1);
-              }}
-              placeholder="Process"
-              className="w-[160px]"
-            />
           </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-900">
+            <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Batch ID
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Harvest Lot
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Process
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Notes
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Drying Duration
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
-              {(() => {
-                const totalPages = Math.ceil(
-                  filteredCompletedBatches.length / COMPLETED_BATCH_PAGE_SIZE,
-                );
-                const paginatedBatches = filteredCompletedBatches.slice(
-                  (completedBatchPage - 1) * COMPLETED_BATCH_PAGE_SIZE,
-                  completedBatchPage * COMPLETED_BATCH_PAGE_SIZE,
-                );
-                return paginatedBatches.length === 0 ? (
+              {paginatedCompletedBatches.length === 0 ? (
                   <tr>
                     <td
                       colSpan={5}
@@ -2000,7 +2219,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     </td>
                   </tr>
                 ) : (
-                  paginatedBatches.map((batch) => {
+                  paginatedCompletedBatches.map((batch) => {
                     const isNewBatch = isRecentItem(
                       batch.createdAt ?? batch.dryingEndDate ?? batch.baggingDate,
                     );
@@ -2055,19 +2274,14 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       </tr>
                     );
                   })
-                );
-              })()}
+                )}
             </tbody>
           </table>
         </div>
         {/* Pagination */}
-        {(() => {
-          const totalPages = Math.ceil(
-            filteredCompletedBatches.length / COMPLETED_BATCH_PAGE_SIZE,
-          );
-          if (totalPages <= 1) return null;
+        {completedBatchTotalPages > 1 && (() => {
           const TOTAL_SLOTS = 7;
-          const tp = totalPages;
+          const tp = completedBatchTotalPages;
           const cp = completedBatchPage;
           let slots: (number | "ellipsis")[] = [];
           if (tp <= TOTAL_SLOTS) {
@@ -2111,9 +2325,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 )}
                 <button
                   onClick={() =>
-                    setCompletedBatchPage((p) => Math.min(totalPages, p + 1))
+                    setCompletedBatchPage((p) => Math.min(tp, p + 1))
                   }
-                  disabled={completedBatchPage === totalPages}
+                  disabled={completedBatchPage === tp}
                   className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
                 >
                   <ChevronRight className="h-4 w-4" />
@@ -2140,14 +2354,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative flex-1 min-w-[180px] max-w-[260px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
+                <DebouncedSearchInput
                   placeholder="Search..."
-                  value={parchmentSearch}
-                  onChange={(e) => {
-                    setParchmentSearch(e.target.value);
-                    setParchmentCurrentPage(1);
-                  }}
+                  onSearch={onParchmentSearch}
                   className="pl-9 w-full border border-gray-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-amber-200 focus:border-amber-300 outline-none transition-all"
                 />
               </div>
@@ -2189,47 +2398,47 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-900">
+            <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Lot ID
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Batch ID
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Weight (kg)
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Moisture (%)
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Process
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Status
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Actions
                 </th>
@@ -2268,13 +2477,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
                       {(p.status === "Hulled"
-                        ? p.initialWeightKg
-                        : p.currentWeightKg
+                        ? (p.initialWeightKg ?? 0)
+                        : (p.currentWeightKg ?? 0)
                       ).toFixed(2)}{" "}
                       kg
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                      {p.moistureContent}%
+                      {p.moistureContent ?? 0}%
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span
@@ -2353,14 +2562,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative w-full sm:w-48">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
+                <DebouncedSearchInput
                   placeholder="Search..."
-                  value={greenBeanSearch}
-                  onChange={(e) => {
-                    setGreenBeanSearch(e.target.value);
-                    setGreenBeanCurrentPage(1);
-                  }}
+                  onSearch={onGreenBeanSearch}
                   className="pl-9 w-full border border-teal-200 bg-white rounded-lg py-1.5 px-3 text-sm focus:ring-1 focus:ring-teal-300 focus:border-teal-300 outline-none"
                 />
               </div>
@@ -2405,53 +2609,53 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-900">
+            <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Lot ID
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Grade
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Weight (kg)
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Price/kg
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Total Amount
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   QC Score
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Availability
                 </th>
                 <th
                   scope="col"
-                  className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
                   Actions
                 </th>
@@ -2508,7 +2712,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         {g.grade}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
-                        {g.currentWeightKg.toFixed(2)} kg
+                        {(g.currentWeightKg ?? 0).toFixed(2)} kg
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
                         {g.pricePerKg ? (
@@ -2522,7 +2726,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-gray-900">
                         {g.pricePerKg ? (
                           <span className="text-teal-700">
-                            {(g.pricePerKg * g.currentWeightKg).toFixed(2)}{" "}
+                            {(g.pricePerKg * (g.currentWeightKg ?? 0)).toFixed(2)}{" "}
                             {g.currency || "THB"}
                           </span>
                         ) : (
@@ -2607,7 +2811,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     </div>
   );
 
-  const KanbanView = () => (
+  const kanbanView = (
     <>
       {/* Processing Summary Bar - Compact */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
@@ -2736,7 +2940,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           {typeof lot.remainingWeightKg === "number" &&
                           typeof lot.weightKg === "number" &&
                           lot.remainingWeightKg !== lot.weightKg
-                            ? `${lot.remainingWeightKg.toFixed(2)} kg (of ${lot.weightKg} kg)`
+                            ? `${(lot.remainingWeightKg ?? 0).toFixed(2)} kg (of ${lot.weightKg} kg)`
                             : typeof lot.weightKg === "number"
                               ? `${lot.weightKg} kg`
                               : "-"}
@@ -2937,269 +3141,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     </>
   );
 
-  // --- Table Logic ---
-  const SortableHeader = <T,>({
-    column,
-    label,
-    sortConfig,
-    requestSort,
-  }: {
-    column: T;
-    label: string;
-    sortConfig: { key: T; direction: SortDirection };
-    requestSort: (key: T) => void;
-  }) => (
-    <th
-      scope="col"
-      className="px-6 py-4 text-left text-xs font-bold text-gray-900 uppercase tracking-wider"
-    >
-      <button
-        onClick={() => requestSort(column)}
-        className="flex items-center gap-1 hover:text-indigo-600 transition-colors"
-      >
-        {label}
-        {sortConfig.key === column &&
-          (sortConfig.direction === "asc" ? (
-            <ArrowUp className="h-3 w-3" />
-          ) : (
-            <ArrowDown className="h-3 w-3" />
-          ))}
-      </button>
-    </th>
-  );
-
-  const Pagination = ({
-    currentPage,
-    totalPages,
-    onPageChange,
-  }: {
-    currentPage: number;
-    totalPages: number;
-    onPageChange: (page: number) => void;
-  }) => {
-    if (totalPages <= 1) return null;
-
-    const TOTAL_SLOTS = 7; // Fixed number of slots to prevent layout shift
-
-    // Generate fixed slots array
-    const getSlots = (): (number | "ellipsis")[] => {
-      if (totalPages <= TOTAL_SLOTS) {
-        // If total pages fit, show all with empty slots filled
-        return Array.from({ length: TOTAL_SLOTS }, (_, i) =>
-          i < totalPages ? i + 1 : 0,
-        ).filter((n) => n > 0) as number[];
-      }
-
-      // For many pages, use: [1] [...] [middle pages] [...] [last]
-      const slots: (number | "ellipsis")[] = [];
-
-      if (currentPage <= 4) {
-        // Near start: 1 2 3 4 5 ... last
-        slots.push(1, 2, 3, 4, 5, "ellipsis", totalPages);
-      } else if (currentPage >= totalPages - 3) {
-        // Near end: 1 ... last-4 last-3 last-2 last-1 last
-        slots.push(
-          1,
-          "ellipsis",
-          totalPages - 4,
-          totalPages - 3,
-          totalPages - 2,
-          totalPages - 1,
-          totalPages,
-        );
-      } else {
-        // Middle: 1 ... current-1 current current+1 ... last
-        slots.push(
-          1,
-          "ellipsis",
-          currentPage - 1,
-          currentPage,
-          currentPage + 1,
-          "ellipsis",
-          totalPages,
-        );
-      }
-
-      return slots;
-    };
-
-    const slots = getSlots();
-
-    return (
-      <div className="flex justify-center items-center px-4 py-2 bg-gray-50 border-t border-gray-200">
-        <div className="flex items-center gap-1">
-          {/* Previous Button - Fixed width */}
-          <button
-            onClick={() => onPageChange(currentPage - 1)}
-            disabled={currentPage === 1}
-            className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-
-          {/* Page Slots - All fixed width */}
-          {slots.map((slot, index) =>
-            slot === "ellipsis" ? (
-              <span
-                key={`ellipsis-${index}`}
-                className="w-8 h-8 flex items-center justify-center text-gray-400 text-xs"
-              >
-                ...
-              </span>
-            ) : (
-              <button
-                key={slot}
-                onClick={() => onPageChange(slot)}
-                className={`w-8 h-8 text-xs font-medium rounded-md transition-colors flex items-center justify-center ${
-                  currentPage === slot
-                    ? "bg-blue-600 text-white"
-                    : "text-gray-700 hover:bg-gray-100"
-                }`}
-              >
-                {slot}
-              </button>
-            ),
-          )}
-
-          {/* Next Button - Fixed width */}
-          <button
-            onClick={() => onPageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
-            className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  const processedParchmentLots = useMemo(() => {
-    let filtered = data.parchmentLots.filter(
-      (p) =>
-        p.id.toLowerCase().includes(parchmentSearch.toLowerCase()) ||
-        p.status.toLowerCase().includes(parchmentSearch.toLowerCase()),
-    );
-
-    // Apply status filter
-    if (parchmentStatusFilter !== "all") {
-      filtered = filtered.filter((p) => p.status === parchmentStatusFilter);
-    }
-
-    // Apply process type filter
-    if (parchmentProcessFilter !== "all") {
-      filtered = filtered.filter(
-        (p) => p.processType === parchmentProcessFilter,
-      );
-    }
-
-    return filtered.sort((a, b) => {
-      const key = parchmentSortConfig.key;
-
-      // Default sort by createdAt (newest first) if sorting by id
-      if (key === "id") {
-        const dateA = new Date(a.createdAt || 0).getTime();
-        const dateB = new Date(b.createdAt || 0).getTime();
-        return parchmentSortConfig.direction === "desc"
-          ? dateB - dateA
-          : dateA - dateB;
-      }
-
-      if (a[key] < b[key])
-        return parchmentSortConfig.direction === "asc" ? -1 : 1;
-      if (a[key] > b[key])
-        return parchmentSortConfig.direction === "asc" ? 1 : -1;
-      return 0;
-    });
-  }, [
-    data.parchmentLots,
-    parchmentSearch,
-    parchmentSortConfig,
-    parchmentStatusFilter,
-    parchmentProcessFilter,
-  ]);
-
-  const parchmentPageCount = Math.ceil(
-    processedParchmentLots.length / ITEMS_PER_PAGE,
-  );
-  const paginatedParchmentLots = processedParchmentLots.slice(
-    (parchmentCurrentPage - 1) * ITEMS_PER_PAGE,
-    parchmentCurrentPage * ITEMS_PER_PAGE,
-  );
-
-  // For Kanban view - only show lots awaiting hulling
-  const kanbanParchmentLots = processedParchmentLots.filter(p => p.status !== "Hulled");
-  const kanbanParchmentPageCount = Math.ceil(kanbanParchmentLots.length / ITEMS_PER_PAGE);
-  const paginatedKanbanParchmentLots = kanbanParchmentLots.slice(
-    (parchmentCurrentPage - 1) * ITEMS_PER_PAGE,
-    parchmentCurrentPage * ITEMS_PER_PAGE,
-  );
-
-  const enrichedGreenBeanLots = useMemo(() => {
-    const qcSessionId = processorUser ? `CS-QC-${processorUser.id}` : "";
-    return data.greenBeanLots.map((gbl) => {
-      const qcScoreData = gbl.cuppingScores.find(
-        (cs) => cs.sessionId === qcSessionId,
-      );
-      return { ...gbl, qcScore: qcScoreData?.score };
-    });
-  }, [data.greenBeanLots, processorUser]);
-
-  const processedGreenBeanLots = useMemo(() => {
-    let filtered = enrichedGreenBeanLots.filter(
-      (g) =>
-        g.id.toLowerCase().includes(greenBeanSearch.toLowerCase()) ||
-        g.grade.toLowerCase().includes(greenBeanSearch.toLowerCase()),
-    );
-
-    // Apply status filter (InStock = weight > 0, Depleted = weight <= 0)
-    if (greenBeanStatusFilter === "InStock") {
-      filtered = filtered.filter((g) => g.currentWeightKg > 0);
-    } else if (greenBeanStatusFilter === "Depleted") {
-      filtered = filtered.filter((g) => g.currentWeightKg <= 0);
-    }
-
-    // Apply grade filter
-    if (greenBeanGradeFilter !== "all") {
-      filtered = filtered.filter((g) => g.grade === greenBeanGradeFilter);
-    }
-
-    return filtered.sort((a, b) => {
-      const key = greenBeanSortConfig.key as keyof typeof a;
-
-      // Default sort by createdAt (newest first) if sorting by id
-      if (key === "id") {
-        const dateA = new Date(a.createdAt || 0).getTime();
-        const dateB = new Date(b.createdAt || 0).getTime();
-        return greenBeanSortConfig.direction === "desc"
-          ? dateB - dateA
-          : dateA - dateB;
-      }
-
-      const aValue = a[key] ?? -1;
-      const bValue = b[key] ?? -1;
-      if (aValue < bValue)
-        return greenBeanSortConfig.direction === "asc" ? -1 : 1;
-      if (aValue > bValue)
-        return greenBeanSortConfig.direction === "asc" ? 1 : -1;
-      return 0;
-    });
-  }, [
-    enrichedGreenBeanLots,
-    greenBeanSearch,
-    greenBeanSortConfig,
-    greenBeanStatusFilter,
-    greenBeanGradeFilter,
-  ]);
-
-  const greenBeanPageCount = Math.ceil(
-    processedGreenBeanLots.length / ITEMS_PER_PAGE,
-  );
-  const paginatedGreenBeanLots = processedGreenBeanLots.slice(
-    (greenBeanCurrentPage - 1) * ITEMS_PER_PAGE,
-    greenBeanCurrentPage * ITEMS_PER_PAGE,
-  );
-
   return (
     <div className="space-y-6">
       {/* Header Section */}
@@ -3249,7 +3190,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
       {/* Statistics Dashboard removed per spec; KPIs now live on main Dashboard */}
 
-      {viewMode === "kanban" ? <KanbanView /> : <TableView />}
+      {viewMode === "kanban" ? kanbanView : tableView}
 
       {viewMode === "kanban" && (
         <div className="mt-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -3266,14 +3207,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               </div>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
+                <DebouncedSearchInput
                   placeholder="Search..."
-                  value={parchmentSearch}
-                  onChange={(e) => {
-                    setParchmentSearch(e.target.value);
-                    setParchmentCurrentPage(1);
-                  }}
+                  onSearch={onParchmentSearch}
                   className="pl-9 w-full border border-amber-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-amber-300 focus:border-amber-300 outline-none"
                 />
               </div>
@@ -3334,8 +3270,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </span>
                         <span className="font-medium text-gray-900">
                           {(p.status === "Hulled"
-                            ? p.initialWeightKg
-                            : p.currentWeightKg
+                            ? (p.initialWeightKg ?? 0)
+                            : (p.currentWeightKg ?? 0)
                           ).toFixed(2)}{" "}
                           kg
                         </span>
@@ -3401,14 +3337,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               </div>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
+                <DebouncedSearchInput
                   placeholder="Search lots..."
-                  value={greenBeanSearch}
-                  onChange={(e) => {
-                    setGreenBeanSearch(e.target.value);
-                    setGreenBeanCurrentPage(1);
-                  }}
+                  onSearch={onGreenBeanSearch}
                   className="pl-9 w-full border border-teal-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-teal-300 focus:border-teal-300 outline-none"
                 />
               </div>
@@ -3495,7 +3426,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             Weight
                           </span>
                           <span className="font-medium text-gray-900">
-                            {g.currentWeightKg.toFixed(2)} kg
+                            {(g.currentWeightKg ?? 0).toFixed(2)} kg
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
@@ -3518,7 +3449,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               Total Amount
                             </span>
                             <span className="font-bold text-teal-700">
-                              {(g.pricePerKg * g.currentWeightKg).toFixed(2)}{" "}
+                              {(g.pricePerKg * (g.currentWeightKg ?? 0)).toFixed(2)}{" "}
                               {g.currency || "THB"}
                             </span>
                           </div>
@@ -3712,7 +3643,20 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           Crop Year (Optional)
                         </label>
                         <CropYearChips
-                          years={data.cropYears}
+                          years={(() => {
+                            const today = new Date();
+                            const cm = today.getMonth() + 1;
+                            const cy = today.getFullYear();
+                            const active = cm >= 10 ? cy : cy - 1;
+                            const targets = [
+                              `${active - 1}/${active}`,
+                              `${active}/${active + 1}`,
+                              `${active + 1}/${active + 2}`,
+                            ];
+                            return [...data.cropYears]
+                              .filter(c => targets.includes(c.year))
+                              .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+                          })()}
                           value={cropYearId}
                           onChange={setCropYearId}
                         />
@@ -3954,9 +3898,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                     #{index + 1}
                                   </span>
                                 </div>
-                                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.75fr_1fr_1fr] gap-3">
                                   <div>
-                                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">
+                                    <label className="flex items-center h-5 text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">
                                       Grade
                                     </label>
                                     <GradeDropdown
@@ -3977,7 +3921,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                     />
                                   </div>
                                   <div>
-                                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">
+                                    <label className="flex items-center h-5 text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">
                                       Weight (kg)
                                     </label>
                                     <input
@@ -3999,43 +3943,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                     />
                                   </div>
                                   <div>
-                                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">
-                                      <div className="flex items-center gap-1">
-                                        <Star
-                                          size={12}
-                                          className="text-gray-500"
-                                        />
-                                        Score
-                                      </div>
-                                    </label>
-                                    <input
-                                      type="number"
-                                      step="0.1"
-                                      min="0"
-                                      max="100"
-                                      placeholder="Optional"
-                                      value={lot.score}
-                                      onChange={(e) =>
-                                        setGradedLots(
-                                          gradedLots.map((l, i) =>
-                                            i === index
-                                              ? { ...l, score: e.target.value }
-                                              : l,
-                                          ),
-                                        )
-                                      }
-                                      className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">
-                                      <div className="flex items-center gap-1">
-                                        <DollarSign
-                                          size={12}
-                                          className="text-gray-500"
-                                        />
-                                        Price/kg (THB)
-                                      </div>
+                                    <label className="flex items-center h-5 text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide gap-1">
+                                      <DollarSign
+                                        size={12}
+                                        className="text-gray-500"
+                                      />
+                                      Price/kg (THB)
                                     </label>
                                     <input
                                       type="number"
@@ -5524,7 +5437,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             {entry.withdrawnByName && (
                               <div className="mb-3">
                                 <p className="text-xs text-gray-500">
-                                  Withdrawn by:{" "}
+                                  Withdrawn:{" "}
                                   <span className="font-semibold text-gray-700">
                                     {entry.withdrawnByName}
                                   </span>

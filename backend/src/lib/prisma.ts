@@ -1,13 +1,20 @@
 import { PrismaClient } from '@prisma/client'
 
 const prismaClientSingleton = () => {
-  // For serverless environments (Vercel), we need to reuse connections
-  // Prisma Client automatically manages connection pooling, but we need
-  // to ensure we're using a singleton pattern to avoid creating multiple instances
-  
   return new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    log: ['error', 'warn'],
+    datasources: {
+      db: {
+        url: process.env.DATABASE_URL,
+      },
+    },
   })
+}
+
+// Append connection_limit for serverless if not already present in DATABASE_URL
+if (process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('connection_limit')) {
+  const separator = process.env.DATABASE_URL.includes('?') ? '&' : '?';
+  process.env.DATABASE_URL = `${process.env.DATABASE_URL}${separator}connection_limit=10`;
 }
 
 declare const globalThis: {

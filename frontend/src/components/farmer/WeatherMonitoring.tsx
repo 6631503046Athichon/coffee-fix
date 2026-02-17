@@ -343,14 +343,14 @@ const WeatherMonitoring: React.FC = () => {
       };
     }
 
-    const avgTemp = filteredRecords.reduce((sum, r) => sum + r.temperatureAvg, 0) / filteredRecords.length;
-    const totalRainfall = filteredRecords.reduce((sum, r) => sum + r.rainfall, 0);
-    const avgHumidity = filteredRecords.reduce((sum, r) => sum + r.humidity, 0) / filteredRecords.length;
+    const avgTemp = filteredRecords.reduce((sum, r) => sum + (r.temperatureAvg ?? 0), 0) / filteredRecords.length;
+    const totalRainfall = filteredRecords.reduce((sum, r) => sum + (r.rainfall ?? 0), 0);
+    const avgHumidity = filteredRecords.reduce((sum, r) => sum + (r.humidity ?? 0), 0) / filteredRecords.length;
 
     return {
-      avgTemp: avgTemp.toFixed(1),
-      totalRainfall: totalRainfall.toFixed(1),
-      avgHumidity: avgHumidity.toFixed(0),
+      avgTemp: (avgTemp ?? 0).toFixed(1),
+      totalRainfall: (totalRainfall ?? 0).toFixed(1),
+      avgHumidity: (avgHumidity ?? 0).toFixed(0),
       recordCount: filteredRecords.length,
     };
   }, [filteredRecords]);

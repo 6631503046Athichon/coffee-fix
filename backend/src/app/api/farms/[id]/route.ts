@@ -78,7 +78,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, caretakerNames, archived, googleMapsUrl, ownerNames } = body
+    const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, caretakerNames, archived, googleMapsUrl, ownerNames, weatherAutoFetchEnabled, weatherAutoFetchInterval } = body
 
     const updateData: any = {}
     if (farmName !== undefined) updateData.farmName = farmName
@@ -108,6 +108,21 @@ export async function PUT(
     if (archived !== undefined) {
       updateData.archived = archived
       updateData.archivedAt = archived ? new Date() : null
+    }
+
+    // Weather auto-fetch settings - Admin only
+    if (weatherAutoFetchEnabled !== undefined || weatherAutoFetchInterval !== undefined) {
+      if (!user.roles.includes('Admin') && !user.isSuperAdmin) {
+        return NextResponse.json(
+          { error: 'Only admin can change weather auto-fetch settings' },
+          { status: 403 }
+        )
+      }
+      if (weatherAutoFetchEnabled !== undefined) updateData.weatherAutoFetchEnabled = Boolean(weatherAutoFetchEnabled)
+      if (weatherAutoFetchInterval !== undefined) {
+        const interval = parseInt(weatherAutoFetchInterval)
+        if (!isNaN(interval) && interval >= 1) updateData.weatherAutoFetchInterval = interval
+      }
     }
 
     const updatedFarm = await prisma.farm.update({

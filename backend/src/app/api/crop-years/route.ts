@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
-// Helper function to ensure current crop year exists
+// Helper function to ensure 3 crop years exist: previous, current, next
 async function ensureCropYears() {
   const now = new Date()
   const currentYear = now.getFullYear()
@@ -10,8 +10,6 @@ async function ensureCropYears() {
 
   // Determine the active crop year based on current date
   // Crop year runs from October 1 to September 30
-  // If month >= 10 (October), we're in the new crop year
-  // If month < 10, we're still in the previous crop year
   let activeCropYearStart: number
   if (currentMonth >= 10) {
     activeCropYearStart = currentYear
@@ -19,26 +17,34 @@ async function ensureCropYears() {
     activeCropYearStart = currentYear - 1
   }
 
-  // Create only current crop year
-  const yearEnd = activeCropYearStart + 1
-  const yearString = `${activeCropYearStart}/${yearEnd}`
+  // Create 3 crop years: previous, current, next
+  const offsets = [-1, 0, 1]
+  const cropYears = []
 
-  const cropYear = await prisma.cropYear.upsert({
-    where: { year: yearString },
-    update: {
-      startDate: new Date(`${activeCropYearStart}-10-01`),
-      endDate: new Date(`${yearEnd}-09-30`),
-      description: `Current crop year ${yearString}`,
-    },
-    create: {
-      year: yearString,
-      startDate: new Date(`${activeCropYearStart}-10-01`),
-      endDate: new Date(`${yearEnd}-09-30`),
-      description: `Current crop year ${yearString}`,
-    },
-  })
+  for (const offset of offsets) {
+    const yearStart = activeCropYearStart + offset
+    const yearEnd = yearStart + 1
+    const yearString = `${yearStart}/${yearEnd}`
+    const label = offset === -1 ? 'Previous' : offset === 0 ? 'Current' : 'Next'
 
-  return [cropYear]
+    const cropYear = await prisma.cropYear.upsert({
+      where: { year: yearString },
+      update: {
+        startDate: new Date(`${yearStart}-10-01`),
+        endDate: new Date(`${yearEnd}-09-30`),
+        description: `${label} crop year ${yearString}`,
+      },
+      create: {
+        year: yearString,
+        startDate: new Date(`${yearStart}-10-01`),
+        endDate: new Date(`${yearEnd}-09-30`),
+        description: `${label} crop year ${yearString}`,
+      },
+    })
+    cropYears.push(cropYear)
+  }
+
+  return cropYears
 }
 
 // GET /api/crop-years - List all crop years (auto-creates if needed)

@@ -13,17 +13,13 @@ import RestoredDataBanner from '../common/RestoredDataBanner';
 import { generateHarvestLotId } from '../../utils/idGenerator';
 import { addHarvestLot } from '../../services/harvestLotService';
 
-// Production Year Chips Component
+// Production Year Chips Component - แสดงแค่ 3 ปี (ก่อน, ปัจจุบัน, หน้า)
 const ProductionYearChips: React.FC<{
   years: CropYear[];
   value: string;
   onChange: (value: string) => void;
-  maxVisible?: number; // จำนวนปีที่แสดง (default: 5)
-}> = ({ years, value, onChange, maxVisible = 5 }) => {
-  const [offset, setOffset] = useState(0);
-  const initializedRef = useRef(false);
-
-  // Smart Logic: หาปีปัจจุบันจาก today
+}> = ({ years, value, onChange }) => {
+  // หาปีปัจจุบันจาก today
   const currentYearId = useMemo(() => {
     const today = new Date();
     return years.find(y => {
@@ -33,101 +29,36 @@ const ProductionYearChips: React.FC<{
     })?.id || '';
   }, [years]);
 
-  // Initialize offset ให้อยู่รอบๆ ปีปัจจุบัน (แค่ครั้งแรกเท่านั้น)
-  useEffect(() => {
-    if (initializedRef.current) return; // ไม่ reset ถ้า initialize แล้ว
-    if (years.length > maxVisible && currentYearId) {
-      const currentIndex = years.findIndex(y => y.id === currentYearId);
-      const halfRange = Math.floor(maxVisible / 2);
-      let startIndex = Math.max(0, currentIndex - halfRange);
-      if (startIndex + maxVisible > years.length) {
-        startIndex = Math.max(0, years.length - maxVisible);
-      }
-      setOffset(startIndex);
-      initializedRef.current = true;
-    }
-  }, [years, currentYearId, maxVisible]);
-
-  // คำนวณปีที่แสดง
-  const visibleYears = useMemo(() => {
-    if (years.length <= maxVisible) return years;
-    return years.slice(offset, offset + maxVisible);
-  }, [years, offset, maxVisible]);
-
-  const canGoBack = offset > 0;
-  const canGoForward = offset + maxVisible < years.length;
-  const hasNavigation = years.length > maxVisible;
-
   // Base styles for all chips
   const baseChipClass = "relative flex items-center justify-center py-3 px-4 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 cursor-pointer";
   const selectedClass = "bg-green-600 text-white border-green-600 shadow-lg";
   const unselectedClass = "bg-white text-gray-700 border-gray-200 hover:border-green-400 hover:bg-green-50";
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-3">
-        {/* ปุ่ม "None" สำหรับไม่เลือกปี */}
-        <button
-          type="button"
-          onClick={() => onChange('')}
-          className={`${baseChipClass} ${!value ? selectedClass : unselectedClass}`}
-        >
-          <span className="text-sm font-semibold">None</span>
-        </button>
+    <div className="grid grid-cols-3 gap-3">
+      {years.map(year => {
+        const isSelected = value === year.id;
+        const isCurrent = year.id === currentYearId;
 
-        {/* ปุ่มแต่ละปี (จำกัดจำนวน) */}
-        {visibleYears.map(year => {
-          const isSelected = value === year.id;
-          const isCurrent = year.id === currentYearId;
-
-          return (
-            <button
-              key={year.id}
-              type="button"
-              onClick={() => onChange(year.id)}
-              className={`${baseChipClass} ${isSelected ? selectedClass : unselectedClass}`}
-              title={year.description || year.year}
-            >
-              {/* Current Badge - เฉพาะปีปัจจุบันเท่านั้น */}
-              {isCurrent && (
-                <span className={`absolute -top-2 -right-2 px-2 py-0.5 text-[10px] font-bold rounded-full shadow-sm ${
-                  isSelected ? 'bg-white text-green-600' : 'bg-green-500 text-white'
-                }`}>
-                  Current
-                </span>
-              )}
-              <span className="text-sm font-semibold">{year.year}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Navigation arrows - ด้านล่าง */}
-      {/* ซ้าย = ไปปีใหม่ (offset-1), ขวา = ไปปีเก่า (offset+1) เพราะ years เรียง descending */}
-      {hasNavigation && (
-        <div className="flex items-center justify-center gap-4">
+        return (
           <button
+            key={year.id}
             type="button"
-            onClick={() => setOffset(Math.max(0, offset - 1))}
-            disabled={!canGoBack}
-            className={`p-2 rounded-full transition-all duration-200 ${canGoBack ? 'hover:bg-green-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
+            onClick={() => onChange(year.id)}
+            className={`${baseChipClass} ${isSelected ? selectedClass : unselectedClass}`}
+            title={year.description || year.year}
           >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-              <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
-            </svg>
+            {isCurrent && (
+              <span className={`absolute -top-2 -right-2 px-2 py-0.5 text-[10px] font-bold rounded-full shadow-sm ${
+                isSelected ? 'bg-white text-green-600' : 'bg-green-500 text-white'
+              }`}>
+                Current
+              </span>
+            )}
+            <span className="text-sm font-semibold">{year.year}</span>
           </button>
-          <button
-            type="button"
-            onClick={() => setOffset(Math.min(years.length - maxVisible, offset + 1))}
-            disabled={!canGoForward}
-            className={`p-2 rounded-full transition-all duration-200 ${canGoForward ? 'hover:bg-green-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-              <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/>
-            </svg>
-          </button>
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 };
@@ -410,25 +341,23 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
     }));
   }, [farmsWithVarieties]);
 
-  // Sort crop years: current/active years first (endDate >= today), then by startDate desc
+  // Filter to 3 crop years (previous, current, next) and sort by startDate desc (newest left)
   const sortedCropYears = React.useMemo(() => {
     const today = new Date();
-    return [...data.cropYears].sort((a, b) => {
-      const aEndDate = new Date(a.endDate);
-      const bEndDate = new Date(b.endDate);
-      const aStartDate = new Date(a.startDate);
-      const bStartDate = new Date(b.startDate);
-      
-      // Active years (not expired) come first
-      const aIsActive = aEndDate >= today;
-      const bIsActive = bEndDate >= today;
-      
-      if (aIsActive && !bIsActive) return -1;
-      if (!aIsActive && bIsActive) return 1;
-      
-      // Within same category, sort by startDate desc (newest first)
-      return bStartDate.getTime() - aStartDate.getTime();
-    });
+    const currentMonth = today.getMonth() + 1;
+    const currentYear = today.getFullYear();
+    const activeCropYearStart = currentMonth >= 10 ? currentYear : currentYear - 1;
+
+    // Build the 3 year strings we want
+    const targetYears = [
+      `${activeCropYearStart - 1}/${activeCropYearStart}`,     // previous
+      `${activeCropYearStart}/${activeCropYearStart + 1}`,     // current
+      `${activeCropYearStart + 1}/${activeCropYearStart + 2}`, // next
+    ];
+
+    return [...data.cropYears]
+      .filter(cy => targetYears.includes(cy.year))
+      .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
   }, [data.cropYears]);
 
   return (

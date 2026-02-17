@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { safeParseFloat } from '@/lib/utils'
 
 // GET /api/processing-batches/:id
 export async function GET(
@@ -58,7 +59,9 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    // SECURITY: Only Processor and Admin can update processing batches
+    requireRole(user, ['Processor', 'Admin'])
 
     const body = await request.json()
     const { status, processType, processNotes, parchmentWeightKg, moistureContent, baggingDate, dryingStartDate, dryingEndDate, cropYearId } = body
@@ -67,8 +70,12 @@ export async function PUT(
     if (status !== undefined) updateData.status = status
     if (processType !== undefined) updateData.processType = processType
     if (processNotes !== undefined) updateData.processNotes = processNotes
-    if (parchmentWeightKg !== undefined) updateData.parchmentWeightKg = parchmentWeightKg ? parseFloat(parchmentWeightKg) : null
-    if (moistureContent !== undefined) updateData.moistureContent = moistureContent ? parseFloat(moistureContent) : null
+    if (parchmentWeightKg !== undefined) {
+      updateData.parchmentWeightKg = safeParseFloat(parchmentWeightKg)
+    }
+    if (moistureContent !== undefined) {
+      updateData.moistureContent = safeParseFloat(moistureContent)
+    }
     if (baggingDate !== undefined) updateData.baggingDate = baggingDate ? new Date(baggingDate) : null
     if (dryingStartDate !== undefined) updateData.dryingStartDate = dryingStartDate ? new Date(dryingStartDate) : null
     if (dryingEndDate !== undefined) updateData.dryingEndDate = dryingEndDate ? new Date(dryingEndDate) : null
@@ -112,7 +119,9 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    // SECURITY: Only Processor and Admin can delete processing batches
+    requireRole(user, ['Processor', 'Admin'])
 
     // Check if batch exists
     const batch = await prisma.processingBatch.findUnique({

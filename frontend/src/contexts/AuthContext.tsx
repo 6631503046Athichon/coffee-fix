@@ -41,7 +41,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setCurrentUser(null);
           setIsAuthenticated(false);
         }
-      }, 5000); // 5 second timeout
+      }, 2000); // 2 second timeout
 
       try {
         const user = await authService.getCurrentUser();
