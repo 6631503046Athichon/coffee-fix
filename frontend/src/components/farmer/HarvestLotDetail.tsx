@@ -73,16 +73,16 @@ const HarvestLotDetail: React.FC = () => {
     const relatedParchmentLots = data.parchmentLots.filter(p => relatedBatches.some(b => b.id === p.processingBatchId));
     const relatedGreenBeanLots = data.greenBeanLots.filter(g => relatedParchmentLots.some(p => p.id === g.parchmentLotId));
     const mainGreenBeanLot = relatedGreenBeanLots.length > 0 ? relatedGreenBeanLots[0] : null;
+    const qcGreenBeanLot = relatedGreenBeanLots.find(g => g.cuppingScores?.length || g.processorScore != null) || null;
+    const qcLots = relatedGreenBeanLots.filter(g => g.cuppingScores?.length || g.processorScore != null);
 
     let cuppingResult: { totalScore: number; finalNotes: string; } | null = null;
-    if (mainGreenBeanLot) {
-        const cuppingScoreInfo = mainGreenBeanLot.cuppingScores[0];
-        if (cuppingScoreInfo) {
-            const session = data.cuppingSessions.find(s => s.id === cuppingScoreInfo.sessionId);
-            const sample = session?.samples.find(s => s.greenBeanLotId === mainGreenBeanLot.id);
-            if (session && sample && session.finalResults && session.finalResults[sample.id]) {
-                cuppingResult = session.finalResults[sample.id];
-            }
+    const cuppingScoreInfo = qcGreenBeanLot?.cuppingScores?.[0];
+    if (qcGreenBeanLot && cuppingScoreInfo) {
+        const session = data.cuppingSessions.find(s => s.id === cuppingScoreInfo.sessionId);
+        const sample = session?.samples.find(s => s.greenBeanLotId === qcGreenBeanLot.id);
+        if (session && sample && session.finalResults && session.finalResults[sample.id]) {
+            cuppingResult = session.finalResults[sample.id];
         }
     }
     // --- End Data Tracing ---
@@ -118,7 +118,7 @@ const HarvestLotDetail: React.FC = () => {
                             <DetailItem icon={Info} label="Current Status" value={statusBadge} />
                         </div>
                     </div>
-                    {cuppingResult && mainGreenBeanLot && (
+                    {cuppingResult && qcGreenBeanLot && (
                          <div className="bg-white shadow-sm rounded-xl border border-gray-200 mt-8">
                              <div className="p-6 border-b border-gray-200">
                                  <h2 className="text-xl font-bold text-gray-900 flex items-center"><Award className="text-amber-500 mr-2 h-6 w-6"/> Quality Results</h2>
@@ -133,7 +133,7 @@ const HarvestLotDetail: React.FC = () => {
                                     <blockquote className="bg-indigo-50 p-4 rounded-lg border-l-4 border-indigo-300 text-gray-700">
                                         "{cuppingResult.finalNotes}"
                                     </blockquote>
-                                    <Link to={`/traceability/${mainGreenBeanLot.id}`} target="_blank" className="mt-4 inline-flex items-center text-sm font-semibold text-indigo-600 hover:text-indigo-700">
+                                    <Link to={`/traceability/${qcGreenBeanLot.id}`} target="_blank" className="mt-4 inline-flex items-center text-sm font-semibold text-indigo-600 hover:text-indigo-700">
                                         View Public Traceability Page <ExternalLink className="h-4 w-4 ml-1" />
                                     </Link>
                                 </div>
@@ -201,9 +201,6 @@ const HarvestLotDetail: React.FC = () => {
                                             <div>Grade: {greenBean.grade}</div>
                                             <div>Weight: {greenBean.currentWeightKg} kg</div>
                                             <div>Status: {greenBean.availabilityStatus}</div>
-                                            {greenBean.processorScore != null && (
-                                                <div>Processor Score: {greenBean.processorScore.toFixed(1)}</div>
-                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -218,18 +215,36 @@ const HarvestLotDetail: React.FC = () => {
                         <TimelineStep
                             icon={Star}
                             title="QC Score"
-                            isComplete={cuppingResult !== null || (mainGreenBeanLot?.cuppingScores?.length ?? 0) > 0}
+                            isComplete={
+                                cuppingResult !== null
+                                || (qcGreenBeanLot?.cuppingScores?.length ?? 0) > 0
+                                || qcGreenBeanLot?.processorScore != null
+                            }
                             isOpen={openStep === 'qcScore'}
                             onToggle={() => setOpenStep(prev => prev === 'qcScore' ? null : 'qcScore')}
                             details={(
-                                <div className="space-y-1">
+                                <div className="space-y-2">
                                     {cuppingResult ? (
-                                        <>
+                                        <div className="space-y-1">
                                             <div><span className="font-semibold">Final Score:</span> {cuppingResult.totalScore.toFixed(2)} pts</div>
                                             <div><span className="font-semibold">Notes:</span> {cuppingResult.finalNotes || 'N/A'}</div>
-                                        </>
-                                    ) : mainGreenBeanLot?.cuppingScores?.[0]?.score ? (
-                                        <div><span className="font-semibold">Score:</span> {mainGreenBeanLot.cuppingScores[0].score} pts</div>
+                                        </div>
+                                    ) : null}
+                                    {qcLots.length > 0 ? (
+                                        <div className="space-y-2">
+                                            {qcLots.map((greenBean, idx) => (
+                                                <div key={greenBean.id} className="rounded-md border border-gray-200 bg-white p-2">
+                                                    <div className="font-semibold">Lot {idx + 1}</div>
+                                                    <div>Grade: {greenBean.grade}</div>
+                                                    {greenBean.processorScore != null && (
+                                                        <div>QC Score: {greenBean.processorScore.toFixed(1)} pts</div>
+                                                    )}
+                                                    {greenBean.cuppingScores?.[0]?.score != null && (
+                                                        <div>Cupping Score: {greenBean.cuppingScores[0].score} pts</div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
                                     ) : (
                                         <div>QC pending.</div>
                                     )}
@@ -239,9 +254,11 @@ const HarvestLotDetail: React.FC = () => {
                         >
                             {cuppingResult
                                 ? `${cuppingResult.totalScore.toFixed(2)} pts`
-                                : mainGreenBeanLot?.cuppingScores?.[0]?.score
-                                    ? `${mainGreenBeanLot.cuppingScores[0].score} pts`
-                                    : 'Pending'}
+                                : qcGreenBeanLot?.processorScore != null
+                                    ? `${qcGreenBeanLot.processorScore.toFixed(1)} pts`
+                                    : cuppingScoreInfo?.score
+                                        ? `${cuppingScoreInfo.score} pts`
+                                        : 'Pending'}
                         </TimelineStep>
                      </div>
                 </div>
