@@ -115,44 +115,52 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
 
     // Map a lot to display fields
     const mapLotForDisplay = (gbl: GreenBeanLot) => {
+    // Utility to format GBL ID as GBL-YYYY-XXX
+    function formatGblId(gbl: GreenBeanLot) {
+        const year = gbl.createdAt ? new Date(gbl.createdAt).getFullYear() : new Date().getFullYear();
+        const index = data.greenBeanLots.findIndex(lot => lot.id === gbl.id);
+        const num = String(index + 1).padStart(3, '0');
+        return `GBL-${year}-${num}`;
+    }
+
     if (gbl.sourceType === GreenBeanSourceType.External && gbl.externalSource) {
-            const variety = gbl.externalSource.variety || 'N/A';
-            const process = gbl.externalSource.processType || 'N/A';
-            // No score shown for external lots in table
-            // External: do not show grade in Info; show grade in its own column (or '-' if missing)
-            const displayInfo = `${variety} / ${process}`;
-            const priceNumber = gbl.externalSource.pricePerKg;
-            const priceCurrency = gbl.externalSource.currency || gbl.currency || 'THB';
-            const displayPrice = (typeof priceNumber === 'number' && !isNaN(priceNumber)) ? `${priceNumber.toFixed(2)} ${priceCurrency}` : undefined;
-            return {
-                ...gbl,
-                variety,
-                process,
-                // finalScore intentionally omitted for external table rendering
-                displayInfo,
-                displayPrice,
-                gradeDisplay: gbl.grade || '—',
-            } as GreenBeanLot & { variety: string; process: string; displayInfo: string; displayPrice?: string; gradeDisplay: string };
-        }
-        const parchmentLot = data.parchmentLots.find(p => p.id === gbl.parchmentLotId);
-        const harvestLot = data.harvestLots.find(h => h.id === parchmentLot?.harvestLotId);
-        const variety = harvestLot?.cherryVariety || 'N/A';
-        const process = parchmentLot?.processType || 'N/A';
-        const finalScore = getFinalScore(gbl);
-        const displayScore = typeof finalScore === 'number' ? finalScore.toFixed(2) : '—';
+        const variety = gbl.externalSource.variety || 'N/A';
+        const process = gbl.externalSource.processType || 'N/A';
         const displayInfo = `${variety} / ${process}`;
-        // For RB lots (created from withdrawals), get the source GBL ID
-        const sourceGblId = (gbl.externalSource as any)?.parentLotCode || undefined;
+        const priceNumber = gbl.externalSource.pricePerKg;
+        const priceCurrency = gbl.externalSource.currency || gbl.currency || 'THB';
+        const displayPrice = (typeof priceNumber === 'number' && !isNaN(priceNumber)) ? `${priceNumber.toFixed(2)} ${priceCurrency}` : undefined;
+        const gblId = formatGblId(gbl);
         return {
             ...gbl,
             variety,
             process,
-            finalScore,
-            displayScore,
             displayInfo,
+            displayPrice,
             gradeDisplay: gbl.grade || '—',
-            sourceGblId,
-        } as GreenBeanLot & { variety: string; process: string; finalScore: string | number; displayScore: string; displayInfo: string; gradeDisplay: string; sourceGblId?: string };
+            lotId: gblId,
+            sourceGblId: gblId,
+        } as GreenBeanLot & { variety: string; process: string; displayInfo: string; displayPrice?: string; gradeDisplay: string; lotId: string; sourceGblId: string };
+    }
+    const parchmentLot = data.parchmentLots.find(p => p.id === gbl.parchmentLotId);
+    const harvestLot = data.harvestLots.find(h => h.id === parchmentLot?.harvestLotId);
+    const variety = harvestLot?.cherryVariety || 'N/A';
+    const process = parchmentLot?.processType || 'N/A';
+    const finalScore = getFinalScore(gbl);
+    const displayScore = typeof finalScore === 'number' ? finalScore.toFixed(2) : '—';
+    const displayInfo = `${variety} / ${process}`;
+    const gblId = formatGblId(gbl);
+    return {
+        ...gbl,
+        variety,
+        process,
+        finalScore,
+        displayScore,
+        displayInfo,
+        gradeDisplay: gbl.grade || '—',
+        lotId: gblId,
+        sourceGblId: gblId,
+    } as GreenBeanLot & { variety: string; process: string; finalScore: string | number; displayScore: string; displayInfo: string; gradeDisplay: string; lotId: string; sourceGblId: string };
     };
 
     // Split into External and Internal lists (sorted by ID descending - newest first)
@@ -184,11 +192,23 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         });
 
         // Generate INV-XXX IDs for all items in order
+        // Utility to generate RB-YYYY-XXXX code
+        function generateRbId(index) {
+            const year = new Date().getFullYear();
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let code = '';
+            let n = index + 1;
+            while (code.length < 4) {
+                code = chars[n % chars.length] + code;
+                n = Math.floor(n / chars.length);
+            }
+            return `RB-${year}-${code}`;
+        }
+
         return sortedByDate.map((item, index) => {
             const gbl = data.greenBeanLots.find(lot => lot.id === item.greenBeanLotId);
             const parchmentLot = data.parchmentLots.find(p => p.id === gbl?.parchmentLotId);
             const harvestLot = data.harvestLots.find(h => h.id === parchmentLot?.harvestLotId);
-            const invNumber = String(index + 1).padStart(3, '0');
             // Get score
             let scoreDisplay = '—';
             if (gbl) {
@@ -199,11 +219,21 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                     scoreDisplay = gbl.processorScore.toFixed(2);
                 }
             }
+            // Format GBL ID for withdrawn inventory
+            let lotId = gbl ? (() => {
+                const year = gbl.createdAt ? new Date(gbl.createdAt).getFullYear() : new Date().getFullYear();
+                const idx = data.greenBeanLots.findIndex(lot => lot.id === gbl.id);
+                const num = String(idx + 1).padStart(3, '0');
+                return `GBL-${year}-${num}`;
+            })() : `#${item.greenBeanLotId.substring(0, 6).toUpperCase()}`;
+
+            // RB-YYYY-XXXX for inventoryId
+            const inventoryId = generateRbId(index);
 
             return {
                 ...item,
-                inventoryId: `INV-${invNumber}`,
-                lotId: gbl?.lotId || `#${item.greenBeanLotId.substring(0, 6).toUpperCase()}`,
+                inventoryId,
+                lotId,
                 variety: harvestLot?.cherryVariety || gbl?.externalSource?.variety || 'N/A',
                 process: parchmentLot?.processType || gbl?.externalSource?.processType || 'N/A',
                 score: scoreDisplay,

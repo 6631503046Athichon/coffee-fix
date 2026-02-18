@@ -36,8 +36,7 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({ lots, onClaim, cu
         <table className="w-full">
           <thead>
             <tr className="bg-gray-800">
-              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">RB ID</th>
-              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Source GBL</th>
+              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">GBL ID</th>
               <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Variety</th>
               <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Process</th>
               <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Score</th>
@@ -49,7 +48,7 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({ lots, onClaim, cu
           <tbody className="divide-y divide-gray-100">
             {lots.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-5 py-12 text-center">
+                <td colSpan={7} className="px-5 py-12 text-center">
                   <div className="flex flex-col items-center">
                     <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
                       <Package className="h-6 w-6 text-gray-400" />
@@ -68,11 +67,6 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({ lots, onClaim, cu
                   <td className="px-5 py-4">
                     <span className="text-sm font-mono font-semibold text-gray-900" title={lot.id}>
                       {lot.lotId || `#${lot.id.substring(0, 6).toUpperCase()}`}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4">
-                    <span className="text-xs font-mono text-gray-500">
-                      {lot.sourceGblId || '—'}
                     </span>
                   </td>
                   <td className="px-5 py-4">

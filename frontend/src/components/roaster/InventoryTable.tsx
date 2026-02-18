@@ -41,8 +41,8 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast, curr
         <table className="w-full">
           <thead>
             <tr className="bg-gray-800">
-              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Inventory ID</th>
-              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Lot ID</th>
+              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">RB ID</th>
+              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Source GBL</th>
               <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Variety</th>
               <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Score</th>
               <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Grade</th>
