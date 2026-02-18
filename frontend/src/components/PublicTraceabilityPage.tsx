@@ -322,7 +322,12 @@ const PublicTraceabilityPage: React.FC = () => {
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Producer</p>
                   <p className="text-base font-bold text-gray-900">
-                    {harvestLot?.farmerName || lot.externalSource?.producerName || 'N/A'}
+                    {farm?.farmName
+                      || farm?.name
+                      || harvestLot?.farmPlotLocation
+                      || harvestLot?.farmerName
+                      || lot.externalSource?.producerName
+                      || 'N/A'}
                   </p>
                 </div>
                 <div>
