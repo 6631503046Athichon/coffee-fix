@@ -2,6 +2,62 @@ import { GreenBeanLot } from "../types";
 import { api } from "./api";
 import { handleApiErrorWithFallback } from "../utils/errorHandler";
 
+// ============================================
+// Withdrawal Types
+// ============================================
+
+export interface CreateWithdrawalInput {
+  amountKg: number;
+  withdrawalType: string;
+  purpose: string;
+  notes?: string;
+  salePrice?: number;
+  currency?: string;
+  customerName?: string;
+  invoiceNumber?: string;
+  deliveryAddress?: string;
+}
+
+// Map frontend display values → Prisma enum values
+const WITHDRAWAL_TYPE_TO_API: Record<string, string> = {
+  'Roasting Stock': 'RoastingStock',
+};
+
+/**
+ * Create a withdrawal for a green bean lot
+ */
+export const createWithdrawal = async (
+  lotId: string,
+  input: CreateWithdrawalInput,
+): Promise<{ greenBeanLot: GreenBeanLot }> => {
+  const apiInput = {
+    ...input,
+    withdrawalType: WITHDRAWAL_TYPE_TO_API[input.withdrawalType] || input.withdrawalType,
+  };
+  const response = await api.post<{ greenBeanLot: any }>(
+    `/green-bean-lots/${lotId}/withdrawals`,
+    apiInput,
+  );
+  return {
+    greenBeanLot: transformGreenBeanLotFromBackend(response.greenBeanLot),
+  };
+};
+
+/**
+ * Delete a withdrawal (reverses weight back to the lot and removes associated RB lot)
+ */
+export const deleteWithdrawal = async (
+  lotId: string,
+  withdrawalId: string,
+): Promise<{ greenBeanLot: GreenBeanLot }> => {
+  const response = await api.delete<{ greenBeanLot: any }>(
+    `/green-bean-lots/${lotId}/withdrawals?withdrawalId=${withdrawalId}`,
+  );
+  return {
+    greenBeanLot: transformGreenBeanLotFromBackend(response.greenBeanLot),
+  };
+};
+
 export interface CreateGreenBeanLotInput {
   sourceType: "Internal" | "External";
   parchmentLotId?: string;

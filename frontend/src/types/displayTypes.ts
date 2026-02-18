@@ -18,6 +18,7 @@ export interface ExternalDisplayLot extends DisplayLot {
 export interface InternalDisplayLot extends DisplayLot {
   finalScore: string | number;
   displayScore: string;
+  sourceGblId?: string;
 }
 
 export interface RoastDisplayLot extends GreenBeanLot {

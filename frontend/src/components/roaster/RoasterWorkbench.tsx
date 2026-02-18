@@ -14,9 +14,8 @@ import InternalLotsTable from './InternalLotsTable';
 import InventoryTable from './InventoryTable';
 import RoastLogPanel from './RoastLogPanel';
 import { toFixed2, clamp } from '../../utils/formatters';
-import { generateRoastLogId } from '../../utils/idGenerator';
-import { claimInventory, getAllRoasterInventory } from '../../services/roasterInventoryService';
-import { getAllGreenBeanLots } from '../../services/greenBeanLotService';
+import { claimInventory, getAllRoasterInventory, createRoastBatch, getAllRoastBatches } from '../../services/roasterInventoryService';
+import { getAllGreenBeanLots, createGreenBeanLot } from '../../services/greenBeanLotService';
 import { useToast } from '../../contexts/ToastContext';
 
 
@@ -62,6 +61,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     const navigate = useNavigate();
     const { addToast } = useToast();
     const [isClaiming, setIsClaiming] = useState(false);
+    const [isLoggingRoast, setIsLoggingRoast] = useState(false);
+    const [isAddingLot, setIsAddingLot] = useState(false);
 
     const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
     const [isAddLotModalOpen, setIsAddLotModalOpen] = useState(false);
@@ -140,6 +141,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         const finalScore = getFinalScore(gbl);
         const displayScore = typeof finalScore === 'number' ? finalScore.toFixed(2) : '—';
         const displayInfo = `${variety} / ${process}`;
+        // For RB lots (created from withdrawals), get the source GBL ID
+        const sourceGblId = (gbl.externalSource as any)?.parentLotCode || undefined;
         return {
             ...gbl,
             variety,
@@ -148,7 +151,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             displayScore,
             displayInfo,
             gradeDisplay: gbl.grade || '—',
-        } as GreenBeanLot & { variety: string; process: string; finalScore: string | number; displayScore: string; displayInfo: string; gradeDisplay: string };
+            sourceGblId,
+        } as GreenBeanLot & { variety: string; process: string; finalScore: string | number; displayScore: string; displayInfo: string; gradeDisplay: string; sourceGblId?: string };
     };
 
     // Split into External and Internal lists (sorted by ID descending - newest first)
@@ -185,12 +189,25 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             const parchmentLot = data.parchmentLots.find(p => p.id === gbl?.parchmentLotId);
             const harvestLot = data.harvestLots.find(h => h.id === parchmentLot?.harvestLotId);
             const invNumber = String(index + 1).padStart(3, '0');
+            // Get score
+            let scoreDisplay = '—';
+            if (gbl) {
+                const finalScore = getFinalScore(gbl);
+                if (typeof finalScore === 'number') {
+                    scoreDisplay = finalScore.toFixed(2);
+                } else if (gbl.processorScore) {
+                    scoreDisplay = gbl.processorScore.toFixed(2);
+                }
+            }
+
             return {
                 ...item,
                 inventoryId: `INV-${invNumber}`,
                 lotId: gbl?.lotId || `#${item.greenBeanLotId.substring(0, 6).toUpperCase()}`,
                 variety: harvestLot?.cherryVariety || gbl?.externalSource?.variety || 'N/A',
                 process: parchmentLot?.processType || gbl?.externalSource?.processType || 'N/A',
+                score: scoreDisplay,
+                grade: gbl?.grade || '—',
             };
         });
     }, [data, currentUser.id]);
@@ -286,7 +303,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                 roasterInventory: [...prev.roasterInventory, claimedItem],
                 greenBeanLots: prev.greenBeanLots.map(lot =>
                     lot.id === lotSnapshot.id
-                        ? { ...lot, currentWeightKg: Math.max(0, lot.currentWeightKg - amount) }
+                        ? { ...lot, currentWeightKg: Math.max(0, Math.round((lot.currentWeightKg - amount) * 100) / 100) }
                         : lot
                 ),
             }));
@@ -317,9 +334,9 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         }
     };
 
-    const handleLogRoastSubmit = (e: React.FormEvent) => {
+    const handleLogRoastSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedInventoryItem) return;
+        if (!selectedInventoryItem || isLoggingRoast) return;
 
         const batchRaw = parseFloat(roastForm.batchSize);
         const roastedRaw = parseFloat(roastForm.roastedWeight);
@@ -334,31 +351,50 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         const yieldPct = toFixed2((roasted / batch) * 100);
         const weightLossPct = toFixed2(100 - yieldPct);
 
-        setData(prev => {
-            const updatedInventory = prev.roasterInventory.map(item =>
-                item.id === selectedInventoryItem.id
-                    ? { ...item, remainingWeightKg: toFixed2(item.remainingWeightKg - batch) }
-                    : item
-            );
-
-            const newRoast: RoastBatch = {
-                id: generateRoastLogId(prev.roastBatches.map(r => r.id)),
-                roasterId: currentUser.id,
+        setIsLoggingRoast(true);
+        try {
+            const { roastBatch } = await createRoastBatch({
                 roasterInventoryId: selectedInventoryItem.id,
                 greenBeanLotId: selectedInventoryItem.greenBeanLotId,
-                roastDate: new Date().toISOString().substring(0, 10),
                 batchSizeKg: batch,
-                yieldPercentage: yieldPct,     // kept for backward compatibility
-                roastedWeightKg: roasted,      // NEW
-                weightLossPct: weightLossPct,  // NEW
+                yieldPercentage: yieldPct,
+                roastedWeightKg: roasted,
+                weightLossPct: weightLossPct,
                 roastLevel: roastLevel,
-                roastProfileNotes: roastForm.notes?.trim(),
-                flavorNotes: selectedFlavorTags.join(', '),
+                roastProfileNotes: roastForm.notes?.trim() || 'Standard roast',
+                flavorNotes: selectedFlavorTags.join(', ') || undefined,
+            });
 
-            };
+            // Optimistic update
+            setData(prev => {
+                const updatedInventory = prev.roasterInventory.map(item =>
+                    item.id === selectedInventoryItem.id
+                        ? { ...item, remainingWeightKg: toFixed2(item.remainingWeightKg - batch) }
+                        : item
+                );
+                return { ...prev, roasterInventory: updatedInventory, roastBatches: [...prev.roastBatches, roastBatch] };
+            });
 
-            return { ...prev, roasterInventory: updatedInventory, roastBatches: [...prev.roastBatches, newRoast] };
-        });
+            addToast({ type: 'success', message: `Roast logged — ${roasted} kg roasted at ${yieldPct}% yield!` });
+
+            // Background refresh to sync exact data from server
+            Promise.all([
+                getAllRoasterInventory(),
+                getAllRoastBatches()
+            ]).then(([freshInventory, freshBatches]) => {
+                setData(prev => ({
+                    ...prev,
+                    roasterInventory: freshInventory,
+                    roastBatches: freshBatches,
+                }));
+            }).catch(() => { /* silent background sync */ });
+
+        } catch (error: any) {
+            console.error('Failed to log roast:', error);
+            addToast({ type: 'error', message: error?.message || 'Failed to log roast. Please try again.' });
+        } finally {
+            setIsLoggingRoast(false);
+        }
 
         setIsLogRoastModalOpen(false);
     };
@@ -825,8 +861,9 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                                 variant="primary"
                                 size="lg"
                                 className="bg-orange-600 hover:bg-orange-700"
+                                disabled={isLoggingRoast}
                             >
-                                Log Roast
+                                {isLoggingRoast ? 'Logging...' : 'Log Roast'}
                             </Button>
                         </div>
                     </form>
@@ -839,43 +876,55 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                 maxWidth="5xl"
             >
                                         <form
-                                            onSubmit={(e) => {
+                                            onSubmit={async (e) => {
                                                 e.preventDefault();
+                                                if (isAddingLot) return;
                                                 const initial = parseFloat(newLotForm.initialWeightKg);
                                                 const price = parseFloat(newLotForm.pricePerKg);
                                                 if (!newLotForm.originName || !newLotForm.variety || !newLotForm.processType) return alert('Please fill origin, variety, and process type');
                                                 if (!initial || initial <= 0) return alert('Initial weight must be > 0');
                                                 if (isNaN(price)) return alert('Enter a valid price');
 
-                                                setData(prev => {
-                                                    const nextNum = prev.greenBeanLots
-                                                        .map(l => parseInt((l.id.match(/GBL(\d+)/)?.[1] || '0'), 10))
-                                                        .reduce((a,b)=>Math.max(a,b), 0) + 1;
-                                                    const newId = `GBL${String(nextNum).padStart(3,'0')}`;
-                                                    const lot: GreenBeanLot = {
-                                                        id: newId,
-                                                        sourceType: GreenBeanSourceType.External,
-                                                        externalSource: {
-                                                            originName: newLotForm.originName,
-                                                            producerName: newLotForm.producerName || undefined,
-                                                            variety: newLotForm.variety,
-                                                            processType: newLotForm.processType,
-                                                            purchaseDate: newLotForm.purchaseDate,
-                                                            pricePerKg: isNaN(price) ? 0 : price,
-                                                            currency: newLotForm.currency,
-                                                            tasteNote: newLotForm.tasteNote || undefined,
-                                                            supplierNotes: newLotForm.supplierNotes || undefined,
-                                                        },
+                                                setIsAddingLot(true);
+                                                try {
+                                                    const newLot = await createGreenBeanLot({
+                                                        sourceType: 'External',
                                                         grade: newLotForm.grade || 'Grade A',
                                                         initialWeightKg: initial,
                                                         currentWeightKg: initial,
                                                         availabilityStatus: 'Available',
                                                         pricePerKg: isNaN(price) ? undefined : price,
                                                         currency: newLotForm.currency,
-                                                        cuppingScores: [],
-                                                    };
-                                                    return { ...prev, greenBeanLots: [lot, ...prev.greenBeanLots] };
-                                                });
+                                                        externalSource: {
+                                                            originName: newLotForm.originName,
+                                                            variety: newLotForm.variety,
+                                                            processType: newLotForm.processType,
+                                                            purchaseDate: newLotForm.purchaseDate,
+                                                            pricePerKg: isNaN(price) ? undefined : price,
+                                                            currency: newLotForm.currency,
+                                                            supplierNotes: newLotForm.supplierNotes || undefined,
+                                                        },
+                                                    });
+
+                                                    setData(prev => ({
+                                                        ...prev,
+                                                        greenBeanLots: [newLot, ...prev.greenBeanLots],
+                                                    }));
+
+                                                    addToast({ type: 'success', message: `External lot added — ${initial} kg from ${newLotForm.originName}!` });
+
+                                                    // Background refresh
+                                                    getAllGreenBeanLots()
+                                                        .then(freshLots => setData(prev => ({ ...prev, greenBeanLots: freshLots })))
+                                                        .catch(() => {});
+
+                                                } catch (error: any) {
+                                                    console.error('Failed to add external lot:', error);
+                                                    addToast({ type: 'error', message: error?.message || 'Failed to add external lot. Please try again.' });
+                                                } finally {
+                                                    setIsAddingLot(false);
+                                                }
+
                                                 setIsAddLotModalOpen(false);
                                                 setNewLotForm({
                                                     originName: '', producerName: '', variety: '', processType: '', purchaseDate: new Date().toISOString().substring(0,10), pricePerKg: '', currency: 'THB', initialWeightKg: '', grade: 'Grade A', supplierNotes: '', tasteNote: ''

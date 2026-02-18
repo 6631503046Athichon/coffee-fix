@@ -77,7 +77,7 @@ export interface HarvestLot {
   remainingWeightKg?: number;
   farmPlotLocation: string;
   harvestDate: string;
-  status: "Ready for Processing" | "Complete";
+  status: "Ready for Processing" | "Complete" | "ReadyForProcessing";
   cropYearId?: string;
   createdAt?: string;
 }
@@ -124,7 +124,7 @@ export interface ParchmentLot {
   currentWeightKg: number;
   moistureContent: number;
   processType: string;
-  status: "Awaiting Hulling" | "Hulled";
+  status: "AwaitingHulling" | "Hulled";
   physicalTestResults?: PhysicalTestResults;
   createdAt?: string;
 }
@@ -159,6 +159,7 @@ export interface GreenBeanLot {
   cuppingScores: { sessionId: string; score: number }[];
   processorScore?: number; // Score assigned by processor during hulling and grading
   withdrawalHistory?: {
+    id: string;
     amountKg: number;
     withdrawalType: "Sale" | "Roasting Stock" | "Sample" | "Export" | "Other";
     purpose: string; // Legacy field / additional description

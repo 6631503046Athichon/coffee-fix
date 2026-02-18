@@ -171,8 +171,13 @@ const StartProcessingModal: React.FC<StartProcessingModalProps> = ({
             <p className="text-2xl font-bold text-gray-900">{harvestLot.cherryVariety}</p>
           </div>
           <div className="text-center sm:border-l-2 sm:border-gray-300">
-            <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">Weight</p>
-            <p className="text-2xl font-bold text-green-600">{harvestLot.weightKg} kg</p>
+            <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">Available Cherry</p>
+            <p className="text-2xl font-bold text-green-600">
+              {((harvestLot.remainingWeightKg ?? harvestLot.weightKg) as number).toFixed(2)} kg
+              {typeof harvestLot.remainingWeightKg === 'number' && harvestLot.remainingWeightKg !== harvestLot.weightKg && (
+                <span className="block text-sm font-normal text-gray-500">of {harvestLot.weightKg} kg total</span>
+              )}
+            </p>
           </div>
           <div className="text-center sm:border-l-2 sm:border-gray-300">
             <p className="text-xs font-bold text-gray-500 uppercase mb-3 tracking-wider">Farmer</p>
@@ -181,7 +186,28 @@ const StartProcessingModal: React.FC<StartProcessingModalProps> = ({
         </div>
       </div>
       <div className="mb-6 space-y-4">
+        {/* Cherry Input Weight */}
         <div>
+          <label className="block text-base font-bold text-gray-700 mb-3">
+            <div className="flex items-center gap-2">
+              <Scale className="h-5 w-5 text-green-600" />
+              Cherry Input Weight (kg)
+            </div>
+          </label>
+          <input
+            type="number"
+            step="0.1"
+            min="0.1"
+            max={harvestLot.remainingWeightKg ?? harvestLot.weightKg}
+            name="inputCherryWeightKg"
+            placeholder={`e.g., ${((harvestLot.remainingWeightKg ?? harvestLot.weightKg) as number).toFixed(2)}`}
+            required
+            className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-base focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 shadow-sm"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            How much cherry (kg) you are putting into this processing batch. Max: {((harvestLot.remainingWeightKg ?? harvestLot.weightKg) as number).toFixed(2)} kg available.
+          </p>
+        </div>
           <label htmlFor="processType" className="block text-base font-bold text-gray-700 mb-3">Select Process Type</label>
           <ProcessTypeDropdown
             value={selectedProcessType}

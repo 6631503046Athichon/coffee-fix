@@ -72,6 +72,12 @@ export const transformFarmToBackend = (farmData: any) => {
           .filter(Boolean)
       : [];
 
+  const parseNumber = (val: any): number | null => {
+    if (val === null || val === undefined || val === "") return null;
+    const n = typeof val === "number" ? val : parseFloat(val);
+    return isNaN(n) ? null : n;
+  };
+
   return {
     farmName: farmData.name || "",
     ownerNames:
@@ -79,11 +85,11 @@ export const transformFarmToBackend = (farmData: any) => {
         ? ownerNamesFromArray
         : ownerNamesFromString,
     location: farmData.location || "",
-    googleMapsUrl: farmData.googleMapsUrl || null,
-    latitude: farmData.latitude?.toString() || null,
-    longitude: farmData.longitude?.toString() || null,
+    googleMapsUrl: farmData.googleMapsUrl?.trim() || null,
+    latitude: parseNumber(farmData.latitude),
+    longitude: parseNumber(farmData.longitude),
     altitude: farmData.altitudeMeters?.toString() || null,
-    sizeHectares: farmData.sizeHectares?.toString() || null,
+    sizeHectares: parseNumber(farmData.sizeHectares),
     varieties: farmData.varieties || [],
     caretakerNames:
       caretakerNamesFromArray.length > 0

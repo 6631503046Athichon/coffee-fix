@@ -8,6 +8,8 @@ export type InventoryDisplayItem = RoasterInventoryItem & {
   variety: string;
   process: string;
   lotId?: string;
+  score?: string;
+  grade?: string;
 };
 
 interface InventoryTableProps {
@@ -41,7 +43,9 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast, curr
             <tr className="bg-gray-800">
               <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Inventory ID</th>
               <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Lot ID</th>
-              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Details</th>
+              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Variety</th>
+              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Score</th>
+              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Grade</th>
               <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Remaining</th>
               <th className="px-5 py-3 text-right text-xs font-semibold text-gray-200 uppercase tracking-wide">Action</th>
             </tr>
@@ -49,7 +53,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast, curr
           <tbody className="divide-y divide-gray-100">
             {items.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-5 py-12 text-center">
+                <td colSpan={7} className="px-5 py-12 text-center">
                   <div className="flex flex-col items-center">
                     <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
                       <Archive className="h-6 w-6 text-gray-400" />
@@ -78,9 +82,19 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast, curr
                   <td className="px-5 py-4">
                     <div className="text-sm">
                       <span className="font-medium text-gray-900">{item.variety}</span>
-                      <span className="text-gray-400 mx-2">/</span>
+                      <span className="text-gray-400 mx-1">/</span>
                       <span className="text-gray-600">{item.process}</span>
                     </div>
+                  </td>
+                  <td className="px-5 py-4">
+                    <span className={`text-sm font-semibold ${item.score && item.score !== '—' ? 'text-indigo-600' : 'text-gray-400'}`}>
+                      {item.score || '—'}
+                    </span>
+                  </td>
+                  <td className="px-5 py-4">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-xs font-semibold text-amber-700 border border-amber-200">
+                      {item.grade || '—'}
+                    </span>
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-2">

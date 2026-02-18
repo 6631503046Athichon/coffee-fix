@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
 
     // Pagination
     const page = parseInt(request.nextUrl.searchParams.get('page') || '1')
-    const limit = parseInt(request.nextUrl.searchParams.get('limit') || '50')
+    const limit = parseInt(request.nextUrl.searchParams.get('limit') || '500')
     const skip = (page - 1) * limit
 
     const [harvestLots, total] = await Promise.all([

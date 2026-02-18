@@ -72,6 +72,9 @@ import {
 import {
   createGreenBeanLot,
   updateGreenBeanLotScore,
+  createWithdrawal,
+  deleteWithdrawal,
+  getAllGreenBeanLots,
 } from "../../services/greenBeanLotService";
 import { updateParchmentLot } from "../../services/parchmentLotService";
 import DatePicker from "../common/DatePicker";
@@ -461,7 +464,7 @@ const KanbanCard: React.FC<{ batch: ProcessingBatch }> = ({ batch }) => {
         <div className="flex justify-between">
           <span>Weight</span>
           <span className="font-medium text-gray-900">
-            {batch.parchmentWeightKg ? `${batch.parchmentWeightKg} kg` : "-"}
+            {batch.parchmentWeightKg ? `${Number(batch.parchmentWeightKg).toFixed(2)} kg` : "-"}
           </span>
         </div>
         <div className="flex justify-between">
@@ -1204,7 +1207,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     }
   };
 
-  const handleDeleteWithdrawal = (lotId: string, index: number) => {
+  const handleDeleteWithdrawal = async (lotId: string, index: number) => {
     const lot = data.greenBeanLots.find((g) => g.id === lotId);
     const withdrawal = lot?.withdrawalHistory?.[index];
     if (!withdrawal) return;
@@ -1214,19 +1217,40 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         `Are you sure you want to delete this withdrawal entry?\n\nAmount: ${withdrawal.amountKg} kg\nType: ${withdrawal.withdrawalType}\nDate: ${withdrawal.date}\n\nNote: The withdrawn amount (${withdrawal.amountKg} kg) will be returned to current stock.`,
       )
     ) {
-      setData((prev) => ({
-        ...prev,
-        greenBeanLots: prev.greenBeanLots.map((gbl) => {
-          if (gbl.id !== lotId) return gbl;
-          const newHistory = [...(gbl.withdrawalHistory || [])];
-          const deletedEntry = newHistory.splice(index, 1)[0];
-          return {
-            ...gbl,
-            currentWeightKg: gbl.currentWeightKg + deletedEntry.amountKg, // Return stock
-            withdrawalHistory: newHistory,
-          };
-        }),
-      }));
+      try {
+        const { greenBeanLot: updatedLot } = await deleteWithdrawal(lotId, withdrawal.id);
+
+        // Update local state with the server response
+        setData((prev) => ({
+          ...prev,
+          greenBeanLots: prev.greenBeanLots.map((gbl) =>
+            gbl.id === lotId
+              ? {
+                  ...gbl,
+                  currentWeightKg: updatedLot.currentWeightKg,
+                  availabilityStatus: updatedLot.availabilityStatus,
+                  withdrawalHistory: updatedLot.withdrawalHistory,
+                }
+              : gbl
+          ),
+        }));
+
+        addToast({
+          type: "success",
+          message: `Withdrawal of ${withdrawal.amountKg} kg deleted. Stock returned.`,
+        });
+
+        // Background refresh to sync all lots (RB lots may have been removed)
+        getAllGreenBeanLots()
+          .then((freshLots) => setData((prev) => ({ ...prev, greenBeanLots: freshLots })))
+          .catch(() => {});
+      } catch (error: any) {
+        console.error("Failed to delete withdrawal:", error);
+        addToast({
+          type: "error",
+          message: error?.message || "Failed to delete withdrawal. Please try again.",
+        });
+      }
     }
   };
 
@@ -1349,23 +1373,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           return;
         }
 
-        // Validate against remaining weight in harvest lot
-        const availableWeight =
-          selectedHarvestLot.remainingWeightKg ?? selectedHarvestLot.weightKg;
-
-        console.log("Validation check:", {
-          parchmentWeightKg,
-          availableWeight,
-          remainingWeightKg: selectedHarvestLot.remainingWeightKg,
-          originalWeightKg: selectedHarvestLot.weightKg,
-        });
-
-        if (parchmentWeightKg > availableWeight) {
-          setFormError(
-            `Parchment weight (${parchmentWeightKg} kg) cannot exceed available harvest lot weight (${availableWeight.toFixed(2)} kg).`,
-          );
-          return;
-        }
+        // Use parchment weight as the cherry input weight so remaining weight is tracked
+        const inputCherryWeightKg = parchmentWeightKg;
         if (
           isNaN(moistureContent) ||
           moistureContent < 0 ||
@@ -1396,6 +1405,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             processType,
             processNotes,
             cropYearId: cropYearId || undefined,
+            inputCherryWeightKg,
             parchmentWeightKg,
             moistureContent,
             dryingStartDate,
@@ -1403,22 +1413,44 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             baggingDate: dryingEndDate,
           };
 
-          console.log("Creating processing batch with payload:", batchPayload);
+          const newBatch = await addProcessingBatch(batchPayload);
 
-          await addProcessingBatch(batchPayload);
+          // Build new parchment lots from the response (backend creates them
+          // when status === Completed) and push them to state immediately.
+          const newParchmentLots: ParchmentLot[] = ((newBatch as any).rawParchmentLots ?? []).map(
+            (pl: any): ParchmentLot => ({
+              id: pl.id,
+              processingBatchId: pl.processingBatchId,
+              harvestLotId: pl.harvestLotId,
+              initialWeightKg: pl.initialWeightKg,
+              currentWeightKg: pl.currentWeightKg,
+              moistureContent: pl.moistureContent,
+              processType: pl.processType,
+              status: pl.status,
+              createdAt: pl.createdAt ? new Date(pl.createdAt).toISOString() : undefined,
+            }),
+          );
 
-          console.log("Processing batch created successfully!");
+          // Update state directly from the API response to avoid a full
+          // refreshData() which would fire many concurrent DB requests and
+          // exhaust the connection pool.
+          setData((prev) => ({
+            ...prev,
+            processingBatches: [newBatch, ...prev.processingBatches],
+            parchmentLots: [...newParchmentLots, ...prev.parchmentLots],
+            harvestLots: prev.harvestLots.map((lot) =>
+              lot.id === selectedHarvestLot.id
+                ? {
+                    ...lot,
+                    remainingWeightKg: Math.max(
+                      0,
+                      (lot.remainingWeightKg ?? lot.weightKg) - inputCherryWeightKg,
+                    ),
+                  }
+                : lot,
+            ),
+          }));
 
-          // Refresh data from backend to get the updated batch and parchment lot
-          await refreshData();
-
-          console.log("Data refreshed successfully!");
-
-          // Update selected harvest lot with fresh data from context
-          // Note: After refreshData(), the context will be updated automatically
-          // We just need to close the modal and the table will show updated data
-
-          // Show success toast
           addToast({
             type: "success",
             message: "สร้าง Processing Batch สำเร็จ!",
@@ -1502,10 +1534,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           );
 
           // Update parchment lot status based on remaining weight
-          // If remaining_weight > 0 → status = Awaiting Hulling
+          // If remaining_weight > 0 → status = AwaitingHulling
           // If remaining_weight == 0 → status = Hulled
-          const newStatus: "Awaiting Hulling" | "Hulled" =
-            remainingWeight > 0 ? "Awaiting Hulling" : "Hulled";
+          const newStatus: "AwaitingHulling" | "Hulled" =
+            remainingWeight > 0 ? "AwaitingHulling" : "Hulled";
           await updateParchmentLot(selectedParchment.id, {
             status: newStatus,
             currentWeightKg: Math.round(remainingWeight * 100) / 100,
@@ -1554,65 +1586,57 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         const amountKg = parseFloat(formData.get("amountKg") as string);
         const purpose = (formData.get("purpose") as string) || "";
 
-        setData((prev) => ({
-          ...prev,
-          greenBeanLots: prev.greenBeanLots.map((gbl) => {
-            if (gbl.id !== selectedGreenBean.id) return gbl;
+        try {
+          setIsSubmitting(true);
 
-            // Generate invoice number for Sale type
-            const invoiceNumber =
-              withdrawalType === "Sale"
-                ? (() => {
-                    const year = new Date().getFullYear();
-                    const allWithdrawals = prev.greenBeanLots.flatMap(
-                      (g) => g.withdrawalHistory || [],
-                    );
-                    const invoicesThisYear = allWithdrawals.filter((w) =>
-                      w.invoiceNumber?.startsWith(`INV-${year}-`),
-                    );
-                    const nextNum = invoicesThisYear.length + 1;
-                    return `INV-${year}-${String(nextNum).padStart(3, "0")}`;
-                  })()
-                : undefined;
+          // Build sale-specific fields
+          const salePrice = withdrawalSalePrice ? parseFloat(withdrawalSalePrice) : undefined;
 
-            // Calculate total amount for Sale type
-            const salePrice = withdrawalSalePrice
-              ? parseFloat(withdrawalSalePrice)
-              : 0;
-            const totalAmount =
-              withdrawalType === "Sale" && salePrice > 0
-                ? amountKg * salePrice
-                : undefined;
-
-            const withdrawal = {
+          const { greenBeanLot: updatedLot } = await createWithdrawal(
+            selectedGreenBean.id,
+            {
               amountKg,
               withdrawalType,
               purpose,
-              date: new Date().toISOString().substring(0, 10),
-              withdrawnBy: currentUser.id,
-              withdrawnByName: currentUser.name,
-              // Add sale-specific fields only if type is Sale
               ...(withdrawalType === "Sale" && {
-                salePrice: salePrice || undefined,
+                salePrice,
                 currency: withdrawalCurrency,
                 customerName: withdrawalCustomerName || undefined,
                 deliveryAddress: withdrawalDeliveryAddress || undefined,
-                invoiceNumber,
-                totalAmount,
               }),
-            };
-            return {
-              ...gbl,
-              currentWeightKg: gbl.currentWeightKg - amountKg,
-              withdrawalHistory: [...(gbl.withdrawalHistory || []), withdrawal],
-            };
-          }),
-        }));
-        // Show success toast
-        addToast({
-          type: "success",
-          message: `Withdraw ${amountKg} kg สำเร็จ!`,
-        });
+            },
+          );
+
+          // Update local state with the server response
+          setData((prev) => ({
+            ...prev,
+            greenBeanLots: prev.greenBeanLots.map((gbl) =>
+              gbl.id === selectedGreenBean.id
+                ? { ...gbl, currentWeightKg: updatedLot.currentWeightKg, availabilityStatus: updatedLot.availabilityStatus, withdrawalHistory: updatedLot.withdrawalHistory }
+                : gbl
+            ),
+          }));
+
+          addToast({
+            type: "success",
+            message: `Withdraw ${amountKg} kg สำเร็จ!`,
+          });
+
+          // Background refresh to sync all lots
+          getAllGreenBeanLots()
+            .then((freshLots) => setData((prev) => ({ ...prev, greenBeanLots: freshLots })))
+            .catch(() => {});
+
+        } catch (error: any) {
+          console.error("Failed to create withdrawal:", error);
+          addToast({
+            type: "error",
+            message: error?.message || "Failed to create withdrawal. Please try again.",
+          });
+        } finally {
+          setIsSubmitting(false);
+        }
+
         // Reset withdrawal form state
         setWithdrawalType("Sample");
         setWithdrawalSalePrice("");
@@ -1667,9 +1691,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     }));
   };
 
-  // Only show lots that are ready for processing (not yet processed)
+  // Show lots ready for processing, including partially-processed lots that still have remaining weight
+  // effectiveRemaining: if remainingWeightKg is null/undefined it means untouched (full weightKg available)
   const readyForProcessingLots = useMemo(
-    () => data.harvestLots.filter((lot) => lot.status === "Ready for Processing"),
+    () => data.harvestLots.filter((lot) => {
+      const effectiveRemaining = lot.remainingWeightKg ?? lot.weightKg;
+      return effectiveRemaining > 0.001;
+    }),
     [data.harvestLots],
   );
 
@@ -1823,8 +1851,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     parchmentCurrentPage * ITEMS_PER_PAGE,
   );
 
-  // For Kanban view - only show lots awaiting hulling
-  const kanbanParchmentLots = processedParchmentLots.filter(p => p.status !== "Hulled");
+  // For Kanban view - respect the current status filter
+  const kanbanParchmentLots = processedParchmentLots;
   const kanbanParchmentPageCount = Math.ceil(kanbanParchmentLots.length / ITEMS_PER_PAGE);
   const paginatedKanbanParchmentLots = kanbanParchmentLots.slice(
     (parchmentCurrentPage - 1) * ITEMS_PER_PAGE,
@@ -1848,11 +1876,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         g.grade.toLowerCase().includes(greenBeanSearch.toLowerCase()),
     );
 
-    // Apply status filter (InStock = weight > 0, Depleted = weight <= 0)
+    // Apply status filter based on availabilityStatus (with weight fallback for legacy data)
     if (greenBeanStatusFilter === "InStock") {
-      filtered = filtered.filter((g) => g.currentWeightKg > 0);
+      filtered = filtered.filter((g) => g.availabilityStatus === "Available" && g.currentWeightKg > 0.001);
     } else if (greenBeanStatusFilter === "Depleted") {
-      filtered = filtered.filter((g) => g.currentWeightKg <= 0);
+      filtered = filtered.filter((g) => g.availabilityStatus === "Withdrawn" || g.currentWeightKg <= 0.001);
     }
 
     // Apply grade filter
@@ -2035,10 +2063,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-green-600">
                       {typeof lot.remainingWeightKg === "number" &&
                       typeof lot.weightKg === "number" &&
-                      lot.remainingWeightKg !== lot.weightKg
-                        ? `${(lot.remainingWeightKg ?? 0).toFixed(2)} kg (of ${lot.weightKg} kg)`
+                      Math.round(lot.remainingWeightKg * 100) / 100 !== Math.round(lot.weightKg * 100) / 100
+                        ? `${(Math.round((lot.remainingWeightKg ?? 0) * 100) / 100).toFixed(2)} kg (of ${Number(lot.weightKg).toFixed(2)} kg)`
                         : typeof lot.weightKg === "number"
-                          ? `${lot.weightKg} kg`
+                          ? `${Number(lot.weightKg).toFixed(2)} kg`
                           : "-"}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
@@ -2472,11 +2500,34 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       #{p.processingBatchId.substring(0, 6).toUpperCase()}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
-                      {(p.status === "Hulled"
-                        ? (p.initialWeightKg ?? 0)
-                        : (p.currentWeightKg ?? 0)
-                      ).toFixed(2)}{" "}
-                      kg
+                      {p.status === "Hulled" ? (
+                        <div>
+                          <span className="text-gray-700">
+                            {(p.initialWeightKg ?? 0).toFixed(2)} kg
+                          </span>
+                          {(() => {
+                            const gbOut = data.greenBeanLots
+                              .filter(g => g.parchmentLotId === p.id)
+                              .reduce((s, g) => s + (g.initialWeightKg ?? 0), 0);
+                            return gbOut > 0 ? (
+                              <span className="block text-teal-600 font-bold text-xs">
+                                → {gbOut.toFixed(2)} kg GB
+                              </span>
+                            ) : null;
+                          })()}
+                        </div>
+                      ) : (
+                        <span>
+                          {(p.currentWeightKg ?? 0).toFixed(2)} kg
+                          {typeof p.currentWeightKg === 'number' &&
+                            typeof p.initialWeightKg === 'number' &&
+                            p.currentWeightKg < p.initialWeightKg && (
+                              <span className="block text-xs text-gray-400">
+                                of {p.initialWeightKg.toFixed(2)} kg
+                              </span>
+                          )}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                       {p.moistureContent ?? 0}%
@@ -2506,7 +2557,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       <button
                         onClick={() => openModal("hullAndGrade", p)}
                         disabled={
-                          p.status === "Hulled" || p.currentWeightKg <= 0
+                          p.status === "Hulled" || (Math.round((p.currentWeightKg ?? 0) * 100) / 100) <= 0
                         }
                         className="p-2 rounded-lg text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all"
                         title="Hull & Grade"
@@ -2608,6 +2659,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   scope="col"
                   className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
                 >
+                  Parchment ID
+                </th>
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider"
+                >
                   Grade
                 </th>
                 <th
@@ -2652,7 +2709,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               {paginatedGreenBeanLots.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-6 py-8 text-center text-gray-400"
                   >
                     <Coffee className="h-12 w-12 mx-auto mb-2 opacity-30" />
@@ -2695,11 +2752,29 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           )}
                         </div>
                       </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                        {(() => {
+                          const parchment = data.parchmentLots.find(p => p.id === g.parchmentLotId);
+                          return parchment ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-xs font-medium">
+                              {formatParchmentId(parchment)}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          );
+                        })()}
+                      </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
                         {g.grade}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
-                        {(g.currentWeightKg ?? 0).toFixed(2)} kg
+                        {g.availabilityStatus === "Withdrawn" ? (
+                          <span className="text-gray-500">
+                            {(Math.round((g.initialWeightKg ?? 0) * 100) / 100).toFixed(2)} kg
+                          </span>
+                        ) : (
+                          <span>{(Math.round((g.currentWeightKg ?? 0) * 100) / 100).toFixed(2)} kg</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
                         {g.pricePerKg ? (
@@ -2713,7 +2788,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-gray-900">
                         {g.pricePerKg ? (
                           <span className="text-teal-700">
-                            {(g.pricePerKg * (g.currentWeightKg ?? 0)).toFixed(2)}{" "}
+                            {(g.pricePerKg * (Math.round((g.availabilityStatus === "Withdrawn" ? (g.initialWeightKg ?? 0) : (g.currentWeightKg ?? 0)) * 100) / 100)).toFixed(2)}{" "}
                             {g.currency || "THB"}
                           </span>
                         ) : (
@@ -2735,12 +2810,15 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 text-xs text-gray-600">
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${g.availabilityStatus === "Available" ? "bg-green-500" : "bg-gray-300"}`}
-                          ></span>
-                          {g.availabilityStatus}
-                        </span>
+                        {(() => {
+                          const effectiveStatus = (g.currentWeightKg <= 0.001 || g.availabilityStatus === "Withdrawn") ? "Withdrawn" : "Available";
+                          return (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-gray-600">
+                              <span className={`w-1.5 h-1.5 rounded-full ${effectiveStatus === "Available" ? "bg-green-500" : "bg-gray-300"}`}></span>
+                              {effectiveStatus}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-2">
@@ -2919,10 +2997,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         <span className="font-medium text-green-600">
                           {typeof lot.remainingWeightKg === "number" &&
                           typeof lot.weightKg === "number" &&
-                          lot.remainingWeightKg !== lot.weightKg
-                            ? `${(lot.remainingWeightKg ?? 0).toFixed(2)} kg (of ${lot.weightKg} kg)`
+                          Math.round(lot.remainingWeightKg * 100) / 100 !== Math.round(lot.weightKg * 100) / 100
+                            ? `${(Math.round((lot.remainingWeightKg ?? 0) * 100) / 100).toFixed(2)} kg (of ${Number(lot.weightKg).toFixed(2)} kg)`
                             : typeof lot.weightKg === "number"
-                              ? `${lot.weightKg} kg`
+                              ? `${Number(lot.weightKg).toFixed(2)} kg`
                               : "-"}
                         </span>
                       </div>
@@ -3270,7 +3348,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     {/* Actions */}
                     <button
                       onClick={() => openModal("hullAndGrade", p)}
-                      disabled={p.status === "Hulled" || p.currentWeightKg <= 0}
+                      disabled={p.status === "Hulled" || (Math.round((p.currentWeightKg ?? 0) * 100) / 100) <= 0}
                       className="w-full py-2 text-xs font-medium rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all inline-flex items-center justify-center gap-1.5"
                     >
                       <PlayCircle size={14} />
@@ -3391,11 +3469,27 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="flex items-center gap-1.5">
+                            <Coffee className="h-3 w-3" />
+                            Parchment
+                          </span>
+                          {(() => {
+                            const parchment = data.parchmentLots.find(p => p.id === g.parchmentLotId);
+                            return parchment ? (
+                              <span className="font-medium text-amber-700">
+                                {formatParchmentId(parchment)}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            );
+                          })()}
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="flex items-center gap-1.5">
                             <Scale className="h-3 w-3" />
                             Weight
                           </span>
                           <span className="font-medium text-gray-900">
-                            {(g.currentWeightKg ?? 0).toFixed(2)} kg
+                            {(Math.round((g.currentWeightKg ?? 0) * 100) / 100).toFixed(2)} kg
                           </span>
                         </div>
                         <div className="flex justify-between items-center">

@@ -102,19 +102,22 @@ export async function POST(request: NextRequest) {
       currency,
     } = validation.data as any;
 
-    // Generate next lotId (GBL-001, etc.)
-    const lastLot = await prisma.greenBeanLot.findFirst({
-      orderBy: { createdAt: 'desc' },
+    // Generate next lotId (GBL-001, etc.) by finding the highest existing GBL number
+    const allGblLots = await prisma.greenBeanLot.findMany({
+      where: { lotId: { startsWith: 'GBL-' } },
       select: { lotId: true },
     });
-    let nextNumber = 1;
-    if (lastLot?.lotId) {
-      const match = lastLot.lotId.match(/GBL-(\d+)/);
-      if (match) {
-        nextNumber = parseInt(match[1], 10) + 1;
+    let maxGbl = 0;
+    allGblLots.forEach((l) => {
+      if (l.lotId) {
+        const match = l.lotId.match(/GBL-(\d+)/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxGbl) maxGbl = num;
+        }
       }
-    }
-    const lotId = `GBL-${String(nextNumber).padStart(3, '0')}`;
+    });
+    const lotId = `GBL-${String(maxGbl + 1).padStart(3, '0')}`;
 
     const greenBeanLot = await prisma.greenBeanLot.create({
       data: {

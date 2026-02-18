@@ -14,7 +14,7 @@ export const getAllHarvestLots = async (
   status?: string
 ): Promise<HarvestLot[]> => {
   try {
-    const params: Record<string, string> = {};
+    const params: Record<string, string> = { limit: '500' };
     if (farmId) params.farmId = farmId;
     if (status) params.status = status;
 

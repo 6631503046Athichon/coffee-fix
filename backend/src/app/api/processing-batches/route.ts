@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
       dryingStartDate,
       dryingEndDate,
       baggingDate,
+      inputCherryWeightKg,
     } = body;
 
     // Validation
@@ -93,9 +94,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use transaction to create batch and update harvest lot status atomically
-    const processingBatch = await prisma.$transaction(async (tx) => {
-      // Create processing batch
+    // Use transaction to create batch and update harvest lot status atomically.
+    // Keep the transaction lean (no heavy includes inside) to avoid timeout.
+    let batchId: string;
+    await prisma.$transaction(async (tx) => {
+      // Fetch current harvest lot to calculate remaining weight
+      const harvestLot = await tx.harvestLot.findUnique({ where: { id: harvestLotId } });
+      if (!harvestLot) throw new Error("Harvest lot not found");
+
+      const cherryUsed = inputCherryWeightKg
+        ? parseFloat(String(inputCherryWeightKg))
+        : (harvestLot.remainingWeightKg ?? harvestLot.weightKg);
+      const currentRemaining = harvestLot.remainingWeightKg ?? harvestLot.weightKg;
+      const newRemainingWeight = Math.max(0, currentRemaining - cherryUsed);
+
+      // Create processing batch (no relations included inside transaction)
       const batch = await tx.processingBatch.create({
         data: {
           harvestLotId,
@@ -112,27 +125,8 @@ export async function POST(request: NextRequest) {
           dryingEndDate: dryingEndDate ? new Date(dryingEndDate) : null,
           baggingDate: baggingDate ? new Date(baggingDate) : null,
         },
-        include: {
-          harvestLot: {
-            select: {
-              id: true,
-              farmerName: true,
-              cherryVariety: true,
-              weightKg: true,
-            },
-          },
-          cropYear: {
-            select: {
-              id: true,
-              year: true,
-            },
-          },
-          dryingLogs: {
-            orderBy: { date: "asc" },
-          },
-          parchmentLots: true,
-        },
       });
+      batchId = batch.id;
 
       // If status is Completed and we have parchment data, create parchment lot
       if (status === "Completed" && parchmentWeightKg && moistureContent) {
@@ -149,13 +143,32 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Update harvest lot status to Complete when processing batch is created
+      // Update harvest lot remainingWeightKg and status
       await tx.harvestLot.update({
         where: { id: harvestLotId },
-        data: { status: "Complete" },
+        data: {
+          status: newRemainingWeight <= 0 ? "Complete" : "ReadyForProcessing",
+          remainingWeightKg: newRemainingWeight,
+        },
       });
+    }, {
+      maxWait: 10000,
+      timeout: 30000,
+    });
 
-      return batch;
+    // Fetch the full batch with relations after the transaction commits
+    const processingBatch = await prisma.processingBatch.findUnique({
+      where: { id: batchId! },
+      include: {
+        harvestLot: {
+          select: { id: true, farmerName: true, cherryVariety: true, weightKg: true },
+        },
+        cropYear: {
+          select: { id: true, year: true },
+        },
+        dryingLogs: { orderBy: { date: "asc" } },
+        parchmentLots: true,
+      },
     });
 
     return NextResponse.json(
