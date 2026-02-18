@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { ArrowLeft, User, MapPin, Weight, Calendar, Tag, Info, CheckCircle, Award, ExternalLink, Package, Coffee, Star } from 'lucide-react';
@@ -15,15 +15,36 @@ const DetailItem: React.FC<{ icon: React.ElementType; label: string; value: stri
     </div>
 );
 
-const TimelineStep: React.FC<{ icon: React.ElementType; title: string; isComplete: boolean; children: React.ReactNode; isLast?: boolean }> = ({ icon: Icon, title, isComplete, children, isLast = false }) => (
+const TimelineStep: React.FC<{
+    icon: React.ElementType;
+    title: string;
+    isComplete: boolean;
+    children: React.ReactNode;
+    details?: React.ReactNode;
+    isOpen?: boolean;
+    onToggle?: () => void;
+    isLast?: boolean;
+}> = ({ icon: Icon, title, isComplete, children, details, isOpen = false, onToggle, isLast = false }) => (
     <div className="relative flex items-start">
         {!isLast && <div className="absolute left-4 top-5 h-full w-0.5 bg-gray-200" />}
         <div className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white border-2 border-gray-300">
             {isComplete ? <CheckCircle className="h-5 w-5 text-green-500" /> : <Icon className="h-5 w-5 text-gray-400" />}
         </div>
         <div className="ml-4">
-            <h4 className={`font-semibold ${isComplete ? 'text-gray-800' : 'text-gray-500'}`}>{title}</h4>
+            <button
+                type="button"
+                onClick={onToggle}
+                className={`text-left font-semibold hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded ${isComplete ? 'text-gray-800' : 'text-gray-500'}`}
+                aria-expanded={isOpen}
+            >
+                {title}
+            </button>
             <div className="mt-1 text-sm text-gray-600">{children}</div>
+            {isOpen && details && (
+                <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+                    {details}
+                </div>
+            )}
         </div>
     </div>
 );
@@ -32,6 +53,7 @@ const HarvestLotDetail: React.FC = () => {
     const { lotId } = useParams<{ lotId: string }>();
     const navigate = useNavigate();
     const { data } = useDataContext();
+    const [openStep, setOpenStep] = useState<'harvested' | 'parchment' | 'greenBean' | 'qcScore' | null>(null);
 
     const lot = data.harvestLots.find(h => h.id === lotId);
     if (!lot) {
@@ -122,20 +144,99 @@ const HarvestLotDetail: React.FC = () => {
                 <div className="bg-white shadow-lg rounded-lg p-6">
                      <h2 className="text-lg font-bold text-gray-800 mb-4">Traceability Timeline</h2>
                      <div className="space-y-6">
-                        <TimelineStep icon={Calendar} title="Harvested" isComplete={true}>
+                        <TimelineStep
+                            icon={Calendar}
+                            title="Harvested"
+                            isComplete={true}
+                            isOpen={openStep === 'harvested'}
+                            onToggle={() => setOpenStep(prev => prev === 'harvested' ? null : 'harvested')}
+                            details={(
+                                <div className="space-y-1">
+                                    <div><span className="font-semibold">Farmer:</span> {lot.farmerName}</div>
+                                    <div><span className="font-semibold">Location:</span> {lot.farmPlotLocation}</div>
+                                    <div><span className="font-semibold">Weight:</span> {lot.weightKg} kg</div>
+                                    <div><span className="font-semibold">Status:</span> {lot.status}</div>
+                                </div>
+                            )}
+                        >
                             {lot.harvestDate}
                         </TimelineStep>
-                        <TimelineStep icon={Package} title="Parchment" isComplete={relatedParchmentLots.length > 0}>
+                        <TimelineStep
+                            icon={Package}
+                            title="Parchment"
+                            isComplete={relatedParchmentLots.length > 0}
+                            isOpen={openStep === 'parchment'}
+                            onToggle={() => setOpenStep(prev => prev === 'parchment' ? null : 'parchment')}
+                            details={relatedParchmentLots.length > 0 ? (
+                                <div className="space-y-2">
+                                    {relatedParchmentLots.map((parchment, idx) => (
+                                        <div key={parchment.id} className="rounded-md border border-gray-200 bg-white p-2">
+                                            <div className="font-semibold">Lot {idx + 1}</div>
+                                            <div>Process: {parchment.processType}</div>
+                                            <div>Weight: {parchment.currentWeightKg} kg</div>
+                                            <div>Moisture: {parchment.moistureContent}%</div>
+                                            <div>Status: {parchment.status}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div>No parchment lots yet.</div>
+                            )}
+                        >
                             {relatedParchmentLots.length > 0
                                 ? `${relatedParchmentLots[0].processType} - ${relatedParchmentLots[0].currentWeightKg} kg`
                                 : 'Pending'}
                         </TimelineStep>
-                        <TimelineStep icon={Coffee} title="Green Bean" isComplete={relatedGreenBeanLots.length > 0}>
+                        <TimelineStep
+                            icon={Coffee}
+                            title="Green Bean"
+                            isComplete={relatedGreenBeanLots.length > 0}
+                            isOpen={openStep === 'greenBean'}
+                            onToggle={() => setOpenStep(prev => prev === 'greenBean' ? null : 'greenBean')}
+                            details={relatedGreenBeanLots.length > 0 ? (
+                                <div className="space-y-2">
+                                    {relatedGreenBeanLots.map((greenBean, idx) => (
+                                        <div key={greenBean.id} className="rounded-md border border-gray-200 bg-white p-2">
+                                            <div className="font-semibold">Lot {idx + 1}</div>
+                                            <div>Grade: {greenBean.grade}</div>
+                                            <div>Weight: {greenBean.currentWeightKg} kg</div>
+                                            <div>Status: {greenBean.availabilityStatus}</div>
+                                            {greenBean.processorScore != null && (
+                                                <div>Processor Score: {greenBean.processorScore.toFixed(1)}</div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div>No green bean lots yet.</div>
+                            )}
+                        >
                             {relatedGreenBeanLots.length > 0
                                 ? `${relatedGreenBeanLots.map(g => g.grade).join(', ')} - ${relatedGreenBeanLots.reduce((sum, g) => sum + g.currentWeightKg, 0).toFixed(1)} kg`
                                 : 'Pending'}
                         </TimelineStep>
-                        <TimelineStep icon={Star} title="QC Score" isComplete={cuppingResult !== null || (mainGreenBeanLot?.cuppingScores?.length ?? 0) > 0} isLast>
+                        <TimelineStep
+                            icon={Star}
+                            title="QC Score"
+                            isComplete={cuppingResult !== null || (mainGreenBeanLot?.cuppingScores?.length ?? 0) > 0}
+                            isOpen={openStep === 'qcScore'}
+                            onToggle={() => setOpenStep(prev => prev === 'qcScore' ? null : 'qcScore')}
+                            details={(
+                                <div className="space-y-1">
+                                    {cuppingResult ? (
+                                        <>
+                                            <div><span className="font-semibold">Final Score:</span> {cuppingResult.totalScore.toFixed(2)} pts</div>
+                                            <div><span className="font-semibold">Notes:</span> {cuppingResult.finalNotes || 'N/A'}</div>
+                                        </>
+                                    ) : mainGreenBeanLot?.cuppingScores?.[0]?.score ? (
+                                        <div><span className="font-semibold">Score:</span> {mainGreenBeanLot.cuppingScores[0].score} pts</div>
+                                    ) : (
+                                        <div>QC pending.</div>
+                                    )}
+                                </div>
+                            )}
+                            isLast
+                        >
                             {cuppingResult
                                 ? `${cuppingResult.totalScore.toFixed(2)} pts`
                                 : mainGreenBeanLot?.cuppingScores?.[0]?.score
