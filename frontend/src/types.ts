@@ -78,7 +78,7 @@ export interface HarvestLot {
   remainingWeightKg?: number;
   farmPlotLocation: string;
   harvestDate: string;
-  status: "Ready for Processing" | "Complete";
+  status: "Ready for Processing" | "Complete" | "ReadyForProcessing";
   cropYearId?: string;
   createdAt?: string;
 }
@@ -138,6 +138,7 @@ export enum GreenBeanSourceType {
 }
 
 export interface GreenBeanLot {
+  lotId: string; // Human-readable lot code, e.g., GBL-001
   id: string;
   displayId?: string;
   sourceType: GreenBeanSourceType;
@@ -162,6 +163,7 @@ export interface GreenBeanLot {
   cuppingScores: { sessionId: string; score: number }[];
   processorScore?: number; // Score assigned by processor during hulling and grading
   withdrawalHistory?: {
+    id: string;
     amountKg: number;
     withdrawalType: "Sale" | "Roasting Stock" | "Sample" | "Export" | "Other";
     purpose: string; // Legacy field / additional description
@@ -390,6 +392,8 @@ export interface RoasterInventoryItem {
   greenBeanLotId: string;
   claimedWeightKg: number;
   remainingWeightKg: number;
+  inventoryId?: string; // Human-readable inventory code, e.g., INV-001
+  createdAt?: string;
 }
 
 export interface RoastBatch {

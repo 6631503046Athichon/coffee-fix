@@ -41,8 +41,8 @@ export const getAllProcessingBatches = async (
  * Create a new processing batch
  */
 export const addProcessingBatch = async (
-  batchData: Partial<ProcessingBatch>
-): Promise<ProcessingBatch> => {
+  batchData: Partial<ProcessingBatch> & { inputCherryWeightKg?: number }
+): Promise<ProcessingBatch & { rawParchmentLots?: any[] }> => {
   const response = await api.post<{ processingBatch: any; message: string }>(
     '/processing-batches',
     {
@@ -51,6 +51,7 @@ export const addProcessingBatch = async (
       processType: batchData.processType,
       processNotes: batchData.processNotes || null,
       cropYearId: batchData.cropYearId || null,
+      inputCherryWeightKg: batchData.inputCherryWeightKg ?? null,
       parchmentWeightKg: batchData.parchmentWeightKg || null,
       moistureContent: batchData.moistureContent || null,
       dryingStartDate: batchData.dryingStartDate || null,
@@ -58,7 +59,10 @@ export const addProcessingBatch = async (
       baggingDate: batchData.baggingDate || null,
     }
   );
-  return transformProcessingBatchFromBackend(response.processingBatch);
+  const batch = transformProcessingBatchFromBackend(response.processingBatch);
+  // Expose raw parchment lots so callers can update state without a round-trip
+  (batch as any).rawParchmentLots = response.processingBatch.parchmentLots ?? [];
+  return batch;
 };
 
 /**

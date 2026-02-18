@@ -12,6 +12,8 @@
     "db:seed": "cd backend && npm run db:seed"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.2",
+    "prisma": "^6.19.2",
     "resend": "^6.4.2"
   }
 }
