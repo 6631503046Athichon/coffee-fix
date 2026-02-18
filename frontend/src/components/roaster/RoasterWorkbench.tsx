@@ -186,6 +186,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                     variety: harvestLot?.cherryVariety || 'N/A',
                     process: parchmentLot?.processType || 'N/A',
                     roasterName: roasterUser?.name || 'Unknown',
+                    greenBeanDisplayId: gbl?.displayId,
                 };
             })
             .sort((a, b) => b.id.localeCompare(a.id)),
@@ -195,8 +196,12 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     const myRoasts = useMemo(() =>
         data.roastBatches
             .filter(roast => roast.roasterId === currentUser.id)
+            .map(roast => {
+                const gbl = data.greenBeanLots.find(lot => lot.id === roast.greenBeanLotId);
+                return { ...roast, greenBeanDisplayId: gbl?.displayId };
+            })
             .sort((a, b) => new Date(b.roastDate).getTime() - new Date(a.roastDate).getTime()),
-        [data.roastBatches, currentUser.id]
+        [data.roastBatches, data.greenBeanLots, currentUser.id]
     );
     // Pagination for Roast Log
     const [page, setPage] = useState(1);

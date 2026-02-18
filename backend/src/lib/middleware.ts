@@ -157,16 +157,22 @@ export function handleApiError(error: any): NextResponse {
     error?.message === 'Insufficient permissions' ||
     error?.message === 'User not found or inactive'
 
-  // Check for database connection pool errors
-  const isConnectionPoolError = 
+  // Check for database connection / pool errors
+  const isConnectionError =
     error?.message?.includes('MaxClientsInSessionMode') ||
     error?.message?.includes('max clients reached') ||
-    error?.code === 'P1001' // Prisma connection error code
+    error?.code === 'P1001' || // Can't reach database server
+    error?.code === 'P1008' || // Operations timed out
+    error?.code === 'P1017' || // Server has closed the connection
+    error?.code === 'P2024' || // Timed out fetching connection from pool
+    error?.message?.includes('10054') ||
+    error?.message?.includes('ECONNRESET') ||
+    error?.message?.includes('ECONNREFUSED')
 
-  if (isConnectionPoolError) {
-    console.error('Database Connection Pool Error:', error)
+  if (isConnectionError) {
+    console.error('Database Connection Error:', error?.code || '', error?.message?.substring(0, 200))
     return errorResponse(
-      'Database connection pool exhausted. Please configure connection pooling. See CONNECTION_POOLING.md for details.',
+      'Database temporarily unavailable. Please try again in a moment.',
       503
     )
   }

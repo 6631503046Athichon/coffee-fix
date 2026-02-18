@@ -41,8 +41,6 @@ export async function nextDisplayId(
       displayId: { startsWith: yearPrefix },
     },
     select: { displayId: true },
-    orderBy: { createdAt: 'desc' },
-    take: 20,
   })
 
   let maxNum = 0

@@ -1,7 +1,40 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
+
+// Transient Prisma error codes that should trigger a retry
+const TRANSIENT_ERROR_CODES = new Set([
+  'P1001', // Can't reach database server
+  'P1008', // Operations timed out
+  'P1017', // Server has closed the connection
+  'P2024', // Timed out fetching a new connection from the connection pool
+])
+
+function isTransientError(error: unknown): boolean {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return TRANSIENT_ERROR_CODES.has(error.code)
+  }
+  if (error instanceof Prisma.PrismaClientInitializationError) {
+    return true
+  }
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase()
+    return msg.includes('10054') ||
+           msg.includes('connection reset') ||
+           msg.includes('connection forcibly closed') ||
+           msg.includes('econnreset') ||
+           msg.includes('econnrefused')
+  }
+  return false
+}
+
+function delay(attempt: number): Promise<void> {
+  const ms = Math.min(500 * Math.pow(2, attempt), 2000)
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+const MAX_RETRIES = 2
 
 const prismaClientSingleton = () => {
-  return new PrismaClient({
+  const client = new PrismaClient({
     log: ['error', 'warn'],
     datasources: {
       db: {
@@ -9,12 +42,32 @@ const prismaClientSingleton = () => {
       },
     },
   })
-}
 
-// Append connection_limit for serverless if not already present in DATABASE_URL
-if (process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('connection_limit')) {
-  const separator = process.env.DATABASE_URL.includes('?') ? '&' : '?';
-  process.env.DATABASE_URL = `${process.env.DATABASE_URL}${separator}connection_limit=10`;
+  return client.$extends({
+    query: {
+      async $allOperations({ operation, model, args, query }) {
+        let lastError: unknown
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            return await query(args)
+          } catch (error) {
+            lastError = error
+            if (attempt < MAX_RETRIES && isTransientError(error)) {
+              console.warn(
+                `[Prisma Retry] ${model}.${operation} failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${
+                  error instanceof Error ? error.message.substring(0, 150) : String(error)
+                }`
+              )
+              await delay(attempt)
+              continue
+            }
+            throw error
+          }
+        }
+        throw lastError
+      },
+    },
+  })
 }
 
 declare const globalThis: {
@@ -22,24 +75,12 @@ declare const globalThis: {
 } & typeof global;
 
 // Singleton pattern - ใช้ instance เดียวกันทั้งแอป
-// ใน serverless (Vercel) แต่ละ invocation อาจสร้าง instance ใหม่
-// แต่เราจะเก็บไว้ใน globalThis เพื่อ reuse connection
-// 
-// IMPORTANT: For Vercel deployment, you MUST use a connection pooler:
-// 1. Use Prisma Accelerate (recommended): https://www.prisma.io/docs/accelerate
-// 2. Or use PgBouncer with your DATABASE_URL:
-//    postgresql://user:pass@host:port/db?pgbouncer=true&connection_limit=1
-// 3. Or use Vercel Postgres with connection pooling enabled
 const prisma = globalThis.prismaGlobal ?? prismaClientSingleton()
 
-// เก็บ instance ไว้ใน globalThis ทั้ง development และ production
-// เพื่อ reuse connection ใน serverless environment
-// This is critical for Vercel serverless functions
 if (!globalThis.prismaGlobal) {
   globalThis.prismaGlobal = prisma
 }
 
-// Cleanup on process exit (optional, but good practice)
 if (process.env.NODE_ENV !== 'production') {
   process.on('beforeExit', async () => {
     await prisma.$disconnect()
@@ -47,4 +88,3 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 export default prisma
-

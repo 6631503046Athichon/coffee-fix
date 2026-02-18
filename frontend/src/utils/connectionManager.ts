@@ -41,8 +41,8 @@ async function probeBackend(): Promise<void> {
   const timeoutId = setTimeout(() => controller.abort(), RECOVERY_PROBE_TIMEOUT_MS)
 
   try {
-    // Any HTTP response (200, 401, 403, 404 …) means the server is alive.
-    await fetch(`${API_BASE_URL}/farms`, {
+    // Lightweight health check — no auth needed, minimal DB overhead.
+    await fetch(`${API_BASE_URL}/health`, {
       method: 'GET',
       signal: controller.signal,
     })

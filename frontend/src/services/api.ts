@@ -54,8 +54,12 @@ async function request<T>(
       return request<T>(endpoint, options, retries - 1);
     }
 
-    // Any non-503 HTTP response (or final 503) means the server is reachable
-    connectionManager.reportSuccess()
+    // Persistent 503 after retries means DB is truly down
+    if (response.status === 503) {
+      connectionManager.reportFailure()
+    } else {
+      connectionManager.reportSuccess()
+    }
 
     if (!response.ok) {
       // Handle 401 Unauthorized - token expired or invalid

@@ -767,6 +767,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const onHarvestLotSearch = useCallback((v: string) => {
     setHarvestLotSearch(v);
     setHarvestLotPage(1);
+    setHarvestCardPage(1);
   }, []);
   const onCompletedBatchSearch = useCallback((v: string) => {
     setCompletedBatchSearch(v);
@@ -1677,12 +1678,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   );
 
   const filteredHarvestLots = useMemo(() => {
+    const search = harvestLotSearch.toLowerCase();
     return readyForProcessingLots.filter(
       (lot) =>
-        lot.id.toLowerCase().includes(harvestLotSearch.toLowerCase()) ||
-        lot.cherryVariety
-          .toLowerCase()
-          .includes(harvestLotSearch.toLowerCase()),
+        formatHarvestLotId(lot).toLowerCase().includes(search) ||
+        lot.cherryVariety.toLowerCase().includes(search),
     );
   }, [readyForProcessingLots, harvestLotSearch]);
 
@@ -1707,18 +1707,23 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
   // Card View pagination for Incoming Harvest Lots
   const harvestCardTotalPages = Math.ceil(
-    readyForProcessingLots.length / CARD_PAGE_SIZE,
+    filteredHarvestLots.length / CARD_PAGE_SIZE,
   );
   const paginatedHarvestCards = useMemo(() => {
+    const sorted = [...filteredHarvestLots].sort(
+      (a, b) =>
+        new Date(b.harvestDate || 0).getTime() -
+        new Date(a.harvestDate || 0).getTime(),
+    );
     const startIndex = (harvestCardPage - 1) * CARD_PAGE_SIZE;
-    return readyForProcessingLots.slice(
+    return sorted.slice(
       startIndex,
       startIndex + CARD_PAGE_SIZE,
     );
-  }, [readyForProcessingLots, harvestCardPage]);
+  }, [filteredHarvestLots, harvestCardPage]);
 
   const filteredCompletedBatches = useMemo(() => {
-    const searchValue = completedBatchSearch.toLowerCase();
+    const search = completedBatchSearch.toLowerCase();
     return data.processingBatches
       .filter((b) => b.status === ProcessingBatchStatus.Completed)
       .filter((b) =>
@@ -1728,10 +1733,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       )
       .filter(
         (b) =>
-          b.id.toLowerCase().includes(searchValue) ||
-          b.harvestLotId.toLowerCase().includes(searchValue) ||
-          b.processType.toLowerCase().includes(searchValue) ||
-          (b.processNotes || "").toLowerCase().includes(searchValue),
+          formatProcessingBatchId(b).toLowerCase().includes(search) ||
+          b.processType.toLowerCase().includes(search) ||
+          (b.processNotes || "").toLowerCase().includes(search),
       );
   }, [
     data.processingBatches,
@@ -1774,10 +1778,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
 
   const processedParchmentLots = useMemo(() => {
+    const search = parchmentSearch.toLowerCase();
     let filtered = data.parchmentLots.filter(
       (p) =>
-        p.id.toLowerCase().includes(parchmentSearch.toLowerCase()) ||
-        p.status.toLowerCase().includes(parchmentSearch.toLowerCase()),
+        formatParchmentId(p).toLowerCase().includes(search) ||
+        p.status.toLowerCase().includes(search),
     );
 
     // Apply status filter
@@ -1847,10 +1852,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   }, [data.greenBeanLots, processorUser]);
 
   const processedGreenBeanLots = useMemo(() => {
+    const search = greenBeanSearch.toLowerCase();
     let filtered = enrichedGreenBeanLots.filter(
       (g) =>
-        g.id.toLowerCase().includes(greenBeanSearch.toLowerCase()) ||
-        g.grade.toLowerCase().includes(greenBeanSearch.toLowerCase()),
+        formatGreenBeanId(g).toLowerCase().includes(search) ||
+        g.grade.toLowerCase().includes(search),
     );
 
     // Apply status filter (InStock = weight > 0, Depleted = weight <= 0)
@@ -2244,7 +2250,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           </div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                          {formatHarvestLotId({ id: batch.harvestLotId })}
+                          {formatHarvestLotId(data.harvestLots.find(h => h.id === batch.harvestLotId) || { id: batch.harvestLotId })}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <span
@@ -2474,7 +2480,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </div>
                       </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                      {formatProcessingBatchId({ id: p.processingBatchId })}
+                      {formatProcessingBatchId(data.processingBatches.find(b => b.id === p.processingBatchId) || { id: p.processingBatchId })}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
                       {(p.status === "Hulled"
@@ -2898,9 +2904,17 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 {readyForProcessingLots.length}
               </span>
             </div>
+            <div className="relative mt-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+              <DebouncedSearchInput
+                placeholder="Search lots..."
+                onSearch={onHarvestLotSearch}
+                className="pl-8 w-full border border-green-200 bg-white rounded-lg py-1.5 px-3 text-xs focus:ring-1 focus:ring-green-300 focus:border-green-300 outline-none"
+              />
+            </div>
           </div>
           <div className="p-3 h-[400px] overflow-y-auto">
-            {readyForProcessingLots.length > 0 ? (
+            {filteredHarvestLots.length > 0 ? (
               <div className="space-y-2">
                 {paginatedHarvestCards.map((lot) => {
                   const isNewLot = isRecentItem(lot.createdAt ?? lot.harvestDate);
@@ -4850,7 +4864,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                   {formatParchmentId(sourceParchment)}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-1">
-                                  Batch {sourceBatch?.displayId || formatProcessingBatchId({ id: sourceParchment.processingBatchId })}
+                                  Batch {formatProcessingBatchId(sourceBatch || { id: sourceParchment.processingBatchId })}
                                 </p>
                               </div>
                               <div>

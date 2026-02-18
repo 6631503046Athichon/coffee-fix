@@ -34,15 +34,10 @@ export const formatDisplayId = (
     }
   }
 
-  // Use first 6 chars of UUID as unique identifier
-  // This gives us 16^6 = 16,777,216 unique combinations
-  const shortId = item.id.substring(0, 6).toUpperCase();
-
-  // Convert hex to number and take last 3 digits
-  const numericId = parseInt(shortId, 16) % 1000;
-  const paddedNumber = String(numericId).padStart(3, '0');
-
-  return `${prefix}-${year}-${paddedNumber}`;
+  // Use first 4 hex chars of UUID as a short hash, prefixed with #
+  // This makes it visually distinct from sequential IDs like GBL-2026-42
+  const shortHash = item.id.substring(0, 4).toLowerCase();
+  return `${prefix}-${year}-#${shortHash}`;
 };
 
 /**
