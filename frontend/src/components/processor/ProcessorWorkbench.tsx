@@ -71,7 +71,6 @@ import {
   Minus,
 } from "lucide-react";
 import { addPricingHistory } from "../../services/salesService";
-import { getAllCustomers } from "../../services/customerService";
 import {
   addProcessingBatch,
   updateProcessingBatch,
@@ -675,6 +674,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     useState<ParchmentLot | null>(null);
   const [selectedHarvestLot, setSelectedHarvestLot] =
     useState<HarvestLot | null>(null);
+  const [parchmentWeightInput, setParchmentWeightInput] = useState('');
   const [selectedGreenBean, setSelectedGreenBean] =
     useState<GreenBeanLot | null>(null);
   const [selectedGreenBeanForHistory, setSelectedGreenBeanForHistory] =
@@ -689,9 +689,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Customer Management State
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [customersLoading, setCustomersLoading] = useState(false);
+  // Customers from global context
+  const customers = data.customers;
 
   // Withdraw Stock Modal State
   const [withdrawalType, setWithdrawalType] = useState<
@@ -768,6 +767,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const onHarvestLotSearch = useCallback((v: string) => {
     setHarvestLotSearch(v);
     setHarvestLotPage(1);
+    setHarvestCardPage(1);
   }, []);
   const onCompletedBatchSearch = useCallback((v: string) => {
     setCompletedBatchSearch(v);
@@ -854,30 +854,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     return "Washed"; // Default fallback
   });
 
-  // Load customers on component mount
-  useEffect(() => {
-    const loadCustomers = async () => {
-      try {
-        setCustomersLoading(true);
-        const customersList = await getAllCustomers();
-        setCustomers(customersList);
-      } catch (error) {
-        console.error("Failed to load customers:", error);
-        // Fallback to empty array - user can still type customer name manually
-        setCustomers([]);
-      } finally {
-        setCustomersLoading(false);
-      }
-    };
-
-    // Only load customers if user has access (Admin or Roaster)
-    if (
-      currentUser.roles?.includes(UserRole.Admin) ||
-      currentUser.roles?.includes(UserRole.Roaster)
-    ) {
-      loadCustomers();
-    }
-  }, [currentUser.roles]);
 
   // Customer options for dropdown
   const customerOptions = useMemo(() => {
@@ -1654,6 +1630,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const openModal = (type: string, item: any) => {
     if (type === "startProcessing") {
       setSelectedHarvestLot(item);
+      setParchmentWeightInput('');
       // Auto-select crop year from harvest lot if available, otherwise default to current
       if (item?.cropYearId) {
         setCropYearId(item.cropYearId);
@@ -1701,12 +1678,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   );
 
   const filteredHarvestLots = useMemo(() => {
+    const search = harvestLotSearch.toLowerCase();
     return readyForProcessingLots.filter(
       (lot) =>
-        lot.id.toLowerCase().includes(harvestLotSearch.toLowerCase()) ||
-        lot.cherryVariety
-          .toLowerCase()
-          .includes(harvestLotSearch.toLowerCase()),
+        formatHarvestLotId(lot).toLowerCase().includes(search) ||
+        lot.cherryVariety.toLowerCase().includes(search),
     );
   }, [readyForProcessingLots, harvestLotSearch]);
 
@@ -1731,18 +1707,23 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
   // Card View pagination for Incoming Harvest Lots
   const harvestCardTotalPages = Math.ceil(
-    readyForProcessingLots.length / CARD_PAGE_SIZE,
+    filteredHarvestLots.length / CARD_PAGE_SIZE,
   );
   const paginatedHarvestCards = useMemo(() => {
+    const sorted = [...filteredHarvestLots].sort(
+      (a, b) =>
+        new Date(b.harvestDate || 0).getTime() -
+        new Date(a.harvestDate || 0).getTime(),
+    );
     const startIndex = (harvestCardPage - 1) * CARD_PAGE_SIZE;
-    return readyForProcessingLots.slice(
+    return sorted.slice(
       startIndex,
       startIndex + CARD_PAGE_SIZE,
     );
-  }, [readyForProcessingLots, harvestCardPage]);
+  }, [filteredHarvestLots, harvestCardPage]);
 
   const filteredCompletedBatches = useMemo(() => {
-    const searchValue = completedBatchSearch.toLowerCase();
+    const search = completedBatchSearch.toLowerCase();
     return data.processingBatches
       .filter((b) => b.status === ProcessingBatchStatus.Completed)
       .filter((b) =>
@@ -1752,10 +1733,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       )
       .filter(
         (b) =>
-          b.id.toLowerCase().includes(searchValue) ||
-          b.harvestLotId.toLowerCase().includes(searchValue) ||
-          b.processType.toLowerCase().includes(searchValue) ||
-          (b.processNotes || "").toLowerCase().includes(searchValue),
+          formatProcessingBatchId(b).toLowerCase().includes(search) ||
+          b.processType.toLowerCase().includes(search) ||
+          (b.processNotes || "").toLowerCase().includes(search),
       );
   }, [
     data.processingBatches,
@@ -1798,10 +1778,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
 
   const processedParchmentLots = useMemo(() => {
+    const search = parchmentSearch.toLowerCase();
     let filtered = data.parchmentLots.filter(
       (p) =>
-        p.id.toLowerCase().includes(parchmentSearch.toLowerCase()) ||
-        p.status.toLowerCase().includes(parchmentSearch.toLowerCase()),
+        formatParchmentId(p).toLowerCase().includes(search) ||
+        p.status.toLowerCase().includes(search),
     );
 
     // Apply status filter
@@ -1871,10 +1852,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   }, [data.greenBeanLots, processorUser]);
 
   const processedGreenBeanLots = useMemo(() => {
+    const search = greenBeanSearch.toLowerCase();
     let filtered = enrichedGreenBeanLots.filter(
       (g) =>
-        g.id.toLowerCase().includes(greenBeanSearch.toLowerCase()) ||
-        g.grade.toLowerCase().includes(greenBeanSearch.toLowerCase()),
+        formatGreenBeanId(g).toLowerCase().includes(search) ||
+        g.grade.toLowerCase().includes(search),
     );
 
     // Apply status filter (InStock = weight > 0, Depleted = weight <= 0)
@@ -2268,7 +2250,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           </div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                          {formatHarvestLotId({ id: batch.harvestLotId })}
+                          {formatHarvestLotId(data.harvestLots.find(h => h.id === batch.harvestLotId) || { id: batch.harvestLotId })}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           <span
@@ -2382,7 +2364,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 <DebouncedSearchInput
                   placeholder="Search..."
                   onSearch={onParchmentSearch}
-                  className="pl-9 w-full border border-gray-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-amber-200 focus:border-amber-300 outline-none transition-all"
+                  className="pl-9 w-full border border-gray-200 bg-white rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300 outline-none transition-all"
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -2498,7 +2480,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </div>
                       </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                      {formatProcessingBatchId({ id: p.processingBatchId })}
+                      {formatProcessingBatchId(data.processingBatches.find(b => b.id === p.processingBatchId) || { id: p.processingBatchId })}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
                       {(p.status === "Hulled"
@@ -2922,9 +2904,17 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 {readyForProcessingLots.length}
               </span>
             </div>
+            <div className="relative mt-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+              <DebouncedSearchInput
+                placeholder="Search lots..."
+                onSearch={onHarvestLotSearch}
+                className="pl-8 w-full border border-green-200 bg-white rounded-lg py-1.5 px-3 text-xs focus:ring-1 focus:ring-green-300 focus:border-green-300 outline-none"
+              />
+            </div>
           </div>
           <div className="p-3 h-[400px] overflow-y-auto">
-            {readyForProcessingLots.length > 0 ? (
+            {filteredHarvestLots.length > 0 ? (
               <div className="space-y-2">
                 {paginatedHarvestCards.map((lot) => {
                   const isNewLot = isRecentItem(lot.createdAt ?? lot.harvestDate);
@@ -3598,20 +3588,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="text-right">
-                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                            {selectedHarvestLot.remainingWeightKg != null ? "Remaining" : "Weight"}
-                          </p>
-                          <p className="text-lg font-bold text-green-600 leading-tight">
-                            {selectedHarvestLot.remainingWeightKg != null
-                              ? selectedHarvestLot.remainingWeightKg.toFixed(2)
-                              : typeof selectedHarvestLot.weightKg === "number"
-                                ? selectedHarvestLot.weightKg
-                                : "-"}
-                            <span className="text-xs font-normal text-gray-400 ml-1">kg</span>
-                          </p>
-                        </div>
-                        <div className="w-px h-8 bg-gray-200" />
-                        <div className="text-right">
                           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Variety</p>
                           <p className="text-sm font-bold text-gray-800 leading-tight">{selectedHarvestLot.cherryVariety}</p>
                         </div>
@@ -3622,6 +3598,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </div>
                       </div>
                     </div>
+
 
                     <div className="space-y-4">
                       {/* Process Type */}
@@ -3672,9 +3649,49 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           name="processNotes"
                           rows={2}
                           placeholder="e.g., Ferment 24h in sealed tank, raised-bed drying..."
-                          className="w-full border-2 border-gray-200 rounded-xl py-2.5 px-4 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all resize-none"
+                          className="w-full border border-gray-300 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all resize-none"
                         />
                       </div>
+
+                      {/* Weight Info Bar */}
+                      {(() => {
+                        const available = selectedHarvestLot.remainingWeightKg ?? selectedHarvestLot.weightKg ?? 0;
+                        const parchmentVal = parseFloat(parchmentWeightInput) || 0;
+                        const remaining = available - parchmentVal;
+                        const pct = available > 0 ? Math.max(0, Math.round((remaining / available) * 100)) : 100;
+                        const isOver = parchmentVal > available;
+                        return (
+                          <div className={`rounded-xl p-3 border ${isOver ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Cherry Weight Available</span>
+                              <span className="text-sm font-bold text-gray-800">{available.toFixed(2)} kg</span>
+                            </div>
+                            <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mb-2">
+                              <div
+                                className={`h-full rounded-full transition-all duration-300 ${isOver ? 'bg-red-500' : 'bg-green-500'}`}
+                                style={{ width: `${isOver ? 100 : pct}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-gray-400 uppercase tracking-wide">Used</span>
+                                <span className="text-xs font-semibold text-gray-700">{parchmentVal > 0 ? parchmentVal.toFixed(2) : '0.00'} kg</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-gray-400 uppercase tracking-wide">Remaining</span>
+                                <span className={`text-xs font-semibold ${isOver ? 'text-red-600' : 'text-green-600'}`}>
+                                  {remaining.toFixed(2)} kg
+                                </span>
+                              </div>
+                            </div>
+                            {isOver && (
+                              <p className="text-xs text-red-600 mt-1.5 font-medium">
+                                Parchment weight exceeds available cherry weight
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* Parchment Weight + Moisture Row */}
                       <div className="grid grid-cols-2 gap-3">
@@ -3689,7 +3706,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             name="parchmentWeightKg"
                             placeholder="e.g., 85.0"
                             required
-                            className="block w-full h-[46px] border-2 border-gray-200 rounded-xl px-4 text-lg font-bold text-gray-800 focus:ring-2 focus:ring-green-500 focus:border-green-400 transition-all"
+                            value={parchmentWeightInput}
+                            onChange={(e) => setParchmentWeightInput(e.target.value)}
+                            className="block w-full h-[46px] border border-gray-300 rounded-xl px-4 text-lg font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500 transition-all"
                           />
                         </div>
                         <div>
@@ -3704,7 +3723,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             name="moistureContent"
                             placeholder="e.g., 12.0"
                             required
-                            className="block w-full h-[46px] border-2 border-gray-200 rounded-xl px-4 text-lg font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all"
+                            className="block w-full h-[46px] border border-gray-300 rounded-xl px-4 text-lg font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
                           />
                         </div>
                       </div>
@@ -3802,7 +3821,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             value={totalGreenWeight}
                             readOnly
                             placeholder="Enter weights below"
-                            className="block w-full h-[46px] border-2 border-gray-200 rounded-xl px-4 text-lg font-bold bg-gray-50 text-green-700 cursor-not-allowed"
+                            className="block w-full h-[46px] border border-gray-300 rounded-xl px-4 text-lg font-bold bg-gray-50 text-green-700 cursor-not-allowed"
                           />
                           {exceedsParchmentWeight && (
                             <div className="mt-2 flex items-center gap-2 bg-red-50 rounded-lg p-2.5 border border-red-200">
@@ -3864,7 +3883,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                     )
                                   }
                                   required
-                                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500"
                                 />
                                 <input
                                   type="number"
@@ -3878,7 +3897,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                       ),
                                     )
                                   }
-                                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500"
                                 />
                               </div>
                               <button
@@ -4056,7 +4075,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                     setWithdrawalCustomerId("");
                                   }}
                                   placeholder="Or type name..."
-                                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                                 />
                               </div>
                             ) : (
@@ -4065,7 +4084,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                 value={withdrawalCustomerName}
                                 onChange={(e) => setWithdrawalCustomerName(e.target.value)}
                                 placeholder="Customer name..."
-                                className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                               />
                             )}
                           </div>
@@ -4078,7 +4097,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               value={withdrawalDeliveryAddress}
                               onChange={(e) => setWithdrawalDeliveryAddress(e.target.value)}
                               placeholder="123 Main St, City"
-                              className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                             />
                           </div>
                         </div>
@@ -4093,7 +4112,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               value={withdrawalSalePrice}
                               onChange={(e) => setWithdrawalSalePrice(e.target.value)}
                               placeholder="0.00"
-                              className="flex-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              className="flex-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                             />
                             <Select
                               value={withdrawalCurrency}
@@ -4148,7 +4167,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           value={withdrawalAmount}
                           onChange={(e) => setWithdrawalAmount(e.target.value)}
                           placeholder="0.0"
-                          className="block w-full h-[46px] border-2 border-gray-200 rounded-xl px-4 text-lg font-bold text-gray-800 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-400 transition-all"
+                          className="block w-full h-[46px] border border-gray-300 rounded-xl px-4 text-lg font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                         />
                       </div>
                       <div className="col-span-3">
@@ -4159,7 +4178,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           type="text"
                           name="purpose"
                           placeholder="e.g., Order #123, Sample roast..."
-                          className="block w-full h-[46px] border-2 border-gray-200 rounded-xl px-4 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-400 transition-all"
+                          className="block w-full h-[46px] border border-gray-300 rounded-xl px-4 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                         />
                       </div>
                     </div>
@@ -4312,7 +4331,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                         setWithdrawalCustomerId("");
                                       }}
                                       placeholder="Or type name..."
-                                      className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                      className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                                     />
                                   </div>
                                 ) : (
@@ -4323,7 +4342,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                       setWithdrawalCustomerName(e.target.value)
                                     }
                                     placeholder="Customer name..."
-                                    className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                                   />
                                 )}
                               </div>
@@ -4338,7 +4357,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                     setWithdrawalDeliveryAddress(e.target.value)
                                   }
                                   placeholder="123 Main St, City"
-                                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                                 />
                               </div>
                             </div>
@@ -4355,7 +4374,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                     setWithdrawalSalePrice(e.target.value)
                                   }
                                   placeholder="0.00"
-                                  className="flex-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  className="flex-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                                 />
                                 <Select
                                   value={withdrawalCurrency}
@@ -4378,7 +4397,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             rows={2}
                             defaultValue={entry.notes || entry.purpose || ""}
                             placeholder="Add or edit notes..."
-                            className="block w-full border-2 border-gray-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-400 transition-all resize-none"
+                            className="block w-full border border-gray-300 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition-all resize-none"
                           />
                         </div>
                       </>
@@ -4440,7 +4459,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       QC Score
                     </h2>
                     <p className="text-base text-gray-600 mt-1">
-                      Quality Control for Lot #{scoringLot.id}
+                      Quality Control for Lot #{scoringLot.displayId || scoringLot.id.substring(0, 8).toUpperCase()}
                     </p>
                   </div>
                 </div>
@@ -4518,7 +4537,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         onChange={(e) => setSimpleQcScore(e.target.value)}
                         required
                         placeholder="Enter score"
-                        className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-lg font-semibold text-center focus:ring-2 focus:ring-amber-500 focus:border-amber-500 shadow-sm transition-all"
+                        className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-lg font-semibold text-center focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm transition-all"
                       />
                       {parseFloat(simpleQcScore) >= 80 && (
                         <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -4710,7 +4729,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     placeholder="Describe flavor notes, aroma, body, aftertaste..."
-                    className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-base focus:ring-2 focus:ring-amber-500 focus:border-amber-500 shadow-sm transition-all resize-none"
+                    className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-base focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm transition-all resize-none"
                   ></textarea>
                 </div>
 
@@ -4845,7 +4864,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                   {formatParchmentId(sourceParchment)}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-1">
-                                  Batch {sourceBatch?.displayId || formatProcessingBatchId({ id: sourceParchment.processingBatchId })}
+                                  Batch {formatProcessingBatchId(sourceBatch || { id: sourceParchment.processingBatchId })}
                                 </p>
                               </div>
                               <div>

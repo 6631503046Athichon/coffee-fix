@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { HarvestLot, Farm, CropYear, UserRole, SCA_ATTRIBUTES } from '../../types';
-import { BarChart, Weight, Wind, Award, MapPin, Leaf, TrendingUp, Clock, ArrowRight, Flame, Droplets, FlaskConical } from 'lucide-react';
+import { BarChart, Weight, Wind, Award, MapPin, Leaf, TrendingUp, Clock, ArrowRight, ChevronRight, Flame, Droplets, FlaskConical } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer } from 'recharts';
 import Select from '../common/Select';
@@ -449,7 +449,7 @@ const FarmerDashboard: React.FC = () => {
                   onClick={() => navigate('/harvest-lots')}
                   className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                 >
-                  View All →
+                  View All <ChevronRight className="inline w-4 h-4" />
                 </button>
               )}
             </div>

@@ -9,6 +9,7 @@ export type InventoryDisplayItem = RoasterInventoryItem & {
   variety: string;
   process: string;
   roasterName?: string;
+  greenBeanDisplayId?: string;
 };
 
 interface InventoryTableProps {
@@ -69,7 +70,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({ items, onLogRoast, show
                 >
                   <td className="px-5 py-4">
                     <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-gray-100 text-sm font-mono font-medium text-gray-800" title={item.greenBeanLotId}>
-                      {formatGreenBeanId({ id: item.greenBeanLotId })}
+                      {formatGreenBeanId({ id: item.greenBeanLotId, displayId: item.greenBeanDisplayId })}
                     </span>
                   </td>
                   {showRoasterName && (

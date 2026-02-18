@@ -49,6 +49,10 @@ export function handleApiError(error: unknown, operation: string): string {
   return errorMessage;
 }
 
+// Throttle connection error logging to reduce console noise
+let lastConnectionErrorTime = 0;
+const CONNECTION_ERROR_THROTTLE_MS = 30_000; // 30 seconds
+
 /**
  * Handle API errors and log to console
  * @param error - The error object
@@ -60,6 +64,24 @@ export function handleApiErrorWithFallback<T>(
   options: ErrorHandlerOptions
 ): T {
   const errorMessage = handleApiError(error, options.operation);
+
+  // Throttle connection error logging: only log once per 30 seconds
+  const isConnectionError = errorMessage.includes('Server unavailable') ||
+                            errorMessage.includes('Cannot connect') ||
+                            errorMessage.includes('Request timeout');
+
+  if (isConnectionError) {
+    const now = Date.now();
+    if (now - lastConnectionErrorTime < CONNECTION_ERROR_THROTTLE_MS) {
+      // Silently return fallback without logging
+      if (options.fallbackValue !== undefined) {
+        return options.fallbackValue;
+      }
+      throw new Error(errorMessage);
+    }
+    lastConnectionErrorTime = now;
+  }
+
   console.error(errorMessage, error);
 
   if (options.fallbackValue !== undefined) {

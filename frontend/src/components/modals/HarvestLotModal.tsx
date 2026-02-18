@@ -150,15 +150,17 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
       setFormErrors({});
       setSuccessMessage(null);
 
-      // Auto-select current production year
-      if (!cropYearId && data.cropYears.length > 0) {
+      // Auto-select current production year as default
+      if (data.cropYears.length > 0) {
         const today = new Date();
         const currentYear = data.cropYears.find(y => {
           const start = new Date(y.startDate);
           const end = new Date(y.endDate);
           return today >= start && today <= end;
         });
-        if (currentYear) {
+        // เลือก current year เป็นค่าเริ่มต้นเสมอ ถ้ายังไม่ได้เลือก หรือค่าเก่าไม่ตรงกับ crop year ที่มีอยู่
+        const validSelection = cropYearId && data.cropYears.some(y => y.id === cropYearId);
+        if (currentYear && !validSelection) {
           setCropYearId(currentYear.id);
         }
       }

@@ -8,25 +8,21 @@ import { UserRole, CuppingSessionType, Customer } from './types';
 import { MOCK_DATA } from './constants';
 import { DataContext } from './hooks/useDataContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { ToastProvider } from './contexts/ToastContext';
+import { ToastProvider, useToast } from './contexts/ToastContext';
+import { connectionManager } from './utils/connectionManager';
 import ToastContainer from './components/common/ToastContainer';
-import { getAllSoilAnalyses } from './services/soilAnalysisService';
-import { getAllWeatherRecords } from './services/weatherService';
 import { initWeatherAutoFetchService, stopWeatherAutoFetchService } from './services/weatherAutoFetchService';
-import { getAllCustomers as getAllCustomersFromBackend } from './services/customerService';
 import { getAllSaleOrders, getAllInvoices, getAllPricingHistory, initializeCustomers, initializeSaleOrders, initializeInvoices, initializePricingHistory } from './services/salesService';
-import { getAllActivityTypes, initializeActivityTypes } from './services/activityTypeService';
-import { getAllProcessTypes, initializeProcessTypes, resetProcessTypes } from './services/processTypeService';
-import { getAllFarms, initializeFarms } from './services/farmService';
-import { getAllHarvestLots } from './services/harvestLotService';
-import { getAllGAPLogs } from './services/gapLogService';
-import { getAllCropYears } from './services/cropYearService';
-import { getAllProcessingBatches } from './services/processingBatchService';
-import { getAllParchmentLots } from './services/parchmentLotService';
-import { getAllGreenBeanLots } from './services/greenBeanLotService';
-import { getAllRoasterInventory, getAllRoastBatches } from './services/roasterService';
-import { getAllUsers } from './services/userService';
-import { batchedPromiseAll } from './utils/batchedFetch';
+import { initializeActivityTypes } from './services/activityTypeService';
+import { initializeProcessTypes, resetProcessTypes } from './services/processTypeService';
+import { initializeFarms } from './services/farmService';
+import { api, bulkLoadPhase1, bulkLoadPhase2 } from './services/api';
+import { transformFarmFromBackend, transformHarvestLotFromBackend, transformSoilAnalysisFromBackend, transformWeatherRecordFromBackend, transformGAPLogFromBackend } from './services/utils/transformers';
+import { transformProcessingBatchFromBackend } from './services/processingBatchService';
+import { transformParchmentLotFromBackend } from './services/parchmentLotService';
+import { transformGreenBeanLotFromBackend } from './services/greenBeanLotService';
+import { transformCustomerFromBackend } from './services/customerService';
+import { transformInventoryItem, transformRoastBatch } from './services/roasterService';
 import { Sidebar, Header } from './components/layout';
 import Login from './components/auth/Login';
 import ForgotPassword from './components/auth/ForgotPassword';
@@ -101,6 +97,39 @@ const FirstLoginSetupWrapper: React.FC = () => {
   return <FirstLoginSetup user={currentUser} />;
 };
 
+// Listens for backend connection state changes and shows toast notifications
+const ConnectionToastListener: React.FC = () => {
+  const { addToast } = useToast();
+
+  useEffect(() => {
+    const handleDisconnected = () => {
+      addToast({
+        type: 'warning',
+        message: 'Backend server is unavailable. Retrying automatically...',
+        duration: 10000,
+      });
+    };
+
+    const handleConnected = () => {
+      addToast({
+        type: 'success',
+        message: 'Backend server is back online. Refreshing data...',
+        duration: 5000,
+      });
+    };
+
+    window.addEventListener('backend:disconnected', handleDisconnected);
+    window.addEventListener('backend:connected', handleConnected);
+
+    return () => {
+      window.removeEventListener('backend:disconnected', handleDisconnected);
+      window.removeEventListener('backend:connected', handleConnected);
+    };
+  }, [addToast]);
+
+  return null;
+};
+
 // Protected routes component
 const ProtectedRoutes: React.FC = () => {
   const { isAuthenticated, isAuthLoading, currentUser } = useAuth();
@@ -114,6 +143,9 @@ const ProtectedRoutes: React.FC = () => {
     setIsEditingState(editing);
   }, []);
 
+  // Cached data versions for smart auto-refresh (detects if data changed before reloading)
+  const lastVersionsRef = useRef<Record<string, string | null>>({});
+
   // Helper function to merge backend data with mock data (backend data takes priority for same IDs)
   const mergeArrays = useCallback(<T extends { id: string }>(backendData: T[], mockData: T[]): T[] => {
     const backendIds = new Set(backendData.map(item => item.id));
@@ -121,9 +153,9 @@ const ProtectedRoutes: React.FC = () => {
     return [...backendData, ...uniqueMockData];
   }, []);
 
-  // Load data from backend API in 2 phases:
-  // Phase 1: Essential data (farms, harvestLots, cropYears, processTypes) - UI renders fast
-  // Phase 2: Secondary data (soil, weather, GAP, processing, parchment, greenBean) - loads in background
+  // Load data from backend API in 2 phases using bulk-load endpoint:
+  // Phase 1: Essential data (farms, harvestLots, cropYears, processTypes, activityTypes, customers, users) - single request
+  // Phase 2: Secondary data (soil, weather, GAP, processing, parchment, greenBean, roaster) - single request
   const loadDataFromBackend = useCallback(async () => {
     try {
       // localStorage reads (no network, instant)
@@ -131,46 +163,39 @@ const ProtectedRoutes: React.FC = () => {
       const storedInvoices = getAllInvoices();
       const storedPricingHistory = getAllPricingHistory();
 
-      // Phase 1: Load essential data + customers + users in parallel
-      const [storedFarms, storedHarvestLots, storedCropYears, storedProcessTypes, storedActivityTypes, storedCustomers, storedUsers] = await batchedPromiseAll([
-        () => getAllFarms(),
-        () => getAllHarvestLots(),
-        () => getAllCropYears(),
-        () => getAllProcessTypes(),
-        () => getAllActivityTypes(),
-        () => getAllCustomersFromBackend().catch(() => {
-          const stored = localStorage.getItem('coffee_lab_customers');
-          return stored ? JSON.parse(stored) : [];
-        }),
-        () => getAllUsers(),
-      ], 6, [] as any);
+      // Phase 1: Single bulk request for essential data
+      const phase1 = await bulkLoadPhase1();
+
+      const storedFarms = phase1.farms.map(transformFarmFromBackend);
+      const storedHarvestLots = phase1.harvestLots.map(transformHarvestLotFromBackend);
+      const storedCustomers = phase1.customers.map(transformCustomerFromBackend);
 
       // Update UI immediately with essential data
       setData(prev => ({
         ...prev,
-        farms: mergeArrays(storedFarms, MOCK_DATA.farms),
-        harvestLots: mergeArrays(storedHarvestLots, MOCK_DATA.harvestLots),
-        cropYears: storedCropYears.length > 0 ? storedCropYears : prev.cropYears,
-        processTypes: storedProcessTypes.length > 0 ? storedProcessTypes : prev.processTypes,
-        activityTypes: storedActivityTypes.length > 0 ? storedActivityTypes : prev.activityTypes,
+        farms: mergeArrays(storedFarms as any, MOCK_DATA.farms),
+        harvestLots: mergeArrays(storedHarvestLots as any, MOCK_DATA.harvestLots),
+        cropYears: phase1.cropYears.length > 0 ? phase1.cropYears : prev.cropYears,
+        processTypes: phase1.processTypes.length > 0 ? phase1.processTypes : prev.processTypes,
+        activityTypes: phase1.activityTypes.length > 0 ? phase1.activityTypes : prev.activityTypes,
         customers: mergeArrays(storedCustomers, MOCK_DATA.customers),
-        users: storedUsers.length > 0 ? storedUsers : prev.users,
+        users: phase1.users.length > 0 ? phase1.users : prev.users,
         saleOrders: storedSaleOrders.length > 0 ? storedSaleOrders : prev.saleOrders,
         invoices: storedInvoices.length > 0 ? storedInvoices : prev.invoices,
         pricingHistory: storedPricingHistory.length > 0 ? storedPricingHistory : prev.pricingHistory,
       }));
 
-      // Phase 2: Load secondary data in background
-      const [storedSoilAnalyses, storedWeatherRecords, storedGAPLogs, storedProcessingBatches, storedParchmentLots, storedGreenBeanLots, storedRoasterInventory, storedRoastBatches] = await batchedPromiseAll([
-        () => getAllSoilAnalyses(),
-        () => getAllWeatherRecords(),
-        () => getAllGAPLogs(),
-        () => getAllProcessingBatches(),
-        () => getAllParchmentLots(),
-        () => getAllGreenBeanLots(),
-        () => getAllRoasterInventory(),
-        () => getAllRoastBatches(),
-      ], 6, [] as any);
+      // Phase 2: Single bulk request for secondary data
+      const phase2 = await bulkLoadPhase2();
+
+      const storedSoilAnalyses = phase2.soilAnalyses.map(transformSoilAnalysisFromBackend);
+      const storedWeatherRecords = phase2.weatherRecords.map(transformWeatherRecordFromBackend);
+      const storedGAPLogs = phase2.gapLogs.map(transformGAPLogFromBackend);
+      const storedProcessingBatches = phase2.processingBatches.map(transformProcessingBatchFromBackend);
+      const storedParchmentLots = phase2.parchmentLots.map(transformParchmentLotFromBackend);
+      const storedGreenBeanLots = phase2.greenBeanLots.map(transformGreenBeanLotFromBackend);
+      const storedRoasterInventory = phase2.roasterInventory.map(transformInventoryItem);
+      const storedRoastBatches = phase2.roastBatches.map(transformRoastBatch);
 
       // Update UI with secondary data
       setData(prev => ({
@@ -238,10 +263,21 @@ const ProtectedRoutes: React.FC = () => {
     // Initial load
     loadDataFromBackend();
 
-    // Auto-refresh every 2 minutes (paused while editing)
-    const refreshInterval = setInterval(() => {
-      if (!isEditingRef.current) {
-        loadDataFromBackend();
+    // Auto-refresh every 2 minutes with smart change detection
+    // First checks /api/data-version for changes, only reloads if data actually changed
+    const refreshInterval = setInterval(async () => {
+      if (isEditingRef.current || !connectionManager.isConnected()) return;
+      try {
+        const versions = await api.get<Record<string, string | null>>('/data-version');
+        const hasChanges = Object.keys(versions).some(
+          key => versions[key] !== lastVersionsRef.current[key]
+        );
+        if (hasChanges) {
+          lastVersionsRef.current = versions;
+          loadDataFromBackend();
+        }
+      } catch {
+        // If version check fails, skip this refresh cycle
       }
     }, 120000);
 
@@ -279,6 +315,23 @@ const ProtectedRoutes: React.FC = () => {
       window.removeEventListener('dataRefresh', handleDataRefresh);
     };
   }, [isAuthenticated, isAuthLoading, loadDataFromBackend, debouncedRefresh]);
+
+  // Connection recovery: auto-refresh when backend reconnects
+  // Recovery polling is started/stopped internally by connectionManager.reportFailure()/reportSuccess()
+  useEffect(() => {
+    if (!isAuthenticated || isAuthLoading) return;
+
+    const handleReconnected = () => {
+      loadDataFromBackend();
+    };
+
+    window.addEventListener('backend:connected', handleReconnected);
+
+    return () => {
+      connectionManager.stopRecoveryPolling();
+      window.removeEventListener('backend:connected', handleReconnected);
+    };
+  }, [isAuthenticated, isAuthLoading, loadDataFromBackend]);
 
   const contextValue = useMemo(() => ({ data, setData, refreshData, setIsEditing, isEditing }), [data, setData, setIsEditing, isEditing]);
 
@@ -416,6 +469,7 @@ const App: React.FC = () => {
     <AuthProvider>
       <ToastProvider>
         <ToastContainer />
+        <ConnectionToastListener />
         <Routes>
           {/* Public Routes - no authentication required */}
           <Route path="/login" element={<Login />} />

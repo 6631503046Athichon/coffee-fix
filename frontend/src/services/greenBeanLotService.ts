@@ -103,7 +103,7 @@ export const getAllGreenBeanLots = async (
 /**
  * Transform green bean lot data from backend format to frontend format
  */
-function transformGreenBeanLotFromBackend(backendLot: any): GreenBeanLot {
+export function transformGreenBeanLotFromBackend(backendLot: any): GreenBeanLot {
   const withdrawalHistory = (backendLot.withdrawalHistory || []).map((w: any) => ({
     ...w,
     withdrawalType: WITHDRAWAL_TYPE_FROM_API[w.withdrawalType] || w.withdrawalType,

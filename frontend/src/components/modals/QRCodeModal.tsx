@@ -68,7 +68,14 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
     }
   }, [isOpen]);
 
-  const handleGeneratePublicId = async () => {
+  // Auto-generate public ID when modal opens without one
+  useEffect(() => {
+    if (isOpen && !currentPublicId && !isGenerating) {
+      handleGeneratePublicId();
+    }
+  }, [isOpen]);
+
+  const handleGeneratePublicId = async (autoClose = false) => {
     setIsGenerating(true);
     setError(null);
     try {
@@ -76,6 +83,9 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
       setCurrentPublicId(result.publicTraceId);
       if (onPublicIdGenerated) {
         onPublicIdGenerated(result.publicTraceId);
+      }
+      if (autoClose) {
+        setTimeout(() => onClose(), 1500);
       }
     } catch (err: any) {
       console.error('Failed to generate public ID:', err);
@@ -144,19 +154,28 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
 
         {!currentPublicId ? (
           <div className="text-center py-8">
-            <QrCode className="h-16 w-16 mx-auto text-gray-300 mb-4" />
-            <p className="text-gray-600 mb-4">
-              No public trace ID generated yet. Generate one to create a shareable QR code.
-            </p>
-            <Button
-              variant="primary"
-              onClick={handleGeneratePublicId}
-              disabled={isGenerating}
-              loading={isGenerating}
-            >
-              <QrCode className="h-4 w-4 mr-2" />
-              Generate Public ID
-            </Button>
+            {isGenerating ? (
+              <>
+                <div className="h-16 w-16 mx-auto mb-4 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+                <p className="text-gray-600">Generating QR Code...</p>
+              </>
+            ) : (
+              <>
+                <QrCode className="h-16 w-16 mx-auto text-gray-300 mb-4" />
+                <p className="text-gray-600 mb-4">
+                  Failed to generate. Try again.
+                </p>
+                <Button
+                  variant="primary"
+                  onClick={handleGeneratePublicId}
+                  disabled={isGenerating}
+                  loading={isGenerating}
+                >
+                  <QrCode className="h-4 w-4 mr-2" />
+                  Generate Public ID
+                </Button>
+              </>
+            )}
           </div>
         ) : (
           <>
@@ -245,7 +264,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
             <div className="border-t border-gray-200 pt-4">
               <Button
                 variant="outline"
-                onClick={handleGeneratePublicId}
+                onClick={() => handleGeneratePublicId(true)}
                 disabled={isGenerating}
                 loading={isGenerating}
                 fullWidth

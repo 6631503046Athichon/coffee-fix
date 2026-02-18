@@ -6,7 +6,7 @@ import { handleApiErrorWithFallback } from "../utils/errorHandler";
 // Roaster Inventory
 // ============================================
 
-function transformInventoryItem(item: any): RoasterInventoryItem {
+export function transformInventoryItem(item: any): RoasterInventoryItem {
   return {
     id: item.id,
     roasterId: item.roasterId,
@@ -16,7 +16,7 @@ function transformInventoryItem(item: any): RoasterInventoryItem {
   };
 }
 
-function transformRoastBatch(batch: any): RoastBatch {
+export function transformRoastBatch(batch: any): RoastBatch {
   return {
     id: batch.id,
     roasterId: batch.roasterId,
