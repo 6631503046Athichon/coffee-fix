@@ -48,7 +48,7 @@ export const deleteParchmentLot = async (id: string): Promise<void> => {
 /**
  * Transform parchment lot data from backend format to frontend format
  */
-function transformParchmentLotFromBackend(backendLot: any): ParchmentLot {
+export function transformParchmentLotFromBackend(backendLot: any): ParchmentLot {
   return {
     id: backendLot.id,
     displayId: backendLot.displayId || undefined,

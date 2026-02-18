@@ -23,9 +23,7 @@ ${notesText}
 Synthesize these notes into a final summary:`;
 
   if (!API_KEY) {
-    // Mock response for development when API key is not available
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network latency
-    return `A mock synthesis of judge notes. The consensus points towards a complex cup with notes of bright citrus, tropical fruits, and a floral character. It has a silky body and elegant acidity, making it a well-balanced and satisfying coffee.`;
+    throw new Error("ไม่พบ Gemini API Key กรุณาตั้งค่า VITE_GEMINI_API_KEY");
   }
 
   try {
@@ -67,16 +65,7 @@ Based on this data, provide:
 `;
 
   if (!API_KEY) {
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    return {
-      keyDescriptors: ["Citrus", "Floral", "Bright", "Silky Body", "Honey"],
-      performanceSummary: `Mock Data: Samples generally performed well on ${attribute}, with judges consistently highlighting positive characteristics. There is a clear distinction between higher-scoring lots, which showed more complexity, and lower-scoring ones.`,
-      roasterRecommendations: [
-        "Consider sourcing more lots that exhibit 'floral' and 'citrus' notes, as these correlated with higher scores.",
-        "For marketing, emphasize the 'silky body' and 'honey' sweetness, as these were common positive descriptors.",
-        "Experiment with blending high-acidity lots with those noted for 'body' to create a more balanced final product."
-      ]
-    };
+    throw new Error("ไม่พบ Gemini API Key กรุณาตั้งค่า VITE_GEMINI_API_KEY");
   }
 
   try {
@@ -119,17 +108,23 @@ Based on this data, provide:
  * Extract lot analysis data from app data
  */
 function extractLotAnalysisData(appData: AppData) {
+    // Build lookup maps for O(1) access instead of O(n) .find() calls
+    const parchmentMap = new Map(appData.parchmentLots.map(p => [p.id, p]));
+    const batchMap = new Map(appData.processingBatches.map(b => [b.id, b]));
+    const harvestMap = new Map(appData.harvestLots.map(h => [h.id, h]));
+    const sessionMap = new Map(appData.cuppingSessions.map(s => [s.id, s]));
+
     const analysisData = appData.greenBeanLots.map(gbl => {
-        const parchmentLot = appData.parchmentLots.find(p => p.id === gbl.parchmentLotId);
-        const processingBatch = appData.processingBatches.find(b => b.id === parchmentLot?.processingBatchId);
-        const harvestLot = appData.harvestLots.find(h => h.id === parchmentLot?.harvestLotId);
+        const parchmentLot = gbl.parchmentLotId ? parchmentMap.get(gbl.parchmentLotId) : undefined;
+        const processingBatch = parchmentLot?.processingBatchId ? batchMap.get(parchmentLot.processingBatchId) : undefined;
+        const harvestLot = parchmentLot?.harvestLotId ? harvestMap.get(parchmentLot.harvestLotId) : undefined;
 
         let finalScore: number | null = null;
         let finalNotes: string | null = null;
         const scoreInfo = gbl.cuppingScores[0];
 
         if (scoreInfo) {
-            const session = appData.cuppingSessions.find(s => s.id === scoreInfo.sessionId);
+            const session = scoreInfo.sessionId ? sessionMap.get(scoreInfo.sessionId) : undefined;
             const sample = session?.samples.find(s => s.greenBeanLotId === gbl.id);
             if (session && sample && session.finalResults && session.finalResults[sample.id]) {
                 finalScore = session.finalResults[sample.id].totalScore;
@@ -157,40 +152,6 @@ function extractLotAnalysisData(appData: AppData) {
     return analysisData.sort((a, b) => b.score - a.score).slice(0, 10);
 }
 
-/**
- * Get mock comprehensive report for development
- */
-function getMockComprehensiveReport(): ComprehensiveQualityReport {
-    return {
-        title: "Mock Annual Coffee Quality Report 2025",
-        executiveSummary: "This year was marked by the exceptional performance of the Gesha variety, particularly when processed using the Honey method. These coffees consistently achieved the highest scores due to their complexity, sweetness, and clean cup profiles. A key trend was the direct correlation between meticulous processing and high cupping scores, highlighting the importance of post-harvest techniques.",
-        topPerformingCoffees: [
-            { lotId: "GBL001", variety: "Gesha", process: "Honey", score: 90.50, tastingNotes: "Remarkable complexity with layers of tropical fruit, jasmine, and a honey-sweet finish." },
-            { lotId: "GBL002", variety: "Caturra", process: "Washed", score: 88.25, tastingNotes: "A very clean and elegant coffee with notes of citrus, green apple, and a delicate floral quality." },
-        ],
-        varietyAnalysis: {
-            topVariety: "Gesha",
-            averageScore: 90.50,
-            analysis: "The Gesha variety continues to dominate the high end of the quality spectrum. Its inherent genetic potential for complex floral and fruit notes, when combined with skilled farming, results in scores that are consistently higher than other varieties in the dataset."
-        },
-        processingAnalysis: {
-            topProcess: "Honey",
-            averageScore: 90.50,
-            analysis: "The Honey process demonstrated its ability to produce exceptionally sweet and full-bodied coffees this year, leading to the highest average scores. This method appears to enhance the natural sweetness of the Gesha cherry, creating a highly desirable cup profile."
-        },
-        keyTrends: [
-            "Strong positive correlation between Gesha variety and scores above 90.",
-            "Honey processed coffees are outperforming Washed and Natural methods in terms of overall score.",
-            "High sweetness scores are a common denominator across all top-performing lots, indicating excellent cherry ripeness."
-        ],
-        recommendations: {
-            forFarmers: "Consider planting more Gesha if the climate is suitable. Focus on achieving optimal cherry ripeness at harvest to maximize sweetness.",
-            forProcessors: "Refine and expand Honey processing techniques, as this method is currently yielding the highest quality and value. Maintain detailed drying logs to ensure consistency.",
-            forRoasters: "Prioritize sourcing Gesha and Honey processed lots for premium, high-margin offerings. Use the detailed tasting notes in marketing to attract discerning customers."
-        }
-    };
-}
-
 export const generateComprehensiveReport = async (appData: AppData): Promise<ComprehensiveQualityReport> => {
     const topLotsData = extractLotAnalysisData(appData);
     
@@ -212,10 +173,9 @@ export const generateComprehensiveReport = async (appData: AppData): Promise<Com
         - forRoasters: Advice on sourcing priorities and marketing angles.`;
 
     if (!API_KEY) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        return getMockComprehensiveReport();
+        throw new Error("ไม่พบ Gemini API Key กรุณาตั้งค่า VITE_GEMINI_API_KEY");
     }
-    
+
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
@@ -303,36 +263,37 @@ export const generateSoilRecommendations = async (soilData: {
   location?: string;
   variety?: string;
 }): Promise<string> => {
-  const prompt = `You are an agricultural soil science expert specializing in coffee cultivation. Analyze the following soil analysis data and provide specific, actionable recommendations for improving soil health and coffee crop productivity.
+  const prompt = `คุณเป็นผู้เชี่ยวชาญด้านวิทยาศาสตร์ดินเกษตรที่เชี่ยวชาญเรื่องการปลูกกาแฟ กรุณาวิเคราะห์ข้อมูลดินต่อไปนี้และให้คำแนะนำที่เฉพาะเจาะจงและปฏิบัติได้จริง เพื่อปรับปรุงสุขภาพดินและเพิ่มผลผลิตกาแฟ
 
-Soil Analysis Data:
-- Location: ${soilData.location || 'Coffee farm'}
-- pH: ${soilData.pH}
-- Phosphorus (P): ${soilData.phosphorus} ppm
-- Potassium (K): ${soilData.potassium} ppm
-- Nitrogen (N): ${soilData.nitrogen}%
-- Calcium (Ca): ${soilData.calcium} ppm
-- Magnesium (Mg): ${soilData.magnesium} ppm
-${soilData.organicMatter ? `- Organic Matter: ${soilData.organicMatter}%` : ''}
-${soilData.sulfur ? `- Sulfur (S): ${soilData.sulfur} ppm` : ''}
-${soilData.zinc ? `- Zinc (Zn): ${soilData.zinc} ppm` : ''}
-${soilData.iron ? `- Iron (Fe): ${soilData.iron} ppm` : ''}
-${soilData.manganese ? `- Manganese (Mn): ${soilData.manganese} ppm` : ''}
-${soilData.copper ? `- Copper (Cu): ${soilData.copper} ppm` : ''}
-${soilData.boron ? `- Boron (B): ${soilData.boron} ppm` : ''}
-${soilData.variety ? `- Coffee Variety: ${soilData.variety}` : ''}
+**กรุณาตอบเป็นภาษาไทยทั้งหมด**
 
-Based on this analysis, provide:
-1. Assessment of current soil health status
-2. Specific nutrient deficiencies or excesses identified
-3. Actionable recommendations for soil amendment (fertilizers, organic matter, pH adjustment, etc.)
-4. Best practices for maintaining optimal soil conditions for coffee cultivation
+ข้อมูลวิเคราะห์ดิน:
+- ที่ตั้ง: ${soilData.location || 'ฟาร์มกาแฟ'}
+- ค่า pH: ${soilData.pH}
+- ฟอสฟอรัส (P): ${soilData.phosphorus} ppm
+- โพแทสเซียม (K): ${soilData.potassium} ppm
+- ไนโตรเจน (N): ${soilData.nitrogen}%
+- แคลเซียม (Ca): ${soilData.calcium} ppm
+- แมกนีเซียม (Mg): ${soilData.magnesium} ppm
+${soilData.organicMatter ? `- อินทรียวัตถุ: ${soilData.organicMatter}%` : ''}
+${soilData.sulfur ? `- กำมะถัน (S): ${soilData.sulfur} ppm` : ''}
+${soilData.zinc ? `- สังกะสี (Zn): ${soilData.zinc} ppm` : ''}
+${soilData.iron ? `- เหล็ก (Fe): ${soilData.iron} ppm` : ''}
+${soilData.manganese ? `- แมงกานีส (Mn): ${soilData.manganese} ppm` : ''}
+${soilData.copper ? `- ทองแดง (Cu): ${soilData.copper} ppm` : ''}
+${soilData.boron ? `- โบรอน (B): ${soilData.boron} ppm` : ''}
+${soilData.variety ? `- พันธุ์กาแฟ: ${soilData.variety}` : ''}
 
-Format your response as clear, practical recommendations that a farmer can implement.`;
+จากข้อมูลนี้ กรุณาให้:
+1. การประเมินสถานะสุขภาพดินปัจจุบัน
+2. สารอาหารที่ขาดหรือมากเกินไป
+3. คำแนะนำในการปรับปรุงดิน (ปุ๋ย, อินทรียวัตถุ, การปรับ pH เป็นต้น)
+4. แนวปฏิบัติที่ดีสำหรับการรักษาสภาพดินให้เหมาะสมกับการปลูกกาแฟ
+
+ตอบเป็นคำแนะนำที่ชัดเจน เข้าใจง่าย เกษตรกรสามารถนำไปปฏิบัติได้จริง`;
 
   if (!API_KEY) {
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    return `Mock AI Recommendations: Based on your soil analysis (pH: ${soilData.pH}), your soil appears to be in ${soilData.pH < 6.0 ? 'acidic' : soilData.pH > 7.0 ? 'alkaline' : 'optimal'} range. For optimal coffee cultivation, maintain pH between 6.0-6.5. Consider adding ${soilData.phosphorus < 30 ? 'phosphorus-rich fertilizers' : 'balanced NPK fertilizer'} and ${soilData.organicMatter && soilData.organicMatter < 3 ? 'organic matter (compost or manure)' : 'maintain current organic matter levels'}. Monitor nutrient levels regularly and adjust fertilization based on crop growth stages.`;
+    throw new Error("ไม่พบ Gemini API Key กรุณาตั้งค่า VITE_GEMINI_API_KEY");
   }
 
   try {
@@ -357,17 +318,23 @@ Format your response as clear, practical recommendations that a farmer can imple
  * Extract trend analysis data from app data
  */
 function extractTrendAnalysisData(appData: AppData) {
+    // Build lookup maps for O(1) access instead of O(n) .find() calls
+    const parchmentMap = new Map(appData.parchmentLots.map(p => [p.id, p]));
+    const batchMap = new Map(appData.processingBatches.map(b => [b.id, b]));
+    const harvestMap = new Map(appData.harvestLots.map(h => [h.id, h]));
+    const sessionMap = new Map(appData.cuppingSessions.map(s => [s.id, s]));
+
     const analysisData = appData.greenBeanLots.map(gbl => {
-        const parchmentLot = appData.parchmentLots.find(p => p.id === gbl.parchmentLotId);
-        const processingBatch = appData.processingBatches.find(b => b.id === parchmentLot?.processingBatchId);
-        const harvestLot = appData.harvestLots.find(h => h.id === parchmentLot?.harvestLotId);
+        const parchmentLot = gbl.parchmentLotId ? parchmentMap.get(gbl.parchmentLotId) : undefined;
+        const processingBatch = parchmentLot?.processingBatchId ? batchMap.get(parchmentLot.processingBatchId) : undefined;
+        const harvestLot = parchmentLot?.harvestLotId ? harvestMap.get(parchmentLot.harvestLotId) : undefined;
 
         let finalScore: number | null = null;
         let finalNotes: string | null = null;
         const scoreInfo = gbl.cuppingScores[0];
 
         if (scoreInfo) {
-            const session = appData.cuppingSessions.find(s => s.id === scoreInfo.sessionId);
+            const session = scoreInfo.sessionId ? sessionMap.get(scoreInfo.sessionId) : undefined;
             const sample = session?.samples.find(s => s.greenBeanLotId === gbl.id);
             if (session && sample && session.finalResults && session.finalResults[sample.id]) {
                 finalScore = session.finalResults[sample.id].totalScore;
@@ -394,22 +361,6 @@ function extractTrendAnalysisData(appData: AppData) {
     return analysisData;
 }
 
-/**
- * Get mock platform trends for development
- */
-function getMockPlatformTrends(): PlatformInsight {
-    return {
-        topPerformingVariety: { variety: "Gesha", avgScore: 89.25 },
-        topPerformingProcess: { process: "Honey", avgScore: 89.25 },
-        notableCorrelations: [
-            "Gesha variety is strongly associated with high scores and complex floral notes.",
-            "The Honey process appears to be yielding the highest quality results in this dataset.",
-            "There is a consistent trend of high sweetness scores across top-performing lots."
-        ],
-        overallSummary: "Mock Data: This year's data highlights the exceptional performance of the Gesha variety, particularly when combined with the Honey process. Roasters should prioritize these lots for premium offerings. The consistent high sweetness scores suggest excellent cherry ripeness and meticulous processing across the board."
-    };
-}
-
 export const getPlatformTrends = async (appData: AppData): Promise<PlatformInsight> => {
     const analysisData = extractTrendAnalysisData(appData);
     
@@ -425,8 +376,7 @@ export const getPlatformTrends = async (appData: AppData): Promise<PlatformInsig
     4.  overallSummary: Provide a brief, insightful summary for platform stakeholders (like roasters or processors) about the key quality trends this year.`;
 
     if (!API_KEY) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        return getMockPlatformTrends();
+        throw new Error("ไม่พบ Gemini API Key กรุณาตั้งค่า VITE_GEMINI_API_KEY");
     }
 
     try {
@@ -510,24 +460,7 @@ Fields to extract:
 Important: Look for Thai or English labels. Common Thai labels: pH, ฟอสฟอรัส (P), โพแทสเซียม (K), ไนโตรเจน (N), แคลเซียม (Ca), แมกนีเซียม (Mg), อินทรีย์วัตถุ (OM).`;
 
   if (!API_KEY) {
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    return {
-      pH: '6.2',
-      phosphorus: '25',
-      potassium: '180',
-      nitrogen: '0.15',
-      calcium: '1200',
-      magnesium: '350',
-      organicMatter: '3.5',
-      sulfur: '12',
-      zinc: '2.8',
-      iron: '45',
-      manganese: '15',
-      copper: '1.5',
-      boron: '0.8',
-      labName: 'Mock Laboratory',
-      certificateNumber: 'MOCK-2025-001',
-    };
+    throw new Error("ไม่พบ Gemini API Key กรุณาตั้งค่า VITE_GEMINI_API_KEY");
   }
 
   try {

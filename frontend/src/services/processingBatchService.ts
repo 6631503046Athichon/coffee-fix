@@ -95,7 +95,7 @@ export const deleteProcessingBatch = async (batchId: string): Promise<void> => {
 /**
  * Transform processing batch data from backend format to frontend format
  */
-function transformProcessingBatchFromBackend(backendBatch: any): ProcessingBatch {
+export function transformProcessingBatchFromBackend(backendBatch: any): ProcessingBatch {
   return {
     id: backendBatch.id,
     displayId: backendBatch.displayId || undefined,

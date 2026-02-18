@@ -1,4 +1,5 @@
 // Base API utility for making requests to backend
+import { connectionManager } from '../utils/connectionManager'
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 
 interface RequestOptions extends RequestInit {
@@ -11,6 +12,11 @@ async function request<T>(
   retries: number = 2
 ): Promise<T> {
   const { params, ...fetchOptions } = options
+
+  // If backend is known to be down, fail fast without a network call
+  if (connectionManager.shouldSuppress()) {
+    throw new Error('Cannot connect to backend server. Please ensure the backend server is running on port 3001.')
+  }
 
   // Build URL with query params
   let url = `${API_BASE_URL}${endpoint}`
@@ -41,11 +47,15 @@ async function request<T>(
     clearTimeout(timeoutId)
 
     // Retry on 503 (connection pool exhausted) with exponential backoff
+    // Do NOT report success yet — the retry may still fail
     if (response.status === 503 && retries > 0) {
       const backoffMs = (3 - retries) * 1000; // 1s, 2s
       await new Promise(resolve => setTimeout(resolve, backoffMs));
       return request<T>(endpoint, options, retries - 1);
     }
+
+    // Any non-503 HTTP response (or final 503) means the server is reachable
+    connectionManager.reportSuccess()
 
     if (!response.ok) {
       // Handle 401 Unauthorized - token expired or invalid
@@ -96,15 +106,17 @@ async function request<T>(
     if (error instanceof Error) {
       // Timeout error
       if (error.name === 'AbortError') {
+        connectionManager.reportFailure()
         throw new Error('Connection timeout: Backend server is not responding. Please ensure the backend server is running on port 3001.')
       }
       
       // Network errors (ERR_EMPTY_RESPONSE, Failed to fetch, etc.)
       const errorMessage = error.message.toLowerCase()
-      if (errorMessage.includes('failed to fetch') || 
+      if (errorMessage.includes('failed to fetch') ||
           errorMessage.includes('networkerror') ||
           errorMessage.includes('empty_response') ||
           errorMessage.includes('network error')) {
+        connectionManager.reportFailure()
         throw new Error('Cannot connect to backend server. Please ensure the backend server is running on port 3001.')
       }
     }
@@ -120,6 +132,31 @@ function getAuthToken(): string | null {
   const token = localStorage.getItem('auth-token')
   return token
 }
+
+// Bulk-load types
+export interface BulkPhase1Response {
+  farms: any[]
+  harvestLots: any[]
+  cropYears: any[]
+  processTypes: any[]
+  activityTypes: any[]
+  customers: any[]
+  users: any[]
+}
+
+export interface BulkPhase2Response {
+  soilAnalyses: any[]
+  weatherRecords: any[]
+  gapLogs: any[]
+  processingBatches: any[]
+  parchmentLots: any[]
+  greenBeanLots: any[]
+  roasterInventory: any[]
+  roastBatches: any[]
+}
+
+export const bulkLoadPhase1 = () => request<BulkPhase1Response>('/bulk-load', { method: 'GET', params: { phase: '1' } })
+export const bulkLoadPhase2 = () => request<BulkPhase2Response>('/bulk-load', { method: 'GET', params: { phase: '2' } })
 
 export const api = {
   get: <T>(endpoint: string, params?: Record<string, string>) =>

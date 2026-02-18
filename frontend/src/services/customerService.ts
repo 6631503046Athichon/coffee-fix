@@ -72,7 +72,7 @@ export const deleteCustomer = async (customerId: string): Promise<void> => {
 /**
  * Transform customer data from backend format to frontend format
  */
-function transformCustomerFromBackend(backendCustomer: any): Customer {
+export function transformCustomerFromBackend(backendCustomer: any): Customer {
   return {
     id: backendCustomer.id,
     name: backendCustomer.name,

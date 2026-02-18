@@ -619,7 +619,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input
                 label="ห้องแล็บที่ตรวจ"
-                placeholder="เช่น Chiang Mai Agricultural Testing Laboratory"
+                placeholder="กรอกตามชื่อในใบรับรอง (ไทยหรืออังกฤษ)"
                 value={soilForm.labName}
                 onChange={event => handleSoilFieldChange('labName', event.target.value)}
                 fullWidth

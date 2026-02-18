@@ -42,6 +42,7 @@ export async function nextDisplayId(
     },
     select: { displayId: true },
     orderBy: { createdAt: 'desc' },
+    take: 20,
   })
 
   let maxNum = 0
