@@ -9,6 +9,15 @@ import { QRCodeModal } from './modals/QRCodeModal';
 import { BulkQRGeneratorModal } from './modals/BulkQRGeneratorModal';
 
 const PAGE_SIZE = 10;
+const NEW_TAG_HOURS = 24;
+
+const isRecentLot = (dateString?: string | null): boolean => {
+    if (!dateString) return false;
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return false;
+    const diffHours = (Date.now() - date.getTime()) / (1000 * 60 * 60);
+    return diffHours >= 0 && diffHours <= NEW_TAG_HOURS;
+};
 
 interface EnrichedLot extends GreenBeanLot {
     processType: string;
@@ -111,6 +120,11 @@ const TraceabilityHub: React.FC = () => {
                     (lot.variety?.toLowerCase() || '').includes(searchLower)
                 ) && matchesVariety && matchesProcess && matchesGrade;
             }).sort((a, b) => {
+                const aDate = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const bDate = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+                if (aDate !== bDate) {
+                    return bDate - aDate;
+                }
                 const aId = a?.id || '';
                 const bId = b?.id || '';
                 return bId.localeCompare(aId);
@@ -352,6 +366,7 @@ const TraceabilityHub: React.FC = () => {
                                     const displayScore = lot.processorScore
                                         ? lot.processorScore.toFixed(1)
                                         : lot.finalScore;
+                                    const isNew = isRecentLot(lot.createdAt);
 
                                     return (
                                         <tr
@@ -359,9 +374,16 @@ const TraceabilityHub: React.FC = () => {
                                             className="hover:bg-gray-50 transition-colors duration-200"
                                         >
                                             <td className="px-4 py-4 whitespace-nowrap">
-                                                <span className="text-sm font-mono font-semibold text-gray-900" title={lot.id}>
-                                                    {formatGreenBeanId(lot)}
-                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-mono font-semibold text-gray-900" title={lot.id}>
+                                                        {formatGreenBeanId(lot)}
+                                                    </span>
+                                                    {isNew && (
+                                                        <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700 border border-rose-200">
+                                                            new
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="px-4 py-4 whitespace-nowrap">
                                                 <span className="text-sm text-gray-700">{lot.variety || 'N/A'}</span>
