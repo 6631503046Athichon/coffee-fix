@@ -11,7 +11,6 @@ import { User, GreenBeanLot, RoasterInventoryItem, RoastLevel, GreenBeanSourceTy
 import { PlusCircle, Package, Flame, Coffee } from 'lucide-react';
 import ExternalLotsTable from './ExternalLotsTable';
 import InternalLotsTable from './InternalLotsTable';
-import InventoryTable from './InventoryTable';
 import RoastLogPanel from './RoastLogPanel';
 import { toFixed2, clamp } from '../../utils/formatters';
 import { claimGreenBeanLot, createRoastBatch } from '../../services/roasterService';
@@ -76,7 +75,6 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     const availableLotsRef = useRef<HTMLDivElement>(null);
     const internalLotsRef = useRef<HTMLDivElement>(null);
     const [lotsTab, setLotsTab] = useState<'internal' | 'external'>('internal');
-    const inventoryRef = useRef<HTMLDivElement>(null);
     const roastLogRef = useRef<HTMLDivElement>(null);
 
     // Add External Lot form state
@@ -175,22 +173,13 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
 
     const myInventory = useMemo(() =>
         data.roasterInventory
-            .filter(item => (isAdmin || item.roasterId === currentUser.id) && item.remainingWeightKg > 0.01)
-            .map(item => {
-                const gbl = data.greenBeanLots.find(lot => lot.id === item.greenBeanLotId);
-                const parchmentLot = data.parchmentLots.find(p => p.id === gbl?.parchmentLotId);
-                const harvestLot = data.harvestLots.find(h => h.id === parchmentLot?.harvestLotId);
-                const roasterUser = data.users.find(u => u.id === item.roasterId);
-                return {
-                    ...item,
-                    variety: harvestLot?.cherryVariety || 'N/A',
-                    process: parchmentLot?.processType || 'N/A',
-                    roasterName: roasterUser?.name || 'Unknown',
-                    greenBeanDisplayId: gbl?.displayId,
-                };
+            .filter(item => {
+                if (item.remainingWeightKg <= 0.01) return false;
+                // Admins see all inventory; roasters see only their own
+                return isAdmin || item.roasterId === currentUser.id;
             })
             .sort((a, b) => b.id.localeCompare(a.id)),
-        [data, currentUser.id, isAdmin]
+        [data.roasterInventory, currentUser.id, isAdmin]
     );
 
     const myRoasts = useMemo(() =>
@@ -212,7 +201,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     }, [totalPages, page]);
     const pagedRoasts = useMemo(() => myRoasts.slice((page-1)*pageSize, (page-1)*pageSize + pageSize), [myRoasts, page]);
 
-    // Pagination for Inventory
+    // Pagination for Inventory (withdrawal lots)
     const [inventoryPage, setInventoryPage] = useState(1);
     const inventoryPageSize = 5;
     const inventoryTotalPages = Math.max(1, Math.ceil(myInventory.length / inventoryPageSize));
@@ -346,7 +335,6 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             alert('You do not have inventory to log a roast. Claim a lot first.');
             return;
         }
-        inventoryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         openLogRoastModal(myInventory[0]);
     };
 
@@ -442,11 +430,11 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                         <div className="min-h-[400px]">
                             {lotsTab === 'internal' ? (
                                 <InternalLotsTable
-                                    lots={pagedInternalLots as any}
-                                    onClaim={(lot) => openClaimModal(lot as any)}
-                                    currentPage={internalPage}
-                                    totalPages={internalTotalPages}
-                                    onPageChange={setInternalPage}
+                                    lots={pagedInventory}
+                                    onLogRoast={(lot) => openLogRoastModal(lot as any)}
+                                    currentPage={inventoryPage}
+                                    totalPages={inventoryTotalPages}
+                                    onPageChange={setInventoryPage}
                                     hideHeader
                                 />
                             ) : (
@@ -463,17 +451,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                         </div>
                     </div>
 
-                    {/* My Inventory */}
-                    <div ref={inventoryRef}>
-                      <InventoryTable
-                        items={pagedInventory as any}
-                        onLogRoast={(item) => openLogRoastModal(item as any)}
-                        showRoasterName={isAdmin}
-                        currentPage={inventoryPage}
-                        totalPages={inventoryTotalPages}
-                        onPageChange={setInventoryPage}
-                      />
-                    </div>
+
                 </div>
 
                 {/* Roast Log */}

@@ -32,6 +32,8 @@ export async function POST(
       )
     }
 
+    // Any withdrawal with a targetRoasterId routes stock to that roaster's inventory
+
     // Get current lot
     const lot = await prisma.greenBeanLot.findUnique({
       where: { id },
@@ -95,8 +97,8 @@ export async function POST(
         },
       })
 
-      // For Roasting Stock: auto-create or update RoasterInventoryItem for the target roaster
-      if (withdrawalType === 'RoastingStock' && targetRoasterId) {
+      // For any withdrawal with a target roaster: auto-create or update RoasterInventoryItem
+      if (targetRoasterId) {
         await tx.roasterInventoryItem.upsert({
           where: {
             roasterId_greenBeanLotId: {
@@ -135,9 +137,9 @@ export async function POST(
       },
     })
 
-    // Fetch the created/updated inventory item if this was a Roasting Stock withdrawal
+    // Fetch the created/updated inventory item if this withdrawal had a target roaster
     let roasterInventoryItem = null
-    if (withdrawalType === 'RoastingStock' && targetRoasterId) {
+    if (targetRoasterId) {
       roasterInventoryItem = await prisma.roasterInventoryItem.findUnique({
         where: {
           roasterId_greenBeanLotId: {
