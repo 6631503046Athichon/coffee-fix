@@ -71,88 +71,61 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { greenBeanLotId, claimedWeightKg } = body
 
-    // Validation
     if (!greenBeanLotId || !claimedWeightKg) {
-      return NextResponse.json(
-        { error: 'Green bean lot ID and claimed weight are required' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Green bean lot ID and claimed weight are required' }, { status: 400 })
     }
 
-    // Get green bean lot
-    const lot = await prisma.greenBeanLot.findUnique({
-      where: { id: greenBeanLotId },
-    })
+    const lot = await prisma.greenBeanLot.findUnique({ where: { id: greenBeanLotId } })
 
-    if (!lot) {
-      return NextResponse.json(
-        { error: 'Green bean lot not found' },
-        { status: 404 }
-      )
-    }
-
-    if (lot.availabilityStatus !== 'Available') {
-      return NextResponse.json(
-        { error: 'Green bean lot is not available' },
-        { status: 400 }
-      )
-    }
-
-    if (parseFloat(claimedWeightKg) > lot.currentWeightKg) {
-      return NextResponse.json(
-        { error: 'Insufficient weight available' },
-        { status: 400 }
-      )
-    }
+    if (!lot) return NextResponse.json({ error: 'Green bean lot not found' }, { status: 404 })
+    if (lot.availabilityStatus !== 'Available') return NextResponse.json({ error: 'Green bean lot is not available' }, { status: 400 })
 
     const weight = parseFloat(claimedWeightKg)
 
-    const inventoryItem = await prisma.roasterInventoryItem.upsert({
-      where: {
-        roasterId_greenBeanLotId: {
+    if (weight > lot.currentWeightKg) {
+      return NextResponse.json({ error: 'Insufficient weight available' }, { status: 400 })
+    }
+
+    const newLotWeight = lot.currentWeightKg - weight
+
+    const inventoryItem = await prisma.$transaction(async (tx) => {
+      // Deduct from the source lot; mark Sold when fully claimed
+      await tx.greenBeanLot.update({
+        where: { id: greenBeanLotId },
+        data: {
+          currentWeightKg: newLotWeight,
+          availabilityStatus: newLotWeight <= 0 ? 'Sold' : 'Available',
+        },
+      })
+
+      return tx.roasterInventoryItem.upsert({
+        where: { roasterId_greenBeanLotId: { roasterId: user.id, greenBeanLotId } },
+        update: {
+          claimedWeightKg: { increment: weight },
+          remainingWeightKg: { increment: weight },
+        },
+        create: {
           roasterId: user.id,
           greenBeanLotId,
+          claimedWeightKg: weight,
+          remainingWeightKg: weight,
         },
-      },
-      update: {
-        claimedWeightKg: { increment: weight },
-        remainingWeightKg: { increment: weight },
-      },
-      create: {
-        roasterId: user.id,
-        greenBeanLotId,
-        claimedWeightKg: weight,
-        remainingWeightKg: weight,
-      },
-      include: {
-        roaster: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        greenBeanLot: {
-          include: {
-            parchmentLot: {
-              include: {
-                harvestLot: {
-                  select: {
-                    id: true,
-                    farmerName: true,
-                    cherryVariety: true,
-                  },
+        include: {
+          roaster: { select: { id: true, name: true } },
+          greenBeanLot: {
+            include: {
+              parchmentLot: {
+                include: {
+                  harvestLot: { select: { id: true, farmerName: true, cherryVariety: true } },
                 },
               },
             },
           },
         },
-      },
+      })
     })
 
-    return NextResponse.json(
-      { inventoryItem, message: 'Green bean lot claimed successfully' },
-      { status: 201 }
-    )
+    return NextResponse.json({ inventoryItem, message: 'Green bean lot claimed successfully' }, { status: 201 })
   } catch (error) {
     return handleApiError(error)
   }

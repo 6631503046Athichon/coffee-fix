@@ -153,9 +153,7 @@ const ProtectedRoutes: React.FC = () => {
     return [...backendData, ...uniqueMockData];
   }, []);
 
-  // Load data from backend API in 2 phases using bulk-load endpoint:
-  // Phase 1: Essential data (farms, harvestLots, cropYears, processTypes, activityTypes, customers, users) - single request
-  // Phase 2: Secondary data (soil, weather, GAP, processing, parchment, greenBean, roaster) - single request
+  // Load data from backend API using parallel bulk-loads then a single state update
   const loadDataFromBackend = useCallback(async () => {
     try {
       // localStorage reads (no network, instant)
@@ -163,14 +161,22 @@ const ProtectedRoutes: React.FC = () => {
       const storedInvoices = getAllInvoices();
       const storedPricingHistory = getAllPricingHistory();
 
-      // Phase 1: Single bulk request for essential data
-      const phase1 = await bulkLoadPhase1();
+      // Run both phases in parallel for faster load
+      const [phase1, phase2] = await Promise.all([bulkLoadPhase1(), bulkLoadPhase2()]);
 
       const storedFarms = phase1.farms.map(transformFarmFromBackend);
       const storedHarvestLots = phase1.harvestLots.map(transformHarvestLotFromBackend);
       const storedCustomers = phase1.customers.map(transformCustomerFromBackend);
+      const storedSoilAnalyses = phase2.soilAnalyses.map(transformSoilAnalysisFromBackend);
+      const storedWeatherRecords = phase2.weatherRecords.map(transformWeatherRecordFromBackend);
+      const storedGAPLogs = phase2.gapLogs.map(transformGAPLogFromBackend);
+      const storedProcessingBatches = phase2.processingBatches.map(transformProcessingBatchFromBackend);
+      const storedParchmentLots = phase2.parchmentLots.map(transformParchmentLotFromBackend);
+      const storedGreenBeanLots = phase2.greenBeanLots.map(transformGreenBeanLotFromBackend);
+      const storedRoasterInventory = phase2.roasterInventory.map(transformInventoryItem);
+      const storedRoastBatches = phase2.roastBatches.map(transformRoastBatch);
 
-      // Update UI immediately with essential data
+      // Single state update — no intermediate flicker
       setData(prev => ({
         ...prev,
         farms: mergeArrays(storedFarms as any, MOCK_DATA.farms),
@@ -183,23 +189,6 @@ const ProtectedRoutes: React.FC = () => {
         saleOrders: storedSaleOrders.length > 0 ? storedSaleOrders : prev.saleOrders,
         invoices: storedInvoices.length > 0 ? storedInvoices : prev.invoices,
         pricingHistory: storedPricingHistory.length > 0 ? storedPricingHistory : prev.pricingHistory,
-      }));
-
-      // Phase 2: Single bulk request for secondary data
-      const phase2 = await bulkLoadPhase2();
-
-      const storedSoilAnalyses = phase2.soilAnalyses.map(transformSoilAnalysisFromBackend);
-      const storedWeatherRecords = phase2.weatherRecords.map(transformWeatherRecordFromBackend);
-      const storedGAPLogs = phase2.gapLogs.map(transformGAPLogFromBackend);
-      const storedProcessingBatches = phase2.processingBatches.map(transformProcessingBatchFromBackend);
-      const storedParchmentLots = phase2.parchmentLots.map(transformParchmentLotFromBackend);
-      const storedGreenBeanLots = phase2.greenBeanLots.map(transformGreenBeanLotFromBackend);
-      const storedRoasterInventory = phase2.roasterInventory.map(transformInventoryItem);
-      const storedRoastBatches = phase2.roastBatches.map(transformRoastBatch);
-
-      // Update UI with secondary data
-      setData(prev => ({
-        ...prev,
         soilAnalyses: storedSoilAnalyses.length > 0 ? storedSoilAnalyses : prev.soilAnalyses,
         weatherRecords: storedWeatherRecords.length > 0 ? storedWeatherRecords : prev.weatherRecords,
         gapLogs: storedGAPLogs.length > 0 ? storedGAPLogs : prev.gapLogs,

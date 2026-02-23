@@ -95,7 +95,7 @@ const RoastLogPanel: React.FC<{
                   </div>
                   <span className="text-gray-300">|</span>
                   <span className="text-sm font-mono font-semibold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">
-                    {formatGreenBeanId({ id: roast.greenBeanLotId, displayId: (roast as any).greenBeanDisplayId })}
+                    {(roast as any).formattedLotId ?? formatGreenBeanId({ id: roast.greenBeanLotId, displayId: (roast as any).greenBeanDisplayId })}
                   </span>
                   {roast.roastLevel && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700">

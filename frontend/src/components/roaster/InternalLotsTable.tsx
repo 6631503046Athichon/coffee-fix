@@ -71,7 +71,7 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({ lots, onLogRoast,
             <col className="w-[20%]" />
           </colgroup>
           <thead>
-            <tr className="bg-black-800 flex items-center text-left ">
+            <tr className="bg-black-800 text-left">
               <th className="px-4 py-3 text-left text-xs font-normal text-white tracking-wide bg-black">ID</th>
               <th className="px-4 py-3 text-right text-xs font-normal text-white tracking-wide bg-black">Details</th>
               <th className="px-4 py-3 text-left text-xs font-normal text-white tracking-wide bg-black">Grade</th>
@@ -132,7 +132,7 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({ lots, onLogRoast,
                   </td>
                   {/* Available (normal cell, no bg) */}
                   <td className="px-4 py-3 text-right align-middle">
-                    <span className="text-sm text-black">{toFixed2(lot.claimedWeightKg)}</span>
+                    <span className="text-sm text-black">{toFixed2(lot.remainingWeightKg)}</span>
                     <span className="text-sm text-gray-400 ml-1">kg</span>
                   </td>
                   {/* Action */}

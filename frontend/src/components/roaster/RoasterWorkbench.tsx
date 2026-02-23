@@ -8,11 +8,11 @@ import { PageHeader } from '../common/PageHeader';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { User, GreenBeanLot, RoasterInventoryItem, RoastLevel, GreenBeanSourceType, UserRole } from '../../types';
-import { PlusCircle, Package, Flame, Coffee } from 'lucide-react';
+import { PlusCircle, Package, Flame, Coffee, Loader2 } from 'lucide-react';
 import ExternalLotsTable from './ExternalLotsTable';
 import InternalLotsTable from './InternalLotsTable';
 import RoastLogPanel from './RoastLogPanel';
-import { toFixed2, clamp } from '../../utils/formatters';
+import { toFixed2, clamp, toRoaId } from '../../utils/formatters';
 import { claimGreenBeanLot, createRoastBatch } from '../../services/roasterService';
 import { createGreenBeanLot } from '../../services/greenBeanLotService';
 import { formatGreenBeanId } from '../../utils/formatDisplayId';
@@ -56,7 +56,7 @@ const COFFEE_VARIETIES = [
 
 
 const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
-    const { data, setData, refreshData } = useDataContext();
+    const { data, setData } = useDataContext();
     const location = useLocation();
     const navigate = useNavigate();
     const { addToast } = useToast();
@@ -64,6 +64,9 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     const [isClaimModalOpen, setIsClaimModalOpen] = useState(false);
     const [isAddLotModalOpen, setIsAddLotModalOpen] = useState(false);
     const [isLogRoastModalOpen, setIsLogRoastModalOpen] = useState(false);
+    const [isRoastingLotId, setIsRoastingLotId] = useState<string | null>(null);
+    const [isSubmittingRoast, setIsSubmittingRoast] = useState(false);
+    const [selectedExternalLot, setSelectedExternalLot] = useState<(GreenBeanLot & { variety: string; process: string }) | null>(null);
     const [selectedLot, setSelectedLot] = useState<(GreenBeanLot & { variety: string, process: string, finalScore?: string | number }) | null>(null);
     const [selectedInventoryItem, setSelectedInventoryItem] = useState<(RoasterInventoryItem & { variety: string, process: string }) | null>(null);
     const [claimAmount, setClaimAmount] = useState('');
@@ -78,6 +81,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     const roastLogRef = useRef<HTMLDivElement>(null);
 
     // Add External Lot form state
+    const [isAddingLot, setIsAddingLot] = useState(false);
     const [newLotForm, setNewLotForm] = useState({
         originName: '',
         producerName: '',
@@ -93,11 +97,6 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     });
 
     const isAdmin = currentUser.roles?.includes(UserRole.Admin);
-
-    // Refresh data on mount to ensure latest inventory is loaded
-    useEffect(() => {
-        refreshData();
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const getFinalScore = (gbl: GreenBeanLot) => {
         let finalScore: string | number = 'N/A';
@@ -187,7 +186,11 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             .filter(roast => roast.roasterId === currentUser.id)
             .map(roast => {
                 const gbl = data.greenBeanLots.find(lot => lot.id === roast.greenBeanLotId);
-                return { ...roast, greenBeanDisplayId: gbl?.displayId };
+                const isExternal = gbl?.sourceType === GreenBeanSourceType.External;
+                const formattedLotId = isExternal
+                    ? toRoaId(roast.greenBeanLotId)
+                    : formatGreenBeanId({ id: roast.greenBeanLotId, displayId: gbl?.displayId });
+                return { ...roast, greenBeanDisplayId: gbl?.displayId, formattedLotId };
             })
             .sort((a, b) => new Date(b.roastDate).getTime() - new Date(a.roastDate).getTime()),
         [data.roastBatches, data.greenBeanLots, currentUser.id]
@@ -253,6 +256,18 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     };
 
 
+    const handleExternalRoast = (lot: GreenBeanLot & { variety: string; process: string }) => {
+        // Open form instantly — no API call yet. We claim only the batch amount on submit.
+        setSelectedExternalLot(lot);
+        setSelectedInventoryItem(null);
+        setRoastForm({ batchSize: '', roastedWeight: '', notes: '', flavorNotes: '' });
+        setRoastLevel(RoastLevel.Medium);
+        setSelectedFlavorTags([]);
+        setSelectedCategory('Sweet');
+        setSelectedNote(FLAVOR_GROUPS['Sweet'][0]);
+        setIsLogRoastModalOpen(true);
+    };
+
     const handleClaimSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const amount = parseFloat(claimAmount);
@@ -275,10 +290,72 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
 
     const handleLogRoastSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedInventoryItem) return;
 
         const batchRaw = parseFloat(roastForm.batchSize);
         const roastedRaw = parseFloat(roastForm.roastedWeight);
+
+        // ── External lot path: claim only the batch amount, then roast ──
+        if (selectedExternalLot && !selectedInventoryItem) {
+            if (isSubmittingRoast) return;
+            if (!batchRaw || batchRaw <= 0) { addToast({ type: 'error', message: 'กรุณากรอก Batch Size ที่ถูกต้อง' }); return; }
+            if (!roastedRaw || roastedRaw <= 0) { addToast({ type: 'error', message: 'กรุณากรอก Roasted Weight ที่ถูกต้อง' }); return; }
+            if (batchRaw > selectedExternalLot.currentWeightKg) { addToast({ type: 'error', message: 'Batch เกิน น้ำหนักที่มี' }); return; }
+            if (roastedRaw > batchRaw) { addToast({ type: 'error', message: 'Roasted Weight ต้องไม่เกิน Batch Size' }); return; }
+
+            const batch = toFixed2(clamp(batchRaw, 0.01, selectedExternalLot.currentWeightKg));
+            const roasted = toFixed2(clamp(roastedRaw, 0.01, batch));
+            const yieldPct = toFixed2((roasted / batch) * 100);
+            const weightLossPct = toFixed2(100 - yieldPct);
+
+            try {
+                setIsSubmittingRoast(true);
+                setIsRoastingLotId(selectedExternalLot.id);
+                // 1. Claim exactly the batch amount from the lot
+                const inventoryItem = await claimGreenBeanLot(selectedExternalLot.id, batch);
+                // 2. Create roast batch against that inventory item
+                const { roastBatch } = await createRoastBatch({
+                    roasterInventoryId: inventoryItem.id,
+                    greenBeanLotId: selectedExternalLot.id,
+                    batchSizeKg: batch,
+                    yieldPercentage: yieldPct,
+                    roastedWeightKg: roasted,
+                    weightLossPct,
+                    roastLevel: roastLevel,
+                    roastProfileNotes: roastForm.notes?.trim() || 'No notes',
+                    flavorNotes: selectedFlavorTags.join(', ') || undefined,
+                });
+                const newLotWeight = Math.max(0, selectedExternalLot.currentWeightKg - batch);
+                setData(prev => ({
+                    ...prev,
+                    roastBatches: [...prev.roastBatches, { ...roastBatch, formattedLotId: toRoaId(selectedExternalLot.id) } as any],
+                    roasterInventory: (() => {
+                        // claim returns remainingWeightKg += batch, roast immediately deducts batch → net 0 change
+                        const finalRemaining = inventoryItem.remainingWeightKg - batch;
+                        const exists = prev.roasterInventory.find(i => i.id === inventoryItem.id);
+                        if (exists) return prev.roasterInventory.map(i => i.id === inventoryItem.id ? { ...i, remainingWeightKg: finalRemaining } : i);
+                        return [...prev.roasterInventory, { ...inventoryItem, remainingWeightKg: finalRemaining }];
+                    })(),
+                    greenBeanLots: prev.greenBeanLots.map(l =>
+                        l.id === selectedExternalLot.id
+                            ? { ...l, currentWeightKg: newLotWeight, availabilityStatus: newLotWeight <= 0 ? 'Sold' : 'Available' }
+                            : l
+                    ),
+                }));
+                addToast({ type: 'success', message: `บันทึก Roast Batch ${batch} kg สำเร็จ!` });
+                setIsLogRoastModalOpen(false);
+                setSelectedExternalLot(null);
+            } catch (err: any) {
+                addToast({ type: 'error', message: err?.message || 'ไม่สามารถบันทึก Roast Batch ได้' });
+            } finally {
+                setIsSubmittingRoast(false);
+                setIsRoastingLotId(null);
+            }
+            return;
+        }
+
+        // ── Normal inventory path ──
+        if (!selectedInventoryItem) return;
+        if (isSubmittingRoast) return;
 
         if (!batchRaw || batchRaw <= 0) { addToast({ type: 'error', message: 'กรุณากรอก Batch Size ที่ถูกต้อง' }); return; }
         if (!roastedRaw || roastedRaw <= 0) { addToast({ type: 'error', message: 'กรุณากรอก Roasted Weight ที่ถูกต้อง' }); return; }
@@ -291,6 +368,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         const weightLossPct = toFixed2(100 - yieldPct);
 
         try {
+            setIsSubmittingRoast(true);
             const { roastBatch, updatedInventory } = await createRoastBatch({
                 roasterInventoryId: selectedInventoryItem.id,
                 greenBeanLotId: selectedInventoryItem.greenBeanLotId,
@@ -315,6 +393,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             setIsLogRoastModalOpen(false);
         } catch (err: any) {
             addToast({ type: 'error', message: err?.message || 'ไม่สามารถบันทึก Roast Batch ได้' });
+        } finally {
+            setIsSubmittingRoast(false);
         }
     };
 
@@ -440,11 +520,12 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                             ) : (
                                 <ExternalLotsTable
                                     lots={pagedExternalLots as any}
-                                    onClaim={(lot) => openClaimModal(lot as any)}
+                                    onRoast={(lot) => handleExternalRoast(lot as any)}
                                     onAddExternal={() => setIsAddLotModalOpen(true)}
                                     currentPage={externalPage}
                                     totalPages={externalTotalPages}
                                     onPageChange={setExternalPage}
+                                    loadingLotId={isRoastingLotId}
                                     hideHeader
                                 />
                             )}
@@ -578,11 +659,14 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             </Modal>
 
             <Modal
-                isOpen={isLogRoastModalOpen && !!selectedInventoryItem}
-                onClose={() => setIsLogRoastModalOpen(false)}
+                isOpen={isLogRoastModalOpen && (!!selectedInventoryItem || !!selectedExternalLot)}
+                onClose={() => { setIsLogRoastModalOpen(false); setSelectedExternalLot(null); setIsSubmittingRoast(false); }}
                 maxWidth="2xl"
             >
-                {selectedInventoryItem && (
+                {(selectedInventoryItem || selectedExternalLot) && (() => {
+                    const lotId = selectedInventoryItem?.greenBeanLotId ?? selectedExternalLot!.id;
+                    const availableKg = selectedInventoryItem?.remainingWeightKg ?? selectedExternalLot!.currentWeightKg;
+                    return (
                     <form onSubmit={handleLogRoastSubmit}>
                         <div className="flex items-center gap-3 mb-4">
                             <div className="p-3 bg-orange-100 rounded-xl">
@@ -590,13 +674,19 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                             </div>
                             <div>
                                 <h2 className="text-2xl font-bold text-gray-900">Log Roast</h2>
-                                <p className="text-sm text-gray-500">for Lot {selectedInventoryItem.greenBeanLotId}</p>
+                                <p className="text-sm text-gray-500">Lot <span className="font-mono font-semibold text-gray-700">{toRoaId(lotId)}</span></p>
                             </div>
                         </div>
 
-                        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-6">
-                            <p className="text-sm font-medium text-orange-900">Inventory Remaining</p>
-                            <p className="text-3xl font-bold text-orange-700">{toFixed2(selectedInventoryItem.remainingWeightKg)} kg</p>
+                        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-6 flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-medium text-orange-900">Available to Roast</p>
+                                <p className="text-3xl font-bold text-orange-700">{toFixed2(availableKg)} kg</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs text-orange-600 uppercase tracking-wide font-medium">Lot ID</p>
+                                <p className="text-lg font-mono font-bold text-orange-800">{toRoaId(lotId)}</p>
+                            </div>
                         </div>
                             <div className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -607,12 +697,12 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                                             min={0.01}
                                             step="0.01"
                                             required
-                                            max={selectedInventoryItem.remainingWeightKg}
+                                            max={availableKg}
                                             value={roastForm.batchSize}
                                             onChange={(e) => setRoastForm({ ...roastForm, batchSize: e.target.value })}
                                             onInvalid={(e) =>
                                                 (e.currentTarget as HTMLInputElement).setCustomValidity(
-                                                    `Batch size must be between 0.01 and ${selectedInventoryItem.remainingWeightKg.toFixed(2)} kg`
+                                                    `Batch size must be between 0.01 and ${availableKg.toFixed(2)} kg`
                                                 )
                                             }
                                             onInput={(e) => (e.currentTarget as HTMLInputElement).setCustomValidity('')}
@@ -759,7 +849,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                             <Button
                                 type="button"
                                 variant="secondary"
-                                onClick={() => setIsLogRoastModalOpen(false)}
+                                onClick={() => { setIsLogRoastModalOpen(false); setSelectedExternalLot(null); setIsSubmittingRoast(false); }}
                             >
                                 Cancel
                             </Button>
@@ -767,13 +857,16 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                                 type="submit"
                                 variant="primary"
                                 size="lg"
-                                className="bg-orange-600 hover:bg-orange-700"
+                                disabled={isSubmittingRoast}
+                                icon={isSubmittingRoast ? <Loader2 className="h-4 w-4 animate-spin" /> : <Flame className="h-4 w-4" />}
+                                className="bg-orange-600 hover:bg-orange-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
                             >
-                                Log Roast
+                                {isSubmittingRoast ? 'Saving…' : 'Log Roast'}
                             </Button>
                         </div>
                     </form>
-                )}
+                    );
+                })()}
             </Modal>
 
             <Modal
@@ -791,6 +884,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                                                 if (isNaN(price)) return alert('Enter a valid price');
 
                                                 try {
+                                                    if (isAddingLot) return;
+                                                    setIsAddingLot(true);
                                                     const lot = await createGreenBeanLot({
                                                         sourceType: 'External',
                                                         grade: newLotForm.grade || 'Grade A',
@@ -817,6 +912,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                                                     });
                                                 } catch (err: any) {
                                                     addToast({ type: 'error', message: err?.message || 'ไม่สามารถเพิ่ม Lot ได้' });
+                                                } finally {
+                                                    setIsAddingLot(false);
                                                 }
                                             }}
                                         >
@@ -959,8 +1056,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                                             </div>
 
                                             <div className="mt-6 flex justify-end gap-3">
-                                                <Button type="button" variant="secondary" onClick={()=>setIsAddLotModalOpen(false)}>Cancel</Button>
-                                                <Button type="submit" variant="success">Add Lot</Button>
+                                                <Button type="button" variant="secondary" onClick={()=>setIsAddLotModalOpen(false)} disabled={isAddingLot}>Cancel</Button>
+                                                <Button type="submit" variant="success" disabled={isAddingLot}>{isAddingLot ? 'Adding...' : 'Add Lot'}</Button>
                                             </div>
                                         </form>
             </Modal>
