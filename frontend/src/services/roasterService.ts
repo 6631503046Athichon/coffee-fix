@@ -7,12 +7,22 @@ import { handleApiErrorWithFallback } from "../utils/errorHandler";
 // ============================================
 
 export function transformInventoryItem(item: any): RoasterInventoryItem {
+  const gbl = item.greenBeanLot;
+  const harvestLot = gbl?.parchmentLot?.harvestLot;
+  // Pick the most recent withdrawal entry for type info
+  const latestWithdrawal = gbl?.withdrawalHistory?.[0];
   return {
     id: item.id,
     roasterId: item.roasterId,
     greenBeanLotId: item.greenBeanLotId,
     claimedWeightKg: item.claimedWeightKg,
     remainingWeightKg: item.remainingWeightKg,
+    greenBeanDisplayId: gbl?.displayId,
+    grade: gbl?.grade ?? undefined,
+    processorScore: gbl?.processorScore ?? undefined,
+    variety: harvestLot?.cherryVariety ?? undefined,
+    process: gbl?.parchmentLot?.processType ?? undefined,
+    withdrawalType: latestWithdrawal?.withdrawalType ?? undefined,
   };
 }
 

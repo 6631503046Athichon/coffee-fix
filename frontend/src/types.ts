@@ -390,6 +390,13 @@ export interface RoasterInventoryItem {
   greenBeanLotId: string;
   claimedWeightKg: number;
   remainingWeightKg: number;
+  // Enriched from nested greenBeanLot (populated by transformInventoryItem)
+  greenBeanDisplayId?: string;
+  grade?: string;
+  processorScore?: number;
+  variety?: string;
+  process?: string;
+  withdrawalType?: string;
 }
 
 export interface RoastBatch {

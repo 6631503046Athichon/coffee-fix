@@ -227,6 +227,11 @@ export async function GET(request: NextRequest) {
                   },
                 },
                 priceSetter: { select: { id: true, name: true } },
+                withdrawalHistory: {
+                  orderBy: { createdAt: 'desc' as const },
+                  take: 5,
+                  select: { withdrawalType: true, amountKg: true, date: true, withdrawnByName: true },
+                },
               },
             },
             roastBatches: { orderBy: { roastDate: 'desc' }, take: 5 },
