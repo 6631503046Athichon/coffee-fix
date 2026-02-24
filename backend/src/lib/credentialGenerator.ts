@@ -1,15 +1,5 @@
 import crypto from 'crypto'
 
-type PrismaLike = {
-  user: {
-    findMany: (args: {
-      where: Record<string, unknown>
-      select: Record<string, boolean>
-      orderBy: Record<string, string>
-    }) => Promise<{ username: string | null }[]>
-  }
-}
-
 /**
  * Generate a unique username based on role
  * Format: {role_lowercase}_{number}
@@ -17,7 +7,8 @@ type PrismaLike = {
  */
 export async function generateUsername(
   role: string,
-  db: PrismaLike
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any
 ): Promise<string> {
   const rolePrefix = role.toLowerCase()
 
