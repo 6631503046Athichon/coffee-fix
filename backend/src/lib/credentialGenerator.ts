@@ -1,5 +1,14 @@
-import { PrismaClient } from '@prisma/client'
 import crypto from 'crypto'
+
+type PrismaLike = {
+  user: {
+    findMany: (args: {
+      where: Record<string, unknown>
+      select: Record<string, boolean>
+      orderBy: Record<string, string>
+    }) => Promise<{ username: string | null }[]>
+  }
+}
 
 /**
  * Generate a unique username based on role
@@ -8,7 +17,7 @@ import crypto from 'crypto'
  */
 export async function generateUsername(
   role: string,
-  db: PrismaClient
+  db: PrismaLike
 ): Promise<string> {
   const rolePrefix = role.toLowerCase()
 
