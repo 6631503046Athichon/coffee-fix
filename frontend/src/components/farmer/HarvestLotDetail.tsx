@@ -171,7 +171,7 @@ const HarvestLotDetail: React.FC = () => {
                                 <div className="space-y-2">
                                     {relatedParchmentLots.map((parchment, idx) => (
                                         <div key={parchment.id} className="rounded-md border border-gray-200 bg-white p-2">
-                                            <div className="font-semibold">Lot {idx + 1}</div>
+                                            <div className="font-semibold">Lot ID: {parchment.displayId || parchment.id.substring(0, 8).toUpperCase()}</div>
                                             <div>Process: {parchment.processType}</div>
                                             <div>Weight: {parchment.currentWeightKg} kg</div>
                                             <div>Moisture: {parchment.moistureContent}%</div>
@@ -197,7 +197,7 @@ const HarvestLotDetail: React.FC = () => {
                                 <div className="space-y-2">
                                     {relatedGreenBeanLots.map((greenBean, idx) => (
                                         <div key={greenBean.id} className="rounded-md border border-gray-200 bg-white p-2">
-                                            <div className="font-semibold">Lot {idx + 1}</div>
+                                            <div className="font-semibold">Lot ID: {greenBean.displayId || greenBean.id.substring(0, 8).toUpperCase()}</div>
                                             <div>Grade: {greenBean.grade}</div>
                                             <div>Weight: {greenBean.currentWeightKg} kg</div>
                                             <div>Status: {greenBean.availabilityStatus}</div>
@@ -234,7 +234,7 @@ const HarvestLotDetail: React.FC = () => {
                                         <div className="space-y-2">
                                             {qcLots.map((greenBean, idx) => (
                                                 <div key={greenBean.id} className="rounded-md border border-gray-200 bg-white p-2">
-                                                    <div className="font-semibold">Lot {idx + 1}</div>
+                                                    <div className="font-semibold">Lot ID: {greenBean.displayId || greenBean.id.substring(0, 8).toUpperCase()}</div>
                                                     <div>Grade: {greenBean.grade}</div>
                                                     {greenBean.processorScore != null && (
                                                         <div>QC Score: {greenBean.processorScore.toFixed(1)} pts</div>
