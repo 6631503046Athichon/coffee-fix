@@ -445,7 +445,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
       pH: analysis.pH.toString(),
       phosphorus: analysis.phosphorus.toString(),
       potassium: analysis.potassium.toString(),
-      nitrogen: analysis.nitrogen.toString(),
+      nitrogen: analysis.nitrogen?.toString() ?? '',
       calcium: analysis.calcium.toString(),
       magnesium: analysis.magnesium.toString(),
       organicMatter: analysis.organicMatter?.toString() ?? '',
@@ -672,16 +672,6 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                   step="0.1" 
                   value={soilForm.potassium} 
                   onChange={event => handleSoilFieldChange('potassium', event.target.value)} 
-                  required 
-                  fullWidth
-                  disabled={isSubmitting}
-                />
-                <Input 
-                  label="ไนโตรเจน (%)" 
-                  type="number" 
-                  step="0.1" 
-                  value={soilForm.nitrogen} 
-                  onChange={event => handleSoilFieldChange('nitrogen', event.target.value)} 
                   required 
                   fullWidth
                   disabled={isSubmitting}
