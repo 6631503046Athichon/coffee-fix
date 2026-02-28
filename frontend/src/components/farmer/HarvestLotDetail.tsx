@@ -75,6 +75,12 @@ const HarvestLotDetail: React.FC = () => {
     const mainGreenBeanLot = relatedGreenBeanLots.length > 0 ? relatedGreenBeanLots[0] : null;
     const qcGreenBeanLot = relatedGreenBeanLots.find(g => g.cuppingScores?.length || g.processorScore != null) || null;
     const qcLots = relatedGreenBeanLots.filter(g => g.cuppingScores?.length || g.processorScore != null);
+    const qcScores = qcLots
+        .map(g => (g.processorScore != null ? g.processorScore : g.cuppingScores?.[0]?.score))
+        .filter((score): score is number => score != null);
+    const qcAverage = qcScores.length > 0
+        ? qcScores.reduce((sum, score) => sum + score, 0) / qcScores.length
+        : null;
 
     let cuppingResult: { totalScore: number; finalNotes: string; } | null = null;
     const cuppingScoreInfo = qcGreenBeanLot?.cuppingScores?.[0];
@@ -254,11 +260,9 @@ const HarvestLotDetail: React.FC = () => {
                         >
                             {cuppingResult
                                 ? `${cuppingResult.totalScore.toFixed(2)} pts`
-                                : qcGreenBeanLot?.processorScore != null
-                                    ? `${qcGreenBeanLot.processorScore.toFixed(1)} pts`
-                                    : cuppingScoreInfo?.score
-                                        ? `${cuppingScoreInfo.score} pts`
-                                        : 'Pending'}
+                                : qcAverage != null
+                                    ? `${qcAverage.toFixed(1)} pts`
+                                    : 'Pending'}
                         </TimelineStep>
                      </div>
                 </div>
