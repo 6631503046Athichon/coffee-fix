@@ -1,8 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { ArrowLeft, User, MapPin, Weight, Calendar, Tag, Info, CheckCircle, Award, ExternalLink, Package, Coffee, Star } from 'lucide-react';
+import { updateHarvestLot } from '../../services/harvestLotService';
 
 
 const DetailItem: React.FC<{ icon: React.ElementType; label: string; value: string | number | React.ReactNode; }> = ({ icon: Icon, label, value }) => (
@@ -52,10 +53,51 @@ const TimelineStep: React.FC<{
 const HarvestLotDetail: React.FC = () => {
     const { lotId } = useParams<{ lotId: string }>();
     const navigate = useNavigate();
-    const { data } = useDataContext();
+    const { data, setData } = useDataContext();
     const [openStep, setOpenStep] = useState<'harvested' | 'parchment' | 'greenBean' | 'qcScore' | null>(null);
+    const isBindingFarmRef = useRef(false);
+
+    const formatDate = (dateValue?: string | Date | null) => {
+        if (!dateValue) return 'N/A';
+        const date = new Date(dateValue);
+        if (Number.isNaN(date.getTime())) return 'N/A';
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+        });
+    };
 
     const lot = data.harvestLots.find(h => h.id === lotId);
+    const plotLocation = lot?.farmPlotLocation?.trim().toLowerCase() || '';
+    const farm = lot?.farm
+        || data.farms.find(f => f.id === lot?.farmId)
+        || data.farms.find(f => {
+            if (!plotLocation) return false;
+            const farmName = (f.farmName || f.name || '').trim().toLowerCase();
+            const farmLocation = (f.location || '').trim().toLowerCase();
+            return farmName === plotLocation || farmLocation === plotLocation;
+        })
+        || null;
+
+    useEffect(() => {
+        if (!lot || !farm || lot.farmId || isBindingFarmRef.current) return;
+        isBindingFarmRef.current = true;
+        updateHarvestLot(lot.id, { farmId: farm.id })
+            .then(updated => {
+                setData(prev => ({
+                    ...prev,
+                    harvestLots: prev.harvestLots.map(h => h.id === updated.id ? updated : h),
+                }));
+            })
+            .catch(error => {
+                console.error('Failed to bind farm to harvest lot:', error);
+            })
+            .finally(() => {
+                isBindingFarmRef.current = false;
+            });
+    }, [farm, lot, setData]);
+
     if (!lot) {
         return (
             <div className="max-w-5xl mx-auto text-center">
@@ -67,7 +109,7 @@ const HarvestLotDetail: React.FC = () => {
             </div>
         );
     }
-    
+
     // --- Data Tracing ---
     const relatedBatches = data.processingBatches.filter(b => b.harvestLotId === lotId);
     const relatedParchmentLots = data.parchmentLots.filter(p => relatedBatches.some(b => b.id === p.processingBatchId));
@@ -81,6 +123,14 @@ const HarvestLotDetail: React.FC = () => {
     const qcAverage = qcScores.length > 0
         ? qcScores.reduce((sum, score) => sum + score, 0) / qcScores.length
         : null;
+    const getCuppingDate = (greenBeanId: string, sessionId?: string) => {
+        if (!sessionId) return 'N/A';
+        const session = data.cuppingSessions.find(s => s.id === sessionId);
+        if (!session) return 'N/A';
+        const sample = session.samples?.find(s => s.greenBeanLotId === greenBeanId);
+        if (!sample) return formatDate(session.date);
+        return formatDate(session.date);
+    };
 
     let cuppingResult: { totalScore: number; finalNotes: string; } | null = null;
     const cuppingScoreInfo = qcGreenBeanLot?.cuppingScores?.[0];
@@ -117,6 +167,7 @@ const HarvestLotDetail: React.FC = () => {
                         </div>
                         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 divide-y md:divide-y-0">
                             <DetailItem icon={User} label="Farmer Name" value={lot.farmerName} />
+                            <DetailItem icon={MapPin} label="Farm Name" value={farm?.farmName || farm?.name || 'N/A'} />
                             <DetailItem icon={Tag} label="Cherry Variety" value={lot.cherryVariety} />
                             <DetailItem icon={Weight} label="Weight (kg)" value={lot.weightKg} />
                             <DetailItem icon={MapPin} label="Farm Plot Location" value={lot.farmPlotLocation} />
@@ -158,6 +209,7 @@ const HarvestLotDetail: React.FC = () => {
                             onToggle={() => setOpenStep(prev => prev === 'harvested' ? null : 'harvested')}
                             details={(
                                 <div className="space-y-1">
+                                    <div><span className="font-semibold">Farm:</span> {farm?.farmName || farm?.name || 'N/A'}</div>
                                     <div><span className="font-semibold">Farmer:</span> {lot.farmerName}</div>
                                     <div><span className="font-semibold">Location:</span> {lot.farmPlotLocation}</div>
                                     <div><span className="font-semibold">Weight:</span> {lot.weightKg} kg</div>
@@ -165,7 +217,7 @@ const HarvestLotDetail: React.FC = () => {
                                 </div>
                             )}
                         >
-                            {lot.harvestDate}
+                            {formatDate(lot.harvestDate)}
                         </TimelineStep>
                         <TimelineStep
                             icon={Package}
@@ -182,6 +234,7 @@ const HarvestLotDetail: React.FC = () => {
                                             <div>Weight: {parchment.currentWeightKg} kg</div>
                                             <div>Moisture: {parchment.moistureContent}%</div>
                                             <div>Status: {parchment.status}</div>
+                                            <div>Date: {formatDate(parchment.createdAt)}</div>
                                         </div>
                                     ))}
                                 </div>
@@ -207,6 +260,7 @@ const HarvestLotDetail: React.FC = () => {
                                             <div>Grade: {greenBean.grade}</div>
                                             <div>Weight: {greenBean.currentWeightKg} kg</div>
                                             <div>Status: {greenBean.availabilityStatus}</div>
+                                            <div>Date: {formatDate(greenBean.createdAt)}</div>
                                         </div>
                                     ))}
                                 </div>
@@ -248,6 +302,11 @@ const HarvestLotDetail: React.FC = () => {
                                                     {greenBean.cuppingScores?.[0]?.score != null && (
                                                         <div>Cupping Score: {greenBean.cuppingScores[0].score} pts</div>
                                                     )}
+                                                    <div>
+                                                        Date: {greenBean.cuppingScores?.[0]?.sessionId
+                                                            ? getCuppingDate(greenBean.id, greenBean.cuppingScores[0].sessionId)
+                                                            : formatDate(greenBean.updatedAt || greenBean.createdAt)}
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
