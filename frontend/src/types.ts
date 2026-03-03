@@ -45,6 +45,7 @@ export interface ProcessType {
 
 export interface Farm {
   id: string;
+  farmName?: string;
   name?: string;
   farmerName: string;
   ownerNames?: string[];
@@ -68,10 +69,18 @@ export interface Farm {
   ownerUserId?: string;
 }
 
+export interface HarvestLotFarmSummary {
+  id: string;
+  farmName?: string;
+  name?: string;
+  location?: string;
+}
+
 export interface HarvestLot {
   id: string;
   displayId?: string;
   farmId?: string;
+  farm?: HarvestLotFarmSummary;
   farmerName: string;
   cherryVariety: string;
   weightKg: number;
@@ -81,6 +90,7 @@ export interface HarvestLot {
   status: "Ready for Processing" | "Complete";
   cropYearId?: string;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface DryingLogEntry {
@@ -184,6 +194,7 @@ export interface GreenBeanLot {
   publicTraceId?: string;
   qrGeneratedAt?: string;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export enum RoastLevel {
