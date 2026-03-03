@@ -60,7 +60,7 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({ lots, onLogRoast,
       )}
 
       {/* Table */}
-      <div className="w-full">
+      <div className="overflow-x-auto">
         <table className="w-full table-fixed">
           <colgroup>
             <col className="w-[14%]" />
@@ -71,13 +71,13 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({ lots, onLogRoast,
             <col className="w-[20%]" />
           </colgroup>
           <thead>
-            <tr className="bg-black-800 flex items-center text-left ">
-              <th className="px-4 py-3 text-left text-xs font-normal text-white tracking-wide bg-black">ID</th>
-              <th className="px-4 py-3 text-right text-xs font-normal text-white tracking-wide bg-black">Details</th>
-              <th className="px-4 py-3 text-left text-xs font-normal text-white tracking-wide bg-black">Grade</th>
-              <th className="px-4 py-3 text-right text-xs font-normal text-white tracking-wide bg-black">Score</th>
-              <th className="px-4 py-3 text-right text-xs font-normal text-white tracking-wide bg-black">Available</th>
-              <th className="px-4 py-3 text-right text-xs font-normal text-white tracking-wide bg-black">Action</th>
+            <tr className="bg-gray-800">
+              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">ID</th>
+              <th className="px-5 py-3 text-center text-xs font-semibold text-gray-200 uppercase tracking-wide">Details</th>
+              <th className="px-5 py-3 text-left text-xs font-semibold text-gray-200 uppercase tracking-wide">Grade</th>
+              <th className="px-5 py-3 text-right text-xs font-semibold text-gray-200 uppercase tracking-wide">Score</th>
+              <th className="px-5 py-3 text-right text-xs font-semibold text-gray-200 uppercase tracking-wide">Available</th>
+              <th className="px-5 py-3 text-right text-xs font-semibold text-gray-200 uppercase tracking-wide">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -105,8 +105,8 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({ lots, onLogRoast,
                       {toRoaId(lot.id)}
                     </span>
                   </td>
-                  {/* Details (icon only, right aligned, no bg) */}
-                  <td className="px-4 py-3 text-right align-middle">
+                  {/* Details (icon only, centered) */}
+                  <td className="px-4 py-3 text-center align-middle">
                     <button
                       onClick={(e) => { e.stopPropagation(); openWithPos(lot.id, e.currentTarget); }}
                       className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 transition-colors"
