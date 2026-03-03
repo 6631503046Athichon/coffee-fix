@@ -12,6 +12,34 @@ import { getActiveCoffeeVarieties, CoffeeVariety } from '../../services/coffeeVa
 
 type ParsedGoogleMaps = { lat: number; lng: number; placeName?: string } | null;
 
+const getDistrictProvince = (placeName?: string): string | undefined => {
+	if (!placeName) return undefined;
+	const parts = placeName
+		.split(',')
+		.map(part => part.trim())
+		.filter(Boolean);
+	if (parts.length < 2) return undefined;
+	const district = parts[parts.length - 2];
+	const province = parts[parts.length - 1];
+	return `${district}, ${province}`;
+};
+
+const getDistrictProvinceFromAddress = (address: Record<string, string>): string | undefined => {
+	const district =
+		address.county ||
+		address.city_district ||
+		address.state_district ||
+		address.municipality ||
+		address.city ||
+		address.town ||
+		address.village ||
+		address.suburb ||
+		address.neighbourhood;
+	const province = address.state || address.region || address.province;
+	if (district && province) return `${district}, ${province}`;
+	return district || province;
+};
+
 function parseGoogleMapsUrl(url: string): ParsedGoogleMaps {
 	if (!url) return null;
 	try {
@@ -73,6 +101,7 @@ const AddFarmPage: React.FC = () => {
 	const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 	const [isGeocoding, setIsGeocoding] = useState(false);
 	const [isGettingLocation, setIsGettingLocation] = useState(false);
+	const [isParsingUrl, setIsParsingUrl] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const lastLoadedFarmIdRef = useRef<string | null>(null);
 
@@ -195,7 +224,7 @@ const AddFarmPage: React.FC = () => {
 		setCustomVariety('');
 	};
 
-	const handleExtractFromGoogleMapsUrl = () => {
+	const handleExtractFromGoogleMapsUrl = async () => {
 		setFormError(null);
 
 		if (!googleMapsUrl.trim()) {
@@ -210,6 +239,7 @@ const AddFarmPage: React.FC = () => {
 		}
 
 		const { lat, lng, placeName } = parsed;
+		let districtProvince = getDistrictProvince(placeName);
 		if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
 			setFormError('The coordinates from this URL are not in a valid range.');
 			return;
@@ -218,24 +248,48 @@ const AddFarmPage: React.FC = () => {
 		setLatitudeInput(lat.toFixed(6));
 		setLongitudeInput(lng.toFixed(6));
 
+		if (!districtProvince) {
+			setIsParsingUrl(true);
+			try {
+				const response = await fetch(
+					`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`,
+					{
+						headers: {
+							'User-Agent': 'CoffeeLab-Platform/1.0',
+						},
+					}
+				);
+				if (response.ok) {
+					const result = await response.json();
+					if (result && result.address) {
+						districtProvince = getDistrictProvinceFromAddress(result.address);
+					}
+				}
+			} catch (error) {
+				console.error('Reverse geocoding error:', error);
+			} finally {
+				setIsParsingUrl(false);
+			}
+		}
+
 		const existingLocation = farmLocation.trim();
 
 		// ถ้ามี Location อยู่แล้ว และดึงชื่อสถานที่จาก URL ได้ ให้เตือนว่าอาจไม่ตรงกัน
-		if (existingLocation && placeName && existingLocation !== placeName) {
-			setFarmLocation(placeName); // อัพเดทเป็นชื่อจาก URL
+		if (existingLocation && districtProvince && existingLocation !== districtProvince) {
+			setFarmLocation(districtProvince); // อัพเดทเป็นอำเภอ, จังหวัดจาก URL
 			setToast({
 				type: 'success',
-				message: `เปลี่ยน Location จาก "${existingLocation}" เป็น "${placeName}" ตาม Google Maps URL`,
+				message: `เปลี่ยน Location จาก "${existingLocation}" เป็น "${districtProvince}" ตาม Google Maps URL`,
 			});
-		} else if (existingLocation && !placeName) {
-			// มี Location อยู่แล้ว แต่ URL ไม่มีชื่อสถานที่ - เตือนให้ตรวจสอบ
-			setFormError(`⚠️ คุณกรอก "${existingLocation}" แต่ลิงค์ Google Maps ไม่มีชื่อสถานที่ กรุณาตรวจสอบว่าพิกัด (${lat.toFixed(4)}, ${lng.toFixed(4)}) ตรงกับ "${existingLocation}" หรือไม่`);
-		} else if (placeName && !existingLocation) {
-			// ไม่มี Location - ใส่ชื่อจาก URL ให้
-			setFarmLocation(placeName);
+		} else if (existingLocation && !districtProvince) {
+			// มี Location อยู่แล้ว แต่ URL ไม่มีข้อมูลอำเภอ, จังหวัด - เตือนให้ตรวจสอบ
+			setFormError(`⚠️ คุณกรอก "${existingLocation}" แต่ลิงค์ Google Maps ไม่มีข้อมูลอำเภอ/จังหวัด กรุณาตรวจสอบว่าพิกัด (${lat.toFixed(4)}, ${lng.toFixed(4)}) ตรงกับ "${existingLocation}" หรือไม่`);
+		} else if (districtProvince && !existingLocation) {
+			// ไม่มี Location - ใส่ชื่ออำเภอ, จังหวัดจาก URL ให้
+			setFarmLocation(districtProvince);
 			setToast({
 				type: 'success',
-				message: `ดึงพิกัดและ Location "${placeName}" จาก Google Maps URL สำเร็จ`,
+				message: `ดึงพิกัดและ Location "${districtProvince}" จาก Google Maps URL สำเร็จ`,
 			});
 		} else {
 			setToast({
@@ -712,11 +766,11 @@ const AddFarmPage: React.FC = () => {
 									type="button"
 									variant="outline"
 									onClick={handleExtractFromGoogleMapsUrl}
-									disabled={!googleMapsUrl.trim()}
-									icon={<MapPin className="h-4 w-4" />}
+									disabled={!googleMapsUrl.trim() || isParsingUrl}
+									icon={isParsingUrl ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
 									className="bg-white hover:bg-sky-50 border-sky-300 text-sky-700 hover:text-sky-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
 								>
-									Use Google Maps URL
+									{isParsingUrl ? 'Checking...' : 'Use Google Maps URL'}
 								</Button>
 								<Button
 									type="button"
