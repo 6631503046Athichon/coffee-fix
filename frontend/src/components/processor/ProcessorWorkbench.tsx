@@ -1348,8 +1348,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         }
 
         // Validate against remaining weight in harvest lot
-        const availableWeight =
-          selectedHarvestLot.remainingWeightKg ?? selectedHarvestLot.weightKg;
+        const availableWeight = getAvailableHarvestWeight(selectedHarvestLot);
 
         console.log("Validation check:", {
           parchmentWeightKg,
@@ -1671,10 +1670,57 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     }
   };
 
-  // Only show lots that are ready for processing (not yet processed)
+  const processedParchmentWeightByHarvestLot = useMemo(() => {
+    return data.processingBatches.reduce<Record<string, number>>((acc, batch) => {
+      if (
+        batch.status === ProcessingBatchStatus.Completed &&
+        typeof batch.parchmentWeightKg === "number" &&
+        batch.parchmentWeightKg > 0
+      ) {
+        acc[batch.harvestLotId] =
+          (acc[batch.harvestLotId] || 0) + batch.parchmentWeightKg;
+      }
+      return acc;
+    }, {});
+  }, [data.processingBatches]);
+
+  const getAvailableHarvestWeight = useCallback(
+    (lot: HarvestLot) => {
+      if (typeof lot.remainingWeightKg === "number") {
+        return Math.max(0, lot.remainingWeightKg);
+      }
+
+      // Backward compatibility: older records may have status=Complete without remainingWeightKg.
+      if (lot.status === "Complete") {
+        const processedWeight = processedParchmentWeightByHarvestLot[lot.id] || 0;
+        if (processedWeight > 0 && typeof lot.weightKg === "number") {
+          return Math.max(0, parseFloat((lot.weightKg - processedWeight).toFixed(6)));
+        }
+      }
+
+      return lot.weightKg || 0;
+    },
+    [processedParchmentWeightByHarvestLot],
+  );
+
+  // Show lots that can still be processed (including legacy Complete records with remaining weight).
   const readyForProcessingLots = useMemo(
-    () => data.harvestLots.filter((lot) => lot.status === "Ready for Processing"),
-    [data.harvestLots],
+    () =>
+      data.harvestLots.filter((lot) => {
+        const availableWeight = getAvailableHarvestWeight(lot);
+        if (lot.status === "Ready for Processing") {
+          return availableWeight > 0;
+        }
+        if (lot.status === "Complete") {
+          if (typeof lot.remainingWeightKg === "number") {
+            return lot.remainingWeightKg > 0;
+          }
+          const processedWeight = processedParchmentWeightByHarvestLot[lot.id] || 0;
+          return processedWeight > 0 && availableWeight > 0;
+        }
+        return false;
+      }),
+    [data.harvestLots, getAvailableHarvestWeight, processedParchmentWeightByHarvestLot],
   );
 
   const filteredHarvestLots = useMemo(() => {
@@ -2025,6 +2071,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               ) : (
                 paginatedHarvestLots.map((lot) => {
                   const isNewLot = isRecentItem(lot.createdAt ?? lot.harvestDate);
+                  const availableWeight = getAvailableHarvestWeight(lot);
+                  const isPartial =
+                    typeof lot.weightKg === "number" && availableWeight < lot.weightKg;
                   return (
                     <tr
                       key={lot.id}
@@ -2044,13 +2093,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       {lot.cherryVariety}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-green-600">
-                      {typeof lot.remainingWeightKg === "number" &&
-                      typeof lot.weightKg === "number" &&
-                      lot.remainingWeightKg !== lot.weightKg
-                        ? `${(lot.remainingWeightKg ?? 0).toFixed(2)} kg (of ${lot.weightKg} kg)`
-                        : typeof lot.weightKg === "number"
-                          ? `${lot.weightKg} kg`
-                          : "-"}
+                      {typeof lot.weightKg === "number"
+                        ? isPartial
+                          ? `${availableWeight.toFixed(2)} kg (of ${lot.weightKg} kg)`
+                          : `${availableWeight.toFixed(2)} kg`
+                        : "-"}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                       {lot.farmerName}
@@ -2918,6 +2965,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               <div className="space-y-2">
                 {paginatedHarvestCards.map((lot) => {
                   const isNewLot = isRecentItem(lot.createdAt ?? lot.harvestDate);
+                  const availableWeight = getAvailableHarvestWeight(lot);
+                  const isPartial =
+                    typeof lot.weightKg === "number" && availableWeight < lot.weightKg;
                   return (
                     <div
                       key={lot.id}
@@ -2952,13 +3002,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       <div className="flex justify-between">
                         <span>Weight</span>
                         <span className="font-medium text-green-600">
-                          {typeof lot.remainingWeightKg === "number" &&
-                          typeof lot.weightKg === "number" &&
-                          lot.remainingWeightKg !== lot.weightKg
-                            ? `${(lot.remainingWeightKg ?? 0).toFixed(2)} kg (of ${lot.weightKg} kg)`
-                            : typeof lot.weightKg === "number"
-                              ? `${lot.weightKg} kg`
-                              : "-"}
+                          {typeof lot.weightKg === "number"
+                            ? isPartial
+                              ? `${availableWeight.toFixed(2)} kg (of ${lot.weightKg} kg)`
+                              : `${availableWeight.toFixed(2)} kg`
+                            : "-"}
                         </span>
                       </div>
                     </div>
@@ -3655,7 +3703,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
                       {/* Weight Info Bar */}
                       {(() => {
-                        const available = selectedHarvestLot.remainingWeightKg ?? selectedHarvestLot.weightKg ?? 0;
+                        const available = getAvailableHarvestWeight(selectedHarvestLot);
                         const parchmentVal = parseFloat(parchmentWeightInput) || 0;
                         const remaining = available - parchmentVal;
                         const pct = available > 0 ? Math.max(0, Math.round((remaining / available) * 100)) : 100;
