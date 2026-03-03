@@ -264,6 +264,16 @@ export interface PublicTraceData {
     availabilityStatus: string;
     externalSource?: any;
     cuppingScores: any[];
+    cuppingFragrance?: number;
+    cuppingFlavor?: number;
+    cuppingAftertaste?: number;
+    cuppingAcidity?: number;
+    cuppingBody?: number;
+    cuppingBalance?: number;
+    cuppingOverall?: number;
+    cuppingUniformity?: number;
+    cuppingCleanCup?: number;
+    cuppingSweetness?: number;
     parchmentLot?: any;
     roastBatches: any[];
   };
