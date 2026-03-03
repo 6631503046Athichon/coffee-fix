@@ -374,7 +374,7 @@ export interface SoilAnalysis {
   pH: number;
   phosphorus: number; // P (ppm or mg/kg)
   potassium: number; // K (ppm or mg/kg)
-  nitrogen: number; // N (%)
+  nitrogen?: number; // N (%)
   calcium: number; // Ca (ppm or mg/kg)
   magnesium: number; // Mg (ppm or mg/kg)
 
