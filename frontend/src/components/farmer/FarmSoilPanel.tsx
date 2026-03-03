@@ -219,7 +219,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
     }
 
     // Validate required fields first - but allow partial data for better UX
-    const requiredFields = ['pH', 'phosphorus', 'potassium', 'nitrogen', 'calcium', 'magnesium'];
+    const requiredFields = ['pH', 'phosphorus', 'potassium', 'calcium', 'magnesium'];
     const missingFields = requiredFields.filter(field => !soilForm[field as keyof SoilFormState]?.trim());
     
     if (missingFields.length > 0) {
@@ -233,7 +233,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
     }
 
     // Validate that values are numeric
-    const numericFields = ['pH', 'phosphorus', 'potassium', 'nitrogen', 'calcium', 'magnesium'];
+    const numericFields = ['pH', 'phosphorus', 'potassium', 'calcium', 'magnesium'];
     const invalidFields: string[] = [];
     for (const field of numericFields) {
       const value = soilForm[field as keyof SoilFormState]?.trim();
@@ -256,7 +256,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
         pH: parseFloat(soilForm.pH),
         phosphorus: parseFloat(soilForm.phosphorus),
         potassium: parseFloat(soilForm.potassium),
-        nitrogen: parseFloat(soilForm.nitrogen),
+        nitrogen: soilForm.nitrogen.trim() ? parseFloat(soilForm.nitrogen) : 0,
         calcium: parseFloat(soilForm.calcium),
         magnesium: parseFloat(soilForm.magnesium),
         organicMatter: soilForm.organicMatter?.trim() ? parseFloat(soilForm.organicMatter) : undefined,
@@ -327,7 +327,6 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
       { key: 'pH', label: 'pH' },
       { key: 'phosphorus', label: 'ฟอสฟอรัส (P)' },
       { key: 'potassium', label: 'โพแทสเซียม (K)' },
-      { key: 'nitrogen', label: 'ไนโตรเจน (N)' },
       { key: 'calcium', label: 'แคลเซียม (Ca)' },
       { key: 'magnesium', label: 'แมกนีเซียม (Mg)' },
     ];
