@@ -107,46 +107,60 @@ export async function POST(request: NextRequest) {
 
     const weight = parseFloat(claimedWeightKg)
 
-    const inventoryItem = await prisma.roasterInventoryItem.upsert({
-      where: {
-        roasterId_greenBeanLotId: {
-          roasterId: user.id,
-          greenBeanLotId,
+    const inventoryInclude = {
+      roaster: {
+        select: {
+          id: true,
+          name: true,
         },
       },
-      update: {
-        claimedWeightKg: { increment: weight },
-        remainingWeightKg: { increment: weight },
-      },
-      create: {
-        roasterId: user.id,
-        greenBeanLotId,
-        claimedWeightKg: weight,
-        remainingWeightKg: weight,
-      },
-      include: {
-        roaster: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        greenBeanLot: {
-          include: {
-            parchmentLot: {
-              include: {
-                harvestLot: {
-                  select: {
-                    id: true,
-                    farmerName: true,
-                    cherryVariety: true,
-                  },
+      greenBeanLot: {
+        include: {
+          parchmentLot: {
+            include: {
+              harvestLot: {
+                select: {
+                  id: true,
+                  farmerName: true,
+                  cherryVariety: true,
                 },
               },
             },
           },
         },
       },
+    } as const
+
+    const inventoryItem = await prisma.$transaction(async (tx) => {
+      const existingItem = await tx.roasterInventoryItem.findFirst({
+        where: {
+          roasterId: user.id,
+          greenBeanLotId,
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      })
+
+      if (existingItem) {
+        return tx.roasterInventoryItem.update({
+          where: { id: existingItem.id },
+          data: {
+            claimedWeightKg: { increment: weight },
+            remainingWeightKg: { increment: weight },
+          },
+          include: inventoryInclude,
+        })
+      }
+
+      return tx.roasterInventoryItem.create({
+        data: {
+          roasterId: user.id,
+          greenBeanLotId,
+          claimedWeightKg: weight,
+          remainingWeightKg: weight,
+        },
+        include: inventoryInclude,
+      })
     })
 
     return NextResponse.json(

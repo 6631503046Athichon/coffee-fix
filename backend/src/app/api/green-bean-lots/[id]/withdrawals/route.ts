@@ -99,24 +99,33 @@ export async function POST(
 
       // For any withdrawal with a target roaster: auto-create or update RoasterInventoryItem
       if (targetRoasterId) {
-        await tx.roasterInventoryItem.upsert({
+        const existingInventoryItem = await tx.roasterInventoryItem.findFirst({
           where: {
-            roasterId_greenBeanLotId: {
-              roasterId: targetRoasterId,
-              greenBeanLotId: id,
-            },
-          },
-          update: {
-            claimedWeightKg: { increment: amount },
-            remainingWeightKg: { increment: amount },
-          },
-          create: {
             roasterId: targetRoasterId,
             greenBeanLotId: id,
-            claimedWeightKg: amount,
-            remainingWeightKg: amount,
           },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true },
         })
+
+        if (existingInventoryItem) {
+          await tx.roasterInventoryItem.update({
+            where: { id: existingInventoryItem.id },
+            data: {
+              claimedWeightKg: { increment: amount },
+              remainingWeightKg: { increment: amount },
+            },
+          })
+        } else {
+          await tx.roasterInventoryItem.create({
+            data: {
+              roasterId: targetRoasterId,
+              greenBeanLotId: id,
+              claimedWeightKg: amount,
+              remainingWeightKg: amount,
+            },
+          })
+        }
       }
     })
 
@@ -140,13 +149,12 @@ export async function POST(
     // Fetch the created/updated inventory item if this withdrawal had a target roaster
     let roasterInventoryItem = null
     if (targetRoasterId) {
-      roasterInventoryItem = await prisma.roasterInventoryItem.findUnique({
+      roasterInventoryItem = await prisma.roasterInventoryItem.findFirst({
         where: {
-          roasterId_greenBeanLotId: {
-            roasterId: targetRoasterId,
-            greenBeanLotId: id,
-          },
+          roasterId: targetRoasterId,
+          greenBeanLotId: id,
         },
+        orderBy: { createdAt: 'desc' },
       })
     }
 

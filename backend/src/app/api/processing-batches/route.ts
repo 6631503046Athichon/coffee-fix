@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
-import { nextDisplayId } from "@/lib/utils";
+import { nextDisplayId, safeParseFloat } from "@/lib/utils";
 
 // GET /api/processing-batches - List all processing batches
 export async function GET(request: NextRequest) {
@@ -94,12 +94,63 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const harvestLot = await prisma.harvestLot.findUnique({
+      where: { id: harvestLotId },
+      select: {
+        id: true,
+        weightKg: true,
+        remainingWeightKg: true,
+      },
+    });
+
+    if (!harvestLot) {
+      return NextResponse.json(
+        { error: "Harvest lot not found" },
+        { status: 404 },
+      );
+    }
+
+    const isCompletedBatch = status === "Completed";
+    const parsedParchmentWeight = safeParseFloat(parchmentWeightKg);
+    const parsedMoistureContent = safeParseFloat(moistureContent);
+
+    if (isCompletedBatch) {
+      if (parsedParchmentWeight === null || parsedParchmentWeight <= 0) {
+        return NextResponse.json(
+          { error: "Valid parchment weight is required for completed batches" },
+          { status: 400 },
+        );
+      }
+
+      if (
+        parsedMoistureContent === null ||
+        parsedMoistureContent < 0 ||
+        parsedMoistureContent > 100
+      ) {
+        return NextResponse.json(
+          { error: "Valid moisture content (0-100) is required for completed batches" },
+          { status: 400 },
+        );
+      }
+
+      const availableWeight =
+        harvestLot.remainingWeightKg ?? harvestLot.weightKg;
+      if (parsedParchmentWeight > availableWeight) {
+        return NextResponse.json(
+          {
+            error: `Parchment weight (${parsedParchmentWeight} kg) exceeds available harvest lot weight (${availableWeight.toFixed(2)} kg)`,
+          },
+          { status: 400 },
+        );
+      }
+    }
+
     // Pre-generate display IDs outside the transaction
-    const batchDisplayId = await nextDisplayId(prisma.processingBatch, "PB")
+    const batchDisplayId = await nextDisplayId(prisma.processingBatch, "PB");
     const parchmentDisplayId =
-      status === "Completed" && parchmentWeightKg && moistureContent
+      isCompletedBatch
         ? await nextDisplayId(prisma.parchmentLot, "PCH")
-        : null
+        : null;
 
     // Use transaction to create batch and update harvest lot status atomically
     const processingBatch = await prisma.$transaction(async (tx) => {
@@ -113,10 +164,8 @@ export async function POST(request: NextRequest) {
           processNotes: processNotes || null,
           cropYearId: cropYearId || null,
           createdById: user.id,
-          parchmentWeightKg: parchmentWeightKg
-            ? parseFloat(parchmentWeightKg)
-            : null,
-          moistureContent: moistureContent ? parseFloat(moistureContent) : null,
+          parchmentWeightKg: parsedParchmentWeight,
+          moistureContent: parsedMoistureContent,
           dryingStartDate: dryingStartDate ? new Date(dryingStartDate) : null,
           dryingEndDate: dryingEndDate ? new Date(dryingEndDate) : null,
           baggingDate: baggingDate ? new Date(baggingDate) : null,
@@ -144,26 +193,41 @@ export async function POST(request: NextRequest) {
       });
 
       // If status is Completed and we have parchment data, create parchment lot
-      if (status === "Completed" && parchmentWeightKg && moistureContent) {
+      if (
+        isCompletedBatch &&
+        parsedParchmentWeight !== null &&
+        parsedMoistureContent !== null
+      ) {
         await tx.parchmentLot.create({
           data: {
             displayId: parchmentDisplayId,
             processingBatchId: batch.id,
             harvestLotId: harvestLotId,
-            initialWeightKg: parseFloat(parchmentWeightKg),
-            currentWeightKg: parseFloat(parchmentWeightKg),
-            moistureContent: parseFloat(moistureContent),
+            initialWeightKg: parsedParchmentWeight,
+            currentWeightKg: parsedParchmentWeight,
+            moistureContent: parsedMoistureContent,
             processType: processType,
             status: "AwaitingHulling",
           },
         });
-      }
 
-      // Update harvest lot status to Complete when processing batch is created
-      await tx.harvestLot.update({
-        where: { id: harvestLotId },
-        data: { status: "Complete" },
-      });
+        const availableWeight =
+          harvestLot.remainingWeightKg ?? harvestLot.weightKg;
+        const newRemainingWeight = Math.max(
+          0,
+          parseFloat((availableWeight - parsedParchmentWeight).toFixed(6)),
+        );
+        const nextHarvestStatus =
+          newRemainingWeight > 0 ? "ReadyForProcessing" : "Complete";
+
+        await tx.harvestLot.update({
+          where: { id: harvestLotId },
+          data: {
+            remainingWeightKg: newRemainingWeight,
+            status: nextHarvestStatus,
+          },
+        });
+      }
 
       return batch;
     });
