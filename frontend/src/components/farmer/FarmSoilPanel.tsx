@@ -7,7 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Farm, SoilAnalysis, UserRole } from '../../types';
 import { generateSoilAnalysisId } from '../../utils/idGenerator';
 import { formatDateDisplay } from '../../utils/formatters';
-import { addSoilAnalysis, updateSoilAnalysis } from '../../services/soilAnalysisService';
+import { addSoilAnalysis, deleteSoilAnalysis, updateSoilAnalysis } from '../../services/soilAnalysisService';
 import { generateSoilRecommendations, extractSoilDataFromImage } from '../../services/geminiService';
 
 export type SoilFormState = {
@@ -460,18 +460,27 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
     }));
   };
 
-  const handleSoilDelete = (analysisId: string) => {
+  const handleSoilDelete = async (analysisId: string) => {
     if (!confirm('ยืนยันการลบผลวิเคราะห์ดินนี้?')) {
       return;
     }
-    setData(prev => ({
-      ...prev,
-      soilAnalyses: prev.soilAnalyses.filter(analysis => analysis.id !== analysisId),
-    }));
-    if (editingSoilId === analysisId) {
-      handleSoilCancelEdit();
+    try {
+      await deleteSoilAnalysis(analysisId);
+      setData(prev => ({
+        ...prev,
+        soilAnalyses: prev.soilAnalyses.filter(analysis => analysis.id !== analysisId),
+      }));
+      if (editingSoilId === analysisId) {
+        handleSoilCancelEdit();
+      }
+      setSoilToast({ type: 'success', message: 'ลบผลวิเคราะห์แล้ว' });
+    } catch (error) {
+      console.error('Failed to delete soil analysis:', error);
+      setSoilToast({
+        type: 'error',
+        message: 'ลบผลวิเคราะห์ไม่สำเร็จ กรุณาลองใหม่',
+      });
     }
-    setSoilToast({ type: 'success', message: 'ลบผลวิเคราะห์แล้ว' });
   };
 
   // If not open, don't render anything

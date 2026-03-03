@@ -74,14 +74,19 @@ import { addPricingHistory } from "../../services/salesService";
 import {
   addProcessingBatch,
   updateProcessingBatch,
+  deleteProcessingBatch,
 } from "../../services/processingBatchService";
 import {
   createGreenBeanLot,
   updateGreenBeanLotScore,
   updateGreenBeanLotAvailability,
   createWithdrawal,
+  deleteGreenBeanLot,
 } from "../../services/greenBeanLotService";
-import { updateParchmentLot } from "../../services/parchmentLotService";
+import {
+  updateParchmentLot,
+  deleteParchmentLot,
+} from "../../services/parchmentLotService";
 import DatePicker from "../common/DatePicker";
 import InvoiceReceipt from "./InvoiceReceipt";
 import Select from "../common/Select";
@@ -1150,54 +1155,135 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   };
 
   // Delete handlers for Admin
-  const handleDeleteBatch = (batchId: string) => {
+  const handleDeleteBatch = async (batchId: string) => {
     if (
       window.confirm(
         "Are you sure you want to delete this processing batch? This will also delete related parchment and green bean lots.",
       )
     ) {
-      setData((prev) => ({
-        ...prev,
-        processingBatches: prev.processingBatches.filter(
-          (b) => b.id !== batchId,
-        ),
-        parchmentLots: prev.parchmentLots.filter(
-          (p) => p.processingBatchId !== batchId,
-        ),
-        greenBeanLots: prev.greenBeanLots.filter((g) => {
-          const parchment = prev.parchmentLots.find(
-            (p) => p.id === g.parchmentLotId,
-          );
-          return parchment?.processingBatchId !== batchId;
-        }),
-      }));
+      try {
+        const relatedParchmentIds = data.parchmentLots
+          .filter((p) => p.processingBatchId === batchId)
+          .map((p) => p.id);
+        const relatedGreenBeanIds = data.greenBeanLots
+          .filter(
+            (g) =>
+              g.parchmentLotId && relatedParchmentIds.includes(g.parchmentLotId),
+          )
+          .map((g) => g.id);
+
+        await Promise.all(
+          relatedGreenBeanIds.map((greenBeanId) =>
+            deleteGreenBeanLot(greenBeanId),
+          ),
+        );
+        await Promise.all(
+          relatedParchmentIds.map((parchmentId) =>
+            deleteParchmentLot(parchmentId),
+          ),
+        );
+        await deleteProcessingBatch(batchId);
+
+        setData((prev) => ({
+          ...prev,
+          processingBatches: prev.processingBatches.filter(
+            (b) => b.id !== batchId,
+          ),
+          parchmentLots: prev.parchmentLots.filter(
+            (p) => p.processingBatchId !== batchId,
+          ),
+          greenBeanLots: prev.greenBeanLots.filter((g) => {
+            const parchment = prev.parchmentLots.find(
+              (p) => p.id === g.parchmentLotId,
+            );
+            return parchment?.processingBatchId !== batchId;
+          }),
+        }));
+
+        addToast({
+          type: "success",
+          message: "Processing batch deleted successfully.",
+        });
+      } catch (error) {
+        console.error("Failed to delete processing batch:", error);
+        addToast({
+          type: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to delete processing batch.",
+        });
+      }
     }
   };
 
-  const handleDeleteParchmentLot = (lotId: string) => {
+  const handleDeleteParchmentLot = async (lotId: string) => {
     if (
       window.confirm(
         "Are you sure you want to delete this parchment lot? This will also delete related green bean lots.",
       )
     ) {
-      setData((prev) => ({
-        ...prev,
-        parchmentLots: prev.parchmentLots.filter((p) => p.id !== lotId),
-        greenBeanLots: prev.greenBeanLots.filter(
-          (g) => g.parchmentLotId !== lotId,
-        ),
-      }));
+      try {
+        const relatedGreenBeanIds = data.greenBeanLots
+          .filter((g) => g.parchmentLotId === lotId)
+          .map((g) => g.id);
+
+        await Promise.all(
+          relatedGreenBeanIds.map((greenBeanId) =>
+            deleteGreenBeanLot(greenBeanId),
+          ),
+        );
+        await deleteParchmentLot(lotId);
+
+        setData((prev) => ({
+          ...prev,
+          parchmentLots: prev.parchmentLots.filter((p) => p.id !== lotId),
+          greenBeanLots: prev.greenBeanLots.filter(
+            (g) => g.parchmentLotId !== lotId,
+          ),
+        }));
+
+        addToast({
+          type: "success",
+          message: "Parchment lot deleted successfully.",
+        });
+      } catch (error) {
+        console.error("Failed to delete parchment lot:", error);
+        addToast({
+          type: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to delete parchment lot.",
+        });
+      }
     }
   };
 
-  const handleDeleteGreenBeanLot = (lotId: string) => {
+  const handleDeleteGreenBeanLot = async (lotId: string) => {
     if (
       window.confirm("Are you sure you want to delete this green bean lot?")
     ) {
-      setData((prev) => ({
-        ...prev,
-        greenBeanLots: prev.greenBeanLots.filter((g) => g.id !== lotId),
-      }));
+      try {
+        await deleteGreenBeanLot(lotId);
+        setData((prev) => ({
+          ...prev,
+          greenBeanLots: prev.greenBeanLots.filter((g) => g.id !== lotId),
+        }));
+        addToast({
+          type: "success",
+          message: "Green bean lot deleted successfully.",
+        });
+      } catch (error) {
+        console.error("Failed to delete green bean lot:", error);
+        addToast({
+          type: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to delete green bean lot.",
+        });
+      }
     }
   };
 

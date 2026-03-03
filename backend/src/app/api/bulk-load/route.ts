@@ -125,6 +125,15 @@ export async function GET(request: NextRequest) {
       const farmScopeWhere = isFarmer && !isAdmin
         ? { farmId: { in: farmIds } }
         : {}
+      const processingScopeWhere = isFarmer && !isAdmin
+        ? { harvestLot: { farmId: { in: farmIds } } }
+        : {}
+      const parchmentScopeWhere = isFarmer && !isAdmin
+        ? { harvestLot: { farmId: { in: farmIds } } }
+        : {}
+      const greenBeanScopeWhere = isFarmer && !isAdmin
+        ? { parchmentLot: { harvestLot: { farmId: { in: farmIds } } } }
+        : {}
 
       // Roaster scope
       const roasterWhere: Record<string, unknown> = {}
@@ -169,6 +178,7 @@ export async function GET(request: NextRequest) {
 
         // Processing Batches
         prisma.processingBatch.findMany({
+          where: processingScopeWhere,
           take: 50,
           include: {
             harvestLot: {
@@ -188,6 +198,7 @@ export async function GET(request: NextRequest) {
 
         // Parchment Lots
         prisma.parchmentLot.findMany({
+          where: parchmentScopeWhere,
           take: 100,
           include: {
             processingBatch: { select: { id: true, processType: true, status: true } },
@@ -199,6 +210,7 @@ export async function GET(request: NextRequest) {
 
         // Green Bean Lots
         prisma.greenBeanLot.findMany({
+          where: greenBeanScopeWhere,
           include: {
             parchmentLot: {
               include: {

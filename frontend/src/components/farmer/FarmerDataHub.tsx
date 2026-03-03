@@ -11,6 +11,7 @@ import { Input } from '../common/Input';
 import { PageHeader } from '../common/PageHeader';
 import { Badge } from '../common/Badge';
 import { exportToCSV } from '../../utils/exportCSV';
+import { deleteHarvestLot, updateHarvestLot } from '../../services/harvestLotService';
 
 import { formatDateDisplay } from '../../utils/formatters';
 
@@ -87,13 +88,19 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
         return filteredLots.slice(start, start + ITEMS_PER_PAGE);
     }, [filteredLots, currentPage]);
 
-    const handleDelete = (lotId: string, e: React.MouseEvent) => {
+    const handleDelete = async (lotId: string, e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent row click
         if (window.confirm('Are you sure you want to delete this harvest lot? This action cannot be undone.')) {
-            setData(prev => ({
-                ...prev,
-                harvestLots: prev.harvestLots.filter(lot => lot.id !== lotId),
-            }));
+            try {
+                await deleteHarvestLot(lotId);
+                setData(prev => ({
+                    ...prev,
+                    harvestLots: prev.harvestLots.filter(lot => lot.id !== lotId),
+                }));
+            } catch (error) {
+                console.error('Failed to delete harvest lot:', error);
+                alert('Failed to delete harvest lot. Please try again.');
+            }
         }
     };
 
@@ -116,27 +123,28 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
         setEditingLot(null);
     };
 
-    const handleEditSubmit = (e: React.FormEvent) => {
+    const handleEditSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingLot) return;
 
-        setData(prev => ({
-            ...prev,
-            harvestLots: prev.harvestLots.map(lot =>
-                lot.id === editingLot.id
-                    ? {
-                        ...lot,
-                        farmerName: editFormData.farmerName,
-                        cherryVariety: editFormData.cherryVariety,
-                        weightKg: parseFloat(editFormData.weightKg),
-                        harvestDate: editFormData.harvestDate,
-                        farmPlotLocation: editFormData.farmPlotLocation,
-                        status: editFormData.status as 'Ready for Processing' | 'Complete'
-                    }
-                    : lot
-            )
-        }));
-        closeEditModal();
+        try {
+            const updatedLot = await updateHarvestLot(editingLot.id, {
+                farmerName: editFormData.farmerName,
+                cherryVariety: editFormData.cherryVariety,
+                weightKg: parseFloat(editFormData.weightKg),
+                harvestDate: editFormData.harvestDate,
+                farmPlotLocation: editFormData.farmPlotLocation,
+                status: editFormData.status as 'Ready for Processing' | 'Complete',
+            });
+            setData(prev => ({
+                ...prev,
+                harvestLots: prev.harvestLots.map(lot => (lot.id === editingLot.id ? updatedLot : lot)),
+            }));
+            closeEditModal();
+        } catch (error) {
+            console.error('Failed to update harvest lot:', error);
+            alert('Failed to update harvest lot. Please try again.');
+        }
     };
 
     const handleExportCSV = () => {

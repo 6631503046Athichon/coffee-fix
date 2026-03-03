@@ -418,27 +418,97 @@ const ProtectedRoutes: React.FC = () => {
             <Routes>
               <Route path="/farmer" element={<Navigate to="/farmer-dashboard" replace />} />
               <Route path="/dashboard" element={<Navigate to="/farmer-dashboard" replace />} />
-              <Route path="/processor" element={<ProcessorWorkbench currentUser={currentUser!} />} />
+              <Route
+                path="/processor"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Processor, UserRole.Admin]}>
+                    <ProcessorWorkbench currentUser={currentUser!} />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/roaster" element={<ProtectedRoute allowedRoles={[UserRole.Roaster, UserRole.Admin]}><RoasterWorkbench currentUser={currentUser!} /></ProtectedRoute>} />
               <Route path="/cupping" element={<CuppingHub />} />
               <Route path="/cupping/:id" element={<CuppingSessionDetail currentUser={currentUser!} />} />
               <Route path="/scoring" element={<CupperScoringSheet currentUser={currentUser!} />} />
-              <Route path="/insights" element={<QualityInsights />} />
+              <Route
+                path="/insights"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Processor, UserRole.Roaster, UserRole.Admin]}>
+                    <QualityInsights />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/competition/:id" element={<CompetitionDashboard currentUserRoles={currentUser?.roles || [UserRole.Farmer]} />} />
               <Route path="/traceability" element={<ProtectedRoute allowedRoles={[UserRole.Admin, UserRole.Processor]}><TraceabilityHub /></ProtectedRoute>} />
               <Route path="/users" element={<ProtectedRoute allowedRoles={[UserRole.Admin]}><UserManagement /></ProtectedRoute>} />
               <Route path="/customers" element={<ProtectedRoute allowedRoles={[UserRole.Admin, UserRole.Roaster]}><CustomerManagement /></ProtectedRoute>} />
-              <Route path="/farmer-farms" element={<FarmerFarmManagement />} />
-              <Route path="/farmer-farms/add" element={<AddFarmPage />} />
-              <Route path="/farmer-farms/edit/:farmId" element={<AddFarmPage />} />
+              <Route
+                path="/farmer-farms"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
+                    <FarmerFarmManagement />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/farmer-farms/add"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
+                    <AddFarmPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/farmer-farms/edit/:farmId"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
+                    <AddFarmPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/activity-types" element={<ProtectedRoute allowedRoles={[UserRole.Admin]}><ActivityTypeManagement /></ProtectedRoute>} />
               <Route path="/process-types" element={<ProtectedRoute allowedRoles={[UserRole.Admin]}><ProcessTypeManagement /></ProtectedRoute>} />
               <Route path="/coffee-varieties" element={<ProtectedRoute allowedRoles={[UserRole.Admin]}><CoffeeVarietiesManager /></ProtectedRoute>} />
-              <Route path="/farmer-dashboard" element={<FarmerDashboard />} />
-              <Route path="/farmer-dashboard/:lotId" element={<HarvestLotDetail />} />
-              <Route path="/harvest-lots" element={<HarvestLotsManagement />} />
-              <Route path="/farmer-data-hub" element={<FarmerDataHub currentUser={currentUser!} />} />
-              <Route path="/gap-compliance" element={<GAPComplianceHelper />} />
+              <Route
+                path="/farmer-dashboard"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
+                    <FarmerDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/farmer-dashboard/:lotId"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
+                    <HarvestLotDetail />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/harvest-lots"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
+                    <HarvestLotsManagement />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/farmer-data-hub"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
+                    <FarmerDataHub currentUser={currentUser!} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/gap-compliance"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
+                    <GAPComplianceHelper />
+                  </ProtectedRoute>
+                }
+              />
             </Routes>
           </main>
         </div>

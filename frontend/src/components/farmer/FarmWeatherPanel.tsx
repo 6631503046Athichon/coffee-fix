@@ -233,16 +233,11 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
         }));
         setWeatherToast({ type: 'success', message: 'อัปเดตข้อมูลอากาศเรียบร้อยแล้ว' });
       } else {
-        const newIdNumber = Math.max(...data.weatherRecords.map(r => parseInt(r.id.replace('WR', '')) || 0), 0) + 1;
-        const newId = `WR${String(newIdNumber).padStart(3, '0')}`;
-
-        const newRecord: WeatherRecord = {
-          id: newId,
-          ...weatherData,
-        } as WeatherRecord;
-
-        await addWeatherRecord(newRecord);
-        setData(prev => ({ ...prev, weatherRecords: [newRecord, ...prev.weatherRecords] }));
+        const createdRecord = await addWeatherRecord(weatherData);
+        setData(prev => ({
+          ...prev,
+          weatherRecords: [createdRecord, ...prev.weatherRecords.filter(r => r.id !== createdRecord.id)],
+        }));
         setWeatherToast({ type: 'success', message: 'บันทึกข้อมูลอากาศใหม่แล้ว' });
       }
 

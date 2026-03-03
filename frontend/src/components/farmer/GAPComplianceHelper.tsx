@@ -13,7 +13,7 @@ import { PageHeader } from '../common/PageHeader';
 import { Badge } from '../common/Badge';
 import { Alert } from '../common/Alert';
 import { generateGAPLogId } from '../../utils/idGenerator';
-import { addGAPLog, updateGAPLog } from '../../services/gapLogService';
+import { addGAPLog, deleteGAPLog, updateGAPLog } from '../../services/gapLogService';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -256,12 +256,18 @@ const GAPComplianceHelper: React.FC = () => {
         setNotes('');
     };
     
-    const handleDelete = (logId: string) => {
+    const handleDelete = async (logId: string) => {
         if (confirm('Are you sure you want to delete this activity log?')) {
-            setData(prev => ({
-                ...prev,
-                gapLogs: prev.gapLogs.filter(log => log.id !== logId)
-            }));
+            try {
+                await deleteGAPLog(logId);
+                setData(prev => ({
+                    ...prev,
+                    gapLogs: prev.gapLogs.filter(log => log.id !== logId)
+                }));
+            } catch (error) {
+                console.error('Failed to delete GAP log:', error);
+                alert('Failed to delete activity log. Please try again.');
+            }
         }
     };
     

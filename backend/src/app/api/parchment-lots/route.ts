@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { nextDisplayId } from '@/lib/utils'
 
 // GET /api/parchment-lots - List all parchment lots
@@ -56,7 +56,9 @@ export async function GET(request: NextRequest) {
 // POST /api/parchment-lots - Create new parchment lot
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    // SECURITY: Only Processor and Admin can create parchment lots
+    requireRole(user, ['Processor', 'Admin'])
 
     const body = await request.json()
     const { processingBatchId, harvestLotId, initialWeightKg, currentWeightKg, moistureContent, processType, status } = body

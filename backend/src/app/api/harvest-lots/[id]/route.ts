@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireRole, requireOwnership, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireOwnership, handleApiError } from '@/lib/middleware'
 import { safeParseFloat } from '@/lib/utils'
 
 // GET /api/harvest-lots/:id
@@ -10,7 +10,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    await requireAuth(request)
+    const user = await requireAuth(request)
 
     const harvestLot = await prisma.harvestLot.findUnique({
       where: { id },
@@ -20,6 +20,7 @@ export async function GET(
             id: true,
             farmName: true,
             location: true,
+            ownerId: true,
           },
         },
         cropYear: {
@@ -41,7 +42,16 @@ export async function GET(
       )
     }
 
-    return NextResponse.json({ harvestLot })
+    // SECURITY: Farmers can only read harvest lots from their own farms.
+    if (user.roles.includes('Farmer') && !user.roles.includes('Admin')) {
+      requireOwnership(user, harvestLot.farm?.ownerId, ['Admin'])
+    }
+
+    const { farm, ...restHarvestLot } = harvestLot
+    const safeFarm = farm
+      ? { id: farm.id, farmName: farm.farmName, location: farm.location }
+      : null
+    return NextResponse.json({ harvestLot: { ...restHarvestLot, farm: safeFarm } })
   } catch (error) {
     return handleApiError(error)
   }
