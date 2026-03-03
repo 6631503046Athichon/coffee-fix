@@ -48,13 +48,28 @@ export const deleteGreenBeanLot = async (id: string): Promise<void> => {
 /**
  * Update green bean lot processor score
  */
+export type CuppingDetailUpdate = Partial<Pick<
+  GreenBeanLot,
+  | "cuppingFragrance"
+  | "cuppingFlavor"
+  | "cuppingAftertaste"
+  | "cuppingAcidity"
+  | "cuppingBody"
+  | "cuppingBalance"
+  | "cuppingOverall"
+  | "cuppingUniformity"
+  | "cuppingCleanCup"
+  | "cuppingSweetness"
+>>;
+
 export const updateGreenBeanLotScore = async (
   id: string,
   processorScore: number,
+  cuppingDetails?: CuppingDetailUpdate,
 ): Promise<GreenBeanLot> => {
   const response = await api.patch<{ greenBeanLot: any }>(
     `/green-bean-lots/${id}`,
-    { processorScore },
+    { processorScore, ...(cuppingDetails || {}) },
   );
   return transformGreenBeanLotFromBackend(response.greenBeanLot);
 };
@@ -125,6 +140,16 @@ export function transformGreenBeanLotFromBackend(backendLot: any): GreenBeanLot 
     publicTraceId: backendLot.publicTraceId,
     qrGeneratedAt: backendLot.qrGeneratedAt,
     processorScore: backendLot.processorScore,
+    cuppingFragrance: backendLot.cuppingFragrance,
+    cuppingFlavor: backendLot.cuppingFlavor,
+    cuppingAftertaste: backendLot.cuppingAftertaste,
+    cuppingAcidity: backendLot.cuppingAcidity,
+    cuppingBody: backendLot.cuppingBody,
+    cuppingBalance: backendLot.cuppingBalance,
+    cuppingOverall: backendLot.cuppingOverall,
+    cuppingUniformity: backendLot.cuppingUniformity,
+    cuppingCleanCup: backendLot.cuppingCleanCup,
+    cuppingSweetness: backendLot.cuppingSweetness,
     pricePerKg: backendLot.pricePerKg,
     currency: backendLot.currency,
     createdAt: backendLot.createdAt

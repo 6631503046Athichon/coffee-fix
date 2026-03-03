@@ -171,6 +171,16 @@ export interface GreenBeanLot {
   availabilityStatus: "Available" | "Withdrawn";
   cuppingScores: { sessionId: string; score: number }[];
   processorScore?: number; // Score assigned by processor during hulling and grading
+  cuppingFragrance?: number;
+  cuppingFlavor?: number;
+  cuppingAftertaste?: number;
+  cuppingAcidity?: number;
+  cuppingBody?: number;
+  cuppingBalance?: number;
+  cuppingOverall?: number;
+  cuppingUniformity?: number;
+  cuppingCleanCup?: number;
+  cuppingSweetness?: number;
   withdrawalHistory?: {
     amountKg: number;
     withdrawalType: "Sale" | "Roasting Stock" | "Sample" | "Export" | "Other";

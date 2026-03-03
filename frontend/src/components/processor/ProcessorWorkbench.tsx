@@ -80,6 +80,7 @@ import {
   updateGreenBeanLotAvailability,
   createWithdrawal,
 } from "../../services/greenBeanLotService";
+import type { CuppingDetailUpdate } from "../../services/greenBeanLotService";
 import { updateParchmentLot } from "../../services/parchmentLotService";
 import DatePicker from "../common/DatePicker";
 import InvoiceReceipt from "./InvoiceReceipt";
@@ -1022,6 +1023,34 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       });
     }
 
+    const cuppingDetailUpdate: CuppingDetailUpdate | undefined =
+      scoringMode === "detailed"
+        ? (() => {
+            const fieldMap: Record<string, keyof CuppingDetailUpdate> = {
+              "Fragrance/Aroma": "cuppingFragrance",
+              Flavor: "cuppingFlavor",
+              Aftertaste: "cuppingAftertaste",
+              Acidity: "cuppingAcidity",
+              Body: "cuppingBody",
+              Balance: "cuppingBalance",
+              Overall: "cuppingOverall",
+              Uniformity: "cuppingUniformity",
+              "Clean Cup": "cuppingCleanCup",
+              Sweetness: "cuppingSweetness",
+            };
+
+            const details: CuppingDetailUpdate = {};
+            Object.entries(fieldMap).forEach(([label, field]) => {
+              const value = scoresToSave[label];
+              if (typeof value === "number" && !Number.isNaN(value)) {
+                details[field] = value;
+              }
+            });
+
+            return details;
+          })()
+        : undefined;
+
     setData((prev) => {
       const qcSessionId = `CS-QC-${processorUser.id}`;
       let qcSession = prev.cuppingSessions.find((s) => s.id === qcSessionId);
@@ -1110,6 +1139,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             ...gbl,
             cuppingScores: newCuppingScores,
             processorScore: totalScore,
+            ...(cuppingDetailUpdate || {}),
           };
         }
         return gbl;
@@ -1124,7 +1154,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
     // Save processor score to backend
     try {
-      await updateGreenBeanLotScore(scoringLot.id, totalScore);
+      await updateGreenBeanLotScore(
+        scoringLot.id,
+        totalScore,
+        cuppingDetailUpdate,
+      );
       addToast({
         type: "success",
         message: `QC Score ${totalScore.toFixed(1)} saved successfully!`,

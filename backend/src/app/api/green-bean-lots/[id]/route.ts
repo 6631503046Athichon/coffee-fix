@@ -100,26 +100,59 @@ export async function PATCH(
     const { id } = await params;
 
     const body = await request.json();
-    const { processorScore } = body;
+    const {
+      processorScore,
+      cuppingFragrance,
+      cuppingFlavor,
+      cuppingAftertaste,
+      cuppingAcidity,
+      cuppingBody,
+      cuppingBalance,
+      cuppingOverall,
+      cuppingUniformity,
+      cuppingCleanCup,
+      cuppingSweetness,
+    } = body;
 
-    if (processorScore === undefined) {
-      return NextResponse.json(
-        { error: "processorScore is required" },
-        { status: 400 },
-      );
+    const updateData: Record<string, number> = {};
+    const fieldsToUpdate: Record<string, unknown> = {
+      processorScore,
+      cuppingFragrance,
+      cuppingFlavor,
+      cuppingAftertaste,
+      cuppingAcidity,
+      cuppingBody,
+      cuppingBalance,
+      cuppingOverall,
+      cuppingUniformity,
+      cuppingCleanCup,
+      cuppingSweetness,
+    };
+
+    let hasUpdates = false;
+    for (const [field, value] of Object.entries(fieldsToUpdate)) {
+      if (value === undefined) continue;
+      const parsed = safeParseFloat(value);
+      if (parsed === null) {
+        return NextResponse.json(
+          { error: `Invalid ${field} value` },
+          { status: 400 },
+        );
+      }
+      updateData[field] = parsed;
+      hasUpdates = true;
     }
 
-    const score = safeParseFloat(processorScore);
-    if (score === null) {
+    if (!hasUpdates) {
       return NextResponse.json(
-        { error: "Invalid processorScore value" },
+        { error: "No valid score fields provided" },
         { status: 400 },
       );
     }
 
     const updatedLot = await prisma.greenBeanLot.update({
       where: { id },
-      data: { processorScore: score },
+      data: updateData,
       include: {
         parchmentLot: {
           include: {
