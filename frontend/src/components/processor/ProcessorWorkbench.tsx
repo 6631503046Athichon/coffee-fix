@@ -60,7 +60,6 @@ import {
   Play,
   Download,
   ClipboardCheck,
-  Pencil,
   Eye,
   Flame,
   Send,
@@ -87,6 +86,7 @@ import {
   updateParchmentLot,
   deleteParchmentLot,
 } from "../../services/parchmentLotService";
+import type { CuppingDetailUpdate } from "../../services/greenBeanLotService";
 import DatePicker from "../common/DatePicker";
 import InvoiceReceipt from "./InvoiceReceipt";
 import Select from "../common/Select";
@@ -710,14 +710,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     useState("");
   const [withdrawalTargetRoasterId, setWithdrawalTargetRoasterId] = useState("");
 
-  // Edit Withdrawal Modal State
-  const [editingWithdrawalIndex, setEditingWithdrawalIndex] = useState<
-    number | null
-  >(null);
-  const [editingWithdrawalLotId, setEditingWithdrawalLotId] = useState<
-    string | null
-  >(null);
-
   // Score Modal State
   const [scoringMode, setScoringMode] = useState<"simple" | "detailed">(
     "simple",
@@ -1036,6 +1028,34 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       });
     }
 
+    const cuppingDetailUpdate: CuppingDetailUpdate | undefined =
+      scoringMode === "detailed"
+        ? (() => {
+            const fieldMap: Record<string, keyof CuppingDetailUpdate> = {
+              "Fragrance/Aroma": "cuppingFragrance",
+              Flavor: "cuppingFlavor",
+              Aftertaste: "cuppingAftertaste",
+              Acidity: "cuppingAcidity",
+              Body: "cuppingBody",
+              Balance: "cuppingBalance",
+              Overall: "cuppingOverall",
+              Uniformity: "cuppingUniformity",
+              "Clean Cup": "cuppingCleanCup",
+              Sweetness: "cuppingSweetness",
+            };
+
+            const details: CuppingDetailUpdate = {};
+            Object.entries(fieldMap).forEach(([label, field]) => {
+              const value = scoresToSave[label];
+              if (typeof value === "number" && !Number.isNaN(value)) {
+                details[field] = value;
+              }
+            });
+
+            return details;
+          })()
+        : undefined;
+
     setData((prev) => {
       const qcSessionId = `CS-QC-${processorUser.id}`;
       let qcSession = prev.cuppingSessions.find((s) => s.id === qcSessionId);
@@ -1124,6 +1144,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             ...gbl,
             cuppingScores: newCuppingScores,
             processorScore: totalScore,
+            ...(cuppingDetailUpdate || {}),
           };
         }
         return gbl;
@@ -1138,7 +1159,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
     // Save processor score to backend
     try {
-      await updateGreenBeanLotScore(scoringLot.id, totalScore);
+      await updateGreenBeanLotScore(
+        scoringLot.id,
+        totalScore,
+        cuppingDetailUpdate,
+      );
       addToast({
         type: "success",
         message: `QC Score ${totalScore.toFixed(1)} saved successfully!`,
@@ -1285,110 +1310,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         });
       }
     }
-  };
-
-  const handleDeleteWithdrawal = (lotId: string, index: number) => {
-    const lot = data.greenBeanLots.find((g) => g.id === lotId);
-    const withdrawal = lot?.withdrawalHistory?.[index];
-    if (!withdrawal) return;
-
-    if (
-      window.confirm(
-        `Are you sure you want to delete this withdrawal entry?\n\nAmount: ${withdrawal.amountKg} kg\nType: ${withdrawal.withdrawalType}\nDate: ${withdrawal.date}\n\nNote: The withdrawn amount (${withdrawal.amountKg} kg) will be returned to current stock.`,
-      )
-    ) {
-      setData((prev) => ({
-        ...prev,
-        greenBeanLots: prev.greenBeanLots.map((gbl) => {
-          if (gbl.id !== lotId) return gbl;
-          const newHistory = [...(gbl.withdrawalHistory || [])];
-          const deletedEntry = newHistory.splice(index, 1)[0];
-          return {
-            ...gbl,
-            currentWeightKg: gbl.currentWeightKg + deletedEntry.amountKg, // Return stock
-            withdrawalHistory: newHistory,
-          };
-        }),
-      }));
-    }
-  };
-
-  const handleEditWithdrawal = (lotId: string, index: number) => {
-    const lot = data.greenBeanLots.find((g) => g.id === lotId);
-    const withdrawal = lot?.withdrawalHistory?.[index];
-    if (!withdrawal) return;
-
-    // Populate edit form with existing values
-    setEditingWithdrawalLotId(lotId);
-    setEditingWithdrawalIndex(index);
-    setWithdrawalType(withdrawal.withdrawalType);
-    setWithdrawalSalePrice(withdrawal.salePrice?.toString() || "");
-    setWithdrawalCurrency(withdrawal.currency || "THB");
-    // Try to find customer by name
-    const matchingCustomer = customers.find(
-      (c) => c.name === withdrawal.customerName,
-    );
-    setWithdrawalCustomerId(matchingCustomer?.id || "");
-    setWithdrawalCustomerName(withdrawal.customerName || "");
-    setWithdrawalDeliveryAddress(withdrawal.deliveryAddress || "");
-    setModal("editWithdrawal");
-  };
-
-  const handleSaveEditWithdrawal = (formData: FormData) => {
-    if (editingWithdrawalLotId === null || editingWithdrawalIndex === null)
-      return;
-
-    const notes = (formData.get("notes") as string) || "";
-
-    setData((prev) => ({
-      ...prev,
-      greenBeanLots: prev.greenBeanLots.map((gbl) => {
-        if (gbl.id !== editingWithdrawalLotId) return gbl;
-        const newHistory = [...(gbl.withdrawalHistory || [])];
-        const existing = newHistory[editingWithdrawalIndex];
-
-        // Update only editable fields (not amount!)
-        newHistory[editingWithdrawalIndex] = {
-          ...existing,
-          withdrawalType,
-          notes,
-          ...(withdrawalType === "Sale" && {
-            salePrice: withdrawalSalePrice
-              ? parseFloat(withdrawalSalePrice)
-              : undefined,
-            currency: withdrawalCurrency,
-            customerName: withdrawalCustomerName || undefined,
-            deliveryAddress: withdrawalDeliveryAddress || undefined,
-            totalAmount: withdrawalSalePrice
-              ? existing.amountKg * parseFloat(withdrawalSalePrice)
-              : existing.totalAmount,
-          }),
-          // Clear sale fields if type changed from Sale
-          ...(withdrawalType !== "Sale" && {
-            salePrice: undefined,
-            currency: undefined,
-            customerName: undefined,
-            deliveryAddress: undefined,
-            totalAmount: undefined,
-          }),
-        };
-
-        return {
-          ...gbl,
-          withdrawalHistory: newHistory,
-        };
-      }),
-    }));
-
-    // Reset edit state
-    setEditingWithdrawalLotId(null);
-    setEditingWithdrawalIndex(null);
-    setWithdrawalType("Sample");
-    setWithdrawalAmount("");
-    setWithdrawalSalePrice("");
-    setWithdrawalCurrency("THB");
-    setWithdrawalCustomerName("");
-    setWithdrawalDeliveryAddress("");
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -1705,9 +1626,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         break;
       }
 
-      case "editWithdrawal":
-        handleSaveEditWithdrawal(formData);
-        break;
     }
     setModal(null);
   };
@@ -2897,6 +2815,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-2">
+                          {(() => {
+                            const hasWithdrawalHistory =
+                              g.withdrawalHistory &&
+                              g.withdrawalHistory.length > 0;
+                            return (
+                              <>
                           <button
                             onClick={() => setSelectedGreenBeanForSource(g)}
                             className="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
@@ -2904,18 +2828,21 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           >
                             <Eye className="h-4 w-4" />
                           </button>
-                          {g.withdrawalHistory &&
-                            g.withdrawalHistory.length > 0 && (
-                              <button
-                                onClick={() =>
-                                  setSelectedGreenBeanForHistory(g)
-                                }
-                                className="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
-                                title="View Withdrawal History"
-                              >
-                                <History className="h-4 w-4" />
-                              </button>
-                            )}
+                          <button
+                            onClick={() => setSelectedGreenBeanForHistory(g)}
+                            className={`inline-flex items-center justify-center w-8 h-8 rounded-md border border-gray-200 transition-colors ${
+                              hasWithdrawalHistory
+                                ? "text-gray-500 hover:bg-gray-50"
+                                : "text-gray-300"
+                            }`}
+                            title={
+                              hasWithdrawalHistory
+                                ? "View Withdrawal History"
+                                : "No withdrawal history yet"
+                            }
+                          >
+                            <History className="h-4 w-4" />
+                          </button>
                           <button
                             onClick={() => setScoringLot(g)}
                             className="p-2 rounded-lg text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 transition-colors"
@@ -2931,6 +2858,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           >
                             <Download size={16} />
                           </button>
+                              </>
+                            );
+                          })()}
                         </div>
                       </td>
                     </tr>
@@ -3625,38 +3555,52 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
                       {/* Actions */}
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => setSelectedGreenBeanForSource(g)}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
-                          title="Source"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        {g.withdrawalHistory &&
-                          g.withdrawalHistory.length > 0 && (
-                            <button
-                              onClick={() => setSelectedGreenBeanForHistory(g)}
-                              className="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
-                              title="History"
-                            >
-                              <History className="h-4 w-4" />
-                            </button>
-                          )}
-                        <button
-                          onClick={() => setScoringLot(g)}
-                          className="flex-1 py-2 text-xs font-medium rounded-md text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 transition-colors inline-flex items-center justify-center gap-1.5"
-                        >
-                          <Star className="h-3 w-3" />
-                          QC Score
-                        </button>
-                        <button
-                          onClick={() => openModal("withdrawStock", g)}
-                          disabled={g.availabilityStatus === "Withdrawn"}
-                          className="flex-1 py-2 text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all inline-flex items-center justify-center gap-1.5"
-                        >
-                          <PlayCircle className="h-3 w-3" />
-                          Withdraw
-                        </button>
+                        {(() => {
+                          const hasWithdrawalHistory =
+                            g.withdrawalHistory &&
+                            g.withdrawalHistory.length > 0;
+                          return (
+                            <>
+                              <button
+                                onClick={() => setSelectedGreenBeanForSource(g)}
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
+                                title="Source"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => setSelectedGreenBeanForHistory(g)}
+                                className={`inline-flex items-center justify-center w-8 h-8 rounded-md border border-gray-200 transition-colors ${
+                                  hasWithdrawalHistory
+                                    ? "text-gray-500 hover:bg-gray-50"
+                                    : "text-gray-300"
+                                }`}
+                                title={
+                                  hasWithdrawalHistory
+                                    ? "History"
+                                    : "No history yet"
+                                }
+                              >
+                                <History className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => setScoringLot(g)}
+                                className="flex-1 py-2 text-xs font-medium rounded-md text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 transition-colors inline-flex items-center justify-center gap-1.5"
+                              >
+                                <Star className="h-3 w-3" />
+                                QC Score
+                              </button>
+                              <button
+                                onClick={() => openModal("withdrawStock", g)}
+                                disabled={g.availabilityStatus === "Withdrawn"}
+                                className="flex-1 py-2 text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all inline-flex items-center justify-center gap-1.5"
+                              >
+                                <PlayCircle className="h-3 w-3" />
+                                Withdraw
+                              </button>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                   );
@@ -4364,179 +4308,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     })()}
                   </>
                 )}
-                {modal === "editWithdrawal" &&
-                  editingWithdrawalLotId &&
-                  editingWithdrawalIndex !== null &&
-                  (() => {
-                    const lot = data.greenBeanLots.find(
-                      (g) => g.id === editingWithdrawalLotId,
-                    );
-                    const entry =
-                      lot?.withdrawalHistory?.[editingWithdrawalIndex];
-                    if (!entry) return null;
-
-                    return (
-                      <>
-                        {/* Compact Header */}
-                        <div className="flex items-center justify-between mb-5">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2.5 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl shadow-md">
-                              <Pencil className="h-6 w-6 text-white" />
-                            </div>
-                            <div>
-                              <h2 className="text-xl font-bold text-gray-900">
-                                Edit Withdrawal
-                              </h2>
-                              <p className="text-xs text-gray-500">
-                                Entry #{editingWithdrawalIndex + 1}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-1.5">
-                            <Scale className="h-3.5 w-3.5 text-gray-500" />
-                            <span className="text-sm font-bold text-gray-700">{entry.amountKg.toFixed(2)} kg</span>
-                            <span className="text-xs text-gray-400 ml-1">{entry.date}</span>
-                          </div>
-                        </div>
-
-                        {/* Withdrawal Type - Visual Cards */}
-                        <div className="mb-5">
-                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2.5">
-                            Withdrawal Type
-                          </label>
-                          <div className="grid grid-cols-5 gap-2">
-                            {([
-                              { value: "Sale", icon: DollarSign, color: "blue", label: "Sale" },
-                              { value: "Roasting Stock", icon: Flame, color: "orange", label: "Roast" },
-                              { value: "Sample", icon: Beaker, color: "purple", label: "Sample" },
-                              { value: "Export", icon: Globe, color: "emerald", label: "Export" },
-                              { value: "Other", icon: MoreHorizontal, color: "gray", label: "Other" },
-                            ] as const).map((type) => {
-                              const isActive = withdrawalType === type.value;
-                              const colorMap: Record<string, { active: string; ring: string }> = {
-                                blue: { active: "bg-blue-50 border-blue-400 text-blue-700", ring: "ring-blue-200" },
-                                orange: { active: "bg-orange-50 border-orange-400 text-orange-700", ring: "ring-orange-200" },
-                                purple: { active: "bg-purple-50 border-purple-400 text-purple-700", ring: "ring-purple-200" },
-                                emerald: { active: "bg-emerald-50 border-emerald-400 text-emerald-700", ring: "ring-emerald-200" },
-                                gray: { active: "bg-gray-100 border-gray-400 text-gray-700", ring: "ring-gray-200" },
-                              };
-                              const c = colorMap[type.color];
-                              return (
-                                <button
-                                  key={type.value}
-                                  type="button"
-                                  onClick={() => setWithdrawalType(type.value as typeof withdrawalType)}
-                                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all text-center ${
-                                    isActive
-                                      ? `${c.active} ring-2 ${c.ring} shadow-sm`
-                                      : "border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600"
-                                  }`}
-                                >
-                                  <type.icon className="h-5 w-5" />
-                                  <span className="text-[11px] font-semibold leading-tight">{type.label}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Conditional Sale Fields */}
-                        {withdrawalType === "Sale" && (
-                          <div className="mb-5 p-4 bg-blue-50/70 rounded-xl border border-blue-200 space-y-3">
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                                  Customer
-                                </label>
-                                {customers.length > 0 ? (
-                                  <div className="space-y-1.5">
-                                    <Select
-                                      value={withdrawalCustomerId}
-                                      onChange={(v) => handleCustomerSelect(v as string)}
-                                      options={customerOptions}
-                                      placeholder="Select customer..."
-                                      colorTheme="blue"
-                                    />
-                                    <input
-                                      type="text"
-                                      value={withdrawalCustomerName}
-                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                                        setWithdrawalCustomerName(e.target.value);
-                                        setWithdrawalCustomerId("");
-                                      }}
-                                      placeholder="Or type name..."
-                                      className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                    />
-                                  </div>
-                                ) : (
-                                  <input
-                                    type="text"
-                                    value={withdrawalCustomerName}
-                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                                      setWithdrawalCustomerName(e.target.value)
-                                    }
-                                    placeholder="Customer name..."
-                                    className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                  />
-                                )}
-                              </div>
-                              <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                                  Delivery Address
-                                </label>
-                                <input
-                                  type="text"
-                                  value={withdrawalDeliveryAddress}
-                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                                    setWithdrawalDeliveryAddress(e.target.value)
-                                  }
-                                  placeholder="123 Main St, City"
-                                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                />
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                                Price per kg
-                              </label>
-                              <div className="flex gap-2">
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  value={withdrawalSalePrice}
-                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                                    setWithdrawalSalePrice(e.target.value)
-                                  }
-                                  placeholder="0.00"
-                                  className="flex-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                />
-                                <Select
-                                  value={withdrawalCurrency}
-                                  onChange={(v) => setWithdrawalCurrency(v as string)}
-                                  options={["THB", "USD", "EUR"]}
-                                  colorTheme="blue"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Notes Input */}
-                        <div className="mb-5">
-                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                            Notes
-                          </label>
-                          <textarea
-                            name="notes"
-                            rows={2}
-                            defaultValue={entry.notes || entry.purpose || ""}
-                            placeholder="Add or edit notes..."
-                            className="block w-full border border-gray-300 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition-all resize-none"
-                          />
-                        </div>
-                      </>
-                    );
-                  })()}
                 <div className="mt-8 flex justify-end space-x-3">
                   <button
                     type="button"
@@ -5188,11 +4959,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               return (
                                 <div
                                   key={g.id}
-                                  className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-amber-300 transition-all"
+                                  className="bg-emerald-50 rounded-xl p-4 border border-emerald-200 hover:border-emerald-300 transition-all"
                                 >
                                   <div className="flex items-start justify-between mb-3">
                                     <div className="flex items-center gap-3">
-                                      <div className="w-8 h-8 bg-amber-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                      <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center flex-shrink-0">
                                         <span className="text-white font-bold text-sm">
                                           #{index + 1}
                                         </span>
@@ -5210,7 +4981,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                       <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
                                         Weight
                                       </p>
-                                      <p className="text-2xl font-bold text-amber-700">
+                                      <p className="text-2xl font-bold text-emerald-700">
                                         {g.currentWeightKg.toFixed(2)} kg
                                       </p>
                                     </div>
@@ -5386,29 +5157,38 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 </div>
 
                 {/* History List */}
-                <div className="overflow-y-auto max-h-96">
-                  <div className="space-y-3">
-                    {selectedGreenBeanForHistory.withdrawalHistory?.map(
-                      (entry, index) => {
-                        // Withdrawal type badge colors
-                        const typeBadgeColors = {
-                          Sale: "bg-green-100 text-green-700 border-green-200",
-                          "Roasting Stock":
-                            "bg-orange-100 text-orange-700 border-orange-200",
-                          Sample:
-                            "bg-purple-100 text-purple-700 border-purple-200",
-                          Export: "bg-blue-100 text-blue-700 border-blue-200",
-                          Other: "bg-gray-100 text-gray-700 border-gray-200",
-                        };
-                        const badgeColor =
-                          typeBadgeColors[entry.withdrawalType] ||
-                          typeBadgeColors["Other"];
+                <div className="overflow-y-auto max-h-78 sm:max-h-80">
+                  {!selectedGreenBeanForHistory.withdrawalHistory ||
+                  selectedGreenBeanForHistory.withdrawalHistory.length === 0 ? (
+                    <div className="text-center py-10 text-gray-400">
+                      <History className="h-12 w-12 mx-auto mb-2 opacity-30" />
+                      <p className="text-sm font-medium">
+                        No withdrawal history yet
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedGreenBeanForHistory.withdrawalHistory?.map(
+                        (entry, index) => {
+                          // Withdrawal type badge colors
+                          const typeBadgeColors = {
+                            Sale: "bg-green-100 text-green-700 border-green-200",
+                            "Roasting Stock":
+                              "bg-orange-100 text-orange-700 border-orange-200",
+                            Sample:
+                              "bg-purple-100 text-purple-700 border-purple-200",
+                            Export: "bg-blue-100 text-blue-700 border-blue-200",
+                            Other: "bg-gray-100 text-gray-700 border-gray-200",
+                          };
+                          const badgeColor =
+                            typeBadgeColors[entry.withdrawalType] ||
+                            typeBadgeColors["Other"];
 
-                        return (
-                          <div
-                            key={index}
-                            className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-blue-300 transition-all"
-                          >
+                          return (
+                            <div
+                              key={index}
+                              className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-blue-300 transition-all"
+                            >
                             <div className="flex items-start justify-between mb-3">
                               <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -5543,51 +5323,21 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                   Invoice
                                 </button>
                               )}
-                              {isAdmin && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleEditWithdrawal(
-                                        selectedGreenBeanForHistory.id,
-                                        index,
-                                      )
-                                    }
-                                    className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-all"
-                                    title="Edit"
-                                  >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                    Edit
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleDeleteWithdrawal(
-                                        selectedGreenBeanForHistory.id,
-                                        index,
-                                      )
-                                    }
-                                    className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 transition-all"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                    Delete
-                                  </button>
-                                </>
-                              )}
                             </div>
                           </div>
-                        );
-                      },
-                    )}
-                  </div>
+                          );
+                        },
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Close Button */}
-                <div className="mt-6 flex justify-end">
+                <div className="sticky bottom-0 mt-6 bg-white pt-4 flex justify-end">
                   <button
                     type="button"
                     onClick={() => setSelectedGreenBeanForHistory(null)}
-                    className="px-6 py-2.5 border border-gray-300 rounded-xl shadow-sm text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
+                    className="mb-4 px-6 py-2.5 border border-gray-300 rounded-xl shadow-sm text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
                   >
                     Close
                   </button>

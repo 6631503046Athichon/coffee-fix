@@ -207,6 +207,16 @@ model GreenBeanLot {
   publicTraceId      String?                     @unique
   qrGeneratedAt      DateTime?
   processorScore     Float?
+  cuppingFragrance   Float?
+  cuppingFlavor      Float?
+  cuppingAftertaste  Float?
+  cuppingAcidity     Float?
+  cuppingBody        Float?
+  cuppingBalance     Float?
+  cuppingOverall     Float?
+  cuppingUniformity  Float?
+  cuppingCleanCup    Float?
+  cuppingSweetness   Float?
   createdAt          DateTime                    @default(now())
   updatedAt          DateTime                    @updatedAt
   cuppingSamples     CuppingSample[]

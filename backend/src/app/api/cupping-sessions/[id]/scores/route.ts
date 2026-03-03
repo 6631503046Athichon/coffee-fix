@@ -137,6 +137,34 @@ export async function POST(
           score: totalScore,
         },
       })
+
+      const scoreFieldMap: Record<string, keyof typeof scores> = {
+        cuppingFragrance: 'fragrance',
+        cuppingFlavor: 'flavor',
+        cuppingAftertaste: 'aftertaste',
+        cuppingAcidity: 'acidity',
+        cuppingBody: 'body',
+        cuppingBalance: 'balance',
+        cuppingOverall: 'overall',
+        cuppingUniformity: 'uniformity',
+        cuppingCleanCup: 'cleanCup',
+        cuppingSweetness: 'sweetness',
+      }
+
+      const cuppingUpdate: Record<string, number> = {}
+      Object.entries(scoreFieldMap).forEach(([field, key]) => {
+        const value = scores[key]
+        if (typeof value === 'number') {
+          cuppingUpdate[field] = value
+        }
+      })
+
+      if (Object.keys(cuppingUpdate).length > 0) {
+        await prisma.greenBeanLot.update({
+          where: { id: sample.greenBeanLotId },
+          data: cuppingUpdate,
+        })
+      }
     }
 
     return NextResponse.json(
