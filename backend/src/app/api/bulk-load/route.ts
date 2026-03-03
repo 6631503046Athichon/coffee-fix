@@ -207,6 +207,14 @@ export async function GET(request: NextRequest) {
               },
             },
             priceSetter: { select: { id: true, name: true } },
+            withdrawalHistory: {
+              include: {
+                withdrawnByUser: {
+                  select: { id: true, name: true },
+                },
+              },
+              orderBy: { date: 'desc' },
+            },
             _count: { select: { cuppingScores: true } },
           },
           orderBy: { createdAt: 'desc' },
