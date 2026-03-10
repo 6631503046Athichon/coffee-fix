@@ -1,9 +1,8 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import DatePicker from '../common/DatePicker';
 import Select from '../common/Select';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
-import { Input } from '../common/Input';
 import { PageHeader } from '../common/PageHeader';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
@@ -67,13 +66,13 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     const [selectedLot, setSelectedLot] = useState<(GreenBeanLot & { variety: string, process: string, finalScore?: string | number }) | null>(null);
     const [selectedInventoryItem, setSelectedInventoryItem] = useState<(RoasterInventoryItem & { variety: string, process: string }) | null>(null);
     const [claimAmount, setClaimAmount] = useState('');
-    const [roastForm, setRoastForm] = useState({ batchSize: '', roastedWeight: '', notes: '', flavorNotes: '' });
+    const [roastForm, setRoastForm] = useState({ batchSize: '', roastedWeight: '', notes: '' });
     const [roastLevel, setRoastLevel] = useState<RoastLevel>(RoastLevel.Medium);
     const [selectedCategory, setSelectedCategory] = useState<keyof typeof FLAVOR_GROUPS>('Sweet');
     const [selectedNote, setSelectedNote] = useState<string>(FLAVOR_GROUPS['Sweet'][0]);
     const [selectedFlavorTags, setSelectedFlavorTags] = useState<string[]>([]);
-    const availableLotsRef = useRef<HTMLDivElement>(null);
-    const internalLotsRef = useRef<HTMLDivElement>(null);
+    const availableLotsRef = useRef<HTMLButtonElement>(null);
+    const internalLotsRef = useRef<HTMLButtonElement>(null);
     const [lotsTab, setLotsTab] = useState<'internal' | 'external'>('internal');
     const roastLogRef = useRef<HTMLDivElement>(null);
 
@@ -99,7 +98,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         refreshData();
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const getFinalScore = (gbl: GreenBeanLot) => {
+    const getFinalScore = useCallback((gbl: GreenBeanLot) => {
         let finalScore: string | number = 'N/A';
         const scoreInfo = gbl.cuppingScores[0];
         if (scoreInfo) {
@@ -113,11 +112,11 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             }
         }
         return finalScore;
-    };
+    }, [data.cuppingSessions]);
 
     // Map a lot to display fields
-    const mapLotForDisplay = (gbl: GreenBeanLot) => {
-    if (gbl.sourceType === GreenBeanSourceType.External && gbl.externalSource) {
+    const mapLotForDisplay = useCallback((gbl: GreenBeanLot) => {
+        if (gbl.sourceType === GreenBeanSourceType.External && gbl.externalSource) {
             const variety = gbl.externalSource.variety || 'N/A';
             const process = gbl.externalSource.processType || 'N/A';
             // No score shown for external lots in table
@@ -152,7 +151,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             displayInfo,
             gradeDisplay: gbl.grade || '—',
         } as GreenBeanLot & { variety: string; process: string; finalScore: string | number; displayScore: string; displayInfo: string; gradeDisplay: string };
-    };
+    }, [data.parchmentLots, data.harvestLots, getFinalScore]);
 
     // Split into External and Internal lists (sorted by ID descending - newest first)
     const availableExternalLots = useMemo(() =>
@@ -160,7 +159,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             .filter(lot => lot.availabilityStatus === 'Available' && lot.currentWeightKg > 0 && lot.sourceType === GreenBeanSourceType.External)
             .map(mapLotForDisplay)
             .sort((a, b) => b.id.localeCompare(a.id)),
-        [data]
+        [data.greenBeanLots, mapLotForDisplay]
     );
 
     const availableInternalLots = useMemo(() =>
@@ -168,7 +167,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             .filter(lot => lot.availabilityStatus === 'Available' && lot.currentWeightKg > 0 && lot.sourceType === GreenBeanSourceType.Internal)
             .map(mapLotForDisplay)
             .sort((a, b) => b.id.localeCompare(a.id)),
-        [data]
+        [data.greenBeanLots, mapLotForDisplay]
     );
 
     const myInventory = useMemo(() =>
@@ -219,15 +218,6 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     }, [externalTotalPages, externalPage]);
     const pagedExternalLots = useMemo(() => availableExternalLots.slice((externalPage-1)*externalPageSize, (externalPage-1)*externalPageSize + externalPageSize), [availableExternalLots, externalPage]);
 
-    // Pagination for Internal Lots
-    const [internalPage, setInternalPage] = useState(1);
-    const internalPageSize = 5;
-    const internalTotalPages = Math.max(1, Math.ceil(availableInternalLots.length / internalPageSize));
-    useEffect(() => {
-        if (internalPage > internalTotalPages) setInternalPage(internalTotalPages);
-    }, [internalTotalPages, internalPage]);
-    const pagedInternalLots = useMemo(() => availableInternalLots.slice((internalPage-1)*internalPageSize, (internalPage-1)*internalPageSize + internalPageSize), [availableInternalLots, internalPage]);
-
     const openClaimModal = (lot: GreenBeanLot & { variety: string, process: string, finalScore?: string | number }) => {
         setSelectedLot(lot);
         setClaimAmount('');
@@ -236,8 +226,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
 
     const openLogRoastModal = (inventoryItem: RoasterInventoryItem & { variety: string, process: string }) => {
         setSelectedInventoryItem(inventoryItem);
-    setRoastForm({ batchSize: '', roastedWeight: '', notes: '', flavorNotes: '' });
-    setRoastLevel(RoastLevel.Medium);
+        setRoastForm({ batchSize: '', roastedWeight: '', notes: '' });
+        setRoastLevel(RoastLevel.Medium);
 
         const existing = (data.roastBatches
             .filter(r => r.roasterId === currentUser.id && r.roasterInventoryId === inventoryItem.id)
@@ -268,8 +258,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             }));
             addToast({ type: 'success', message: `Claim ${amount} kg สำเร็จ!` });
             setIsClaimModalOpen(false);
-        } catch (err: any) {
-            addToast({ type: 'error', message: err?.message || 'ไม่สามารถ Claim lot ได้' });
+        } catch (err: unknown) {
+            addToast({ type: 'error', message: err instanceof Error ? err.message : 'ไม่สามารถ Claim lot ได้' });
         }
     };
 
@@ -313,15 +303,15 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             }));
             addToast({ type: 'success', message: `บันทึก Roast Batch ${batch} kg สำเร็จ!` });
             setIsLogRoastModalOpen(false);
-        } catch (err: any) {
-            addToast({ type: 'error', message: err?.message || 'ไม่สามารถบันทึก Roast Batch ได้' });
+        } catch (err: unknown) {
+            addToast({ type: 'error', message: err instanceof Error ? err.message : 'ไม่สามารถบันทึก Roast Batch ได้' });
         }
     };
 
     const handleQuickClaim = () => {
         const anyAvailable = [...availableExternalLots, ...availableInternalLots];
         if (anyAvailable.length === 0) {
-            alert('No green bean lots are available to claim right now.');
+            addToast({ type: 'warning', message: 'No green bean lots are available to claim right now.' });
             return;
         }
         const pick = availableExternalLots.length > 0 ? availableExternalLots[0] : availableInternalLots[0];
@@ -332,10 +322,10 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
 
     const handleQuickLogRoast = () => {
         if (myInventory.length === 0) {
-            alert('You do not have inventory to log a roast. Claim a lot first.');
+            addToast({ type: 'warning', message: 'You do not have inventory to log a roast. Claim a lot first.' });
             return;
         }
-        openLogRoastModal(myInventory[0]);
+        openLogRoastModal(myInventory[0] as RoasterInventoryItem & { variety: string; process: string });
     };
 
     const scrollToRoastLog = () => {
@@ -379,7 +369,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                         {/* Tab Header */}
                         <div className="flex items-center border-b border-gray-200">
                             <button
-                                ref={internalLotsRef as any}
+                                ref={internalLotsRef}
                                 onClick={() => setLotsTab('internal')}
                                 className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
                                     lotsTab === 'internal'
@@ -396,7 +386,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                                 </div>
                             </button>
                             <button
-                                ref={availableLotsRef as any}
+                                ref={availableLotsRef}
                                 onClick={() => setLotsTab('external')}
                                 className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
                                     lotsTab === 'external'
@@ -590,7 +580,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                             </div>
                             <div>
                                 <h2 className="text-2xl font-bold text-gray-900">Log Roast</h2>
-                                <p className="text-sm text-gray-500">for Lot {selectedInventoryItem.greenBeanLotId}</p>
+                                <p className="text-sm text-gray-500">for Lot {selectedInventoryItem.greenBeanDisplayId || formatGreenBeanId({ id: selectedInventoryItem.greenBeanLotId })}</p>
                             </div>
                         </div>
 
@@ -786,9 +776,9 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                                                 e.preventDefault();
                                                 const initial = parseFloat(newLotForm.initialWeightKg);
                                                 const price = parseFloat(newLotForm.pricePerKg);
-                                                if (!newLotForm.originName || !newLotForm.variety || !newLotForm.processType) return alert('Please fill origin, variety, and process type');
-                                                if (!initial || initial <= 0) return alert('Initial weight must be > 0');
-                                                if (isNaN(price)) return alert('Enter a valid price');
+                                                if (!newLotForm.originName || !newLotForm.variety || !newLotForm.processType) { addToast({ type: 'error', message: 'Please fill origin, variety, and process type' }); return; }
+                                                if (!initial || initial <= 0) { addToast({ type: 'error', message: 'Initial weight must be > 0' }); return; }
+                                                if (newLotForm.pricePerKg !== '' && isNaN(price)) { addToast({ type: 'error', message: 'Enter a valid price' }); return; }
 
                                                 try {
                                                     const lot = await createGreenBeanLot({
@@ -815,8 +805,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                                                     setNewLotForm({
                                                         originName: '', producerName: '', variety: '', processType: '', purchaseDate: new Date().toISOString().substring(0,10), pricePerKg: '', currency: 'THB', initialWeightKg: '', grade: 'Grade A', supplierNotes: '', tasteNote: ''
                                                     });
-                                                } catch (err: any) {
-                                                    addToast({ type: 'error', message: err?.message || 'ไม่สามารถเพิ่ม Lot ได้' });
+                                                } catch (err: unknown) {
+                                                    addToast({ type: 'error', message: err instanceof Error ? err.message : 'ไม่สามารถเพิ่ม Lot ได้' });
                                                 }
                                             }}
                                         >

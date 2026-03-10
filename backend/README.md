@@ -72,7 +72,7 @@ npm run db:seed
 npm run dev
 ```
 
-The API will be available at `http://localhost:3000`
+The API will be available at `http://localhost:3001`
 
 ## API Endpoints
 
@@ -252,7 +252,7 @@ The API will be available at `http://localhost:3000`
 
 - `GET /api/health` - Health check
 - `GET /api/data-version` - Get data version for cache invalidation
-- `POST /api/bulk-load` - Bulk load data
+- `GET /api/bulk-load` - Bulk load data
 - `POST /api/backfill-display-ids` - Backfill display IDs (Admin only)
 
 ## Authentication
@@ -320,7 +320,7 @@ backend/
 │       ├── prisma.ts         # Prisma client singleton
 │       ├── auth.ts           # JWT + bcrypt helpers
 │       ├── middleware.ts     # requireAuth, handleApiError
-│       ├── validations.ts    # Zod validation schemas
+│       ├── validations/      # Zod validation schemas
 │       └── email.ts          # Email service (Resend)
 ├── prisma/
 │   ├── schema.prisma         # Database schema
