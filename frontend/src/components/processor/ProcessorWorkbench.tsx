@@ -69,7 +69,6 @@ import {
   ArrowRight,
   Minus,
 } from "lucide-react";
-import { addPricingHistory } from "../../services/salesService";
 import {
   addProcessingBatch,
   updateProcessingBatch,

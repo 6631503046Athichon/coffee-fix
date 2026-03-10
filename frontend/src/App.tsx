@@ -12,10 +12,9 @@ import { ToastProvider, useToast } from './contexts/ToastContext';
 import { connectionManager } from './utils/connectionManager';
 import ToastContainer from './components/common/ToastContainer';
 import { initWeatherAutoFetchService, stopWeatherAutoFetchService } from './services/weatherAutoFetchService';
-import { getAllSaleOrders, getAllInvoices, getAllPricingHistory, initializeCustomers, initializeSaleOrders, initializeInvoices, initializePricingHistory } from './services/salesService';
-import { initializeActivityTypes } from './services/activityTypeService';
-import { initializeProcessTypes, resetProcessTypes } from './services/processTypeService';
-import { initializeFarms } from './services/farmService';
+import { getAllSaleOrders } from './services/saleOrderService';
+import { getAllInvoices } from './services/invoiceService';
+import { getAllPricingHistory } from './services/pricingHistoryService';
 import { api, bulkLoadPhase1, bulkLoadPhase2 } from './services/api';
 import { transformFarmFromBackend, transformHarvestLotFromBackend, transformSoilAnalysisFromBackend, transformWeatherRecordFromBackend, transformGAPLogFromBackend } from './services/utils/transformers';
 import { transformProcessingBatchFromBackend } from './services/processingBatchService';
@@ -158,10 +157,19 @@ const ProtectedRoutes: React.FC = () => {
   // Phase 2: Secondary data (soil, weather, GAP, processing, parchment, greenBean, roaster) - single request
   const loadDataFromBackend = useCallback(async () => {
     try {
-      // localStorage reads (no network, instant)
-      const storedSaleOrders = getAllSaleOrders();
-      const storedInvoices = getAllInvoices();
-      const storedPricingHistory = getAllPricingHistory();
+      // Load sale orders, invoices, pricing history from backend API
+      let storedSaleOrders: any[] = [];
+      let storedInvoices: any[] = [];
+      let storedPricingHistory: any[] = [];
+      try {
+        [storedSaleOrders, storedInvoices, storedPricingHistory] = await Promise.all([
+          getAllSaleOrders(),
+          getAllInvoices(),
+          getAllPricingHistory(),
+        ]);
+      } catch (err) {
+        console.warn('Failed to load sales data from backend:', err);
+      }
 
       // Phase 1: Single bulk request for essential data
       const phase1 = await bulkLoadPhase1();
@@ -522,18 +530,7 @@ const App: React.FC = () => {
   const contextValue = useMemo(() => ({ data, setData: () => {}, refreshData: async () => {}, setIsEditing: () => {}, isEditing: false }), [data]);
 
   // Initialize localStorage on app mount (only for non-API data)
-  useEffect(() => {
-    // Only initialize localStorage for data that doesn't come from API
-    // API data (farms, soil analyses, weather records, harvest lots, GAP logs) 
-    // will be loaded in ProtectedRoutes component
-    initializeActivityTypes(MOCK_DATA.activityTypes);
-    // Force: reset to exactly the three defaults on each refresh (per request)
-    resetProcessTypes(MOCK_DATA.processTypes);
-    initializeCustomers(MOCK_DATA.customers);
-    initializeSaleOrders(MOCK_DATA.saleOrders);
-    initializeInvoices(MOCK_DATA.invoices);
-    initializePricingHistory(MOCK_DATA.pricingHistory);
-  }, []);
+  // No localStorage initialization needed — all data comes from API
 
   return (
     <AuthProvider>

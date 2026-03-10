@@ -68,13 +68,3 @@ export const deleteSoilAnalysis = async (analysisId: string): Promise<void> => {
   }
 };
 
-// Legacy localStorage functions for backward compatibility
-const SOIL_ANALYSES_STORAGE_KEY = 'coffee_lab_soil_analyses';
-
-export const initializeSoilAnalyses = (defaultAnalyses: SoilAnalysis[]) => {
-  localStorage.setItem(SOIL_ANALYSES_STORAGE_KEY, JSON.stringify(defaultAnalyses));
-};
-
-const saveAllSoilAnalyses = (analyses: SoilAnalysis[]) => {
-  localStorage.setItem(SOIL_ANALYSES_STORAGE_KEY, JSON.stringify(analyses));
-};

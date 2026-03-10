@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { UserRole } from '../../types'
-import { api } from '../../services/api'
+import { createUser } from '../../services/userService'
 import { X, Copy, Check, AlertCircle, UserPlus } from 'lucide-react'
 
 interface CreateUserModalProps {
@@ -12,7 +12,7 @@ interface CreateUserModalProps {
 interface GeneratedCredentials {
   username: string
   password: string
-  message: string
+  message?: string
 }
 
 const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUserCreated }) => {
@@ -62,10 +62,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
         payload.email = email.trim()
       }
 
-      const response = await api.post<{
-        user: any
-        credentials?: GeneratedCredentials
-      }>('/users', payload)
+      const response = await createUser(payload)
 
       if (response.credentials) {
         setGeneratedCredentials(response.credentials)

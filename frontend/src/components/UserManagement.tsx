@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UserRole } from '../types';
 import { Users as UsersIcon, AlertCircle, UserPlus, Edit, Trash2, Shield, Search, Key, X, Filter, ChevronDown, ChevronLeft, ChevronRight, Check } from 'lucide-react';
-import { api } from '../services/api';
+import { getAllUsers, updateUser, deleteUser } from '../services/userService';
 import { useAuth } from '../contexts/AuthContext';
 import CreateUserModal from './modals/CreateUserModal';
 import EditUserModal from './modals/EditUserModal';
@@ -132,18 +132,12 @@ const UserManagement: React.FC = () => {
             setLoading(true);
             setError('');
 
-            // Build query params
-            const params: Record<string, string> = {};
-            if (searchTerm) params.search = searchTerm;
-            if (roleFilter) params.role = roleFilter;
-            if (statusFilter) params.status = statusFilter;
-
-            const queryString = Object.keys(params).length > 0
-                ? '?' + new URLSearchParams(params).toString()
-                : '';
-
-            const response = await api.get<{ users: User[] }>(`/users${queryString}`);
-            setUsers(response.users || []);
+            const response = await getAllUsers({
+                search: searchTerm || undefined,
+                role: roleFilter || undefined,
+                status: statusFilter || undefined,
+            });
+            setUsers(response);
         } catch (err: any) {
             console.error('Error fetching users:', err);
             
@@ -181,7 +175,7 @@ const UserManagement: React.FC = () => {
         const generatedPassword = Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 
         try {
-            await api.put(`/users/${resetPasswordUser.id}`, { password: generatedPassword });
+            await updateUser(resetPasswordUser.id, { password: generatedPassword });
             setNewPassword(generatedPassword);
         } catch (err: any) {
             alert(err instanceof Error ? err.message : 'Failed to reset password');
@@ -213,7 +207,7 @@ const UserManagement: React.FC = () => {
         if (!confirmed) return;
 
         try {
-            await api.delete(`/users/${user.id}`);
+            await deleteUser(user.id);
             fetchUsers();
         } catch (err: any) {
             alert(err instanceof Error ? err.message : 'Failed to delete user');

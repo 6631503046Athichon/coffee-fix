@@ -71,13 +71,3 @@ export const deleteWeatherRecord = async (recordId: string): Promise<void> => {
   }
 };
 
-// Legacy localStorage functions for backward compatibility
-const WEATHER_RECORDS_STORAGE_KEY = 'coffee_lab_weather_records';
-
-export const initializeWeatherRecords = (defaultRecords: WeatherRecord[]) => {
-  localStorage.setItem(WEATHER_RECORDS_STORAGE_KEY, JSON.stringify(defaultRecords));
-};
-
-const saveAllWeatherRecords = (records: WeatherRecord[]) => {
-  localStorage.setItem(WEATHER_RECORDS_STORAGE_KEY, JSON.stringify(records));
-};

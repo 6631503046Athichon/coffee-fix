@@ -97,8 +97,3 @@ export const activityTypeNameExists = async (name: string, excludeId?: string): 
   const all = await getAllActivityTypes();
   return all.some(t => t.name.toLowerCase() === name.toLowerCase() && t.id !== excludeId);
 };
-
-// Legacy functions for backward compatibility (no-op)
-export const initializeActivityTypes = (_defaultTypes: ActivityType[]) => {
-  // No-op: Data comes from API now
-};
