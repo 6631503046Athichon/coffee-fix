@@ -71,13 +71,10 @@ export interface Farm {
   collaborators?: FarmCollaborator[];
 }
 
-export type FarmCollaboratorRole = 'Worker' | 'Caretaker' | 'Manager';
-
 export interface FarmCollaborator {
   id: string;
   farmId: string;
   userId: string;
-  role: FarmCollaboratorRole;
   createdAt?: string;
   user?: {
     id: string;

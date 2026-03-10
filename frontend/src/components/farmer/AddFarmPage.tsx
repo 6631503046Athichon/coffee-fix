@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { PlusCircle, Save, MapPin, Compass, X, RefreshCw, ArrowLeft, Sprout, User as UserIcon, Ruler, Coffee, Leaf, Info } from 'lucide-react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Farm, User, UserRole, FarmCollaborator, FarmCollaboratorRole } from '../../types';
+import { Farm, User, UserRole, FarmCollaborator } from '../../types';
 import { Button, Input } from '../common';
 import Select from '../common/Select';
 import { addFarm, updateFarm } from '../../services/farmService';
@@ -102,7 +102,6 @@ const AddFarmPage: React.FC = () => {
 	// Collaborators
 	const [collaborators, setCollaborators] = useState<FarmCollaborator[]>([]);
 	const [selectedCollaboratorId, setSelectedCollaboratorId] = useState<string>('');
-	const [selectedCollaboratorRole, setSelectedCollaboratorRole] = useState<FarmCollaboratorRole>('Worker');
 	const [collaboratorLoading, setCollaboratorLoading] = useState(false);
 
 	const [customVariety, setCustomVariety] = useState('');
@@ -250,11 +249,10 @@ const AddFarmPage: React.FC = () => {
 		if (isEditing && farmId) {
 			// Editing: call API immediately
 			setCollaboratorLoading(true);
-			const result = await addFarmCollaborator(farmId, selectedCollaboratorId, selectedCollaboratorRole);
+			const result = await addFarmCollaborator(farmId, selectedCollaboratorId);
 			if (result) {
 				setCollaborators(prev => [...prev, result]);
 				setSelectedCollaboratorId('');
-				setSelectedCollaboratorRole('Worker');
 			}
 			setCollaboratorLoading(false);
 		} else {
@@ -264,12 +262,10 @@ const AddFarmPage: React.FC = () => {
 				id: `pending-${Date.now()}`,
 				farmId: '',
 				userId: selectedCollaboratorId,
-				role: selectedCollaboratorRole,
 				user: pendingUser ? { id: pendingUser.id, name: pendingUser.name, email: pendingUser.email ?? undefined, roles: pendingUser.roles as string[] } : undefined,
 			};
 			setCollaborators(prev => [...prev, pending]);
 			setSelectedCollaboratorId('');
-			setSelectedCollaboratorRole('Worker');
 		}
 	};
 
@@ -550,7 +546,7 @@ const AddFarmPage: React.FC = () => {
 				// Add pending collaborators after farm creation
 				if (collaborators.length > 0 && savedFarm.id) {
 					await Promise.all(
-						collaborators.map(c => addFarmCollaborator(savedFarm.id, c.userId, c.role))
+						collaborators.map(c => addFarmCollaborator(savedFarm.id, c.userId))
 					);
 				}
 
@@ -806,7 +802,7 @@ const AddFarmPage: React.FC = () => {
 						<div className="mt-6 pt-6 border-t border-gray-100">
 							<div className="flex items-center justify-between mb-4">
 								<label className="block text-sm font-semibold text-gray-700">
-									ผู้ช่วยในฟาร์ม (Collaborators)
+									ผู้ดูแลฟาร์ม
 								</label>
 							</div>
 
@@ -821,18 +817,6 @@ const AddFarmPage: React.FC = () => {
 										getLabel={(u: User) => `${u.name}${u.email ? ` (${u.email})` : u.username ? ` (${u.username})` : ''}`}
 										placeholder={farmersLoading ? 'กำลังโหลด...' : 'เลือก Farmer...'}
 										disabled={farmersLoading || collaboratorLoading}
-										colorTheme="blue"
-									/>
-								</div>
-								<div className="w-36">
-									<Select
-										options={[
-											{ value: 'Worker', label: 'คนงาน' },
-											{ value: 'Caretaker', label: 'ผู้ดูแล' },
-											{ value: 'Manager', label: 'ผู้จัดการ' },
-										]}
-										value={selectedCollaboratorRole}
-										onChange={(v) => setSelectedCollaboratorRole(v as FarmCollaboratorRole)}
 										colorTheme="blue"
 									/>
 								</div>
@@ -852,7 +836,6 @@ const AddFarmPage: React.FC = () => {
 							{collaborators.length > 0 ? (
 								<div className="space-y-2">
 									{collaborators.map((collab) => {
-										const roleLabels: Record<string, string> = { Worker: 'คนงาน', Caretaker: 'ผู้ดูแล', Manager: 'ผู้จัดการ' };
 										return (
 											<div key={collab.id} className="flex items-center justify-between bg-blue-50 rounded-lg px-4 py-2.5">
 												<div className="flex items-center gap-3">
@@ -865,9 +848,6 @@ const AddFarmPage: React.FC = () => {
 															<span className="text-xs text-gray-500 ml-2">({collab.user.email})</span>
 														)}
 													</div>
-													<span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-														{roleLabels[collab.role] || collab.role}
-													</span>
 												</div>
 												<Button
 													type="button"
@@ -884,7 +864,7 @@ const AddFarmPage: React.FC = () => {
 									})}
 								</div>
 							) : (
-								<p className="text-sm text-gray-400">ยังไม่มีผู้ช่วยในฟาร์ม</p>
+								<p className="text-sm text-gray-400">ยังไม่มีผู้ดูแล</p>
 							)}
 						</div>
 					)}

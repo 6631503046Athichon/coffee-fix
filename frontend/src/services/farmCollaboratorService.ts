@@ -1,4 +1,4 @@
-import { FarmCollaborator, FarmCollaboratorRole } from '../types';
+import { FarmCollaborator } from '../types';
 import { api } from './api';
 import { handleApiError } from '../utils/errorHandler';
 
@@ -21,12 +21,10 @@ export const getFarmCollaborators = async (farmId: string): Promise<FarmCollabor
 export const addFarmCollaborator = async (
   farmId: string,
   userId: string,
-  role: FarmCollaboratorRole = 'Worker'
 ): Promise<FarmCollaborator | null> => {
   try {
     const response = await api.post<{ collaborator: FarmCollaborator }>(`/farms/${farmId}/collaborators`, {
       userId,
-      role,
     });
     return response.collaborator;
   } catch (error) {

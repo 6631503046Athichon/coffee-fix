@@ -64,7 +64,7 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { userId, role } = body
+    const { userId } = body
 
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 })
@@ -75,7 +75,7 @@ export async function POST(
       return NextResponse.json({ error: 'Farm owner cannot be added as collaborator' }, { status: 400 })
     }
 
-    // Check target user exists and is a Farmer
+    // Check target user exists and is active
     const targetUser = await prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, roles: true, isActive: true },
@@ -84,13 +84,10 @@ export async function POST(
       return NextResponse.json({ error: 'User not found or inactive' }, { status: 404 })
     }
 
-    const validRoles = ['Worker', 'Caretaker', 'Manager']
-    const collaboratorRole = validRoles.includes(role) ? role : 'Worker'
-
     const collaborator = await prisma.farmCollaborator.upsert({
       where: { farmId_userId: { farmId: id, userId } },
-      update: { role: collaboratorRole },
-      create: { farmId: id, userId, role: collaboratorRole },
+      update: {},
+      create: { farmId: id, userId },
       include: {
         user: { select: { id: true, name: true, email: true, roles: true } },
       },

@@ -714,21 +714,14 @@ enum RoastLevel {
   Dark
 }
 
-enum FarmCollaboratorRole {
-  Worker
-  Caretaker
-  Manager
-}
-
 model FarmCollaborator {
-  id        String                @id @default(uuid())
+  id        String   @id @default(uuid())
   farmId    String
   userId    String
-  role      FarmCollaboratorRole  @default(Worker)
-  createdAt DateTime              @default(now())
-  updatedAt DateTime              @updatedAt
-  farm      Farm                  @relation(fields: [farmId], references: [id], onDelete: Cascade)
-  user      User                  @relation("CollaboratorUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  farm      Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  user      User     @relation("CollaboratorUser", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([farmId, userId])
   @@index([farmId])
