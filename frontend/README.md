@@ -50,11 +50,23 @@ frontend/
 │   │   ├── gapLogService.ts
 │   │   ├── soilAnalysisService.ts
 │   │   ├── weatherService.ts
+│   │   ├── weatherApiService.ts           # Weather API fetching
+│   │   ├── weatherAutoFetchService.ts     # Auto-fetch weather
+│   │   ├── geminiService.ts               # Gemini AI service
 │   │   ├── userService.ts
 │   │   ├── coffeeVarietyService.ts
 │   │   ├── cropYearService.ts
 │   │   ├── activityTypeService.ts
 │   │   └── processTypeService.ts
+│   ├── utils/                       # Utility modules
+│   │   ├── connectionManager.ts     # Connection state management
+│   │   ├── errorHandler.ts          # Error handling utilities
+│   │   ├── formatters.ts            # Data formatting helpers
+│   │   ├── formatDisplayId.ts       # Display ID formatting
+│   │   ├── logger.ts                # Logging utility
+│   │   ├── exportCSV.ts             # CSV export utility
+│   │   └── idGenerator.ts           # ID generation utility
+│   ├── constants.ts                 # App-wide constants
 │   ├── types.ts                     # Shared TypeScript types
 │   ├── App.tsx                      # Main Application + Routes
 │   └── main.tsx                     # Entry Point

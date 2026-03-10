@@ -4,6 +4,9 @@ import { Button } from '../common/Button';
 import { Download, Printer, Copy, Check, QrCode, RefreshCw, Image } from 'lucide-react';
 import { generatePublicTraceId, getPublicTraceUrl, generateQRDataUrl, generateQRSvg } from '../../services/greenBeanLotService';
 
+const escapeHtml = (str: string) =>
+  str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+
 interface QRCodeModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -38,6 +41,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
     }
 
     const generateQR = async () => {
+      setError(null);
       try {
         // Generate PNG data URL
         const dataUrl = await generateQRDataUrl(publicUrl, { size, margin: 1 });
@@ -46,14 +50,14 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
         // Generate SVG
         const svg = await generateQRSvg(publicUrl, { size, margin: 1 });
         setSvgContent(svg);
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('Error generating QR code:', err);
         setError('Failed to generate QR code');
       }
     };
 
     generateQR();
-  }, [currentPublicId, size, publicUrl]);
+  }, [currentPublicId, size]);
 
   // Sync with prop changes
   useEffect(() => {
@@ -73,7 +77,17 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
     if (isOpen && !currentPublicId && !isGenerating) {
       handleGeneratePublicId();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: trigger only when modal opens
   }, [isOpen]);
+
+  const closeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup auto-close timer on unmount
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
 
   const handleGeneratePublicId = async (autoClose = false) => {
     setIsGenerating(true);
@@ -85,11 +99,11 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
         onPublicIdGenerated(result.publicTraceId);
       }
       if (autoClose) {
-        setTimeout(() => onClose(), 1500);
+        closeTimerRef.current = setTimeout(() => onClose(), 1500);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to generate public ID:', err);
-      setError(err.message || 'Failed to generate public ID');
+      setError(err instanceof Error ? err.message : 'Failed to generate public ID');
     } finally {
       setIsGenerating(false);
     }
@@ -107,11 +121,14 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
     if (!svgContent) return;
     const blob = new Blob([svgContent], { type: 'image/svg+xml' });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = `qr-${currentPublicId}.svg`;
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
+    try {
+      const link = document.createElement('a');
+      link.download = `qr-${currentPublicId}.svg`;
+      link.href = url;
+      link.click();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   };
 
   const handleCopyLink = async () => {
@@ -119,20 +136,21 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
       await navigator.clipboard.writeText(publicUrl);
       setIsLinkCopied(true);
       setTimeout(() => setIsLinkCopied(false), 2000);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to copy:', err);
     }
   };
 
   const handlePrint = () => {
+    if (!qrDataUrl) return;
     const printWindow = window.open('', '', 'height=600,width=600');
     if (printWindow) {
       printWindow.document.write(`
         <html>
-          <head><title>QR Code - ${lotId}</title></head>
+          <head><title>QR Code - ${escapeHtml(lotId)}</title></head>
           <body style="text-align: center; margin-top: 50px; font-family: system-ui, sans-serif;">
             <img src="${qrDataUrl}" alt="QR Code" style="width: ${size}px; height: ${size}px;" />
-            <p style="margin-top: 20px; font-size: 12px; color: #666; word-break: break-all; max-width: 400px; margin-left: auto; margin-right: auto;">${publicUrl}</p>
+            <p style="margin-top: 20px; font-size: 12px; color: #666; word-break: break-all; max-width: 400px; margin-left: auto; margin-right: auto;">${escapeHtml(publicUrl)}</p>
           </body>
         </html>
       `);
@@ -167,7 +185,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
                 </p>
                 <Button
                   variant="primary"
-                  onClick={handleGeneratePublicId}
+                  onClick={() => handleGeneratePublicId()}
                   disabled={isGenerating}
                   loading={isGenerating}
                 >
