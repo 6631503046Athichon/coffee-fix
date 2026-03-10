@@ -25,7 +25,10 @@ export async function GET(request: NextRequest) {
       // Phase 1: Essential data
       const farmsWhere: Record<string, unknown> = {}
       if (!isAdmin) {
-        farmsWhere.ownerId = user.id
+        farmsWhere.OR = [
+          { ownerId: user.id },
+          { collaborators: { some: { userId: user.id } } },
+        ]
       }
 
       const [farms, harvestLots, cropYears, processTypes, activityTypes, customers, users] = await Promise.all([
@@ -34,6 +37,11 @@ export async function GET(request: NextRequest) {
           where: farmsWhere,
           include: {
             owner: { select: { id: true, name: true, email: true } },
+            collaborators: {
+              include: {
+                user: { select: { id: true, name: true, email: true, roles: true } },
+              },
+            },
           },
           orderBy: { createdAt: 'desc' },
         }),
@@ -116,7 +124,12 @@ export async function GET(request: NextRequest) {
       let farmIds: string[] = []
       if (isFarmer && !isAdmin) {
         const farms = await prisma.farm.findMany({
-          where: { ownerId: user.id },
+          where: {
+            OR: [
+              { ownerId: user.id },
+              { collaborators: { some: { userId: user.id } } },
+            ],
+          },
           select: { id: true },
         })
         farmIds = farms.map(f => f.id)

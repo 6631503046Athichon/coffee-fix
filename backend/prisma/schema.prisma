@@ -25,6 +25,7 @@ model User {
   cuppingSessions      CuppingSession[]       @relation("SessionCreator")
   cuppingJudges        CuppingSessionJudge[]
   createdFarms         Farm[]                 @relation("FarmOwner")
+  farmCollaborations   FarmCollaborator[]     @relation("CollaboratorUser")
   gapLogs              GAPLogEntry[]
   greenBeanLots        GreenBeanLot[]         @relation("GreenBeanLotCreator")
   priceSetGreenBeans   GreenBeanLot[]         @relation("PriceSetter")
@@ -67,6 +68,7 @@ model Farm {
   weatherAutoFetchEnabled  Boolean         @default(false)
   weatherAutoFetchInterval Int             @default(5)
   owner                    User            @relation("FarmOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  collaborators  FarmCollaborator[]
   gapLogs        GAPLogEntry[]
   harvestLots    HarvestLot[]
   soilAnalyses   SoilAnalysis[]
@@ -710,4 +712,25 @@ enum RoastLevel {
   Light
   Medium
   Dark
+}
+
+enum FarmCollaboratorRole {
+  Worker
+  Caretaker
+  Manager
+}
+
+model FarmCollaborator {
+  id        String                @id @default(uuid())
+  farmId    String
+  userId    String
+  role      FarmCollaboratorRole  @default(Worker)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+  farm      Farm                  @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  user      User                  @relation("CollaboratorUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([farmId, userId])
+  @@index([farmId])
+  @@index([userId])
 }

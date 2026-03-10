@@ -3,10 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { PlusCircle, Save, MapPin, Compass, X, RefreshCw, ArrowLeft, Sprout, User as UserIcon, Ruler, Coffee, Leaf, Info } from 'lucide-react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Farm, User, UserRole } from '../../types';
+import { Farm, User, UserRole, FarmCollaborator, FarmCollaboratorRole } from '../../types';
 import { Button, Input } from '../common';
 import Select from '../common/Select';
 import { addFarm, updateFarm } from '../../services/farmService';
+import { addFarmCollaborator, removeFarmCollaborator } from '../../services/farmCollaboratorService';
 import { generateFarmId } from '../../utils/idGenerator';
 import { getActiveCoffeeVarieties, CoffeeVariety } from '../../services/coffeeVarietyService';
 import { getAllUsers } from '../../services/userService';
@@ -97,6 +98,13 @@ const AddFarmPage: React.FC = () => {
 	const [selectedOwnerId, setSelectedOwnerId] = useState<string>('');
 	const [farmersLoading, setFarmersLoading] = useState(true);
 	const isAdmin = currentUser?.roles?.includes(UserRole.Admin) ?? false;
+
+	// Collaborators
+	const [collaborators, setCollaborators] = useState<FarmCollaborator[]>([]);
+	const [selectedCollaboratorId, setSelectedCollaboratorId] = useState<string>('');
+	const [selectedCollaboratorRole, setSelectedCollaboratorRole] = useState<FarmCollaboratorRole>('Worker');
+	const [collaboratorLoading, setCollaboratorLoading] = useState(false);
+
 	const [customVariety, setCustomVariety] = useState('');
 	const [customVarietiesList, setCustomVarietiesList] = useState<string[]>([]); // varieties ที่ user เพิ่มเอง
 	const [googleMapsUrl, setGoogleMapsUrl] = useState('');
@@ -176,6 +184,7 @@ const AddFarmPage: React.FC = () => {
 			}
 			setSelectedVarieties(editingFarm.varieties ?? []);
 			setCustomVariety('');
+			setCollaborators(editingFarm.collaborators ?? []);
 			setGoogleMapsUrl(editingFarm.googleMapsUrl ?? '');
 			setLatitudeInput(
 				editingFarm.latitude !== undefined && editingFarm.latitude !== null ? String(editingFarm.latitude) : '',
@@ -222,6 +231,45 @@ const AddFarmPage: React.FC = () => {
 	const handleRemoveOwnerName = (index: number) => {
 		setOwnerNames(prev => (prev.length === 1 ? [''] : prev.filter((_, i) => i !== index)));
 	};
+
+	// Collaborator handlers
+	const handleAddCollaborator = async () => {
+		if (!selectedCollaboratorId || !isEditing || !farmId) return;
+		// Can't add owner as collaborator
+		if (selectedCollaboratorId === selectedOwnerId) {
+			setFormError('เจ้าของฟาร์มไม่สามารถเพิ่มเป็นผู้ช่วยได้');
+			return;
+		}
+		// Can't add duplicate
+		if (collaborators.some(c => c.userId === selectedCollaboratorId)) {
+			setFormError('ผู้ใช้นี้เป็นผู้ช่วยอยู่แล้ว');
+			return;
+		}
+		setCollaboratorLoading(true);
+		setFormError(null);
+		const result = await addFarmCollaborator(farmId, selectedCollaboratorId, selectedCollaboratorRole);
+		if (result) {
+			setCollaborators(prev => [...prev, result]);
+			setSelectedCollaboratorId('');
+			setSelectedCollaboratorRole('Worker');
+		}
+		setCollaboratorLoading(false);
+	};
+
+	const handleRemoveCollaborator = async (userId: string) => {
+		if (!isEditing || !farmId) return;
+		setCollaboratorLoading(true);
+		const success = await removeFarmCollaborator(farmId, userId);
+		if (success) {
+			setCollaborators(prev => prev.filter(c => c.userId !== userId));
+		}
+		setCollaboratorLoading(false);
+	};
+
+	// Users available as collaborators (farmers not already added and not the owner)
+	const availableCollaborators = farmerUsers.filter(
+		u => u.id !== selectedOwnerId && !collaborators.some(c => c.userId === u.id)
+	);
 
 	const removeVariety = (variety: string) => {
 		setSelectedVarieties(prev => prev.filter(v => v !== variety));
@@ -672,8 +720,9 @@ const AddFarmPage: React.FC = () => {
 								<Button
 									type="button"
 									variant="secondary"
+									size="sm"
 									onClick={handleAddOwnerName}
-									className="px-3 py-1 text-xs bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+									className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
 								>
 									Add Owner
 								</Button>
@@ -721,6 +770,94 @@ const AddFarmPage: React.FC = () => {
 							)}
 						</div>
 					</div>
+
+					{/* Collaborators - only when editing */}
+					{isEditing && isAdmin && (
+						<div className="mt-6 pt-6 border-t border-gray-100">
+							<div className="flex items-center justify-between mb-4">
+								<label className="block text-sm font-semibold text-gray-700">
+									ผู้ช่วยในฟาร์ม (Collaborators)
+								</label>
+							</div>
+
+							{/* Add collaborator row */}
+							<div className="flex items-end gap-3 mb-4">
+								<div className="flex-1">
+									<Select
+										options={availableCollaborators}
+										value={selectedCollaboratorId || null}
+										onChange={(v) => setSelectedCollaboratorId(v as string)}
+										getValue={(u: User) => u.id}
+										getLabel={(u: User) => `${u.name}${u.email ? ` (${u.email})` : u.username ? ` (${u.username})` : ''}`}
+										placeholder={farmersLoading ? 'กำลังโหลด...' : 'เลือก Farmer...'}
+										disabled={farmersLoading || collaboratorLoading}
+										colorTheme="blue"
+									/>
+								</div>
+								<div className="w-36">
+									<Select
+										options={[
+											{ value: 'Worker', label: 'คนงาน' },
+											{ value: 'Caretaker', label: 'ผู้ดูแล' },
+											{ value: 'Manager', label: 'ผู้จัดการ' },
+										]}
+										value={selectedCollaboratorRole}
+										onChange={(v) => setSelectedCollaboratorRole(v as FarmCollaboratorRole)}
+										colorTheme="blue"
+									/>
+								</div>
+								<Button
+									type="button"
+									variant="primary"
+									size="sm"
+									onClick={handleAddCollaborator}
+									disabled={!selectedCollaboratorId || collaboratorLoading}
+								>
+									<PlusCircle className="h-4 w-4 mr-1" />
+									เพิ่ม
+								</Button>
+							</div>
+
+							{/* Collaborator list */}
+							{collaborators.length > 0 ? (
+								<div className="space-y-2">
+									{collaborators.map((collab) => {
+										const roleLabels: Record<string, string> = { Worker: 'คนงาน', Caretaker: 'ผู้ดูแล', Manager: 'ผู้จัดการ' };
+										return (
+											<div key={collab.id} className="flex items-center justify-between bg-blue-50 rounded-lg px-4 py-2.5">
+												<div className="flex items-center gap-3">
+													<div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+														<UserIcon className="h-4 w-4 text-blue-600" />
+													</div>
+													<div>
+														<span className="text-sm font-medium text-gray-900">{collab.user?.name || 'Unknown'}</span>
+														{collab.user?.email && (
+															<span className="text-xs text-gray-500 ml-2">({collab.user.email})</span>
+														)}
+													</div>
+													<span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+														{roleLabels[collab.role] || collab.role}
+													</span>
+												</div>
+												<Button
+													type="button"
+													variant="ghost"
+													size="sm"
+													onClick={() => handleRemoveCollaborator(collab.userId)}
+													disabled={collaboratorLoading}
+													className="text-red-500 hover:text-red-700 hover:bg-red-50"
+												>
+													<X className="h-4 w-4" />
+												</Button>
+											</div>
+										);
+									})}
+								</div>
+							) : (
+								<p className="text-sm text-gray-400">ยังไม่มีผู้ช่วยในฟาร์ม</p>
+							)}
+						</div>
+					)}
 				</div>
 
 				{/* Location Details Section */}

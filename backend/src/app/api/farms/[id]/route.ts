@@ -21,6 +21,11 @@ export async function GET(
             email: true,
           },
         },
+        collaborators: {
+          include: {
+            user: { select: { id: true, name: true, email: true, roles: true } },
+          },
+        },
         harvestLots: {
           take: 10,
           orderBy: { harvestDate: 'desc' },
@@ -35,8 +40,9 @@ export async function GET(
       )
     }
 
-    // Check permission
-    if (!user.roles.includes('Admin') && farm.ownerId !== user.id) {
+    // Check permission: owner, collaborator, or admin
+    const isCollaborator = farm.collaborators.some((c: any) => c.userId === user.id)
+    if (!user.roles.includes('Admin') && farm.ownerId !== user.id && !isCollaborator) {
       return NextResponse.json(
         { error: 'Forbidden' },
         { status: 403 }
@@ -69,7 +75,7 @@ export async function PUT(
       )
     }
 
-    // Check permission
+    // Check permission: owner or admin can edit (collaborators cannot change farm settings)
     if (!user.roles.includes('Admin') && farm.ownerId !== user.id) {
       return NextResponse.json(
         { error: 'Forbidden' },
@@ -145,6 +151,11 @@ export async function PUT(
             id: true,
             name: true,
             email: true,
+          },
+        },
+        collaborators: {
+          include: {
+            user: { select: { id: true, name: true, email: true, roles: true } },
           },
         },
       },

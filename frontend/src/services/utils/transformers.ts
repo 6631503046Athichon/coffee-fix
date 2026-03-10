@@ -48,6 +48,7 @@ export const transformFarmFromBackend = (farm: any) => {
     archived: farm.archived || false,
     archivedAt: farm.archivedAt || undefined,
     ownerUserId: farm.ownerId,
+    collaborators: farm.collaborators || [],
   };
 };
 

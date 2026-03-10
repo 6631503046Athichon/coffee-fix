@@ -67,6 +67,24 @@ export interface Farm {
   archivedAt?: string;
   /** Optional: the owner user id (farmer) who owns this farm */
   ownerUserId?: string;
+  /** Collaborators assigned to this farm */
+  collaborators?: FarmCollaborator[];
+}
+
+export type FarmCollaboratorRole = 'Worker' | 'Caretaker' | 'Manager';
+
+export interface FarmCollaborator {
+  id: string;
+  farmId: string;
+  userId: string;
+  role: FarmCollaboratorRole;
+  createdAt?: string;
+  user?: {
+    id: string;
+    name: string;
+    email?: string;
+    roles?: string[];
+  };
 }
 
 export interface HarvestLotFarmSummary {
