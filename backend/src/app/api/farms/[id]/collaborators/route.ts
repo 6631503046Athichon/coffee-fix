@@ -78,7 +78,7 @@ export async function POST(
     // Check target user exists and is active
     const targetUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, roles: true, isActive: true },
+      select: { id: true, isActive: true },
     })
     if (!targetUser || !targetUser.isActive) {
       return NextResponse.json({ error: 'User not found or inactive' }, { status: 404 })

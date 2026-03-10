@@ -4,18 +4,18 @@ Backend API server for Coffee Lab Platform built with Next.js 14, Prisma ORM, an
 
 ## Tech Stack
 
-- **Framework:** Next.js 14 (App Router)
+- **Framework:** Next.js 14.2 (App Router)
 - **API Routes:** Next.js API Routes (`/app/api/*/route.ts`)
-- **Database ORM:** Prisma
-- **Database:** PostgreSQL
+- **Database ORM:** Prisma 5.22
+- **Database:** PostgreSQL (Railway)
 - **Authentication:** JWT + bcrypt
-- **Language:** TypeScript
+- **Language:** TypeScript (strict mode)
 
 ## Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - PostgreSQL 14+
-- npm or yarn
+- npm
 
 ## Setup
 
@@ -44,16 +44,9 @@ FRONTEND_URL="http://localhost:5173"
 NODE_ENV="development"
 
 # Email Configuration (Optional - for password reset emails)
-# Set EMAIL_ENABLED=true to enable email sending
 EMAIL_ENABLED="false"
-# Resend API (Recommended - similar to Go resend-go implementation)
-# Works from localhost - no need for production server!
 RESEND_API_KEY="re_your_resend_api_key"
-# For development/testing: Use Resend's test email (works immediately)
 RESEND_FROM="onboarding@resend.dev"
-# For production: Use your verified domain
-# RESEND_FROM="no-reply@yourdomain.com"  # Must be verified domain in Resend
-# Or use EMAIL_FROM as fallback
 EMAIL_FROM="Coffee Lab <onboarding@resend.dev>"
 ```
 
@@ -63,7 +56,10 @@ EMAIL_FROM="Coffee Lab <onboarding@resend.dev>"
 # Generate Prisma Client
 npm run db:generate
 
-# Run migrations
+# Push schema to database (recommended for first setup)
+npx prisma db push
+
+# Or run migrations
 npm run db:migrate
 
 # Seed database with initial data
@@ -78,18 +74,17 @@ npm run dev
 
 The API will be available at `http://localhost:3000`
 
-### Testing with Postman
-
-See `../docs/backend/API_TESTING.md` for detailed API testing guide.
-
 ## API Endpoints
 
 ### Authentication
 
 - `POST /api/auth/login` - Login user
-- `POST /api/auth/register` - Register new user
 - `POST /api/auth/logout` - Logout user
 - `GET /api/auth/me` - Get current user
+- `POST /api/auth/first-login-update` - Update password/username on first login
+- `POST /api/auth/forgot-password` - Request password reset email
+- `POST /api/auth/verify-reset-token` - Verify reset token
+- `POST /api/auth/reset-password` - Reset password with token
 
 ### Users
 
@@ -98,21 +93,21 @@ See `../docs/backend/API_TESTING.md` for detailed API testing guide.
 - `GET /api/users/:id` - Get user by ID
 - `PUT /api/users/:id` - Update user
 - `DELETE /api/users/:id` - Delete user (Admin only)
+- `POST /api/users/transfer-ownership` - Transfer farm ownership (Admin only)
 
 ### Farms
 
-- `GET /api/farms` - List all farms
+- `GET /api/farms` - List farms (own + collaborating, Admin sees all)
 - `POST /api/farms` - Create farm
 - `GET /api/farms/:id` - Get farm by ID
 - `PUT /api/farms/:id` - Update farm
 - `DELETE /api/farms/:id` - Delete farm (Admin only)
 
-### Farm Requests
+### Farm Collaborators
 
-- `GET /api/farm-requests` - List all farm requests
-- `POST /api/farm-requests` - Create farm request
-- `GET /api/farm-requests/:id` - Get farm request by ID
-- `PUT /api/farm-requests/:id` - Approve/reject farm request (Admin only)
+- `GET /api/farms/:id/collaborators` - List farm caretakers
+- `POST /api/farms/:id/collaborators` - Add caretaker `{ userId }`
+- `DELETE /api/farms/:id/collaborators?userId=` - Remove caretaker
 
 ### Harvest Lots
 
@@ -133,8 +128,8 @@ See `../docs/backend/API_TESTING.md` for detailed API testing guide.
 
 - `GET /api/parchment-lots` - List all parchment lots
 - `POST /api/parchment-lots` - Create parchment lot
-- `PUT /api/parchment-lots/:id` - Update parchment lot (includes physical test results)
 - `GET /api/parchment-lots/:id` - Get parchment lot by ID
+- `PUT /api/parchment-lots/:id` - Update parchment lot (includes physical test results)
 
 ### Green Bean Lots
 
@@ -143,10 +138,16 @@ See `../docs/backend/API_TESTING.md` for detailed API testing guide.
 - `GET /api/green-bean-lots/:id` - Get green bean lot by ID
 - `PUT /api/green-bean-lots/:id` - Update green bean lot
 - `POST /api/green-bean-lots/:id/withdrawals` - Create withdrawal
+- `POST /api/green-bean-lots/:id/generate-public-id` - Generate public trace ID
+- `GET /api/green-bean-lots/:id/qr` - Get QR code for traceability
+
+### Public Traceability
+
+- `GET /api/trace/:publicId` - Public traceability lookup (no auth required)
 
 ### Roaster Inventory
 
-- `GET /api/roaster-inventory` - List all roaster inventory items
+- `GET /api/roaster-inventory` - List roaster inventory items
 - `POST /api/roaster-inventory` - Claim green bean lot for roasting
 - `GET /api/roaster-inventory/:id` - Get inventory item by ID
 - `PUT /api/roaster-inventory/:id` - Update inventory item
@@ -166,22 +167,6 @@ See `../docs/backend/API_TESTING.md` for detailed API testing guide.
 - `POST /api/cupping-sessions/:id/judges` - Add judge to session
 - `POST /api/cupping-sessions/:id/scores` - Submit score for a sample
 
-### Activity Types
-
-- `GET /api/activity-types` - List all activity types
-- `POST /api/activity-types` - Create activity type (Admin only)
-- `GET /api/activity-types/:id` - Get activity type by ID
-- `PUT /api/activity-types/:id` - Update activity type (Admin only)
-- `DELETE /api/activity-types/:id` - Delete activity type (Admin only)
-
-### Process Types
-
-- `GET /api/process-types` - List all process types
-- `POST /api/process-types` - Create process type (Admin only)
-- `GET /api/process-types/:id` - Get process type by ID
-- `PUT /api/process-types/:id` - Update process type (Admin only)
-- `DELETE /api/process-types/:id` - Delete process type (Admin only)
-
 ### GAP Logs
 
 - `GET /api/gap-logs` - List all GAP logs
@@ -199,8 +184,35 @@ See `../docs/backend/API_TESTING.md` for detailed API testing guide.
 
 ### Weather Records
 
-- `GET /api/weather-records` - List all weather records
+- `GET /api/weather-records` - List weather records
 - `POST /api/weather-records` - Create weather record
+- `GET /api/weather-records/:id` - Get weather record by ID
+- `PUT /api/weather-records/:id` - Update weather record
+- `GET /api/weather` - Fetch weather data from external API
+
+### Activity Types
+
+- `GET /api/activity-types` - List all activity types
+- `POST /api/activity-types` - Create activity type (Admin only)
+- `GET /api/activity-types/:id` - Get activity type by ID
+- `PUT /api/activity-types/:id` - Update activity type (Admin only)
+- `DELETE /api/activity-types/:id` - Delete activity type (Admin only)
+
+### Process Types
+
+- `GET /api/process-types` - List all process types
+- `POST /api/process-types` - Create process type (Admin only)
+- `GET /api/process-types/:id` - Get process type by ID
+- `PUT /api/process-types/:id` - Update process type (Admin only)
+- `DELETE /api/process-types/:id` - Delete process type (Admin only)
+
+### Coffee Varieties
+
+- `GET /api/coffee-varieties` - List all coffee varieties
+- `POST /api/coffee-varieties` - Create coffee variety (Admin only)
+- `GET /api/coffee-varieties/:id` - Get coffee variety by ID
+- `PUT /api/coffee-varieties/:id` - Update coffee variety (Admin only)
+- `DELETE /api/coffee-varieties/:id` - Delete coffee variety (Admin only)
 
 ### Crop Years
 
@@ -236,9 +248,16 @@ See `../docs/backend/API_TESTING.md` for detailed API testing guide.
 - `GET /api/pricing-history` - List all pricing history
 - `POST /api/pricing-history` - Create pricing history entry
 
+### System
+
+- `GET /api/health` - Health check
+- `GET /api/data-version` - Get data version for cache invalidation
+- `POST /api/bulk-load` - Bulk load data
+- `POST /api/backfill-display-ids` - Backfill display IDs (Admin only)
+
 ## Authentication
 
-All API endpoints (except `/api/auth/login` and `/api/auth/register`) require authentication via JWT token.
+All API endpoints (except public auth routes and `/api/trace/:publicId`) require authentication via JWT token.
 
 The token can be provided in two ways:
 1. **HTTP-only Cookie:** Set automatically after login
@@ -262,61 +281,61 @@ HTTP Status Codes:
 - `403` - Forbidden
 - `404` - Not Found
 - `409` - Conflict
+- `503` - Database Unavailable
 - `500` - Internal Server Error
 
 ## Database Management
 
-### Prisma Studio
-
-Open GUI to view and edit database:
-
 ```bash
+# Open Prisma Studio (GUI)
 npm run db:studio
-```
+# Opens at http://localhost:5555
 
-Opens at: `http://localhost:5555`
+# Push schema changes directly (development)
+npx prisma db push
 
-### Migrations
-
-```bash
 # Create new migration
 npm run db:migrate
 
-# Reset database (WARNING: deletes all data!)
-npx prisma migrate reset
-
 # Deploy migrations (production)
 npx prisma migrate deploy
+
+# Reset database (WARNING: deletes all data!)
+npx prisma migrate reset
 ```
 
-## Development
-
-### Project Structure
+## Project Structure
 
 ```
 backend/
 ├── src/
 │   ├── app/
-│   │   └── api/          # API routes
-│   └── lib/              # Core utilities
-│       ├── prisma.ts     # Database client
-│       ├── auth.ts       # Auth helpers
-│       ├── middleware.ts # Middleware
-│       └── email.ts      # Email service
+│   │   └── api/              # API routes (Next.js App Router)
+│   │       ├── auth/         # Authentication endpoints
+│   │       ├── farms/        # Farm management + collaborators
+│   │       ├── harvest-lots/ # Harvest lot management
+│   │       ├── ...           # Other feature routes
+│   │       └── health/       # Health check
+│   └── lib/                  # Core utilities
+│       ├── prisma.ts         # Prisma client singleton
+│       ├── auth.ts           # JWT + bcrypt helpers
+│       ├── middleware.ts     # requireAuth, handleApiError
+│       ├── validations.ts    # Zod validation schemas
+│       └── email.ts          # Email service (Resend)
 ├── prisma/
-│   ├── schema.prisma    # Database schema
-│   └── seed.ts          # Seed script
-└── .env                  # Environment variables
+│   ├── schema.prisma         # Database schema
+│   ├── seed.ts               # Seed script
+│   └── migrations/           # Migration files
+└── .env                      # Environment variables
 ```
 
 ## Production
 
 1. Set `NODE_ENV=production`
-2. Use strong `JWT_SECRET`
-3. Configure proper `DATABASE_URL`
+2. Use strong `JWT_SECRET` (min 32 chars)
+3. Configure `DATABASE_URL` pointing to production DB
 4. Set `FRONTEND_URL` to production frontend URL
-5. Run `npm run build`
-6. Start with `npm start`
+5. Run `npm run build` then `npm start`
 
 ## License
 

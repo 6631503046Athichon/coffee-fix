@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { PlusCircle, Save, MapPin, Compass, X, RefreshCw, ArrowLeft, Sprout, User as UserIcon, Ruler, Coffee, Leaf, Info } from 'lucide-react';
+import { PlusCircle, Save, MapPin, Compass, X, RefreshCw, ArrowLeft, Sprout, User as UserIcon, Ruler, Coffee, Leaf, Info, Users, UserPlus, Trash2 } from 'lucide-react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Farm, User, UserRole, FarmCollaborator } from '../../types';
@@ -800,14 +800,15 @@ const AddFarmPage: React.FC = () => {
 					{/* Collaborators */}
 					{isAdmin && (
 						<div className="mt-6 pt-6 border-t border-gray-100">
-							<div className="flex items-center justify-between mb-4">
-								<label className="block text-base font-semibold text-gray-700">
-									ผู้ดูแลฟาร์ม
-								</label>
+							<div className="flex items-center gap-2.5 mb-4">
+								<div className="p-1.5 bg-indigo-50 rounded-lg">
+									<Users className="h-4 w-4 text-indigo-600" />
+								</div>
+								<label className="text-sm font-semibold text-gray-700">Farm Caretakers</label>
 							</div>
 
 							{/* Add collaborator row */}
-							<div className="flex items-end gap-3 mb-5">
+							<div className="flex items-center gap-2 mb-4">
 								<div className="flex-1">
 									<Select
 										options={availableCollaborators}
@@ -815,7 +816,7 @@ const AddFarmPage: React.FC = () => {
 										onChange={(v) => setSelectedCollaboratorId(v as string)}
 										getValue={(u: User) => u.id}
 										getLabel={(u: User) => `${u.name}${u.email ? ` (${u.email})` : u.username ? ` (${u.username})` : ''}`}
-										placeholder={farmersLoading ? 'กำลังโหลด...' : 'เลือก Farmer...'}
+										placeholder={farmersLoading ? 'กำลังโหลด...' : 'เลือกผู้ดูแล...'}
 										disabled={farmersLoading || collaboratorLoading}
 										colorTheme="blue"
 									/>
@@ -823,48 +824,48 @@ const AddFarmPage: React.FC = () => {
 								<Button
 									type="button"
 									variant="primary"
-									size="sm"
 									onClick={handleAddCollaborator}
 									disabled={!selectedCollaboratorId || collaboratorLoading}
+									className="bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap px-5 py-2.5"
 								>
-									<PlusCircle className="h-4 w-4 mr-1" />
+									<UserPlus className="h-5 w-5 mr-1.5" />
 									เพิ่ม
 								</Button>
 							</div>
 
 							{/* Collaborator list */}
 							{collaborators.length > 0 ? (
-								<div className="space-y-3">
-									{collaborators.map((collab) => {
-										return (
-											<div key={collab.id} className="flex items-center justify-between bg-blue-50 rounded-xl px-5 py-4">
-												<div className="flex items-center gap-4">
-													<div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-														<UserIcon className="h-5 w-5 text-blue-600" />
-													</div>
-													<div>
-														<span className="text-base font-medium text-gray-900">{collab.user?.name || 'Unknown'}</span>
-														{collab.user?.email && (
-															<p className="text-sm text-gray-500">({collab.user.email})</p>
-														)}
-													</div>
+								<div className="space-y-1.5">
+									{collaborators.map((collab) => (
+										<div key={collab.id} className="group flex items-center justify-between bg-gradient-to-r from-indigo-50/80 to-blue-50/50 rounded-xl px-4 py-3 border border-indigo-100/60 transition-all hover:border-indigo-200">
+											<div className="flex items-center gap-3">
+												<div className="w-9 h-9 bg-white rounded-full flex items-center justify-center shadow-sm border border-indigo-100">
+													<UserIcon className="h-4 w-4 text-indigo-500" />
 												</div>
-												<Button
-													type="button"
-													variant="ghost"
-													size="sm"
-													onClick={() => handleRemoveCollaborator(collab.userId)}
-													disabled={collaboratorLoading}
-													className="text-red-500 hover:text-red-700 hover:bg-red-50"
-												>
-													<X className="h-5 w-5" />
-												</Button>
+												<div className="flex flex-col">
+													<span className="text-sm font-semibold text-gray-800">{collab.user?.name || 'Unknown'}</span>
+													{collab.user?.email && (
+														<span className="text-xs text-gray-400">{collab.user.email}</span>
+													)}
+												</div>
 											</div>
-										);
-									})}
+											<button
+												type="button"
+												onClick={() => handleRemoveCollaborator(collab.userId)}
+												disabled={collaboratorLoading}
+												className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50"
+												aria-label={`ลบ ${collab.user?.name}`}
+											>
+												<Trash2 className="h-4 w-4" />
+											</button>
+										</div>
+									))}
 								</div>
 							) : (
-								<p className="text-sm text-gray-400">ยังไม่มีผู้ดูแล</p>
+								<div className="flex items-center gap-2 py-4 px-3 rounded-xl bg-gray-50 border border-dashed border-gray-200">
+									<Users className="h-4 w-4 text-gray-300" />
+									<p className="text-sm text-gray-400">ยังไม่มีผู้ดูแล</p>
+								</div>
 							)}
 						</div>
 					)}
