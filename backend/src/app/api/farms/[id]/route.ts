@@ -78,7 +78,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, caretakerNames, archived, googleMapsUrl, ownerNames, weatherAutoFetchEnabled, weatherAutoFetchInterval } = body
+    const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, caretakerNames, archived, googleMapsUrl, ownerNames, ownerId, weatherAutoFetchEnabled, weatherAutoFetchInterval } = body
 
     const updateData: any = {}
     if (farmName !== undefined) updateData.farmName = farmName
@@ -108,6 +108,17 @@ export async function PUT(
     if (archived !== undefined) {
       updateData.archived = archived
       updateData.archivedAt = archived ? new Date() : null
+    }
+
+    // Owner reassignment - Admin only
+    if (ownerId !== undefined && ownerId !== farm.ownerId) {
+      if (!user.roles.includes('Admin') && !user.isSuperAdmin) {
+        return NextResponse.json(
+          { error: 'Only admin can change farm ownership' },
+          { status: 403 }
+        )
+      }
+      updateData.ownerId = ownerId
     }
 
     // Weather auto-fetch settings - Admin only
