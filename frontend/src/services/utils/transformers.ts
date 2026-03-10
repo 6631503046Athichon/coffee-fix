@@ -92,6 +92,7 @@ export const transformFarmToBackend = (farmData: any) => {
         : caretakerNamesFromString,
     caretakerName: null,
     archived: farmData.archived || false,
+    ownerId: farmData.ownerUserId || undefined,
   };
 };
 

@@ -1,14 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { PlusCircle, Save, MapPin, Compass, X, RefreshCw, ArrowLeft, Sprout, User, Ruler, Coffee, Leaf, Info } from 'lucide-react';
+import { PlusCircle, Save, MapPin, Compass, X, RefreshCw, ArrowLeft, Sprout, User as UserIcon, Ruler, Coffee, Leaf, Info } from 'lucide-react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Farm } from '../../types';
+import { Farm, User, UserRole } from '../../types';
 import { Button, Input } from '../common';
 import Select from '../common/Select';
 import { addFarm, updateFarm } from '../../services/farmService';
 import { generateFarmId } from '../../utils/idGenerator';
 import { getActiveCoffeeVarieties, CoffeeVariety } from '../../services/coffeeVarietyService';
+import { getAllUsers } from '../../services/userService';
 
 type ParsedGoogleMaps = { lat: number; lng: number; placeName?: string } | null;
 
@@ -89,8 +90,13 @@ const AddFarmPage: React.FC = () => {
 	const [farmName, setFarmName] = useState('');
 	const [farmLocation, setFarmLocation] = useState('');
 	const [ownerNames, setOwnerNames] = useState<string[]>(['']);
-	const [farmerNames, setFarmerNames] = useState<string[]>(['']);
 	const [selectedVarieties, setSelectedVarieties] = useState<string[]>([]);
+
+	// Farmer (owner) dropdown
+	const [farmerUsers, setFarmerUsers] = useState<User[]>([]);
+	const [selectedOwnerId, setSelectedOwnerId] = useState<string>('');
+	const [farmersLoading, setFarmersLoading] = useState(true);
+	const isAdmin = currentUser?.roles?.includes(UserRole.Admin) ?? false;
 	const [customVariety, setCustomVariety] = useState('');
 	const [customVarietiesList, setCustomVarietiesList] = useState<string[]>([]); // varieties ที่ user เพิ่มเอง
 	const [googleMapsUrl, setGoogleMapsUrl] = useState('');
@@ -128,6 +134,26 @@ const AddFarmPage: React.FC = () => {
 		fetchVarieties();
 	}, []);
 
+	// Fetch farmer users for dropdown
+	useEffect(() => {
+		const fetchFarmers = async () => {
+			setFarmersLoading(true);
+			try {
+				const users = await getAllUsers();
+				const farmers = users.filter(u => u.roles?.includes(UserRole.Farmer) && u.isActive !== false);
+				setFarmerUsers(farmers);
+				if (currentUser && !isAdmin && farmers.some(f => f.id === currentUser.id)) {
+					setSelectedOwnerId(currentUser.id);
+				}
+			} catch (error) {
+				console.error('Failed to fetch farmers:', error);
+			} finally {
+				setFarmersLoading(false);
+			}
+		};
+		fetchFarmers();
+	}, [currentUser, isAdmin]);
+
 	useEffect(() => {
 		if (isEditing && editingFarm) {
 			if (lastLoadedFarmIdRef.current === editingFarm.id) {
@@ -143,13 +169,11 @@ const AddFarmPage: React.FC = () => {
 					.map(name => name.trim())
 					.filter(Boolean);
 			setOwnerNames(parsedOwners.length > 0 ? parsedOwners : ['']);
-			const parsedFarmers = editingFarm.caretakerNames && editingFarm.caretakerNames.length > 0
-				? editingFarm.caretakerNames
-				: (editingFarm.caretakerName ?? '')
-					.split(',')
-					.map(name => name.trim())
-					.filter(Boolean);
-			setFarmerNames(parsedFarmers.length > 0 ? parsedFarmers : ['']);
+			if (editingFarm.ownerUserId) {
+				setSelectedOwnerId(editingFarm.ownerUserId);
+			} else if (currentUser && !isAdmin) {
+				setSelectedOwnerId(currentUser.id);
+			}
 			setSelectedVarieties(editingFarm.varieties ?? []);
 			setCustomVariety('');
 			setGoogleMapsUrl(editingFarm.googleMapsUrl ?? '');
@@ -168,7 +192,11 @@ const AddFarmPage: React.FC = () => {
 			setFarmName('');
 			setFarmLocation('');
 			setOwnerNames(['']);
-			setFarmerNames(['']);
+			if (currentUser && !isAdmin) {
+				setSelectedOwnerId(currentUser.id);
+			} else {
+				setSelectedOwnerId('');
+			}
 			setSelectedVarieties([]);
 			setCustomVariety('');
 			setGoogleMapsUrl('');
@@ -193,18 +221,6 @@ const AddFarmPage: React.FC = () => {
 
 	const handleRemoveOwnerName = (index: number) => {
 		setOwnerNames(prev => (prev.length === 1 ? [''] : prev.filter((_, i) => i !== index)));
-	};
-
-	const handleFarmerNameChange = (index: number, value: string) => {
-		setFarmerNames(prev => prev.map((name, i) => (i === index ? value : name)));
-	};
-
-	const handleAddFarmerName = () => {
-		setFarmerNames(prev => [...prev, '']);
-	};
-
-	const handleRemoveFarmerName = (index: number) => {
-		setFarmerNames(prev => (prev.length === 1 ? [''] : prev.filter((_, i) => i !== index)));
 	};
 
 	const removeVariety = (variety: string) => {
@@ -333,7 +349,13 @@ const AddFarmPage: React.FC = () => {
 			setIsSubmitting(false);
 			return;
 		}
-		const sanitizedFarmers = farmerNames.map(name => name.trim()).filter(Boolean);
+		if (!selectedOwnerId) {
+			setFormError('กรุณาเลือก Farmer ที่จะเป็นเจ้าของสวน');
+			setIsSubmitting(false);
+			return;
+		}
+		const selectedFarmer = farmerUsers.find(f => f.id === selectedOwnerId);
+		const sanitizedFarmers = selectedFarmer ? [selectedFarmer.name] : [];
 		if (selectedVarieties.length === 0) {
 			setFormError('Please select or add at least 1 coffee variety');
 			setIsSubmitting(false);
@@ -401,6 +423,7 @@ const AddFarmPage: React.FC = () => {
 				caretakerName: undefined,
 				googleMapsUrl: googleMapsUrl.trim() || undefined,
 				location: farmLocation.trim(),
+				ownerUserId: selectedOwnerId,
 				varieties: [...selectedVarieties].sort(),
 				latitude,
 				longitude,
@@ -442,7 +465,7 @@ const AddFarmPage: React.FC = () => {
 				caretakerName: undefined,
 				googleMapsUrl: googleMapsUrl.trim() || undefined,
 				location: farmLocation.trim(),
-				ownerUserId: currentUser.id,
+				ownerUserId: selectedOwnerId,
 				varieties: [...selectedVarieties].sort(),
 				archived: false,
 				latitude,
@@ -638,7 +661,7 @@ const AddFarmPage: React.FC = () => {
 				<div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
 					<div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
 						<div className="p-2 bg-blue-50 rounded-lg">
-							<User className="h-5 w-5 text-blue-600" />
+							<UserIcon className="h-5 w-5 text-blue-600" />
 						</div>
 						<h2 className="text-xl font-bold text-gray-900">People</h2>
 					</div>
@@ -680,40 +703,20 @@ const AddFarmPage: React.FC = () => {
 							</div>
 						</div>
 						<div className="space-y-3">
-							<div className="flex items-center justify-between">
-								<label className="block text-sm font-semibold text-gray-700">Farmer</label>
-								<Button
-									type="button"
-									variant="secondary"
-									onClick={handleAddFarmerName}
-									className="px-3 py-1.5 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
-								>
-									Add Farmer
-								</Button>
-							</div>
-							<div className="space-y-2">
-								{farmerNames.map((name, index) => (
-									<div key={`farmer-${index}`} className="flex items-center gap-2">
-										<Input
-											placeholder={`Farmer name ${index + 1}`}
-											value={name}
-											onChange={e => handleFarmerNameChange(index, e.target.value)}
-											fullWidth
-										/>
-										{farmerNames.length > 1 && (
-											<Button
-												type="button"
-												variant="outline"
-												onClick={() => handleRemoveFarmerName(index)}
-												className="px-2.5 py-2 text-gray-500 hover:text-red-600"
-												aria-label={`Remove farmer ${index + 1}`}
-											>
-												<X className="h-4 w-4" />
-											</Button>
-										)}
-									</div>
-								))}
-							</div>
+							<label className="block text-sm font-semibold text-gray-700">Farmer (เจ้าของฟาร์ม)</label>
+							<Select
+								options={farmerUsers}
+								value={selectedOwnerId || null}
+								onChange={(v) => setSelectedOwnerId(v as string)}
+								getValue={(u: User) => u.id}
+								getLabel={(u: User) => `${u.name}${u.email ? ` (${u.email})` : u.username ? ` (${u.username})` : ''}`}
+								placeholder={farmersLoading ? 'กำลังโหลด...' : 'เลือก Farmer...'}
+								disabled={!isAdmin || farmersLoading}
+								colorTheme="blue"
+							/>
+							{!isAdmin && (
+								<p className="text-xs text-gray-500">ฟาร์มจะถูกสร้างในบัญชีของคุณ</p>
+							)}
 						</div>
 					</div>
 				</div>
