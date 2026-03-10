@@ -667,13 +667,13 @@ const AddFarmPage: React.FC = () => {
 					</div>
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 						<div className="space-y-3">
-							<div className="flex items-center justify-between">
+							<div className="flex items-center justify-between min-h-[28px]">
 								<label className="block text-sm font-semibold text-gray-700">Farm Owner Name</label>
 								<Button
 									type="button"
 									variant="secondary"
 									onClick={handleAddOwnerName}
-									className="px-3 py-1.5 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+									className="px-3 py-1 text-xs bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
 								>
 									Add Owner
 								</Button>
@@ -703,7 +703,9 @@ const AddFarmPage: React.FC = () => {
 							</div>
 						</div>
 						<div className="space-y-3">
-							<label className="block text-sm font-semibold text-gray-700 mb-1">Farmer</label>
+							<div className="min-h-[28px] flex items-center">
+								<label className="block text-sm font-semibold text-gray-700">Farmer</label>
+							</div>
 							<Select
 								options={farmerUsers}
 								value={selectedOwnerId || null}
