@@ -823,11 +823,11 @@ const AddFarmPage: React.FC = () => {
 								</div>
 								<Button
 									type="button"
-									variant="primary"
+									variant="secondary"
 									size="sm"
 									onClick={handleAddCollaborator}
 									disabled={!selectedCollaboratorId || collaboratorLoading}
-									className="bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap"
+									className="bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 whitespace-nowrap"
 								>
 									<UserPlus className="h-4 w-4 mr-1" />
 									เพิ่ม
