@@ -234,7 +234,7 @@ const AddFarmPage: React.FC = () => {
 
 	// Collaborator handlers
 	const handleAddCollaborator = async () => {
-		if (!selectedCollaboratorId || !isEditing || !farmId) return;
+		if (!selectedCollaboratorId) return;
 		// Can't add owner as collaborator
 		if (selectedCollaboratorId === selectedOwnerId) {
 			setFormError('เจ้าของฟาร์มไม่สามารถเพิ่มเป็นผู้ช่วยได้');
@@ -245,25 +245,47 @@ const AddFarmPage: React.FC = () => {
 			setFormError('ผู้ใช้นี้เป็นผู้ช่วยอยู่แล้ว');
 			return;
 		}
-		setCollaboratorLoading(true);
 		setFormError(null);
-		const result = await addFarmCollaborator(farmId, selectedCollaboratorId, selectedCollaboratorRole);
-		if (result) {
-			setCollaborators(prev => [...prev, result]);
+
+		if (isEditing && farmId) {
+			// Editing: call API immediately
+			setCollaboratorLoading(true);
+			const result = await addFarmCollaborator(farmId, selectedCollaboratorId, selectedCollaboratorRole);
+			if (result) {
+				setCollaborators(prev => [...prev, result]);
+				setSelectedCollaboratorId('');
+				setSelectedCollaboratorRole('Worker');
+			}
+			setCollaboratorLoading(false);
+		} else {
+			// Creating: add as pending (local only, will be saved after farm creation)
+			const pendingUser = farmerUsers.find(u => u.id === selectedCollaboratorId);
+			const pending: FarmCollaborator = {
+				id: `pending-${Date.now()}`,
+				farmId: '',
+				userId: selectedCollaboratorId,
+				role: selectedCollaboratorRole,
+				user: pendingUser ? { id: pendingUser.id, name: pendingUser.name, email: pendingUser.email ?? undefined, roles: pendingUser.roles as string[] } : undefined,
+			};
+			setCollaborators(prev => [...prev, pending]);
 			setSelectedCollaboratorId('');
 			setSelectedCollaboratorRole('Worker');
 		}
-		setCollaboratorLoading(false);
 	};
 
 	const handleRemoveCollaborator = async (userId: string) => {
-		if (!isEditing || !farmId) return;
-		setCollaboratorLoading(true);
-		const success = await removeFarmCollaborator(farmId, userId);
-		if (success) {
+		if (isEditing && farmId) {
+			// Editing: call API
+			setCollaboratorLoading(true);
+			const success = await removeFarmCollaborator(farmId, userId);
+			if (success) {
+				setCollaborators(prev => prev.filter(c => c.userId !== userId));
+			}
+			setCollaboratorLoading(false);
+		} else {
+			// Creating: just remove from local state
 			setCollaborators(prev => prev.filter(c => c.userId !== userId));
 		}
-		setCollaboratorLoading(false);
 	};
 
 	// Users available as collaborators (farmers not already added and not the owner)
@@ -524,6 +546,14 @@ const AddFarmPage: React.FC = () => {
 			};
 			try {
 				const savedFarm = await addFarm(newFarm);
+
+				// Add pending collaborators after farm creation
+				if (collaborators.length > 0 && savedFarm.id) {
+					await Promise.all(
+						collaborators.map(c => addFarmCollaborator(savedFarm.id, c.userId, c.role))
+					);
+				}
+
 				setData(prev => ({
 					...prev,
 					farms: [savedFarm, ...prev.farms],
@@ -771,8 +801,8 @@ const AddFarmPage: React.FC = () => {
 						</div>
 					</div>
 
-					{/* Collaborators - only when editing */}
-					{isEditing && isAdmin && (
+					{/* Collaborators */}
+					{isAdmin && (
 						<div className="mt-6 pt-6 border-t border-gray-100">
 							<div className="flex items-center justify-between mb-4">
 								<label className="block text-sm font-semibold text-gray-700">
