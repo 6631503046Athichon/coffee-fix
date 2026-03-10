@@ -665,7 +665,7 @@ const AddFarmPage: React.FC = () => {
 						</div>
 						<h2 className="text-xl font-bold text-gray-900">People</h2>
 					</div>
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 						<div className="space-y-3">
 							<div className="flex items-center justify-between">
 								<label className="block text-sm font-semibold text-gray-700">Farm Owner Name</label>
@@ -703,7 +703,7 @@ const AddFarmPage: React.FC = () => {
 							</div>
 						</div>
 						<div className="space-y-3">
-							<label className="block text-sm font-semibold text-gray-700">Farmer (เจ้าของฟาร์ม)</label>
+							<label className="block text-sm font-semibold text-gray-700 mb-1">Farmer</label>
 							<Select
 								options={farmerUsers}
 								value={selectedOwnerId || null}
