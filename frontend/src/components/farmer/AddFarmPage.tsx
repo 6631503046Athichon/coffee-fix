@@ -349,12 +349,12 @@ const AddFarmPage: React.FC = () => {
 			setIsSubmitting(false);
 			return;
 		}
-		if (!selectedOwnerId) {
+		if (!isAdmin && !selectedOwnerId) {
 			setFormError('กรุณาเลือก Farmer ที่จะเป็นเจ้าของสวน');
 			setIsSubmitting(false);
 			return;
 		}
-		const selectedFarmer = farmerUsers.find(f => f.id === selectedOwnerId);
+		const selectedFarmer = selectedOwnerId ? farmerUsers.find(f => f.id === selectedOwnerId) : null;
 		const sanitizedFarmers = selectedFarmer ? [selectedFarmer.name] : [];
 		if (selectedVarieties.length === 0) {
 			setFormError('Please select or add at least 1 coffee variety');
@@ -423,7 +423,7 @@ const AddFarmPage: React.FC = () => {
 				caretakerName: undefined,
 				googleMapsUrl: googleMapsUrl.trim() || undefined,
 				location: farmLocation.trim(),
-				ownerUserId: selectedOwnerId,
+				ownerUserId: selectedOwnerId || undefined,
 				varieties: [...selectedVarieties].sort(),
 				latitude,
 				longitude,
@@ -465,7 +465,7 @@ const AddFarmPage: React.FC = () => {
 				caretakerName: undefined,
 				googleMapsUrl: googleMapsUrl.trim() || undefined,
 				location: farmLocation.trim(),
-				ownerUserId: selectedOwnerId,
+				ownerUserId: selectedOwnerId || undefined,
 				varieties: [...selectedVarieties].sort(),
 				archived: false,
 				latitude,
