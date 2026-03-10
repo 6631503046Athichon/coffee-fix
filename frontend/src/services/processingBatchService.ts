@@ -86,6 +86,25 @@ export const updateProcessingBatch = async (
 };
 
 /**
+ * Add a drying log entry to a processing batch
+ */
+export const addDryingLog = async (
+  batchId: string,
+  logData: {
+    date: string;
+    moistureContent: number;
+    ambientTemp: number;
+    relativeHumidity: number;
+  },
+): Promise<any> => {
+  const response = await api.post<{ dryingLog: any; message: string }>(
+    `/processing-batches/${batchId}/drying-logs`,
+    logData,
+  );
+  return response.dryingLog;
+};
+
+/**
  * Delete a processing batch
  */
 export const deleteProcessingBatch = async (batchId: string): Promise<void> => {

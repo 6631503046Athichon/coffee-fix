@@ -13,14 +13,6 @@ export enum ProcessingBatchStatus {
   Completed = "Completed",
 }
 
-// Deprecated: Use ActivityType interface instead
-// Kept for backward compatibility
-export enum GAPActivityType {
-  Fertilizer = "Fertilizer",
-  PestManagement = "Pest Management",
-  WaterManagement = "Water Management",
-}
-
 export interface ActivityType {
   id: string;
   name: string;

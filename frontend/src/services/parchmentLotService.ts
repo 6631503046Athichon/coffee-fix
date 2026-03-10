@@ -25,6 +25,24 @@ export const getAllParchmentLots = async (
 };
 
 /**
+ * Create a new parchment lot
+ */
+export const createParchmentLot = async (data: {
+  processingBatchId: string;
+  harvestLotId: string;
+  initialWeightKg: number;
+  moistureContent: number;
+  processType: string;
+  status?: string;
+}): Promise<ParchmentLot> => {
+  const response = await api.post<{ parchmentLot: any; message: string }>(
+    "/parchment-lots",
+    data,
+  );
+  return transformParchmentLotFromBackend(response.parchmentLot);
+};
+
+/**
  * Update a parchment lot
  */
 export const updateParchmentLot = async (
