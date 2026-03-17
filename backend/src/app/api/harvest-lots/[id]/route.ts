@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireOwnership, handleApiError } from '@/lib/middleware'
 import { safeParseFloat } from '@/lib/utils'
@@ -85,7 +86,7 @@ export async function PUT(
     const body = await request.json()
     const { farmerName, cherryVariety, weightKg, farmPlotLocation, harvestDate, status, cropYearId, farmId } = body
 
-    const updateData: any = {}
+    const updateData: Prisma.HarvestLotUpdateInput = {}
     if (farmerName !== undefined) updateData.farmerName = farmerName
     if (cherryVariety !== undefined) updateData.cherryVariety = cherryVariety
     if (weightKg !== undefined) {

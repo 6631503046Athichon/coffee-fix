@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Prepare update data
-    const updateData: any = {
+    const updateData: Record<string, string | boolean | Date> = {
       updatedAt: new Date()
     }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { hashPassword } from '@/lib/auth'
@@ -74,7 +75,7 @@ export async function PUT(
 
     // Non-admins can only update their own name
     if (isOwnProfile && !isAdmin) {
-      const updateData: any = {}
+      const updateData: Prisma.UserUpdateInput = {}
       if (name) updateData.name = name
       if (email) updateData.email = email
       if (username) updateData.username = username
@@ -166,7 +167,7 @@ export async function PUT(
       }
     }
 
-    const updateData: any = {}
+    const updateData: Prisma.UserUpdateInput = {}
     if (name !== undefined) updateData.name = name
     if (email !== undefined) updateData.email = email
     if (username !== undefined) updateData.username = username

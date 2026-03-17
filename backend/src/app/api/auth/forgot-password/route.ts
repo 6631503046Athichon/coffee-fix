@@ -80,16 +80,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // In development mode, include token in response for testing
-    const isDevelopment = process.env.NODE_ENV !== 'production'
-    const response: any = {
+    const response = {
       message: 'If an account with that email exists, we have sent a password reset link.',
-    }
-
-    if (isDevelopment) {
-      response.devToken = resetToken
-      // Use hash router format: /#/reset-password?token=...
-      response.devResetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/#/reset-password?token=${resetToken}`
     }
 
     return NextResponse.json(response)

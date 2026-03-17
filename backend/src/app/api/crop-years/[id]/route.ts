@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
@@ -57,7 +58,7 @@ export async function PUT(
     const body = await request.json()
     const { year, startDate, endDate, description } = body
 
-    const updateData: any = {}
+    const updateData: Prisma.CropYearUpdateInput = {}
     if (year !== undefined) updateData.year = year
     if (startDate !== undefined) updateData.startDate = new Date(startDate)
     if (endDate !== undefined) updateData.endDate = new Date(endDate)

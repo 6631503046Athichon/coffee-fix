@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, handleApiError } from '@/lib/middleware'
 
@@ -74,7 +75,7 @@ export async function GET(
     const scores = cuppingSession.scores
 
     // Organize scores by sample
-    const scoresBySample: any = {}
+    const scoresBySample: Record<string, Record<string, unknown>[]> = {}
     for (const score of scores) {
       if (!scoresBySample[score.sampleId]) {
         scoresBySample[score.sampleId] = []
@@ -112,7 +113,7 @@ export async function PUT(
     const body = await request.json()
     const { name, date, type, status, finalResults } = body
 
-    const updateData: any = {}
+    const updateData: Prisma.CuppingSessionUpdateInput = {}
     if (name !== undefined) updateData.name = name
     if (date !== undefined) updateData.date = new Date(date)
     if (type !== undefined) updateData.type = type

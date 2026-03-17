@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, handleApiError } from '@/lib/middleware'
 
@@ -62,7 +63,7 @@ export async function PUT(
     const body = await request.json()
     const { farmId, farmPlotLocation, activityTypeId, date, productUsed, quantity, notes } = body
 
-    const updateData: any = {}
+    const updateData: Prisma.GAPLogEntryUpdateInput = {}
     if (farmId !== undefined) updateData.farmId = farmId
     if (farmPlotLocation !== undefined) updateData.farmPlotLocation = farmPlotLocation
     if (activityTypeId !== undefined) {

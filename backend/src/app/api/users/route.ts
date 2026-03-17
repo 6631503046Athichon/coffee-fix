@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Return generated credentials to admin
-    const response: any = {
+    const response: Record<string, unknown> = {
       user: newUser,
       message: 'User created successfully'
     }

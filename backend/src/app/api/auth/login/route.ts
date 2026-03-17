@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: shouldUseSecure, // false for localhost, true for production
       sameSite: sameSiteValue, // 'lax' for localhost, 'none' for cross-domain production
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: 60 * 60 * 24, // 1 day to match JWT 24h expiry
       path: '/',
       // Don't set domain for localhost - let browser handle it
     })

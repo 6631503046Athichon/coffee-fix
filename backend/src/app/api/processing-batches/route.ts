@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
 import { nextDisplayId, safeParseFloat } from "@/lib/utils";
@@ -8,7 +9,7 @@ export async function GET(request: NextRequest) {
   try {
     await requireAuth(request);
 
-    const where: any = {};
+    const where: Prisma.ProcessingBatchWhereInput = {};
 
     // Filter by harvestLotId if provided
     const harvestLotId = request.nextUrl.searchParams.get("harvestLotId");

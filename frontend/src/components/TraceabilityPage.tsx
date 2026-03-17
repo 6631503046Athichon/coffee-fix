@@ -88,10 +88,9 @@ const TraceabilityPage: React.FC = () => {
         if (qrCodeElement) {
             const printWindow = window.open('', '', 'height=400,width=400');
             if (printWindow) {
-                printWindow.document.write('<html><head><title>Print QR Code</title></head><body style="text-align: center; margin-top: 50px;">');
-                printWindow.document.write(qrCodeElement.innerHTML);
-                printWindow.document.write('</body></html>');
+                printWindow.document.write('<html><head><title>Print QR Code</title></head><body style="text-align: center; margin-top: 50px;"></body></html>');
                 printWindow.document.close();
+                printWindow.document.body.appendChild(qrCodeElement.cloneNode(true));
                 printWindow.focus();
                 printWindow.print();
                 printWindow.close();

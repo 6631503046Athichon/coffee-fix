@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
@@ -41,7 +42,7 @@ export async function GET(
     }
 
     // Check permission: owner, collaborator, or admin
-    const isCollaborator = farm.collaborators.some((c: any) => c.userId === user.id)
+    const isCollaborator = farm.collaborators.some((c: { userId: string }) => c.userId === user.id)
     if (!user.roles.includes('Admin') && farm.ownerId !== user.id && !isCollaborator) {
       return NextResponse.json(
         { error: 'Forbidden' },
@@ -86,7 +87,7 @@ export async function PUT(
     const body = await request.json()
     const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, caretakerNames, archived, googleMapsUrl, ownerNames, ownerId, weatherAutoFetchEnabled, weatherAutoFetchInterval } = body
 
-    const updateData: any = {}
+    const updateData: Prisma.FarmUpdateInput = {}
     if (farmName !== undefined) updateData.farmName = farmName
     if (location !== undefined) updateData.location = location
     if (latitude !== undefined) updateData.latitude = latitude ? parseFloat(latitude) : null

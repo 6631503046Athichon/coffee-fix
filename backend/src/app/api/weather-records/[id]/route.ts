@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, handleApiError } from '@/lib/middleware'
 
@@ -66,7 +67,7 @@ export async function PUT(
       notes,
     } = body
 
-    const updateData: any = {}
+    const updateData: Prisma.WeatherRecordUpdateInput = {}
     if (farmId !== undefined) updateData.farmId = farmId
     if (farmPlotLocation !== undefined) updateData.farmPlotLocation = farmPlotLocation
     if (recordDate !== undefined) updateData.recordDate = new Date(recordDate)

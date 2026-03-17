@@ -3,6 +3,15 @@
 import nodemailer from 'nodemailer'
 import { Resend } from 'resend'
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export interface EmailOptions {
   to: string
   subject: string
@@ -243,7 +252,7 @@ async function sendWithResend(options: EmailOptions): Promise<void> {
 export async function sendWelcomeEmail(email: string, name: string): Promise<void> {
   const subject = 'Welcome to Coffee Lab Platform'
   const html = `
-    <h1>Welcome, ${name}!</h1>
+    <h1>Welcome, ${escapeHtml(name)}!</h1>
     <p>Your account has been created on the Coffee Lab Platform.</p>
     <p>Please contact your administrator for login credentials.</p>
     <p>You will be required to change your password on first login.</p>
@@ -280,7 +289,7 @@ export async function sendPasswordResetEmail(email: string, resetToken: string, 
           <h1>Password Reset Request</h1>
         </div>
         <div class="content">
-          <p>Hello${userName ? ' ' + userName : ''},</p>
+          <p>Hello${userName ? ' ' + escapeHtml(userName) : ''},</p>
           <p>We received a request to reset your password for your Coffee Lab Platform account.</p>
           <p>Click the button below to reset your password:</p>
           <p style="text-align: center;">

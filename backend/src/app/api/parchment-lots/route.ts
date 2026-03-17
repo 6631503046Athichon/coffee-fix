@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { nextDisplayId } from '@/lib/utils'
@@ -8,7 +9,7 @@ export async function GET(request: NextRequest) {
   try {
     await requireAuth(request)
 
-    const where: any = {}
+    const where: Prisma.ParchmentLotWhereInput = {}
     
     // Filter by processingBatchId if provided
     const processingBatchId = request.nextUrl.searchParams.get('processingBatchId')
@@ -122,7 +123,7 @@ export async function PUT(
     const body = await request.json()
     const { currentWeightKg, moistureContent, status, physicalTestResults } = body
 
-    const updateData: any = {}
+    const updateData: Prisma.ParchmentLotUpdateInput = {}
     if (currentWeightKg !== undefined) updateData.currentWeightKg = parseFloat(currentWeightKg)
     if (moistureContent !== undefined) updateData.moistureContent = parseFloat(moistureContent)
     if (status !== undefined) updateData.status = status

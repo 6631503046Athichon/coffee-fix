@@ -1,4 +1,5 @@
 import crypto from 'crypto'
+import { PrismaClient } from '@prisma/client'
 
 /**
  * Generate a unique username based on role
@@ -7,8 +8,7 @@ import crypto from 'crypto'
  */
 export async function generateUsername(
   role: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any
+  db: PrismaClient
 ): Promise<string> {
   const rolePrefix = role.toLowerCase()
 

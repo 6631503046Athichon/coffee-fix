@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { safeParseFloat } from '@/lib/utils'
@@ -66,7 +67,7 @@ export async function PUT(
     const body = await request.json()
     const { status, processType, processNotes, parchmentWeightKg, moistureContent, baggingDate, dryingStartDate, dryingEndDate, cropYearId } = body
 
-    const updateData: any = {}
+    const updateData: Prisma.ProcessingBatchUpdateInput = {}
     if (status !== undefined) updateData.status = status
     if (processType !== undefined) updateData.processType = processType
     if (processNotes !== undefined) updateData.processNotes = processNotes

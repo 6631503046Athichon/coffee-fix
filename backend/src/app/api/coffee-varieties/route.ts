@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
@@ -10,7 +11,7 @@ export async function GET(request: NextRequest) {
   try {
     await requireAuth(request)
 
-    const where: any = {}
+    const where: Prisma.CoffeeVarietyWhereInput = {}
 
     // Filter by isActive if provided
     const isActive = request.nextUrl.searchParams.get('isActive')

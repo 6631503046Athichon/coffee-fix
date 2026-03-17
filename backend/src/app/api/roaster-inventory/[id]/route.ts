@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, handleApiError } from '@/lib/middleware'
 
@@ -99,7 +100,7 @@ export async function PUT(
     const body = await request.json()
     const { claimedWeightKg, remainingWeightKg } = body
 
-    const updateData: any = {}
+    const updateData: Prisma.RoasterInventoryItemUpdateInput = {}
     if (claimedWeightKg !== undefined) updateData.claimedWeightKg = parseFloat(claimedWeightKg)
     if (remainingWeightKg !== undefined) updateData.remainingWeightKg = parseFloat(remainingWeightKg)
 
