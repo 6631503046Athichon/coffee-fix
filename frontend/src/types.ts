@@ -135,6 +135,25 @@ export interface PhysicalTestResults {
   notes?: string;
 }
 
+export interface ParchmentWithdrawalRecord {
+  id: string;
+  amountKg: number;
+  withdrawalType: "Sale" | "RoastingStock" | "HullAndGrade" | "Sample" | "Export" | "Other";
+  purpose: string;
+  notes?: string;
+  date: string;
+  withdrawnBy?: string;
+  withdrawnByName?: string;
+  salePrice?: number;
+  currency?: string;
+  customerName?: string;
+  deliveryAddress?: string;
+  totalAmount?: number;
+  targetRoasterId?: string;
+  roastProfileNotes?: string;
+  cuppingScore?: number;
+}
+
 export interface ParchmentLot {
   id: string;
   displayId?: string;
@@ -146,6 +165,7 @@ export interface ParchmentLot {
   processType: string;
   status: "AwaitingHulling" | "Hulled";
   physicalTestResults?: PhysicalTestResults;
+  withdrawalHistory?: ParchmentWithdrawalRecord[];
   createdAt?: string;
 }
 

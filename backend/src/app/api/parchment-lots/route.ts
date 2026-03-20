@@ -23,6 +23,11 @@ export async function GET(request: NextRequest) {
       where.status = status
     }
 
+    const processType = request.nextUrl.searchParams.get('processType')
+    if (processType) {
+      where.processType = processType
+    }
+
     const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '100', 10), 200)
 
     const parchmentLots = await prisma.parchmentLot.findMany({
@@ -44,6 +49,7 @@ export async function GET(request: NextRequest) {
           },
         },
         physicalTestResults: true,
+        withdrawalHistory: { orderBy: { date: 'desc' as const } },
       },
       orderBy: { createdAt: 'desc' },
     })
