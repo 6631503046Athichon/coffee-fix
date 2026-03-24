@@ -3,6 +3,7 @@ import ReactDOM from "react-dom";
 import {
   User,
   ParchmentLot,
+  HarvestLot,
 } from "../../types";
 import {
   Box,
@@ -14,6 +15,10 @@ import {
   History,
   ChevronDown,
   ChevronRight,
+  FileSpreadsheet,
+  Leaf,
+  ExternalLink,
+  ArrowRight,
 } from "lucide-react";
 import { formatParchmentId } from "../../utils/formatDisplayId";
 import {
@@ -26,6 +31,7 @@ import type {
 } from "../../services/parchmentLotService";
 import ProcessAndHullModal from "./modals/ProcessAndHullModal";
 import ParchmentWithdrawModal from "./modals/ParchmentWithdrawModal";
+import ExcelImportModal from "./modals/ExcelImportModal";
 import { useToast } from "../../contexts/ToastContext";
 import { useDataContext } from "../../hooks/useDataContext";
 
@@ -75,11 +81,14 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   const [processFilter, setProcessFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "inStock" | "Hulled">("inStock");
   const [searchText, setSearchText] = useState("");
+  const [harvestSearchText, setHarvestSearchText] = useState("");
 
   // Modal states
   const [showProcessAndHullModal, setShowProcessAndHullModal] = useState(false);
+  const [preSelectedHarvestLotId, setPreSelectedHarvestLotId] = useState<string | undefined>();
   const [selectedParchmentForWithdraw, setSelectedParchmentForWithdraw] =
     useState<ParchmentLot | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Collapsed sections
@@ -98,12 +107,26 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
 
   // ---- Derived data ----
 
-  const totalCherryWeight = useMemo(
+  // Harvest lots ready for processing
+  const readyHarvestLots = useMemo(
     () =>
-      data.harvestLots
-        .filter((h) => h.status === "Ready for Processing")
-        .reduce((sum, h) => sum + (h.weightKg || 0), 0),
+      data.harvestLots.filter((lot) => {
+        if (lot.status === "Ready for Processing") {
+          return (lot.weightKg || 0) > 0;
+        }
+        if (lot.status === "Complete") {
+          return typeof lot.remainingWeightKg === "number"
+            ? lot.remainingWeightKg > 0
+            : false;
+        }
+        return false;
+      }),
     [data.harvestLots],
+  );
+
+  const totalCherryWeight = useMemo(
+    () => readyHarvestLots.reduce((sum, h) => sum + (h.remainingWeightKg ?? (h.weightKg || 0)), 0),
+    [readyHarvestLots],
   );
 
   const totalParchmentWeight = useMemo(
@@ -111,7 +134,24 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     [data.parchmentLots],
   );
 
-  // Filter + search
+  const externalLotCount = useMemo(
+    () => data.parchmentLots.filter((p) => p.sourceType === "External").length,
+    [data.parchmentLots],
+  );
+
+  // Filtered harvest lots for incoming section
+  const filteredHarvestLots = useMemo(() => {
+    if (!harvestSearchText.trim()) return readyHarvestLots;
+    const q = harvestSearchText.toLowerCase();
+    return readyHarvestLots.filter(
+      (h) =>
+        (h.displayId || "").toLowerCase().includes(q) ||
+        h.farmerName.toLowerCase().includes(q) ||
+        h.cherryVariety.toLowerCase().includes(q),
+    );
+  }, [readyHarvestLots, harvestSearchText]);
+
+  // Filter + search parchment lots
   const filteredLots = useMemo(() => {
     let lots = data.parchmentLots;
 
@@ -130,7 +170,9 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
       lots = lots.filter(
         (p) =>
           formatParchmentId(p).toLowerCase().includes(q) ||
-          p.processType.toLowerCase().includes(q),
+          p.processType.toLowerCase().includes(q) ||
+          (p.externalSource?.code || "").toLowerCase().includes(q) ||
+          (p.externalSource?.origin || "").toLowerCase().includes(q),
       );
     }
     return lots;
@@ -144,28 +186,15 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
       if (!map[key]) map[key] = [];
       map[key].push(lot);
     }
-    // Sort keys alphabetically
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
   }, [filteredLots]);
 
-  // Harvest lots ready for processing
-  const readyHarvestLots = useMemo(
-    () =>
-      data.harvestLots.filter((lot) => {
-        if (lot.status === "Ready for Processing") {
-          return (lot.weightKg || 0) > 0;
-        }
-        if (lot.status === "Complete") {
-          return typeof lot.remainingWeightKg === "number"
-            ? lot.remainingWeightKg > 0
-            : false;
-        }
-        return false;
-      }),
-    [data.harvestLots],
-  );
-
   // ---- Handlers ----
+
+  const handleProcessFromHarvestLot = useCallback((lot: HarvestLot) => {
+    setPreSelectedHarvestLotId(lot.id);
+    setShowProcessAndHullModal(true);
+  }, []);
 
   const handleProcessAndHull = useCallback(
     async (formData: ProcessAndHullInput) => {
@@ -175,6 +204,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         addToast({ type: "success", message: "Process recorded and hulled successfully!" });
         await refreshData();
         setShowProcessAndHullModal(false);
+        setPreSelectedHarvestLotId(undefined);
       } catch (error: any) {
         addToast({ type: "error", message: error.message || "Failed to process and hull" });
       } finally {
@@ -205,6 +235,11 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     [addToast, refreshData, selectedParchmentForWithdraw],
   );
 
+  const handleImportSuccess = useCallback(async () => {
+    await refreshData();
+    addToast({ type: "success", message: "Parchment lots imported from Excel!" });
+  }, [refreshData, addToast]);
+
   // ---- Helpers ----
 
   const formatStatus = (s: string) =>
@@ -218,7 +253,6 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   const statusDot = (s: string) =>
     s === "Hulled" ? "bg-gray-400" : "bg-emerald-500";
 
-  // Process type colors
   const processColor = (type: string) => {
     const colors: Record<string, string> = {
       Washed: "bg-sky-100 text-sky-700 border-sky-200",
@@ -227,6 +261,8 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     };
     return colors[type] || "bg-purple-100 text-purple-700 border-purple-200";
   };
+
+  const isIncomingCollapsed = collapsedSections.has("__incoming__");
 
   // ---- Render ----
 
@@ -243,14 +279,14 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
               Parchment Stock
             </h1>
             <p className="text-gray-500 text-xs mt-0.5">
-              Manage parchment inventory, record processes, and track withdrawals
+              Manage parchment inventory, record processes, import external stock, and track withdrawals
             </p>
           </div>
         </div>
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white shadow-sm rounded-lg border border-gray-200 p-4 flex items-center gap-4">
           <div className="p-2.5 bg-red-100 rounded-xl">
             <Scale className="h-5 w-5 text-red-600" />
@@ -264,6 +300,9 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                 maximumFractionDigits: 2,
               })}{" "}
               kg
+            </p>
+            <p className="text-[10px] text-gray-400">
+              {readyHarvestLots.length} lot{readyHarvestLots.length !== 1 ? "s" : ""} ready
             </p>
           </div>
         </div>
@@ -287,6 +326,140 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             </p>
           </div>
         </div>
+        <div className="bg-white shadow-sm rounded-lg border border-gray-200 p-4 flex items-center gap-4">
+          <div className="p-2.5 bg-blue-100 rounded-xl">
+            <ExternalLink className="h-5 w-5 text-blue-600" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              External Lots
+            </p>
+            <p className="text-xl font-bold text-gray-900">
+              {externalLotCount}
+            </p>
+            <p className="text-[10px] text-gray-400">
+              Imported from Excel
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Incoming Harvest Lots Section ─── */}
+      <div className="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+        <button
+          onClick={() => toggleSection("__incoming__")}
+          className="w-full flex items-center justify-between px-4 py-3 bg-red-50 hover:bg-red-100 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            {isIncomingCollapsed ? (
+              <ChevronRight className="h-4 w-4 text-red-400" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-red-400" />
+            )}
+            <Leaf className="h-4 w-4 text-red-500" />
+            <span className="text-sm font-bold text-gray-800">
+              Incoming Harvest Lots
+            </span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+              {readyHarvestLots.length}
+            </span>
+          </div>
+          <span className="text-sm font-semibold text-gray-700">
+            {totalCherryWeight.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg
+          </span>
+        </button>
+
+        {!isIncomingCollapsed && (
+          <div>
+            {readyHarvestLots.length === 0 ? (
+              <div className="p-8 text-center">
+                <Leaf className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                <p className="text-sm text-gray-500">No harvest lots ready for processing</p>
+              </div>
+            ) : (
+              <>
+                {/* Search bar for harvest lots */}
+                {readyHarvestLots.length > 5 && (
+                  <div className="px-4 py-2 border-b border-gray-100">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                      <input
+                        type="text"
+                        value={harvestSearchText}
+                        onChange={(e) => setHarvestSearchText(e.target.value)}
+                        placeholder="Search harvest lots..."
+                        className="pl-8 w-full sm:w-64 border border-gray-200 bg-white rounded-lg py-1.5 px-3 text-xs focus:ring-1 focus:ring-red-300 focus:border-red-300 outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50/50">
+                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Lot ID
+                        </th>
+                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Farmer
+                        </th>
+                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Variety
+                        </th>
+                        <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Weight (kg)
+                        </th>
+                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Harvest Date
+                        </th>
+                        <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredHarvestLots.map((lot) => {
+                        const availableWeight = lot.remainingWeightKg ?? lot.weightKg;
+                        return (
+                          <tr key={lot.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-3 font-semibold text-gray-900">
+                              {lot.displayId || lot.id.slice(0, 8)}
+                            </td>
+                            <td className="px-4 py-3 text-gray-700">
+                              {lot.farmerName}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+                                {lot.cherryVariety}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-gray-900">
+                              {availableWeight.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-4 py-3 text-center text-gray-600 text-xs">
+                              {lot.harvestDate
+                                ? new Date(lot.harvestDate).toLocaleDateString()
+                                : "—"}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                onClick={() => handleProcessFromHarvestLot(lot)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-all"
+                              >
+                                <ArrowRight className="h-3.5 w-3.5" />
+                                Process
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Action Bar */}
@@ -355,9 +528,21 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             />
           </div>
 
+          {/* Import from Excel */}
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-sm whitespace-nowrap"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Import Excel
+          </button>
+
           {/* Record Process & Hull */}
           <button
-            onClick={() => setShowProcessAndHullModal(true)}
+            onClick={() => {
+              setPreSelectedHarvestLotId(undefined);
+              setShowProcessAndHullModal(true);
+            }}
             className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-bold hover:bg-green-700 transition-all shadow-sm whitespace-nowrap"
           >
             <Plus className="h-4 w-4" />
@@ -374,7 +559,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             No parchment lots found
           </p>
           <p className="text-xs text-gray-400 mt-1">
-            Record a process to get started
+            Record a process or import from Excel to get started
           </p>
         </div>
       ) : (
@@ -426,6 +611,9 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                         <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                           Lot ID
                         </th>
+                        <th className="text-center px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Source
+                        </th>
                         <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                           Weight (kg)
                         </th>
@@ -447,13 +635,39 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                       {lots.map((lot) => {
                         const historyCount =
                           lot.withdrawalHistory?.length || 0;
+                        const isExternal = lot.sourceType === "External";
                         return (
                           <tr
                             key={lot.id}
                             className="hover:bg-gray-50 transition-colors"
                           >
-                            <td className="px-4 py-3 font-semibold text-gray-900">
-                              {formatParchmentId(lot)}
+                            <td className="px-4 py-3">
+                              <div className="font-semibold text-gray-900">
+                                {formatParchmentId(lot)}
+                              </div>
+                              {isExternal && lot.externalSource?.code && (
+                                <div className="text-[10px] text-gray-400 mt-0.5">
+                                  Code: {lot.externalSource.code}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {isExternal ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                                  <ExternalLink className="h-2.5 w-2.5" />
+                                  External
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+                                  <Leaf className="h-2.5 w-2.5" />
+                                  Internal
+                                </span>
+                              )}
+                              {isExternal && lot.externalSource?.origin && (
+                                <div className="text-[10px] text-gray-400 mt-0.5">
+                                  {lot.externalSource.origin}
+                                </div>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-right">
                               <span className="font-bold text-gray-900">
@@ -527,11 +741,18 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
               <div className="flex flex-col h-full overflow-y-auto p-8">
                 <ProcessAndHullModal
-                  harvestLots={readyHarvestLots}
+                  harvestLots={
+                    preSelectedHarvestLotId
+                      ? readyHarvestLots.filter((l) => l.id === preSelectedHarvestLotId)
+                      : readyHarvestLots
+                  }
                   processTypes={processTypeOptions}
                   cropYears={data.cropYears}
                   onSubmit={handleProcessAndHull}
-                  onCancel={() => setShowProcessAndHullModal(false)}
+                  onCancel={() => {
+                    setShowProcessAndHullModal(false);
+                    setPreSelectedHarvestLotId(undefined);
+                  }}
                   isSubmitting={isSubmitting}
                 />
               </div>
@@ -552,6 +773,22 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                   onSubmit={handleParchmentWithdraw}
                   onCancel={() => setSelectedParchmentForWithdraw(null)}
                   isSubmitting={isSubmitting}
+                />
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
+      {/* ─── Excel Import Modal ─── */}
+      {showImportModal && (
+        <ModalPortal>
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
+              <div className="flex flex-col h-full overflow-y-auto p-8">
+                <ExcelImportModal
+                  onSuccess={handleImportSuccess}
+                  onClose={() => setShowImportModal(false)}
                 />
               </div>
             </div>

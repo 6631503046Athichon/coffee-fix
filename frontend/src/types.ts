@@ -154,11 +154,28 @@ export interface ParchmentWithdrawalRecord {
   cuppingScore?: number;
 }
 
+export enum ParchmentSourceType {
+  Internal = "Internal",
+  External = "External",
+}
+
+export interface ParchmentExternalSource {
+  code: string;
+  variety: string;
+  origin: string;
+  supplierName?: string;
+  importDate: string;
+  importedBy: string;
+  fileName: string;
+}
+
 export interface ParchmentLot {
   id: string;
   displayId?: string;
-  processingBatchId: string;
-  harvestLotId: string;
+  processingBatchId?: string;
+  harvestLotId?: string;
+  sourceType: ParchmentSourceType;
+  externalSource?: ParchmentExternalSource;
   initialWeightKg: number;
   currentWeightKg: number;
   moistureContent: number;

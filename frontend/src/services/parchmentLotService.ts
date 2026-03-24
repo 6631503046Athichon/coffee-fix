@@ -1,5 +1,5 @@
 import { ParchmentLot } from "../types";
-import { api } from "./api";
+import { api, getAuthToken, API_BASE_URL } from "./api";
 
 /**
  * Fetch all parchment lots, optionally filtered by processingBatchId, status, or processType
@@ -130,14 +130,57 @@ export const processAndHull = async (
 };
 
 /**
+ * Import parchment lots from Excel file
+ */
+export interface ExcelImportResult {
+  imported: number;
+  skipped: number;
+  errors: string[];
+  parchmentLots: ParchmentLot[];
+}
+
+export const importParchmentFromExcel = async (
+  file: File,
+): Promise<ExcelImportResult> => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const token = getAuthToken();
+  const response = await fetch(`${API_BASE_URL}/parchment-lots/import-excel`, {
+    method: "POST",
+    headers: {
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || "Import failed");
+  }
+
+  const data = await response.json();
+  return {
+    imported: data.imported,
+    skipped: data.skipped,
+    errors: data.errors || [],
+    parchmentLots: (data.parchmentLots || []).map(
+      transformParchmentLotFromBackend,
+    ),
+  };
+};
+
+/**
  * Transform parchment lot data from backend format to frontend format
  */
 export function transformParchmentLotFromBackend(backendLot: any): ParchmentLot {
   return {
     id: backendLot.id,
     displayId: backendLot.displayId || undefined,
-    processingBatchId: backendLot.processingBatchId,
-    harvestLotId: backendLot.harvestLotId,
+    processingBatchId: backendLot.processingBatchId || undefined,
+    harvestLotId: backendLot.harvestLotId || undefined,
+    sourceType: backendLot.sourceType || 'Internal',
+    externalSource: backendLot.externalSource || undefined,
     initialWeightKg: backendLot.initialWeightKg,
     currentWeightKg: backendLot.currentWeightKg,
     moistureContent: backendLot.moistureContent,

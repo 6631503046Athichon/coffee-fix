@@ -68,12 +68,20 @@ export async function POST(request: NextRequest) {
     requireRole(user, ['Processor', 'Admin'])
 
     const body = await request.json()
-    const { processingBatchId, harvestLotId, initialWeightKg, currentWeightKg, moistureContent, processType, status } = body
+    const { processingBatchId, harvestLotId, initialWeightKg, currentWeightKg, moistureContent, processType, status, sourceType, externalSource } = body
+
+    const isExternal = sourceType === 'External'
 
     // Validation
-    if (!processingBatchId || !harvestLotId || !initialWeightKg || !moistureContent || !processType) {
+    if (!isExternal && (!processingBatchId || !harvestLotId)) {
       return NextResponse.json(
-        { error: 'Processing batch ID, harvest lot ID, initial weight, moisture content, and process type are required' },
+        { error: 'Processing batch ID and harvest lot ID are required for internal parchment lots' },
+        { status: 400 }
+      )
+    }
+    if (!initialWeightKg || !moistureContent || !processType) {
+      return NextResponse.json(
+        { error: 'Initial weight, moisture content, and process type are required' },
         { status: 400 }
       )
     }
@@ -83,8 +91,10 @@ export async function POST(request: NextRequest) {
     const parchmentLot = await prisma.parchmentLot.create({
       data: {
         displayId,
-        processingBatchId,
-        harvestLotId,
+        processingBatchId: processingBatchId || null,
+        harvestLotId: harvestLotId || null,
+        sourceType: isExternal ? 'External' : 'Internal',
+        externalSource: isExternal && externalSource ? externalSource : undefined,
         initialWeightKg: parseFloat(initialWeightKg),
         currentWeightKg: currentWeightKg ? parseFloat(currentWeightKg) : parseFloat(initialWeightKg),
         moistureContent: parseFloat(moistureContent),
