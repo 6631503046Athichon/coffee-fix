@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { hashPassword, generateToken } from '@/lib/auth'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit: 10 registrations per hour per IP (defense-in-depth even though admin-only)
+    const limited = await rateLimit(request, RATE_LIMITS.REGISTER)
+    if (limited) return limited
+
     // SECURITY: Only admins can register new users
     const user = await requireAuth(request)
     requireRole(user, ['Admin'])

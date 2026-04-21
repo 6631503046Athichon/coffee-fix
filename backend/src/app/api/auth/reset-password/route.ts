@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { hashPassword, verifyPassword } from '@/lib/auth'
 import { handleApiError } from '@/lib/middleware'
+import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit: 5 reset attempts per 15 minutes per IP (prevents token brute-force)
+    const limited = await rateLimit(request, RATE_LIMITS.RESET_PASSWORD)
+    if (limited) return limited
+
     const body = await request.json()
     const { token, password } = body
 
