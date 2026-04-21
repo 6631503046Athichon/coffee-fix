@@ -1,5 +1,17 @@
 import crypto from 'crypto'
-import { PrismaClient } from '@prisma/client'
+
+// Minimal structural type so we can pass either a plain PrismaClient or the
+// $extends()-wrapped singleton from src/lib/prisma.ts (which has a different
+// nominal type than PrismaClient).
+type UserLookupDb = {
+  user: {
+    findMany: (args: {
+      where: { username: { startsWith: string } }
+      select: { username: true }
+      orderBy: { username: 'desc' }
+    }) => Promise<Array<{ username: string | null }>>
+  }
+}
 
 /**
  * Generate a unique username based on role
@@ -8,7 +20,7 @@ import { PrismaClient } from '@prisma/client'
  */
 export async function generateUsername(
   role: string,
-  db: PrismaClient
+  db: UserLookupDb,
 ): Promise<string> {
   const rolePrefix = role.toLowerCase()
 

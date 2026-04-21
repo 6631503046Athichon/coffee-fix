@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
+import { Prisma, CuppingSessionType, CuppingSessionStatus } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
@@ -9,17 +9,17 @@ export async function GET(request: NextRequest) {
     await requireAuth(request)
 
     const where: Prisma.CuppingSessionWhereInput = {}
-    
-    // Filter by type if provided
+
+    // Filter by type if provided (validated against enum to avoid Prisma runtime errors)
     const type = request.nextUrl.searchParams.get('type')
-    if (type) {
-      where.type = type
+    if (type && (Object.values(CuppingSessionType) as string[]).includes(type)) {
+      where.type = type as CuppingSessionType
     }
 
-    // Filter by status if provided
+    // Filter by status if provided (validated against enum)
     const status = request.nextUrl.searchParams.get('status')
-    if (status) {
-      where.status = status
+    if (status && (Object.values(CuppingSessionStatus) as string[]).includes(status)) {
+      where.status = status as CuppingSessionStatus
     }
 
     // Pagination

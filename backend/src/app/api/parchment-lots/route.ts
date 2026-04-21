@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
+import { Prisma, ParchmentLotStatus } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { nextDisplayId } from '@/lib/utils'
@@ -10,19 +10,20 @@ export async function GET(request: NextRequest) {
     await requireAuth(request)
 
     const where: Prisma.ParchmentLotWhereInput = {}
-    
+
     // Filter by processingBatchId if provided
     const processingBatchId = request.nextUrl.searchParams.get('processingBatchId')
     if (processingBatchId) {
       where.processingBatchId = processingBatchId
     }
 
-    // Filter by status if provided
+    // Filter by status if provided (validated against enum)
     const status = request.nextUrl.searchParams.get('status')
-    if (status) {
-      where.status = status
+    if (status && (Object.values(ParchmentLotStatus) as string[]).includes(status)) {
+      where.status = status as ParchmentLotStatus
     }
 
+    // processType is a String field in schema, accepts any value
     const processType = request.nextUrl.searchParams.get('processType')
     if (processType) {
       where.processType = processType

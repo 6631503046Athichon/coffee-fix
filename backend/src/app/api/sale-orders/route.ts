@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
+import { Prisma, SaleOrderStatus } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
@@ -9,17 +9,17 @@ export async function GET(request: NextRequest) {
     await requireAuth(request)
 
     const where: Prisma.SaleOrderWhereInput = {}
-    
+
     // Filter by customerId if provided
     const customerId = request.nextUrl.searchParams.get('customerId')
     if (customerId) {
       where.customerId = customerId
     }
 
-    // Filter by status if provided
+    // Filter by status if provided (validated against enum)
     const status = request.nextUrl.searchParams.get('status')
-    if (status) {
-      where.status = status
+    if (status && (Object.values(SaleOrderStatus) as string[]).includes(status)) {
+      where.status = status as SaleOrderStatus
     }
 
     const saleOrders = await prisma.saleOrder.findMany({

@@ -86,7 +86,9 @@ export async function PUT(
     const body = await request.json()
     const { farmerName, cherryVariety, weightKg, farmPlotLocation, harvestDate, status, cropYearId, farmId } = body
 
-    const updateData: Prisma.HarvestLotUpdateInput = {}
+    // Use UncheckedUpdateInput so we can assign scalar FKs (cropYearId, farmId)
+    // directly without needing a nested `connect`.
+    const updateData: Prisma.HarvestLotUncheckedUpdateInput = {}
     if (farmerName !== undefined) updateData.farmerName = farmerName
     if (cherryVariety !== undefined) updateData.cherryVariety = cherryVariety
     if (weightKg !== undefined) {

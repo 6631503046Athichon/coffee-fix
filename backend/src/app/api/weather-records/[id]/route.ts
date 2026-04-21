@@ -67,7 +67,9 @@ export async function PUT(
       notes,
     } = body
 
-    const updateData: Prisma.WeatherRecordUpdateInput = {}
+    // Use UncheckedUpdateInput so we can assign scalar FKs (farmId) directly
+    // without needing a nested `connect`.
+    const updateData: Prisma.WeatherRecordUncheckedUpdateInput = {}
     if (farmId !== undefined) updateData.farmId = farmId
     if (farmPlotLocation !== undefined) updateData.farmPlotLocation = farmPlotLocation
     if (recordDate !== undefined) updateData.recordDate = new Date(recordDate)

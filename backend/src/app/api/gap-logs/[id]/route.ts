@@ -63,7 +63,9 @@ export async function PUT(
     const body = await request.json()
     const { farmId, farmPlotLocation, activityTypeId, date, productUsed, quantity, notes } = body
 
-    const updateData: Prisma.GAPLogEntryUpdateInput = {}
+    // Use UncheckedUpdateInput so we can assign scalar FKs (farmId, activityTypeId)
+    // directly without needing a nested `connect`.
+    const updateData: Prisma.GAPLogEntryUncheckedUpdateInput = {}
     if (farmId !== undefined) updateData.farmId = farmId
     if (farmPlotLocation !== undefined) updateData.farmPlotLocation = farmPlotLocation
     if (activityTypeId !== undefined) {

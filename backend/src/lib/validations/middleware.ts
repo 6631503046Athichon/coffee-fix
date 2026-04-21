@@ -33,8 +33,9 @@ export async function validateBody<T>(
           {
             error: 'Validation Error',
             message: 'ข้อมูลไม่ถูกต้อง',
-            details: error.issues.map((e: { path: (string | number)[]; message: string; code: string }) => ({
-              field: e.path.join('.'),
+            // Zod v4 uses PropertyKey[] for path (can include symbols) — let TS infer the issue type.
+            details: error.issues.map((e) => ({
+              field: e.path.map(String).join('.'),
               message: e.message,
               code: e.code,
             })),
@@ -95,8 +96,9 @@ export function validateQuery<T>(
           {
             error: 'Validation Error',
             message: 'พารามิเตอร์ไม่ถูกต้อง',
-            details: error.issues.map((e: { path: (string | number)[]; message: string; code: string }) => ({
-              field: e.path.join('.'),
+            // Zod v4 uses PropertyKey[] for path (can include symbols) — let TS infer the issue type.
+            details: error.issues.map((e) => ({
+              field: e.path.map(String).join('.'),
               message: e.message,
               code: e.code,
             })),
@@ -127,8 +129,9 @@ export function validateParams<T>(
           {
             error: 'Validation Error',
             message: 'พารามิเตอร์ไม่ถูกต้อง',
-            details: error.issues.map((e: { path: (string | number)[]; message: string; code: string }) => ({
-              field: e.path.join('.'),
+            // Zod v4 uses PropertyKey[] for path (can include symbols) — let TS infer the issue type.
+            details: error.issues.map((e) => ({
+              field: e.path.map(String).join('.'),
               message: e.message,
               code: e.code,
             })),

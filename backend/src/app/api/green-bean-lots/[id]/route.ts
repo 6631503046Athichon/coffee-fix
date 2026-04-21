@@ -208,7 +208,9 @@ export async function PUT(
       priceSetDate,
     } = body;
 
-    const updateData: Prisma.GreenBeanLotUpdateInput = {};
+    // Use UncheckedUpdateInput so we can assign scalar FKs (priceSetBy) directly
+    // without needing a nested `connect`.
+    const updateData: Prisma.GreenBeanLotUncheckedUpdateInput = {};
     if (grade !== undefined) updateData.grade = grade;
     if (currentWeightKg !== undefined) {
       const weight = safeParseFloat(currentWeightKg);
