@@ -6,6 +6,31 @@ const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
 const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
 
+/**
+ * Get the initialised GoogleGenAI client or throw a localised error if the
+ * API key is missing. Call sites that previously did `if (!API_KEY) throw ...`
+ * followed by `ai.foo(...)` now funnel through this helper so TypeScript's
+ * strict-null checks can narrow the client to non-null.
+ */
+function getAI(): GoogleGenAI {
+  if (!ai) {
+    throw new Error('ไม่พบ Gemini API Key กรุณาตั้งค่า VITE_GEMINI_API_KEY')
+  }
+  return ai
+}
+
+/**
+ * The Gemini SDK types `response.text` as `string | undefined`. Empty
+ * responses always indicate an API failure for our use cases, so surface it
+ * as an error instead of letting `undefined` leak downstream.
+ */
+function requireText(text: string | undefined): string {
+  if (text === undefined || text === '') {
+    throw new Error('Gemini API returned an empty response')
+  }
+  return text
+}
+
 export interface QualityInsight {
   keyDescriptors: string[];
   performanceSummary: string;
@@ -27,7 +52,7 @@ Synthesize these notes into a final summary:`;
   }
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
@@ -37,7 +62,7 @@ Synthesize these notes into a final summary:`;
         }
     });
 
-    return response.text;
+    return requireText(response.text);
   } catch (error) {
     console.error("Error calling Gemini API:", error);
     return "Error generating AI summary. Please review notes manually.";
@@ -69,7 +94,7 @@ Based on this data, provide:
   }
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
@@ -96,7 +121,7 @@ Based on this data, provide:
         }
     });
     
-    return JSON.parse(response.text);
+    return JSON.parse(requireText(response.text));
 
   } catch (error) {
     console.error("Error calling Gemini API for insights:", error);
@@ -177,7 +202,7 @@ export const generateComprehensiveReport = async (appData: AppData): Promise<Com
     }
 
     try {
-        const response = await ai.models.generateContent({
+        const response = await getAI().models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
@@ -235,7 +260,7 @@ export const generateComprehensiveReport = async (appData: AppData): Promise<Com
             }
         });
 
-        return JSON.parse(response.text);
+        return JSON.parse(requireText(response.text));
 
     } catch (error) {
         console.error("Error calling Gemini API for comprehensive report:", error);
@@ -297,7 +322,7 @@ ${soilData.variety ? `- พันธุ์กาแฟ: ${soilData.variety}` : '
   }
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
@@ -307,7 +332,7 @@ ${soilData.variety ? `- พันธุ์กาแฟ: ${soilData.variety}` : '
       }
     });
 
-    return response.text;
+    return requireText(response.text);
   } catch (error) {
     console.error("Error calling Gemini API for soil recommendations:", error);
     throw new Error("Failed to generate AI recommendations. Please try again.");
@@ -380,7 +405,7 @@ export const getPlatformTrends = async (appData: AppData): Promise<PlatformInsig
     }
 
     try {
-        const response = await ai.models.generateContent({
+        const response = await getAI().models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
@@ -403,7 +428,7 @@ export const getPlatformTrends = async (appData: AppData): Promise<PlatformInsig
             }
         });
 
-        return JSON.parse(response.text);
+        return JSON.parse(requireText(response.text));
 
     } catch (error) {
         console.error("Error calling Gemini API for platform trends:", error);
@@ -505,7 +530,7 @@ Important: Look for Thai or English labels. Common Thai labels: pH, ฟอสฟ
       },
     });
 
-    return JSON.parse(response.text);
+    return JSON.parse(requireText(response.text));
   } catch (error) {
     console.error('Error calling Gemini Vision for soil OCR:', error);
     throw new Error('ไม่สามารถอ่านค่าจากรูปได้ กรุณาลองอีกครั้ง');

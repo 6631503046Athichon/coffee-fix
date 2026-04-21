@@ -31,7 +31,7 @@ const TraceabilityPage: React.FC = () => {
     const harvestLot = data.harvestLots.find(h => h.id === parchmentLot?.harvestLotId);
     
     const scoreInfo = greenBeanLot.cuppingScores[0];
-    let cuppingResult: CuppingSession['finalResults'][string] | undefined;
+    let cuppingResult: NonNullable<CuppingSession['finalResults']>[string] | undefined;
     let cuppingScore: number | undefined;
     let cuppingNotes: string = '';
     

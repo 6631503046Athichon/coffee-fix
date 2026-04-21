@@ -124,10 +124,10 @@ const QualityInsights: React.FC = () => {
     }, [data.parchmentLots, data.processingBatches]);
     
     const dryingChartData = useMemo(() => {
-        if (!selectedParchmentLotId) return null;
+        if (!selectedParchmentLotId) return undefined;
         const parchmentLot = data.parchmentLots.find(pl => pl.id === selectedParchmentLotId);
         const batch = data.processingBatches.find(pb => pb.id === parchmentLot?.processingBatchId);
-        return batch?.dryingLog || null;
+        return batch?.dryingLog ?? undefined;
     }, [selectedParchmentLotId, data.parchmentLots, data.processingBatches]);
 
 

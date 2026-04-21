@@ -239,7 +239,7 @@ const GAPComplianceHelper: React.FC = () => {
         setDate(log.date);
         setProductUsed(log.productUsed);
         setQuantity(log.quantity);
-        setNotes(log.notes);
+        setNotes(log.notes ?? '');
         // Scroll to form
         setTimeout(() => {
             formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });

@@ -149,7 +149,7 @@ const CuppingSessionDetail: React.FC<{ currentUser: User }> = ({ currentUser }) 
                                                         <div key={attr} className="flex justify-between">
                                                             <span className="text-gray-600">{attr.split('/')[0]}:</span>
                                                             <span className="font-bold text-gray-800">
-                                                                {session.finalResults[sample.id].avgScores[attr]?.toFixed(2) || 'N/A'}
+                                                                {session.finalResults?.[sample.id]?.avgScores[attr]?.toFixed(2) || 'N/A'}
                                                             </span>
                                                         </div>
                                                     ))}

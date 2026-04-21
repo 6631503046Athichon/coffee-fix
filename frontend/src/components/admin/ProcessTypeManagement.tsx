@@ -108,11 +108,9 @@ const ProcessTypeManagement: React.FC = () => {
     setShowModal(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-
-    
 
     // Validation
     if (!formData.name.trim()) {
@@ -120,8 +118,8 @@ const ProcessTypeManagement: React.FC = () => {
       return;
     }
 
-    // Check duplicate name
-    if (processTypeNameExists(formData.name.trim(), editingType?.id)) {
+    // Check duplicate name (service call is async)
+    if (await processTypeNameExists(formData.name.trim(), editingType?.id)) {
       setErrorMessage('Process type with this name already exists');
       return;
     }

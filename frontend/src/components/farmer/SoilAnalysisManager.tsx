@@ -158,7 +158,7 @@ const SoilAnalysisManager: React.FC<SoilAnalysisManagerProps> = ({ currentUser }
         setPH(analysis.pH.toString());
         setPhosphorus(analysis.phosphorus.toString());
         setPotassium(analysis.potassium.toString());
-        setNitrogen(analysis.nitrogen.toString());
+        setNitrogen(analysis.nitrogen?.toString() || '');
         setCalcium(analysis.calcium.toString());
         setMagnesium(analysis.magnesium.toString());
         setOrganicMatter(analysis.organicMatter?.toString() || '');

@@ -2530,7 +2530,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </div>
                       </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
-                      {formatProcessingBatchId(data.processingBatches.find(b => b.id === p.processingBatchId) || { id: p.processingBatchId })}
+                      {formatProcessingBatchId(data.processingBatches.find(b => b.id === p.processingBatchId) || { id: p.processingBatchId ?? '' })}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
                       {(p.status === "Hulled"
@@ -4768,7 +4768,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                   {formatParchmentId(sourceParchment)}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-1">
-                                  Batch {formatProcessingBatchId(sourceBatch || { id: sourceParchment.processingBatchId })}
+                                  Batch {formatProcessingBatchId(sourceBatch || { id: sourceParchment.processingBatchId ?? '' })}
                                 </p>
                               </div>
                               <div>
