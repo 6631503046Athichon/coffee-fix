@@ -134,7 +134,12 @@ describe('Token Extraction Tests', () => {
 
   describe('POST /api/auth/first-login-update - Token Extraction', () => {
     test('should work with Authorization header token', async () => {
-      mockPrismaUser.findUnique.mockResolvedValueOnce({
+      // Use mockResolvedValue (persistent) because the route flow calls findUnique
+      // multiple times: (1) requireAuth lookup, (2) full-row lookup in handler,
+      // (3) username uniqueness check, (4) email uniqueness check.
+      // All four can safely return the same user object — the uniqueness checks
+      // compare ids and a same-id hit is treated as "not taken".
+      mockPrismaUser.findUnique.mockResolvedValue({
         id: userId,
         username: 'olduser',
         email: 'old@example.com',
@@ -142,6 +147,7 @@ describe('Token Extraction Tests', () => {
         name: 'Test User',
         roles: ['Farmer'],
         isActive: true,
+        isSuperAdmin: false,
         mustChangePassword: true,
         mustChangeUsername: true,
         mustChangeEmail: true,
@@ -186,7 +192,8 @@ describe('Token Extraction Tests', () => {
     })
 
     test('should work with auth-token cookie', async () => {
-      mockPrismaUser.findUnique.mockResolvedValueOnce({
+      // See comment above re: mockResolvedValue vs mockResolvedValueOnce.
+      mockPrismaUser.findUnique.mockResolvedValue({
         id: userId,
         username: 'olduser',
         email: 'old@example.com',
@@ -194,6 +201,7 @@ describe('Token Extraction Tests', () => {
         name: 'Test User',
         roles: ['Farmer'],
         isActive: true,
+        isSuperAdmin: false,
         mustChangePassword: true,
         mustChangeUsername: false,
         mustChangeEmail: false,
