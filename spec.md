@@ -1,6 +1,6 @@
 # Coffee Lab Platform — Engineering Spec
 
-เอกสารนี้เป็นสเปคเสริมของ **Coffee Lab Platform Coding Standards** (ไฟล์ `.docx` เวอร์ชัน 1.0, 18 พ.ย. 2568) ครอบคลุมเฉพาะประเด็นที่ไม่ได้ระบุในเอกสารหลัก หรือที่ต้องอัปเดตให้ตรงกับโค้ดจริง
+เอกสารนี้เป็น **สเปคเทคนิคเชิงลึก** สำหรับประเด็นที่ทะลุผ่านระดับ style guide ทั่วไป ใช้คู่กับ [`CODING_STANDARDS.md`](CODING_STANDARDS.md) ที่ root ของ repo (ซึ่งเป็นเวอร์ชันปรับแก้ของเอกสาร `.docx` เดิมให้ตรงกับโค้ดจริง)
 
 **โครงสร้างโปรเจกต์จริง**: เป็น 2 โปรเจกต์แยก — `backend/` (Next.js 14 App Router + Prisma) และ `frontend/` (Vite + React 19 SPA)
 
@@ -261,17 +261,68 @@ type UserLookupDb = {
 
 **ยืนยัน**: `npm run lint` → `✔ No ESLint warnings or errors`
 
-### 4.8 Test failures ที่ยังเหลือ (pre-existing, ไม่ใช่ regression จากงานนี้)
+### 4.8 ✅ 7 pre-existing test failures — แก้แล้ว (commit d26eea0)
 
-ตอนนี้ `npx jest` ผ่าน 173/180 — มี 7 test ที่ fail มาก่อนแล้ว:
+เดิม 7 test fail มาก่อน fix session แก้ทั้งหมดแล้ว `npx jest` ผ่าน **180/180**
 
-**`__tests__/safe-parsing.test.ts` (3)** — test คาด error message `"Invalid amount"` แต่ route คืน `"Amount, withdrawal type, and purpose are required"` เป็นเรื่อง route validation order กับ test expectations ไม่ตรงกัน ไม่ได้ตัดถนน test จึง reach ไม่ถึง amount parsing
+**`__tests__/safe-parsing.test.ts` (3)** — route ใน `green-bean-lots/[id]/withdrawals/route.ts` ตรวจ `!amountKg` ซึ่ง treat `0` เป็น missing field เปลี่ยนเป็น `amountKg === undefined` แล้ว → 0/NaN/Infinity ตก fall-through ไปเข้า `safeParseFloat` branch ที่คืน `"Invalid amount"` ตามที่ test คาด (และ consume findUnique mock ของแต่ละ test แทนที่จะ leak ข้าม)
 
-**`__tests__/plaintext-password-removal.test.ts` (4)** — test mocks ไม่ครบ: `mockPrismaUser` มีเฉพาะ `findMany, findUnique, create, update` แต่ route เรียก `prisma.user.findFirst` ด้วย (check email ซ้ำ) ทำให้ route โยน error (500) ก่อนถึง `create`
+**`__tests__/plaintext-password-removal.test.ts` (4)** — เพิ่ม `findFirst: jest.fn()` ใน `mockPrismaUser` แก้ test ให้ import `PUT` แทน `PATCH` (route จริง export `PUT` เท่านั้น)
 
-นอกจากนี้ test `should not store temporaryPassword field during user update` ต้องการ export `PATCH` จาก `/api/users/[id]/route.ts` แต่ไฟล์จริงไม่มี export นี้
+### 4.9 ✅ Nodemailer CVE — แก้แล้ว (commit 867f26f)
 
-**แก้ในอนาคต**: เพิ่ม `findFirst: jest.fn()` ใน mockPrismaUser, ทบทวนว่า route คืน error message ตามลำดับที่ test คาดหรือไม่, ย้าย PATCH logic มาอยู่ที่ `users/[id]/route.ts` ถ้าจำเป็น
+อัปเกรด `nodemailer` จาก `^7.0.10` → `^8.0.5` (+ types) เคลียร์ CVE สองตัว:
+- SMTP envelope.size injection
+- CRLF ใน EHLO/HELO name
+
+Audit `backend/`: production vulnerabilities ลดจาก 6 → 2 (เหลือ `next` ที่ต้องรอ v16 และ `xlsx` ที่ยังไม่มี upstream fix)
+
+ตรวจ `backend/src/lib/email.ts` — ใช้เฉพาะ API surface ที่ปลอดภัย (ไม่แตะ `envelope.size`, ไม่กำหนด EHLO name เอง) major bump ไม่ต้องแก้ call site
+
+### 4.10 ✅ Frontend TypeScript strict mode — แก้แล้ว (commit df9e586)
+
+เพิ่ม `"strict": true` ใน [`frontend/tsconfig.json`](frontend/tsconfig.json) แก้ 30 type error ที่โผล่มา สรุป pattern ที่ใช้ซ้ำ:
+
+- **Gemini API null safety** ([`frontend/src/services/geminiService.ts`](frontend/src/services/geminiService.ts)) — สร้าง helper `getAI()` + `requireText()` กันกรณี `GoogleGenAI` client เป็น `null` (API key หาย) หรือ `response.text` เป็น `undefined` ใช้แทน `ai.models.generateContent` (5 จุด) และ `response.text` (หลายจุด)
+- **Real bug** ([`frontend/src/components/admin/ProcessTypeManagement.tsx`](frontend/src/components/admin/ProcessTypeManagement.tsx)) — `processTypeNameExists` เป็น async แต่ handler ไม่ `await` ทำให้ duplicate check ไม่ทำงาน (Promise เป็น truthy เสมอ) เปลี่ยน handler เป็น async + เพิ่ม `await` แล้ว
+- **Sort comparator undefined handling** ([`frontend/src/components/farmer/HarvestLotsManagement.tsx`](frontend/src/components/farmer/HarvestLotsManagement.tsx)) — explicit branch เมื่อ value เป็น `undefined` ทั้งสองฝั่ง / ฝั่งเดียว
+
+`npx tsc --noEmit` ฝั่ง frontend ผ่าน 0 errors
+
+### 4.11 ✅ Tailwind migration CDN → local postcss build — แก้แล้ว (commit c304dda)
+
+ย้าย Tailwind จาก `<script src="https://cdn.tailwindcss.com">` ใน [`frontend/index.html`](frontend/index.html) ไปเป็น local postcss build:
+
+- ใหม่: [`frontend/tailwind.config.ts`](frontend/tailwind.config.ts) ครบทั้ง content glob, theme extend (keyframes, animation, colors indigo palette, fontFamily Inter + Noto Sans Thai)
+- ใหม่: [`frontend/postcss.config.js`](frontend/postcss.config.js) ใช้ tailwindcss + autoprefixer
+- อัปเดต [`frontend/src/styles.css`](frontend/src/styles.css) เพิ่ม `@tailwind base/components/utilities` directive ข้างบน
+- ลบ CDN script + inline `window.tailwindConfig` ออกจาก `index.html`
+
+Bundle CSS เพิ่มจาก ~1 kB (nothing — runtime CDN) → 72 kB (purged local build) — trade-off เพื่อ production bundle ไม่พึ่ง CDN
+
+### 4.12 ✅ Frontend vitest coverage — เพิ่มแล้ว (commit afcf486)
+
+เพิ่ม 4 test files ครอบ utility modules (44 new tests):
+
+- [`frontend/src/utils/formatDisplayId.test.ts`](frontend/src/utils/formatDisplayId.test.ts) — 8 tests
+- [`frontend/src/utils/formatters.test.ts`](frontend/src/utils/formatters.test.ts) — 16 tests
+- [`frontend/src/utils/idGenerator.test.ts`](frontend/src/utils/idGenerator.test.ts) — 8 tests
+- [`frontend/src/utils/errorHandler.test.ts`](frontend/src/utils/errorHandler.test.ts) — 12 tests
+
+`npm test -- --run` ผ่าน **77/77** (รวม 33 transformer tests เดิม)
+
+ยังขาด: component-level tests สำหรับ Button, Input, Toast, DatePicker — tracked เป็น follow-up
+
+### 4.13 ✅ ProcessorWorkbench extract ปฐม — แก้แล้ว
+
+[`frontend/src/components/processor/ProcessorWorkbench.tsx`](frontend/src/components/processor/ProcessorWorkbench.tsx) 5,361 → 4,826 บรรทัด โดย lift helpers 535 บรรทัดออกไปที่ [`frontend/src/components/processor/workbench/`](frontend/src/components/processor/workbench) (11 ไฟล์ใหม่ + barrel index):
+
+- `constants.ts` (types + `isRecentItem` + `formatParchmentStatus`)
+- `scoring.ts` (`ScoreInput`, `validateScore`, initial scores)
+- `ModalPortal.tsx`, `DebouncedSearchInput.tsx`, `ProcessTypeDropdown.tsx`, `GradeDropdown.tsx`, `CropYearChips.tsx`
+- `KanbanCard.tsx`, `KanbanColumn.tsx`, `Pagination.tsx`
+
+ไม่มีการเปลี่ยน behaviour — build + tsc + vitest ผ่านหมด รอบสอง (modal handlers, cupping panel, stock panel) tracked เป็น follow-up ใน CODING_STANDARDS.md §7
 
 ### 4.9 Error monitoring (Sentry) — ยังไม่ได้ติด
 
@@ -294,18 +345,27 @@ type UserLookupDb = {
 
 ---
 
-## 6. Verification Status (Backend)
+## 6. Verification Status
 
 ผลการรันคำสั่ง verify ล่าสุด:
+
+### 6.1 Backend
 
 | คำสั่ง | ผลลัพธ์ |
 |---|---|
 | `npx tsc --noEmit` (production code only) | ✅ 0 errors |
 | `npm run lint` | ✅ 0 warnings, 0 errors |
-| `npx jest` | ⚠️ 173/180 pass (7 pre-existing failures — ดู §4.8) |
+| `npx jest` | ✅ 180/180 pass (7 pre-existing failures ปิดใน §4.8) |
 | `npm run build` | ✅ Build succeeded (0 errors, 0 warnings) |
+| `npm audit --production` | ⚠️ 2 remaining (next v14 ต้อง v16 breaking, xlsx ยังไม่มี upstream fix) |
 
-**หมายเหตุ**: test errors 7 ตัวไม่ใช่ regression ของงานนี้ — อยู่ในสอง test file ที่ mock ไม่ครบก่อนหน้านี้ (ดู §4.8) ส่วน 173 test ที่เหลือเขียวทั้งหมด รวมถึง 16 token-extraction tests ที่ผมแก้ mock ให้
+### 6.2 Frontend
+
+| คำสั่ง | ผลลัพธ์ |
+|---|---|
+| `npx tsc --noEmit` | ✅ 0 errors (strict mode เปิดแล้ว) |
+| `npm test -- --run` | ✅ 77/77 pass (5 test files) |
+| `npm run build` | ✅ Build succeeded (CSS 72 kB, JS 1.71 MB gzip 420 kB) |
 
 ---
 
