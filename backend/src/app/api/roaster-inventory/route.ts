@@ -117,16 +117,22 @@ export async function POST(request: NextRequest) {
       },
     } as const
 
-    const inventoryItem = await prisma.$transaction(async (tx) => {
+    const claimResult = await prisma.$transaction(async (tx) => {
       // Deduct from the source lot; mark Withdrawn when fully claimed
-      await tx.greenBeanLot.update({
+      const updatedSourceLot = await tx.greenBeanLot.update({
         where: { id: greenBeanLotId },
         data: {
           currentWeightKg: newLotWeight,
           availabilityStatus: newLotWeight <= 0 ? 'Withdrawn' : 'Available',
         },
+        select: {
+          id: true,
+          currentWeightKg: true,
+          availabilityStatus: true,
+        },
       })
 
+      let inventoryItem
       const existingItem = await tx.roasterInventoryItem.findFirst({
         where: {
           roasterId: user.id,
@@ -137,7 +143,7 @@ export async function POST(request: NextRequest) {
       })
 
       if (existingItem) {
-        return tx.roasterInventoryItem.update({
+        inventoryItem = await tx.roasterInventoryItem.update({
           where: { id: existingItem.id },
           data: {
             claimedWeightKg: { increment: weight },
@@ -145,21 +151,30 @@ export async function POST(request: NextRequest) {
           },
           include: inventoryInclude,
         })
+      } else {
+        inventoryItem = await tx.roasterInventoryItem.create({
+          data: {
+            roasterId: user.id,
+            greenBeanLotId,
+            claimedWeightKg: weight,
+            remainingWeightKg: weight,
+          },
+          include: inventoryInclude,
+        })
       }
 
-      return tx.roasterInventoryItem.create({
-        data: {
-          roasterId: user.id,
-          greenBeanLotId,
-          claimedWeightKg: weight,
-          remainingWeightKg: weight,
-        },
-        include: inventoryInclude,
-      })
+      return {
+        inventoryItem,
+        updatedSourceLot,
+      }
     })
 
     return NextResponse.json(
-      { inventoryItem, message: 'Green bean lot claimed successfully' },
+      {
+        inventoryItem: claimResult.inventoryItem,
+        updatedSourceLot: claimResult.updatedSourceLot,
+        message: 'Green bean lot claimed successfully',
+      },
       { status: 201 },
     )
   } catch (error) {

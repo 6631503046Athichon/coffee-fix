@@ -1,44 +1,61 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Package, PlusCircle } from 'lucide-react';
-import { Button } from '../common/Button';
-import type { ExternalDisplayLot } from '../../types/displayTypes';
-import { toFixed2, toRoaId } from '../../utils/formatters';
+import React, { useState, useEffect, useCallback } from 'react'
+import { Package, PlusCircle } from 'lucide-react'
+import { Button } from '../common/Button'
+import type { ExternalDisplayLot } from '../../types/displayTypes'
+import { toFixed2, toRoaId } from '../../utils/formatters'
 
 interface ExternalLotsTableProps {
-  lots: ExternalDisplayLot[];
-  onRoast: (lot: ExternalDisplayLot) => void;
-  onAddExternal: () => void;
-  currentPage?: number;
-  totalPages?: number;
-  onPageChange?: (page: number) => void;
-  hideHeader?: boolean;
-  loadingLotId?: string | null;
+  lots: ExternalDisplayLot[]
+  onRoast: (lot: ExternalDisplayLot) => void
+  onAddExternal: () => void
+  currentPage?: number
+  totalPages?: number
+  onPageChange?: (page: number) => void
+  hideHeader?: boolean
+  loadingLotId?: string | null
 }
 
-const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({ lots, onRoast, onAddExternal, currentPage = 1, totalPages = 1, onPageChange, hideHeader = false, loadingLotId }) => {
-  const [openPopover, setOpenPopover] = useState<string | null>(null);
-  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
+  lots,
+  onRoast,
+  onAddExternal,
+  currentPage = 1,
+  totalPages = 1,
+  onPageChange,
+  hideHeader = false,
+  loadingLotId,
+}) => {
+  const [openPopover, setOpenPopover] = useState<string | null>(null)
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
 
-  const openWithPos = useCallback((id: string, btn: HTMLButtonElement) => {
-    if (openPopover === id) { setOpenPopover(null); return; }
-    const rect = btn.getBoundingClientRect();
-    setPopoverPos({ top: rect.top + window.scrollY - 120, left: rect.left + window.scrollX });
-    setOpenPopover(id);
-  }, [openPopover]);
+  const openWithPos = useCallback(
+    (id: string, btn: HTMLButtonElement) => {
+      if (openPopover === id) {
+        setOpenPopover(null)
+        return
+      }
+      const rect = btn.getBoundingClientRect()
+      setPopoverPos({ top: rect.top + window.scrollY - 120, left: rect.left + window.scrollX })
+      setOpenPopover(id)
+    },
+    [openPopover],
+  )
 
   useEffect(() => {
-    const close = () => setOpenPopover(null);
+    const close = () => setOpenPopover(null)
     if (openPopover) {
-      document.addEventListener('click', close);
-      window.addEventListener('scroll', close, true);
+      document.addEventListener('click', close)
+      window.addEventListener('scroll', close, true)
     }
-    return () => { document.removeEventListener('click', close); window.removeEventListener('scroll', close, true); };
-  }, [openPopover]);
+    return () => {
+      document.removeEventListener('click', close)
+      window.removeEventListener('scroll', close, true)
+    }
+  }, [openPopover])
 
-  const activeLot = lots.find(l => l.id === openPopover);
+  const activeLot = lots.find((l) => l.id === openPopover)
 
   return (
-    
     <div className={hideHeader ? '' : 'bg-white rounded-xl border border-gray-200 overflow-hidden'}>
       {/* Header */}
       {!hideHeader && (
@@ -52,14 +69,6 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({ lots, onRoast, on
               <p className="text-sm text-gray-500">External green bean inventory</p>
             </div>
           </div>
-          <Button
-            variant="success"
-            size="sm"
-            icon={<PlusCircle className="h-4 w-4" />}
-            onClick={onAddExternal}
-          >
-            Add Lot
-          </Button>
         </div>
       )}
 
@@ -75,11 +84,32 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({ lots, onRoast, on
           </colgroup>
           <thead>
             <tr className="bg-black-800 text-left">
-              <th className="px-4 py-3 text-left text-xs font-normal text-white tracking-wide bg-black">ID</th>
-              <th className="px-4 py-3 text-right text-xs font-normal text-white tracking-wide bg-black">Details</th>
-              <th className="px-4 py-3 text-left text-xs font-normal text-white tracking-wide bg-black">Grade</th>
-              <th className="px-4 py-3 text-right text-xs font-normal text-white tracking-wide bg-black">Available</th>
-              <th className="px-4 py-3 text-right text-xs font-normal text-white tracking-wide bg-black">Action</th>
+              <th className="px-4 py-3 text-left text-xs font-normal text-white tracking-wide bg-black">
+                ID
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-normal text-white tracking-wide bg-black">
+                Details
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-normal text-white tracking-wide bg-black">
+                Grade
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-normal text-white tracking-wide bg-black">
+                Available
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-normal text-white tracking-wide bg-black">
+                <div className="flex items-center justify-end gap-3">
+                  <span className="leading-none">Action</span>
+                  <Button
+                    variant="success"
+                    size="sm"
+                    icon={<PlusCircle className="h-3.5 w-3.5" />}
+                    className="min-w-[92px] justify-center"
+                    onClick={onAddExternal}
+                  >
+                    Add Lot
+                  </Button>
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -91,17 +121,24 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({ lots, onRoast, on
                       <Package className="h-6 w-6 text-gray-400" />
                     </div>
                     <p className="text-sm text-gray-500 font-medium">No external lots available</p>
-                    <p className="text-xs text-gray-400 mt-1">Add new external green bean lots to start</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Add new external green bean lots to start
+                    </p>
                   </div>
                 </td>
               </tr>
             ) : (
-              lots.map(lot => (
+              lots.map((lot) => (
                 <tr key={lot.id}>
-                  <td className="px-4 py-3 text-left font-mono text-sm text-black whitespace-nowrap">{toRoaId(lot.id)}</td>
+                  <td className="px-4 py-3 text-left font-mono text-sm text-black whitespace-nowrap">
+                    {toRoaId(lot.id)}
+                  </td>
                   <td className="px-4 py-3 text-right align-middle">
                     <button
-                      onClick={e => { e.stopPropagation(); openWithPos(lot.id, e.currentTarget); }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openWithPos(lot.id, e.currentTarget)
+                      }}
                       className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 transition-colors"
                       title="View Details"
                     >
@@ -112,25 +149,34 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({ lots, onRoast, on
                       <div
                         className="fixed z-[9999] w-56 bg-white border border-gray-200 rounded-xl shadow-2xl"
                         style={{ top: popoverPos.top, left: popoverPos.left }}
-                        onClick={e => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 gap-4">
                           <div className="flex items-center gap-4">
                             <Package className="h-4 w-4 text-emerald-500" />
-                            <span className="text-xs font-normal text-gray-700 uppercase tracking-wide">Lot Details</span>
+                            <span className="text-xs font-normal text-gray-700 uppercase tracking-wide">
+                              Lot Details
+                            </span>
                           </div>
-                          <button onClick={() => setOpenPopover(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                          <button
+                            onClick={() => setOpenPopover(null)}
+                            className="text-gray-400 hover:text-gray-600 transition-colors"
+                          >
                             <span className="text-lg">×</span>
                           </button>
                         </div>
                         <div className="px-4 py-3 space-y-4">
                           <div className="flex justify-between items-center gap-4">
                             <span className="text-xs text-gray-500">Variety</span>
-                            <span className="text-xs font-normal text-gray-800">{activeLot.variety || '—'}</span>
+                            <span className="text-xs font-normal text-gray-800">
+                              {activeLot.variety || '—'}
+                            </span>
                           </div>
                           <div className="flex justify-between items-center gap-4">
                             <span className="text-xs text-gray-500">Process</span>
-                            <span className="text-xs font-normal text-gray-800">{activeLot.process || '—'}</span>
+                            <span className="text-xs font-normal text-gray-800">
+                              {activeLot.process || '—'}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -141,16 +187,22 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({ lots, onRoast, on
                       {lot.grade || '—'}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right align-middle text-black font-bold">{toFixed2(lot.currentWeightKg)}<span className="text-sm text-gray-400 ml-1">kg</span></td>
+                  <td className="px-4 py-3 text-right align-middle text-black font-bold">
+                    {toFixed2(lot.currentWeightKg)}
+                    <span className="text-sm text-gray-400 ml-1">kg</span>
+                  </td>
                   <td className="px-4 py-3 text-right align-middle">
-                    <Button
-                      variant="success"
-                      size="sm"
-                      disabled={loadingLotId === lot.id}
-                      onClick={() => onRoast(lot)}
-                    >
-                      {loadingLotId === lot.id ? 'Loading…' : 'Roast'}
-                    </Button>
+                    <div className="flex justify-end">
+                      <Button
+                        variant="success"
+                        size="sm"
+                        className="min-w-[92px] justify-center"
+                        disabled={loadingLotId === lot.id}
+                        onClick={() => onRoast(lot)}
+                      >
+                        {loadingLotId === lot.id ? 'Loading…' : 'Roast'}
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -159,7 +211,7 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({ lots, onRoast, on
         </table>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default ExternalLotsTable;
+export default ExternalLotsTable

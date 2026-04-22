@@ -14,7 +14,7 @@ import {
   GreenBeanSourceType,
   UserRole,
 } from '../../types'
-import { PlusCircle, Package, Flame, Coffee, Loader2 } from 'lucide-react'
+import { Package, Flame, Coffee, Loader2 } from 'lucide-react'
 import ExternalLotsTable from './ExternalLotsTable'
 import InternalLotsTable from './InternalLotsTable'
 import RoastLogPanel from './RoastLogPanel'
@@ -319,7 +319,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     // Open form instantly — no API call yet. We claim only the batch amount on submit.
     setSelectedExternalLot(lot)
     setSelectedInventoryItem(null)
-    setRoastForm({ batchSize: '', roastedWeight: '', notes: '', flavorNotes: '' })
+    setRoastForm({ batchSize: '', roastedWeight: '', notes: '' })
     setRoastLevel(RoastLevel.Medium)
     setSelectedFlavorTags([])
     setSelectedCategory('Sweet')
@@ -335,7 +335,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
       return
     }
     try {
-      const inventoryItem = await claimGreenBeanLot(selectedLot.id, amount)
+      const { inventoryItem } = await claimGreenBeanLot(selectedLot.id, amount)
       setData((prev) => ({
         ...prev,
         roasterInventory: [...prev.roasterInventory, inventoryItem],
@@ -385,9 +385,12 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         setIsSubmittingRoast(true)
         setIsRoastingLotId(selectedExternalLot.id)
         // 1. Claim exactly the batch amount from the lot
-        const inventoryItem = await claimGreenBeanLot(selectedExternalLot.id, batch)
+        const { inventoryItem, updatedSourceLot } = await claimGreenBeanLot(
+          selectedExternalLot.id,
+          batch,
+        )
         // 2. Create roast batch against that inventory item
-        const { roastBatch } = await createRoastBatch({
+        const { roastBatch, updatedInventory } = await createRoastBatch({
           roasterInventoryId: inventoryItem.id,
           greenBeanLotId: selectedExternalLot.id,
           batchSizeKg: batch,
@@ -398,7 +401,6 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
           roastProfileNotes: roastForm.notes?.trim() || 'No notes',
           flavorNotes: selectedFlavorTags.join(', ') || undefined,
         })
-        const newLotWeight = Math.max(0, selectedExternalLot.currentWeightKg - batch)
         setData((prev) => ({
           ...prev,
           roastBatches: [
@@ -406,8 +408,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             { ...roastBatch, formattedLotId: toRoaId(selectedExternalLot.id) } as any,
           ],
           roasterInventory: (() => {
-            // claim returns remainingWeightKg += batch, roast immediately deducts batch → net 0 change
-            const finalRemaining = inventoryItem.remainingWeightKg - batch
+            const finalRemaining = updatedInventory.remainingWeightKg
             const exists = prev.roasterInventory.find((i) => i.id === inventoryItem.id)
             if (exists)
               return prev.roasterInventory.map((i) =>
@@ -419,11 +420,11 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             ]
           })(),
           greenBeanLots: prev.greenBeanLots.map((l) =>
-            l.id === selectedExternalLot.id
+            updatedSourceLot && l.id === updatedSourceLot.id
               ? {
                   ...l,
-                  currentWeightKg: newLotWeight,
-                  availabilityStatus: newLotWeight <= 0 ? 'Sold' : 'Available',
+                  currentWeightKg: updatedSourceLot.currentWeightKg,
+                  availabilityStatus: updatedSourceLot.availabilityStatus,
                 }
               : l,
           ),
@@ -597,18 +598,6 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                   </span>
                 </div>
               </button>
-              {lotsTab === 'external' && (
-                <div className="px-4">
-                  <Button
-                    variant="success"
-                    size="sm"
-                    icon={<PlusCircle className="h-4 w-4" />}
-                    onClick={() => setIsAddLotModalOpen(true)}
-                  >
-                    Add Lot
-                  </Button>
-                </div>
-              )}
             </div>
 
             {/* Tab Content */}
