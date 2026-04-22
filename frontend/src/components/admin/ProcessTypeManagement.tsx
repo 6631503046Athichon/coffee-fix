@@ -77,7 +77,9 @@ const ProcessTypeManagement: React.FC = () => {
     isActive: true,
   });
   const [showSuccess, setShowSuccess] = useState(false);
+  const [successAction, setSuccessAction] = useState<'added' | 'updated'>('added');
   const [errorMessage, setErrorMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
   const resetForm = () => {
@@ -124,56 +126,50 @@ const ProcessTypeManagement: React.FC = () => {
       return;
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    setIsSubmitting(true);
 
-    if (editingType) {
-      // Update existing
-      const updated: ProcessType = {
-        ...editingType,
-        name: formData.name.trim(),
-        description: formData.description.trim() || undefined,
-        colorScheme: formData.colorScheme,
-        isActive: formData.isActive,
-      };
-      updateProcessType(updated);
-      // Immediately sync DataContext from localStorage to avoid race conditions
-      try {
-        const latest = JSON.parse(localStorage.getItem('coffee_lab_process_types') || '[]');
-        setData(prev => ({ ...prev, processTypes: latest }));
-      } catch {}
-    } else {
-      // Create new
-      const newType: ProcessType = {
-        // Generate id from localStorage to avoid collisions
-        id: (() => {
-          try {
-            const current = JSON.parse(localStorage.getItem('coffee_lab_process_types') || '[]');
-            return `PT${String(current.length + 1).padStart(3, '0')}`;
-          } catch {
-            return `PT${String(data.processTypes.length + 1).padStart(3, '0')}`;
-          }
-        })(),
-        name: formData.name.trim(),
-        description: formData.description.trim() || undefined,
-        colorScheme: formData.colorScheme,
-        createdDate: today,
-        isActive: formData.isActive,
-      };
-      addProcessType(newType);
-      // Immediately sync DataContext from localStorage to avoid race conditions
-      try {
-        const latest = JSON.parse(localStorage.getItem('coffee_lab_process_types') || '[]');
-        setData(prev => ({ ...prev, processTypes: latest }));
-      } catch {}
+    try {
+      if (editingType) {
+        const saved = await updateProcessType({
+          ...editingType,
+          name: formData.name.trim(),
+          description: formData.description.trim() || undefined,
+          colorScheme: formData.colorScheme,
+          isActive: formData.isActive,
+        });
+
+        setData(prev => ({
+          ...prev,
+          processTypes: prev.processTypes.map(type => type.id === saved.id ? saved : type),
+        }));
+        setSuccessAction('updated');
+      } else {
+        const created = await addProcessType({
+          name: formData.name.trim(),
+          description: formData.description.trim() || undefined,
+          colorScheme: formData.colorScheme,
+          isActive: formData.isActive,
+        });
+
+        setData(prev => ({
+          ...prev,
+          processTypes: [created, ...prev.processTypes],
+        }));
+        setSuccessAction('added');
+      }
+
+      setShowModal(false);
+      resetForm();
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (err: any) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to save process type');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setShowModal(false);
-    resetForm();
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     const typeToDelete = data.processTypes.find(t => t.id === id);
     if (!typeToDelete) return;
 
@@ -192,22 +188,30 @@ const ProcessTypeManagement: React.FC = () => {
       }
     }
 
-    deleteProcessType(id);
-    // Immediately sync DataContext from localStorage
     try {
-      const latest = JSON.parse(localStorage.getItem('coffee_lab_process_types') || '[]');
-      setData(prev => ({ ...prev, processTypes: latest }));
-    } catch {}
+      await deleteProcessType(id);
+      setData(prev => ({
+        ...prev,
+        processTypes: prev.processTypes.filter(type => type.id !== id),
+      }));
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : 'Failed to delete process type');
+    }
   };
 
-  const handleToggleStatus = (processType: ProcessType) => {
-    const updated = { ...processType, isActive: !processType.isActive };
-    updateProcessType(updated);
-    // Immediately sync DataContext from localStorage
+  const handleToggleStatus = async (processType: ProcessType) => {
     try {
-      const latest = JSON.parse(localStorage.getItem('coffee_lab_process_types') || '[]');
-      setData(prev => ({ ...prev, processTypes: latest }));
-    } catch {}
+      const updated = await updateProcessType({
+        ...processType,
+        isActive: !processType.isActive,
+      });
+      setData(prev => ({
+        ...prev,
+        processTypes: prev.processTypes.map(type => type.id === updated.id ? updated : type),
+      }));
+    } catch (err: any) {
+      alert(err instanceof Error ? err.message : 'Failed to update status');
+    }
   };
 
   const activeTypes = data.processTypes.filter(t => t.isActive);
@@ -242,7 +246,7 @@ const ProcessTypeManagement: React.FC = () => {
         <div className="flex items-center gap-2 bg-green-50 text-green-700 px-4 py-3 rounded-lg border border-green-200">
           <CheckCircle className="h-5 w-5" />
           <span className="font-semibold">
-            Process type {editingType ? 'updated' : 'added'} successfully!
+            Process type {successAction} successfully!
           </span>
         </div>
       )}
@@ -448,7 +452,10 @@ const ProcessTypeManagement: React.FC = () => {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowModal(false);
+                    resetForm();
+                  }}
                   className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   <X className="h-5 w-5 text-gray-500" />
@@ -535,17 +542,21 @@ const ProcessTypeManagement: React.FC = () => {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowModal(false);
+                    resetForm();
+                  }}
                   className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
+                  disabled={isSubmitting}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                   <Save className="h-4 w-4" />
-                  {editingType ? 'Update' : 'Create'}
+                  {isSubmitting ? 'Saving...' : editingType ? 'Update' : 'Create'}
                 </button>
               </div>
             </form>

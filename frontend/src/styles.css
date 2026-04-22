@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+body {
+  font-family: 'Inter', 'Noto Sans Thai', sans-serif;
+}
+
 .btn-edit {
   background-color: #4CAF50;
   color: white;

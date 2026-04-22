@@ -36,8 +36,7 @@ export async function GET(
   }
 }
 
-// PUT /api/process-types/:id
-export async function PUT(
+async function updateProcessType(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -48,16 +47,40 @@ export async function PUT(
 
     const body = await request.json()
     const { name, description, colorScheme, isActive } = body
+    const existingProcessType = await prisma.processType.findUnique({
+      where: { id },
+      select: { id: true },
+    })
+
+    if (!existingProcessType) {
+      return NextResponse.json(
+        { error: 'Process type not found' },
+        { status: 404 }
+      )
+    }
 
     const updateData: Prisma.ProcessTypeUpdateInput = {}
-    if (name !== undefined) updateData.name = name
-    if (description !== undefined) updateData.description = description
-    if (colorScheme !== undefined) {
-      if (typeof colorScheme === 'object') {
-        updateData.colorScheme = JSON.stringify(colorScheme)
-      } else {
-        updateData.colorScheme = colorScheme
+    if (name !== undefined) {
+      const normalizedName = typeof name === 'string' ? name.trim() : ''
+      if (!normalizedName) {
+        return NextResponse.json(
+          { error: 'Name cannot be empty' },
+          { status: 400 }
+        )
       }
+      updateData.name = normalizedName
+    }
+    if (description !== undefined) {
+      updateData.description = typeof description === 'string' ? description.trim() || null : null
+    }
+    if (colorScheme !== undefined) {
+      if (!colorScheme || typeof colorScheme !== 'object') {
+        return NextResponse.json(
+          { error: 'Color scheme object is required' },
+          { status: 400 }
+        )
+      }
+      updateData.colorScheme = JSON.stringify(colorScheme)
     }
     if (isActive !== undefined) updateData.isActive = isActive
 
@@ -77,6 +100,22 @@ export async function PUT(
   } catch (error) {
     return handleApiError(error)
   }
+}
+
+// PUT /api/process-types/:id
+export async function PUT(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  return updateProcessType(request, context)
+}
+
+// PATCH /api/process-types/:id
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  return updateProcessType(request, context)
 }
 
 // DELETE /api/process-types/:id

@@ -1,6 +1,6 @@
 
 
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package, Box } from 'lucide-react';
 
@@ -26,31 +26,49 @@ import { Sidebar, Header } from './components/layout';
 import Login from './components/auth/Login';
 import ForgotPassword from './components/auth/ForgotPassword';
 import ResetPassword from './components/auth/ResetPassword';
-import { FirstLoginSetup } from './components/auth/FirstLoginSetup';
 import ProtectedRoute from './components/common/ProtectedRoute';
-import ProcessorWorkbench from './components/processor/ProcessorWorkbench';
-import ParchmentPage from './components/processor/ParchmentTab';
-import CuppingHub from './components/cupper/CuppingHub';
-import TraceabilityPage from './components/TraceabilityPage';
-import PublicTraceabilityPage from './components/PublicTraceabilityPage';
-import CompetitionDashboard from './components/competition/CompetitionDashboard';
-import FarmerDashboard from './components/farmer/FarmerDashboard';
-import HarvestLotDetail from './components/farmer/HarvestLotDetail';
-import HarvestLotsManagement from './components/farmer/HarvestLotsManagement';
-import QualityInsights from './components/QualityInsights';
-import CuppingSessionDetail from './components/cupper/CuppingSessionDetail';
-import FarmerDataHub from './components/farmer/FarmerDataHub';
-import GAPComplianceHelper from './components/farmer/GAPComplianceHelper';
-import CupperScoringSheet from './components/cupper/CupperScoringSheet';
-import TraceabilityHub from './components/TraceabilityHub';
-import UserManagement from './components/UserManagement';
-import FarmerFarmManagement from './components/farmer/FarmManagement';
-import AddFarmPage from './components/farmer/AddFarmPage';
-import ActivityTypeManagement from './components/admin/ActivityTypeManagement';
-import ProcessTypeManagement from './components/admin/ProcessTypeManagement';
-import RoasterWorkbench from './components/roaster/RoasterWorkbench';
-import CoffeeVarietiesManager from './components/CoffeeVarietiesManager';
-import CustomerManagement from './components/CustomerManagement';
+
+const FirstLoginSetup = lazy(() =>
+  import('./components/auth/FirstLoginSetup').then(module => ({ default: module.FirstLoginSetup }))
+);
+const ProcessorWorkbench = lazy(() => import('./components/processor/ProcessorWorkbench'));
+const ParchmentPage = lazy(() => import('./components/processor/ParchmentTab'));
+const CuppingHub = lazy(() => import('./components/cupper/CuppingHub'));
+const TraceabilityPage = lazy(() => import('./components/TraceabilityPage'));
+const PublicTraceabilityPage = lazy(() => import('./components/PublicTraceabilityPage'));
+const CompetitionDashboard = lazy(() => import('./components/competition/CompetitionDashboard'));
+const FarmerDashboard = lazy(() => import('./components/farmer/FarmerDashboard'));
+const HarvestLotDetail = lazy(() => import('./components/farmer/HarvestLotDetail'));
+const HarvestLotsManagement = lazy(() => import('./components/farmer/HarvestLotsManagement'));
+const QualityInsights = lazy(() => import('./components/QualityInsights'));
+const CuppingSessionDetail = lazy(() => import('./components/cupper/CuppingSessionDetail'));
+const FarmerDataHub = lazy(() => import('./components/farmer/FarmerDataHub'));
+const GAPComplianceHelper = lazy(() => import('./components/farmer/GAPComplianceHelper'));
+const CupperScoringSheet = lazy(() => import('./components/cupper/CupperScoringSheet'));
+const TraceabilityHub = lazy(() => import('./components/TraceabilityHub'));
+const UserManagement = lazy(() => import('./components/UserManagement'));
+const FarmerFarmManagement = lazy(() => import('./components/farmer/FarmManagement'));
+const AddFarmPage = lazy(() => import('./components/farmer/AddFarmPage'));
+const ActivityTypeManagement = lazy(() => import('./components/admin/ActivityTypeManagement'));
+const ProcessTypeManagement = lazy(() => import('./components/admin/ProcessTypeManagement'));
+const RoasterWorkbench = lazy(() => import('./components/roaster/RoasterWorkbench'));
+const CoffeeVarietiesManager = lazy(() => import('./components/CoffeeVarietiesManager'));
+const CustomerManagement = lazy(() => import('./components/CustomerManagement'));
+
+const RouteLoader: React.FC = () => (
+  <div className="min-h-[16rem] flex items-center justify-center">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mx-auto mb-3"></div>
+      <p className="text-sm text-gray-600">Loading page...</p>
+    </div>
+  </div>
+);
+
+const withRouteLoader = (element: React.ReactNode) => (
+  <Suspense fallback={<RouteLoader />}>
+    {element}
+  </Suspense>
+);
 
 // Helper function to get dashboard path by role
 const getDashboardPathByRole = (roles: UserRole[]): string => {
@@ -94,7 +112,7 @@ const FirstLoginSetupWrapper: React.FC = () => {
     return <Navigate to="/login" replace />;
   }
 
-  return <FirstLoginSetup user={currentUser} />;
+  return withRouteLoader(<FirstLoginSetup user={currentUser} />);
 };
 
 // Listens for backend connection state changes and shows toast notifications
@@ -421,7 +439,7 @@ const ProtectedRoutes: React.FC = () => {
                 path="/processor"
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Processor, UserRole.Admin]}>
-                    <ProcessorWorkbench currentUser={currentUser!} />
+                    {withRouteLoader(<ProcessorWorkbench currentUser={currentUser!} />)}
                   </ProtectedRoute>
                 }
               />
@@ -429,31 +447,62 @@ const ProtectedRoutes: React.FC = () => {
                 path="/parchment"
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Processor, UserRole.Admin]}>
-                    <ParchmentPage currentUser={currentUser!} />
+                    {withRouteLoader(<ParchmentPage currentUser={currentUser!} />)}
                   </ProtectedRoute>
                 }
               />
-              <Route path="/roaster" element={<ProtectedRoute allowedRoles={[UserRole.Roaster, UserRole.Admin]}><RoasterWorkbench currentUser={currentUser!} /></ProtectedRoute>} />
-              <Route path="/cupping" element={<CuppingHub />} />
-              <Route path="/cupping/:id" element={<CuppingSessionDetail currentUser={currentUser!} />} />
-              <Route path="/scoring" element={<CupperScoringSheet currentUser={currentUser!} />} />
+              <Route
+                path="/roaster"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Roaster, UserRole.Admin]}>
+                    {withRouteLoader(<RoasterWorkbench currentUser={currentUser!} />)}
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/cupping" element={withRouteLoader(<CuppingHub />)} />
+              <Route path="/cupping/:id" element={withRouteLoader(<CuppingSessionDetail currentUser={currentUser!} />)} />
+              <Route path="/scoring" element={withRouteLoader(<CupperScoringSheet currentUser={currentUser!} />)} />
               <Route
                 path="/insights"
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Processor, UserRole.Roaster, UserRole.Admin]}>
-                    <QualityInsights />
+                    {withRouteLoader(<QualityInsights />)}
                   </ProtectedRoute>
                 }
               />
-              <Route path="/competition/:id" element={<CompetitionDashboard currentUserRoles={currentUser?.roles || [UserRole.Farmer]} />} />
-              <Route path="/traceability" element={<ProtectedRoute allowedRoles={[UserRole.Admin, UserRole.Processor]}><TraceabilityHub /></ProtectedRoute>} />
-              <Route path="/users" element={<ProtectedRoute allowedRoles={[UserRole.Admin]}><UserManagement /></ProtectedRoute>} />
-              <Route path="/customers" element={<ProtectedRoute allowedRoles={[UserRole.Admin, UserRole.Roaster]}><CustomerManagement /></ProtectedRoute>} />
+              <Route
+                path="/competition/:id"
+                element={withRouteLoader(<CompetitionDashboard currentUserRoles={currentUser?.roles || [UserRole.Farmer]} />)}
+              />
+              <Route
+                path="/traceability"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Admin, UserRole.Processor]}>
+                    {withRouteLoader(<TraceabilityHub />)}
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/users"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Admin]}>
+                    {withRouteLoader(<UserManagement />)}
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/customers"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Admin, UserRole.Roaster]}>
+                    {withRouteLoader(<CustomerManagement />)}
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/farmer-farms"
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
-                    <FarmerFarmManagement />
+                    {withRouteLoader(<FarmerFarmManagement />)}
                   </ProtectedRoute>
                 }
               />
@@ -461,7 +510,7 @@ const ProtectedRoutes: React.FC = () => {
                 path="/farmer-farms/add"
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
-                    <AddFarmPage />
+                    {withRouteLoader(<AddFarmPage />)}
                   </ProtectedRoute>
                 }
               />
@@ -469,18 +518,39 @@ const ProtectedRoutes: React.FC = () => {
                 path="/farmer-farms/edit/:farmId"
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
-                    <AddFarmPage />
+                    {withRouteLoader(<AddFarmPage />)}
                   </ProtectedRoute>
                 }
               />
-              <Route path="/activity-types" element={<ProtectedRoute allowedRoles={[UserRole.Admin]}><ActivityTypeManagement /></ProtectedRoute>} />
-              <Route path="/process-types" element={<ProtectedRoute allowedRoles={[UserRole.Admin]}><ProcessTypeManagement /></ProtectedRoute>} />
-              <Route path="/coffee-varieties" element={<ProtectedRoute allowedRoles={[UserRole.Admin]}><CoffeeVarietiesManager /></ProtectedRoute>} />
+              <Route
+                path="/activity-types"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Admin]}>
+                    {withRouteLoader(<ActivityTypeManagement />)}
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/process-types"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Admin]}>
+                    {withRouteLoader(<ProcessTypeManagement />)}
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/coffee-varieties"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Admin]}>
+                    {withRouteLoader(<CoffeeVarietiesManager />)}
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/farmer-dashboard"
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
-                    <FarmerDashboard />
+                    {withRouteLoader(<FarmerDashboard />)}
                   </ProtectedRoute>
                 }
               />
@@ -488,7 +558,7 @@ const ProtectedRoutes: React.FC = () => {
                 path="/farmer-dashboard/:lotId"
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
-                    <HarvestLotDetail />
+                    {withRouteLoader(<HarvestLotDetail />)}
                   </ProtectedRoute>
                 }
               />
@@ -496,7 +566,7 @@ const ProtectedRoutes: React.FC = () => {
                 path="/harvest-lots"
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
-                    <HarvestLotsManagement />
+                    {withRouteLoader(<HarvestLotsManagement />)}
                   </ProtectedRoute>
                 }
               />
@@ -504,7 +574,7 @@ const ProtectedRoutes: React.FC = () => {
                 path="/farmer-data-hub"
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
-                    <FarmerDataHub currentUser={currentUser!} />
+                    {withRouteLoader(<FarmerDataHub currentUser={currentUser!} />)}
                   </ProtectedRoute>
                 }
               />
@@ -512,7 +582,7 @@ const ProtectedRoutes: React.FC = () => {
                 path="/gap-compliance"
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
-                    <GAPComplianceHelper />
+                    {withRouteLoader(<GAPComplianceHelper />)}
                   </ProtectedRoute>
                 }
               />
@@ -546,13 +616,13 @@ const App: React.FC = () => {
             path="/traceability/:lotId"
             element={
               <DataContext.Provider value={contextValue}>
-                <TraceabilityPage />
+                {withRouteLoader(<TraceabilityPage />)}
               </DataContext.Provider>
             }
           />
           <Route
             path="/trace/:publicId"
-            element={<PublicTraceabilityPage />}
+            element={withRouteLoader(<PublicTraceabilityPage />)}
           />
           {/* Root route - redirect to login if not authenticated */}
           <Route path="/" element={<RootRedirect />} />

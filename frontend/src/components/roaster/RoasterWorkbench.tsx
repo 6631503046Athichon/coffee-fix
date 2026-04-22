@@ -149,7 +149,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
           // finalScore intentionally omitted for external table rendering
           displayInfo,
           displayPrice,
-          gradeDisplay: gbl.grade || '—',
+          gradeDisplay: gbl.grade || 'Ã¢â‚¬â€',
         } as GreenBeanLot & {
           variety: string
           process: string
@@ -163,7 +163,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
       const variety = harvestLot?.cherryVariety || 'N/A'
       const process = parchmentLot?.processType || 'N/A'
       const finalScore = getFinalScore(gbl)
-      const displayScore = typeof finalScore === 'number' ? finalScore.toFixed(2) : '—'
+      const displayScore = typeof finalScore === 'number' ? finalScore.toFixed(2) : 'Ã¢â‚¬â€'
       const displayInfo = `${variety} / ${process}`
       return {
         ...gbl,
@@ -172,7 +172,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         finalScore,
         displayScore,
         displayInfo,
-        gradeDisplay: gbl.grade || '—',
+        gradeDisplay: gbl.grade || 'Ã¢â‚¬â€',
       } as GreenBeanLot & {
         variety: string
         process: string
@@ -316,7 +316,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
   }
 
   const handleExternalRoast = (lot: GreenBeanLot & { variety: string; process: string }) => {
-    // Open form instantly — no API call yet. We claim only the batch amount on submit.
+    // Open form instantly Ã¢â‚¬â€ no API call yet. We claim only the batch amount on submit.
     setSelectedExternalLot(lot)
     setSelectedInventoryItem(null)
     setRoastForm({ batchSize: '', roastedWeight: '', notes: '' })
@@ -331,7 +331,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     e.preventDefault()
     const amount = parseFloat(claimAmount)
     if (!selectedLot || !amount || amount <= 0 || amount > selectedLot.currentWeightKg) {
-      addToast({ type: 'error', message: 'จำนวนที่ Claim ไม่ถูกต้อง' })
+      addToast({ type: 'error', message: 'Enter a valid claim amount.' })
       return
     }
     try {
@@ -340,12 +340,12 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         ...prev,
         roasterInventory: [...prev.roasterInventory, inventoryItem],
       }))
-      addToast({ type: 'success', message: `Claim ${amount} kg สำเร็จ!` })
+      addToast({ type: 'success', message: `Claimed ${amount} kg successfully.` })
       setIsClaimModalOpen(false)
     } catch (err: unknown) {
       addToast({
         type: 'error',
-        message: err instanceof Error ? err.message : 'ไม่สามารถ Claim lot ได้',
+        message: err instanceof Error ? err.message : 'Unable to claim this lot.',
       })
     }
   }
@@ -356,23 +356,23 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     const batchRaw = parseFloat(roastForm.batchSize)
     const roastedRaw = parseFloat(roastForm.roastedWeight)
 
-    // ── External lot path: claim only the batch amount, then roast ──
+    // Ã¢â€â‚¬Ã¢â€â‚¬ External lot path: claim only the batch amount, then roast Ã¢â€â‚¬Ã¢â€â‚¬
     if (selectedExternalLot && !selectedInventoryItem) {
       if (isSubmittingRoast) return
       if (!batchRaw || batchRaw <= 0) {
-        addToast({ type: 'error', message: 'กรุณากรอก Batch Size ที่ถูกต้อง' })
+        addToast({ type: 'error', message: 'Enter a valid batch size.' })
         return
       }
       if (!roastedRaw || roastedRaw <= 0) {
-        addToast({ type: 'error', message: 'กรุณากรอก Roasted Weight ที่ถูกต้อง' })
+        addToast({ type: 'error', message: 'Enter a valid roasted weight.' })
         return
       }
       if (batchRaw > selectedExternalLot.currentWeightKg) {
-        addToast({ type: 'error', message: 'Batch เกิน น้ำหนักที่มี' })
+        addToast({ type: 'error', message: 'Batch size exceeds the available weight.' })
         return
       }
       if (roastedRaw > batchRaw) {
-        addToast({ type: 'error', message: 'Roasted Weight ต้องไม่เกิน Batch Size' })
+        addToast({ type: 'error', message: 'Roasted weight cannot exceed the batch size.' })
         return
       }
 
@@ -429,11 +429,11 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
               : l,
           ),
         }))
-        addToast({ type: 'success', message: `บันทึก Roast Batch ${batch} kg สำเร็จ!` })
+        addToast({ type: 'success', message: `Logged roast batch ${batch} kg successfully.` })
         setIsLogRoastModalOpen(false)
         setSelectedExternalLot(null)
       } catch (err: any) {
-        addToast({ type: 'error', message: err?.message || 'ไม่สามารถบันทึก Roast Batch ได้' })
+        addToast({ type: 'error', message: err?.message || 'Unable to log this roast batch.' })
       } finally {
         setIsSubmittingRoast(false)
         setIsRoastingLotId(null)
@@ -441,24 +441,24 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
       return
     }
 
-    // ── Normal inventory path ──
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Normal inventory path Ã¢â€â‚¬Ã¢â€â‚¬
     if (!selectedInventoryItem) return
     if (isSubmittingRoast) return
 
     if (!batchRaw || batchRaw <= 0) {
-      addToast({ type: 'error', message: 'กรุณากรอก Batch Size ที่ถูกต้อง' })
+      addToast({ type: 'error', message: 'Enter a valid batch size.' })
       return
     }
     if (!roastedRaw || roastedRaw <= 0) {
-      addToast({ type: 'error', message: 'กรุณากรอก Roasted Weight ที่ถูกต้อง' })
+      addToast({ type: 'error', message: 'Enter a valid roasted weight.' })
       return
     }
     if (batchRaw > selectedInventoryItem.remainingWeightKg) {
-      addToast({ type: 'error', message: 'Batch เกิน inventory ที่มี' })
+      addToast({ type: 'error', message: 'Batch size exceeds the available inventory.' })
       return
     }
     if (roastedRaw > batchRaw) {
-      addToast({ type: 'error', message: 'Roasted Weight ต้องไม่เกิน Batch Size' })
+      addToast({ type: 'error', message: 'Roasted weight cannot exceed the batch size.' })
       return
     }
 
@@ -489,12 +489,12 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             : item,
         ),
       }))
-      addToast({ type: 'success', message: `บันทึก Roast Batch ${batch} kg สำเร็จ!` })
+      addToast({ type: 'success', message: `Logged roast batch ${batch} kg successfully.` })
       setIsLogRoastModalOpen(false)
     } catch (err: unknown) {
       addToast({
         type: 'error',
-        message: err instanceof Error ? err.message : 'ไม่สามารถบันทึก Roast Batch ได้',
+        message: err instanceof Error ? err.message : 'Unable to log this roast batch.',
       })
     } finally {
       setIsSubmittingRoast(false)
@@ -874,10 +874,10 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                         {(() => {
                           const b = parseFloat(roastForm.batchSize || '0')
                           const r = parseFloat(roastForm.roastedWeight || '0')
-                          if (!b || !r) return '—'
+                          if (!b || !r) return 'Ã¢â‚¬â€'
                           const yieldPct = (r / b) * 100
                           const lossPct = 100 - yieldPct
-                          return `${lossPct.toFixed(1)}% loss • ${yieldPct.toFixed(1)}% yield`
+                          return `${lossPct.toFixed(1)}% loss Ã¢â‚¬Â¢ ${yieldPct.toFixed(1)}% yield`
                         })()}
                       </div>
                     </div>
@@ -981,7 +981,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                             className="ml-1 text-yellow-700 hover:text-yellow-900 font-bold"
                             aria-label={`Remove ${tag}`}
                           >
-                            ✕
+                            Ã¢Å“â€¢
                           </button>
                         </span>
                       ))}
@@ -1014,7 +1014,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                     }
                     className="bg-orange-600 hover:bg-orange-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
                   >
-                    {isSubmittingRoast ? 'Saving…' : 'Log Roast'}
+                    {isSubmittingRoast ? 'SavingÃ¢â‚¬Â¦' : 'Log Roast'}
                   </Button>
                 </div>
               </form>
@@ -1063,7 +1063,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                 },
               })
               setData((prev) => ({ ...prev, greenBeanLots: [lot, ...prev.greenBeanLots] }))
-              addToast({ type: 'success', message: `เพิ่ม External Lot สำเร็จ!` })
+              addToast({ type: 'success', message: 'Added external lot successfully.' })
               setIsAddLotModalOpen(false)
               setNewLotForm({
                 originName: '',
@@ -1081,7 +1081,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             } catch (err: unknown) {
               addToast({
                 type: 'error',
-                message: err instanceof Error ? err.message : 'ไม่สามารถเพิ่ม Lot ได้',
+                message: err instanceof Error ? err.message : 'Unable to add this lot.',
               })
             } finally {
               setIsAddingLot(false)
@@ -1098,36 +1098,36 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             </div>
           </div>
 
-          {/* Top summary – only for purchase modal */}
+          {/* Top summary Ã¢â‚¬â€œ only for purchase modal */}
           <div className="mb-6 rounded-2xl border border-gray-200 bg-gray-50 p-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
               <div>
                 <span className="font-semibold text-gray-900">Origin name:</span>{' '}
-                <span className="text-gray-700">{newLotForm.originName || '—'}</span>
+                <span className="text-gray-700">{newLotForm.originName || 'Ã¢â‚¬â€'}</span>
               </div>
               <div>
                 <span className="font-semibold text-gray-900">Variety:</span>{' '}
-                <span className="text-gray-700">{newLotForm.variety || '—'}</span>
+                <span className="text-gray-700">{newLotForm.variety || 'Ã¢â‚¬â€'}</span>
               </div>
               <div>
                 <span className="font-semibold text-gray-900">Process name:</span>{' '}
-                <span className="text-gray-700">{newLotForm.processType || '—'}</span>
+                <span className="text-gray-700">{newLotForm.processType || 'Ã¢â‚¬â€'}</span>
               </div>
               <div>
                 <span className="font-semibold text-gray-900">Producer:</span>{' '}
-                <span className="text-gray-700">{newLotForm.producerName || '—'}</span>
+                <span className="text-gray-700">{newLotForm.producerName || 'Ã¢â‚¬â€'}</span>
               </div>
 
               <div>
                 <span className="font-semibold text-gray-900">Taste note:</span>{' '}
-                <span className="text-gray-700">{newLotForm.tasteNote || '—'}</span>
+                <span className="text-gray-700">{newLotForm.tasteNote || 'Ã¢â‚¬â€'}</span>
               </div>
               <div className="md:col-span-2">
                 <span className="font-semibold text-gray-900">Price:</span>{' '}
                 <span className="text-gray-700">
                   {newLotForm.pricePerKg
                     ? `${parseFloat(newLotForm.pricePerKg).toFixed(2)} ${newLotForm.currency}`
-                    : '—'}
+                    : 'Ã¢â‚¬â€'}
                 </span>
               </div>
             </div>

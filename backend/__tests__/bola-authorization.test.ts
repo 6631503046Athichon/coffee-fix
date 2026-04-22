@@ -162,6 +162,11 @@ describe('BOLA Authorization Tests', () => {
         isSuperAdmin: false,
       }
 
+      mockPrisma.greenBeanLot.findUnique.mockResolvedValueOnce({
+        id: 'lot-123',
+        currentWeightKg: 100,
+        availabilityStatus: 'Available',
+      })
       mockPrisma.greenBeanLot.update.mockResolvedValueOnce({
         id: 'lot-123',
         grade: 'A',
@@ -194,6 +199,11 @@ describe('BOLA Authorization Tests', () => {
         isSuperAdmin: false,
       }
 
+      mockPrisma.greenBeanLot.findUnique.mockResolvedValueOnce({
+        id: 'lot-123',
+        currentWeightKg: 100,
+        availabilityStatus: 'Available',
+      })
       mockPrisma.greenBeanLot.update.mockResolvedValueOnce({
         id: 'lot-123',
         grade: 'A',
@@ -783,6 +793,11 @@ describe('BOLA Authorization Tests', () => {
       }
 
       // Test on a route that requires specific role
+      mockPrisma.greenBeanLot.findUnique.mockResolvedValueOnce({
+        id: 'lot-123',
+        currentWeightKg: 100,
+        availabilityStatus: 'Available',
+      })
       mockPrisma.greenBeanLot.update.mockResolvedValueOnce({
         id: 'lot-123',
         parchmentLot: {},

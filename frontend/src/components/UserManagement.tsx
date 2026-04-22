@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { User, UserRole } from '../types';
 import { Users as UsersIcon, AlertCircle, UserPlus, Edit, Trash2, Shield, Search, Key, X, Filter, ChevronDown, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { getAllUsers, updateUser, deleteUser } from '../services/userService';
@@ -89,6 +90,7 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({ options, value, onChang
 
 const UserManagement: React.FC = () => {
     const { currentUser } = useAuth();
+    const navigate = useNavigate();
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>('');
@@ -109,9 +111,9 @@ const UserManagement: React.FC = () => {
     useEffect(() => {
         if (currentUser && !isAdmin) {
             // This should not happen if ProtectedRoute works, but adding as safety
-            window.location.href = '/farmer-dashboard';
+            navigate('/farmer-dashboard', { replace: true });
         }
-    }, [currentUser, isAdmin]);
+    }, [currentUser, isAdmin, navigate]);
 
     // Modal states
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -242,6 +244,7 @@ const UserManagement: React.FC = () => {
     }
 
     const superAdmin = users.find((u) => u.isSuperAdmin);
+    const currentSuperAdmin = currentUser?.isSuperAdmin ? currentUser : superAdmin || null;
 
     return (
         <div>
@@ -396,16 +399,16 @@ const UserManagement: React.FC = () => {
                             )}
                             {error.includes('connection pool') && (
                                 <div className="text-xs text-red-600 mt-2 space-y-1">
-                                    <p><strong>วิธีแก้ไข:</strong></p>
+                                    <p><strong>How to fix:</strong></p>
                                     <ol className="list-decimal list-inside ml-2 space-y-1">
-                                        <li>ไปที่ Vercel Project Settings → Environment Variables</li>
-                                        <li>ตั้งค่า DATABASE_URL ให้ใช้ connection pooler:</li>
-                                        <li className="ml-4">- Supabase: ใช้ port 6543 และเพิ่ม ?pgbouncer=true</li>
-                                        <li className="ml-4">- Neon: เพิ่ม ?pgbouncer=true&connection_limit=1</li>
-                                        <li className="ml-4">- หรือใช้ Prisma Accelerate (แนะนำ)</li>
+                                        <li>Open Vercel Project Settings and go to Environment Variables</li>
+                                        <li>Configure `DATABASE_URL` to use a connection pooler:</li>
+                                        <li className="ml-4">- Supabase: use port `6543` and add `?pgbouncer=true`</li>
+                                        <li className="ml-4">- Neon: add `?pgbouncer=true&amp;connection_limit=1`</li>
+                                        <li className="ml-4">- Or use Prisma Accelerate</li>
                                         <li>Redeploy application</li>
                                     </ol>
-                                    <p className="mt-2">ดูรายละเอียดเพิ่มเติมใน backend/CONNECTION_POOLING.md</p>
+                                    <p className="mt-2">See `backend/CONNECTION_POOLING.md` for more detail.</p>
                                 </div>
                             )}
                         </div>
@@ -567,12 +570,12 @@ const UserManagement: React.FC = () => {
                 onUserUpdated={fetchUsers}
             />
 
-            <TransferOwnershipModal
-                isOpen={showTransferModal}
-                currentSuperAdmin={superAdmin || null}
-                onClose={() => setShowTransferModal(false)}
-                onTransferComplete={fetchUsers}
-            />
+                <TransferOwnershipModal
+                    isOpen={showTransferModal}
+                    currentSuperAdmin={currentSuperAdmin}
+                    onClose={() => setShowTransferModal(false)}
+                    onTransferComplete={fetchUsers}
+                />
 
             {/* Reset Password Modal */}
             {resetPasswordUser && (

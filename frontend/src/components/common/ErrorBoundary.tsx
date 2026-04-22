@@ -1,4 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { redirectToHashRoute } from '../../utils/hashRouting';
 import { AlertCircle, RefreshCw, Home } from 'lucide-react';
 import { logger } from '../../utils/logger';
 
@@ -73,7 +74,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   };
 
   handleGoHome = (): void => {
-    window.location.href = '/';
+    redirectToHashRoute('/');
   };
 
   render(): ReactNode {

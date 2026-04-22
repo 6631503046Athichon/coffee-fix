@@ -41,9 +41,10 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { name, description, colorScheme, isActive } = body
+    const normalizedName = typeof name === 'string' ? name.trim() : ''
 
     // Validation
-    if (!name) {
+    if (!normalizedName) {
       return NextResponse.json(
         { error: 'Name is required' },
         { status: 400 }
@@ -59,8 +60,8 @@ export async function POST(request: NextRequest) {
 
     const processType = await prisma.processType.create({
       data: {
-        name,
-        description: description || null,
+        name: normalizedName,
+        description: typeof description === 'string' ? description.trim() || null : null,
         colorScheme: JSON.stringify(colorScheme),
         isActive: isActive !== undefined ? isActive : true,
       },

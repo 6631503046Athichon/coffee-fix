@@ -14,6 +14,41 @@ export default defineConfig(({ mode }) => {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
       },
+      build: {
+        rollupOptions: {
+          output: {
+            manualChunks(id) {
+              if (!id.includes('node_modules')) return undefined;
+
+              if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) {
+                return 'vendor-react';
+              }
+
+              if (id.includes('react-router') || id.includes('@remix-run')) {
+                return 'vendor-router';
+              }
+
+              if (id.includes('recharts') || id.includes('/d3-') || id.includes('/internmap/')) {
+                return 'vendor-charts';
+              }
+
+              if (id.includes('@google/genai')) {
+                return 'vendor-ai';
+              }
+
+              if (id.includes('qrcode') || id.includes('jszip') || id.includes('file-saver')) {
+                return 'vendor-files';
+              }
+
+              if (id.includes('lucide-react')) {
+                return 'vendor-ui';
+              }
+
+              return 'vendor-misc';
+            },
+          },
+        },
+      },
       resolve: {
         alias: {
           '@': path.resolve(__dirname, './src'),

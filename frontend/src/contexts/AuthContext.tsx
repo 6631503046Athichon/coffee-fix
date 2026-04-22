@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
 import { authService } from '../services/authService';
+import { getCurrentHashRoute, redirectToHashRoute } from '../utils/hashRouting';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -78,8 +79,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('auth-token');
       
       // Redirect to login if not already there
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
+      if (getCurrentHashRoute() !== '/login') {
+        redirectToHashRoute('/login');
       }
     };
 

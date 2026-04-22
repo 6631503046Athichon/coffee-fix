@@ -121,7 +121,7 @@ const FarmMapView: React.FC<FarmMapViewProps> = ({
   useEffect(() => {
     const handleNavigate = (event: CustomEvent) => {
       const farmId = event.detail;
-      navigate(`/farmer-dashboard/farm/${farmId}`);
+      navigate(`/farmer-farms/edit/${farmId}`);
     };
     window.addEventListener('navigateToFarm', handleNavigate as EventListener);
     return () => {

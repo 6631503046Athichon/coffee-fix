@@ -65,10 +65,13 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, onClose, on
     setLoading(true)
 
     try {
+      const trimmedEmail = email.trim()
+      const trimmedUsername = username.trim()
+
       await updateUser(user.id, {
         name: name.trim(),
-        email: email.trim() || null,
-        username: username.trim() || null,
+        email: trimmedEmail || null,
+        username: trimmedUsername || user.username || undefined,
         roles,
         isActive,
       })
@@ -174,7 +177,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, onClose, on
                 placeholder="Optional username"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Leave empty to keep current username
+                Clear the field to keep the current username unchanged
               </p>
             </div>
 

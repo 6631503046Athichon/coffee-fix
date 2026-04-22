@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom';
-import QRCode from 'qrcode';
 import { GreenBeanLot } from '../../types';
 import { FileText, Printer, X } from 'lucide-react';
-import { getPublicTraceUrl } from '../../services/greenBeanLotService';
+import { generateQRDataUrl, getPublicTraceUrl, getTraceabilityLotUrl } from '../../services/greenBeanLotService';
 import { formatGreenBeanId } from '../../utils/formatDisplayId';
 
 interface InvoiceReceiptProps {
@@ -21,19 +20,14 @@ const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({ visible, onClose, lot, 
       return getPublicTraceUrl(lot.publicTraceId);
     }
 
-    try {
-      const base = typeof window !== 'undefined' ? window.location.origin : '';
-      return `${base}/traceability/${lot.id}`;
-    } catch {
-      return `/traceability/${lot.id}`;
-    }
+    return getTraceabilityLotUrl(lot.id);
   }, [lot.id, lot.publicTraceId]);
 
   useEffect(() => {
     let canceled = false;
     (async () => {
       try {
-        const url = await QRCode.toDataURL(traceabilityUrl, { margin: 1, width: 256 });
+        const url = await generateQRDataUrl(traceabilityUrl, { margin: 1, size: 256 });
         if (!canceled) setQrDataUrl(url);
       } catch {
         // ignore QR errors

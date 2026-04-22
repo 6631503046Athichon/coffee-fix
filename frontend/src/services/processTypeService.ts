@@ -69,50 +69,39 @@ export const getActiveProcessTypes = async (): Promise<ProcessType[]> => {
 /**
  * Add a new process type
  */
-export const addProcessType = async (processType: Omit<ProcessType, 'id'>): Promise<ProcessType | null> => {
-  try {
-    const data = await api.post<SingleProcessTypeResponse>('/process-types', {
-      name: processType.name,
-      description: processType.description,
-      colorScheme: processType.colorScheme,
-      isActive: processType.isActive,
-    });
-    return mapProcessType(data.processType);
-  } catch (error) {
-    console.error('Error adding process type:', error);
-    return null;
-  }
+export const addProcessType = async (processType: {
+  name: string;
+  description?: string;
+  colorScheme: ProcessType['colorScheme'];
+  isActive: boolean;
+}): Promise<ProcessType> => {
+  const data = await api.post<SingleProcessTypeResponse>('/process-types', {
+    name: processType.name,
+    description: processType.description || null,
+    colorScheme: processType.colorScheme,
+    isActive: processType.isActive,
+  });
+  return mapProcessType(data.processType);
 };
 
 /**
  * Update an existing process type
  */
-export const updateProcessType = async (processType: ProcessType): Promise<ProcessType | null> => {
-  try {
-    const data = await api.patch<SingleProcessTypeResponse>(`/process-types/${processType.id}`, {
-      name: processType.name,
-      description: processType.description,
-      colorScheme: processType.colorScheme,
-      isActive: processType.isActive,
-    });
-    return mapProcessType(data.processType);
-  } catch (error) {
-    console.error('Error updating process type:', error);
-    return null;
-  }
+export const updateProcessType = async (processType: ProcessType): Promise<ProcessType> => {
+  const data = await api.put<SingleProcessTypeResponse>(`/process-types/${processType.id}`, {
+    name: processType.name,
+    description: processType.description || null,
+    colorScheme: processType.colorScheme,
+    isActive: processType.isActive,
+  });
+  return mapProcessType(data.processType);
 };
 
 /**
  * Delete a process type
  */
-export const deleteProcessType = async (id: string): Promise<boolean> => {
-  try {
-    await api.delete(`/process-types/${id}`);
-    return true;
-  } catch (error) {
-    console.error('Error deleting process type:', error);
-    return false;
-  }
+export const deleteProcessType = async (id: string): Promise<void> => {
+  await api.delete(`/process-types/${id}`);
 };
 
 export const processTypeNameExists = async (name: string, excludeId?: string): Promise<boolean> => {

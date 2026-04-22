@@ -247,12 +247,23 @@ export const getQRCodeUrl = (
   return `${baseUrl}/green-bean-lots/${lotId}/qr?format=${format}&size=${size}`;
 };
 
+const getFrontendBaseUrl = (): string => {
+  if (typeof window === 'undefined') return '';
+  const appPath = window.location.pathname === '/'
+    ? ''
+    : window.location.pathname.replace(/\/$/, '');
+  return `${window.location.origin}${appPath}`;
+};
+
 /**
  * Build the public trace URL for a lot
  */
 export const getPublicTraceUrl = (publicTraceId: string): string => {
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-  return `${baseUrl}/trace/${publicTraceId}`;
+  return `${getFrontendBaseUrl()}/#/trace/${publicTraceId}`;
+};
+
+export const getTraceabilityLotUrl = (lotId: string): string => {
+  return `${getFrontendBaseUrl()}/#/traceability/${lotId}`;
 };
 
 export interface PublicTraceData {

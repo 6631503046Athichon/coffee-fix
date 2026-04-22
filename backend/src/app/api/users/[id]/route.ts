@@ -123,14 +123,14 @@ export async function PUT(
       // Regular admin cannot modify Super Admin
       if (targetIsSuperAdmin) {
         return NextResponse.json(
-          { error: 'ไม่สามารถแก้ไขข้อมูล Super Admin ได้ ต้องใช้สิทธิ์ Super Admin' },
+          { error: 'Cannot modify the super admin account without super admin privileges' },
           { status: 403 }
         )
       }
       // Regular admin cannot modify other admins
       if (targetIsAdmin && currentUser.id !== id) {
         return NextResponse.json(
-          { error: 'ไม่สามารถแก้ไขข้อมูล Admin คนอื่นได้ ต้องใช้สิทธิ์ Super Admin' },
+          { error: 'Cannot modify another admin account without super admin privileges' },
           { status: 403 }
         )
       }
@@ -241,7 +241,7 @@ export async function DELETE(
     // Cannot delete Super Admin
     if (targetIsSuperAdmin) {
       return NextResponse.json(
-        { error: 'ไม่สามารถลบ Super Admin ได้' },
+        { error: 'Cannot delete the super admin account' },
         { status: 403 }
       )
     }
@@ -249,7 +249,7 @@ export async function DELETE(
     // Only Super Admin can delete other admins
     if (targetIsAdmin && !currentUser.isSuperAdmin) {
       return NextResponse.json(
-        { error: 'ไม่สามารถลบ Admin คนอื่นได้ ต้องใช้สิทธิ์ Super Admin' },
+        { error: 'Cannot delete another admin account without super admin privileges' },
         { status: 403 }
       )
     }
