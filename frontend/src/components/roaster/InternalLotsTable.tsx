@@ -185,14 +185,17 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
                     </td>
                     {/* Action */}
                     <td className="px-4 py-3 text-right align-middle">
-                      <Button
-                        variant="success"
-                        size="sm"
-                        icon={<PlusCircle className="h-4 w-4" />}
-                        onClick={() => onLogRoast(lot)}
-                      >
-                        Roast
-                      </Button>
+                      <div className="flex justify-end">
+                        <Button
+                          variant="success"
+                          size="sm"
+                          className="min-w-[92px] justify-center"
+                          icon={<PlusCircle className="h-4 w-4" />}
+                          onClick={() => onLogRoast(lot)}
+                        >
+                          Roast
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))
