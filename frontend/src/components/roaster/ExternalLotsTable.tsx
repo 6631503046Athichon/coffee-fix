@@ -74,7 +74,7 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full table-fixed">
           <colgroup>
             <col className="w-[18%]" />
             <col className="w-[18%]" />
@@ -97,13 +97,13 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
                 Available
               </th>
               <th className="px-4 py-3 text-right text-xs font-normal text-white tracking-wide bg-black">
-                <div className="flex items-center justify-end gap-3">
-                  <span className="leading-none">Action</span>
+                <div className="w-[104px] ml-auto flex flex-col items-stretch gap-2">
+                  <span className="sr-only">Action</span>
                   <Button
                     variant="success"
                     size="sm"
                     icon={<PlusCircle className="h-3.5 w-3.5" />}
-                    className="min-w-[92px] justify-center"
+                    className="w-full justify-center"
                     onClick={onAddExternal}
                   >
                     Add Lot
@@ -192,11 +192,11 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
                     <span className="text-sm text-gray-400 ml-1">kg</span>
                   </td>
                   <td className="px-4 py-3 text-right align-middle">
-                    <div className="flex justify-end">
+                    <div className="w-[104px] ml-auto">
                       <Button
                         variant="success"
                         size="sm"
-                        className="min-w-[92px] justify-center"
+                        className="w-full justify-center"
                         disabled={loadingLotId === lot.id}
                         onClick={() => onRoast(lot)}
                       >
