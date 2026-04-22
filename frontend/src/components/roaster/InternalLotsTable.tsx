@@ -43,6 +43,7 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({ lots, onLogRoast,
 
   return (
     <>
+    console.log('Rendering InternalLotsTable with lots:', lots);
     <div className={hideHeader ? '' : 'bg-white rounded-xl border border-gray-200 overflow-hidden'}>
       {/* Header */}
       {!hideHeader && (
