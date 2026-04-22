@@ -49,6 +49,54 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (!dryingStartDate || !dryingEndDate) {
+      return NextResponse.json(
+        { error: 'Drying start date and drying end date are required' },
+        { status: 400 }
+      )
+    }
+
+    const dryingStart = new Date(dryingStartDate)
+    const dryingEnd = new Date(dryingEndDate)
+    if (Number.isNaN(dryingStart.getTime()) || Number.isNaN(dryingEnd.getTime())) {
+      return NextResponse.json(
+        { error: 'Drying dates must be valid dates' },
+        { status: 400 }
+      )
+    }
+
+    if (dryingEnd < dryingStart) {
+      return NextResponse.json(
+        { error: 'Drying end date cannot be before drying start date' },
+        { status: 400 }
+      )
+    }
+
+    let gradedWeightSum = 0
+    const seenGrades = new Set<string>()
+    for (let i = 0; i < gradedLots.length; i++) {
+      const gl = gradedLots[i]
+      const grade = typeof gl?.grade === 'string' ? gl.grade.trim() : ''
+      const weight = safeParseFloat(gl?.weight)
+
+      if (!grade || weight === null || weight <= 0) {
+        return NextResponse.json(
+          { error: 'Each graded lot must include a unique grade and a weight greater than 0' },
+          { status: 400 }
+        )
+      }
+
+      if (seenGrades.has(grade)) {
+        return NextResponse.json(
+          { error: `Duplicate grade is not allowed: ${grade}` },
+          { status: 400 }
+        )
+      }
+
+      seenGrades.add(grade)
+      gradedWeightSum += weight
+    }
+
     // Validate harvest lot
     const harvestLot = await prisma.harvestLot.findUnique({
       where: { id: harvestLotId },
@@ -70,12 +118,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (gradedWeightSum - parsedParchmentWeight > 0.01) {
+      return NextResponse.json(
+        { error: 'Total green bean weight cannot exceed parchment weight' },
+        { status: 400 }
+      )
+    }
+
     // Pre-generate display IDs
     const batchDisplayId = await nextDisplayId(prisma.processingBatch, 'PB')
     const parchmentDisplayId = await nextDisplayId(prisma.parchmentLot, 'PCH')
     const greenBeanDisplayIds: string[] = []
     for (let i = 0; i < gradedLots.length; i++) {
-      greenBeanDisplayIds.push(await nextDisplayId(prisma.greenBeanLot, 'GB'))
+      greenBeanDisplayIds.push(await nextDisplayId(prisma.greenBeanLot, 'GBL'))
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -91,8 +146,8 @@ export async function POST(request: NextRequest) {
           createdById: user.id,
           parchmentWeightKg: parsedParchmentWeight,
           moistureContent: parsedMoistureContent,
-          dryingStartDate: dryingStartDate ? new Date(dryingStartDate) : null,
-          dryingEndDate: dryingEndDate ? new Date(dryingEndDate) : null,
+          dryingStartDate: dryingStart,
+          dryingEndDate: dryingEnd,
         },
       })
 
@@ -119,6 +174,18 @@ export async function POST(request: NextRequest) {
           moistureContent: parsedMoistureContent,
           processType,
           status: 'Hulled',
+        },
+      })
+
+      await tx.parchmentWithdrawal.create({
+        data: {
+          parchmentLotId: parchmentLot.id,
+          amountKg: parsedParchmentWeight,
+          withdrawalType: 'HullAndGrade',
+          purpose: `Immediate hull after ${processType} process`,
+          notes: processNotes || null,
+          withdrawnBy: user.id,
+          withdrawnByName: user.name,
         },
       })
 
@@ -157,10 +224,19 @@ export async function POST(request: NextRequest) {
       return { batch, parchmentLot, greenBeanLots: createdGreenBeans }
     })
 
+    const parchmentLotWithHistory = await prisma.parchmentLot.findUnique({
+      where: { id: result.parchmentLot.id },
+      include: {
+        withdrawalHistory: {
+          orderBy: { date: 'desc' },
+        },
+      },
+    })
+
     return NextResponse.json(
       {
         processingBatch: result.batch,
-        parchmentLot: result.parchmentLot,
+        parchmentLot: parchmentLotWithHistory ?? result.parchmentLot,
         greenBeanLots: result.greenBeanLots,
         message: 'Process and hull completed successfully',
       },

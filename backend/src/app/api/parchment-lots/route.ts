@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma, ParchmentLotStatus } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
-import { nextDisplayId } from '@/lib/utils'
+import { nextDisplayId, safeParseFloat } from '@/lib/utils'
 
 // GET /api/parchment-lots - List all parchment lots
 export async function GET(request: NextRequest) {
@@ -80,9 +80,42 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    if (!initialWeightKg || !moistureContent || !processType) {
+    if (initialWeightKg === undefined || moistureContent === undefined || !processType) {
       return NextResponse.json(
         { error: 'Initial weight, moisture content, and process type are required' },
+        { status: 400 }
+      )
+    }
+
+    const parsedInitialWeight = safeParseFloat(initialWeightKg)
+    const parsedCurrentWeight =
+      currentWeightKg === undefined ? parsedInitialWeight : safeParseFloat(currentWeightKg)
+    const parsedMoistureContent = safeParseFloat(moistureContent)
+
+    if (parsedInitialWeight === null || parsedInitialWeight <= 0) {
+      return NextResponse.json(
+        { error: 'Initial weight must be greater than 0' },
+        { status: 400 }
+      )
+    }
+
+    if (parsedCurrentWeight === null || parsedCurrentWeight < 0) {
+      return NextResponse.json(
+        { error: 'Current weight must be 0 or greater' },
+        { status: 400 }
+      )
+    }
+
+    if (parsedCurrentWeight - parsedInitialWeight > 0.01) {
+      return NextResponse.json(
+        { error: 'Current weight cannot exceed initial weight' },
+        { status: 400 }
+      )
+    }
+
+    if (parsedMoistureContent === null || parsedMoistureContent < 0 || parsedMoistureContent > 100) {
+      return NextResponse.json(
+        { error: 'Moisture content must be between 0 and 100' },
         { status: 400 }
       )
     }
@@ -96,11 +129,11 @@ export async function POST(request: NextRequest) {
         harvestLotId: harvestLotId || null,
         sourceType: isExternal ? 'External' : 'Internal',
         externalSource: isExternal && externalSource ? externalSource : undefined,
-        initialWeightKg: parseFloat(initialWeightKg),
-        currentWeightKg: currentWeightKg ? parseFloat(currentWeightKg) : parseFloat(initialWeightKg),
-        moistureContent: parseFloat(moistureContent),
+        initialWeightKg: parsedInitialWeight,
+        currentWeightKg: parsedCurrentWeight,
+        moistureContent: parsedMoistureContent,
         processType,
-        status: status || 'AwaitingHulling',
+        status: status || (parsedCurrentWeight <= 0 ? 'Hulled' : 'AwaitingHulling'),
       },
       include: {
         processingBatch: {
@@ -141,9 +174,32 @@ export async function PUT(
     const { currentWeightKg, moistureContent, status, physicalTestResults } = body
 
     const updateData: Prisma.ParchmentLotUpdateInput = {}
-    if (currentWeightKg !== undefined) updateData.currentWeightKg = parseFloat(currentWeightKg)
-    if (moistureContent !== undefined) updateData.moistureContent = parseFloat(moistureContent)
-    if (status !== undefined) updateData.status = status
+    let parsedCurrentWeight: number | null = null
+    if (currentWeightKg !== undefined) {
+      parsedCurrentWeight = safeParseFloat(currentWeightKg)
+      if (parsedCurrentWeight === null || parsedCurrentWeight < 0) {
+        return NextResponse.json(
+          { error: 'Current weight must be 0 or greater' },
+          { status: 400 }
+        )
+      }
+      updateData.currentWeightKg = parsedCurrentWeight
+    }
+    if (moistureContent !== undefined) {
+      const parsedMoistureContent = safeParseFloat(moistureContent)
+      if (parsedMoistureContent === null || parsedMoistureContent < 0 || parsedMoistureContent > 100) {
+        return NextResponse.json(
+          { error: 'Moisture content must be between 0 and 100' },
+          { status: 400 }
+        )
+      }
+      updateData.moistureContent = parsedMoistureContent
+    }
+    if (parsedCurrentWeight !== null && parsedCurrentWeight <= 0) {
+      updateData.status = 'Hulled'
+    } else if (status !== undefined) {
+      updateData.status = status
+    }
 
     // Update or create physical test results
     if (physicalTestResults) {

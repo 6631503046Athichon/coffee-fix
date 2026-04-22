@@ -73,14 +73,13 @@ import {
   deleteProcessingBatch,
 } from "../../services/processingBatchService";
 import {
-  createGreenBeanLot,
   updateGreenBeanLotScore,
   updateGreenBeanLotAvailability,
   createWithdrawal,
   deleteGreenBeanLot,
 } from "../../services/greenBeanLotService";
 import {
-  updateParchmentLot,
+  createParchmentWithdrawal,
   deleteParchmentLot,
 } from "../../services/parchmentLotService";
 import type { CuppingDetailUpdate } from "../../services/greenBeanLotService";
@@ -131,6 +130,7 @@ interface ProcessorWorkbenchProps {
 const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   currentUser,
 }) => {
+  const MAX_GRADE_OPTIONS = 8;
   const { data, setData, refreshData } = useDataContext();
   const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>("kanban");
@@ -364,6 +364,29 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       0,
     );
   }, [gradedLots]);
+
+  const selectedHullGrades = useMemo(
+    () => gradedLots.map((lot) => lot.grade).filter(Boolean),
+    [gradedLots],
+  );
+
+  const duplicateHullGrades = useMemo(() => {
+    const seen = new Set<string>();
+    const duplicates = new Set<string>();
+
+    selectedHullGrades.forEach((grade) => {
+      if (seen.has(grade)) {
+        duplicates.add(grade);
+      } else {
+        seen.add(grade);
+      }
+    });
+
+    return Array.from(duplicates);
+  }, [selectedHullGrades]);
+
+  const hasDuplicateHullGrades = duplicateHullGrades.length > 0;
+  const canAddMoreHullGrades = gradedLots.length < MAX_GRADE_OPTIONS;
 
   const resetAllScoreForms = useCallback(() => {
     setSimpleQcScore("");
@@ -918,10 +941,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           setFormError("Please enter weights for the graded lots.");
           return;
         }
-        // Validation: Total Green Bean Weight must not exceed Parchment Weight
         if (greenWeight > selectedParchment.currentWeightKg) {
           setFormError(
-            `Total Green Bean Weight (${greenWeight.toFixed(2)} kg) ไม่สามารถเกิน Parchment Weight (${selectedParchment.currentWeightKg.toFixed(2)} kg)`,
+            `Total Green Bean Weight (${greenWeight.toFixed(2)} kg) cannot exceed Parchment Weight (${selectedParchment.currentWeightKg.toFixed(2)} kg)`,
           );
           return;
         }
@@ -931,64 +953,43 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           );
           return;
         }
+        if (
+          gradedLots.some(
+            (lot) => !lot.grade || (parseFloat(lot.weight) || 0) <= 0,
+          )
+        ) {
+          setFormError("Each graded lot must have a grade and weight greater than 0.");
+          return;
+        }
+        if (hasDuplicateHullGrades) {
+          setFormError(
+            `Each graded lot must use a different grade. Duplicate grade: ${duplicateHullGrades.join(", ")}`,
+          );
+          return;
+        }
 
         setIsSubmitting(true);
         try {
-          // Create green bean lots via API and collect created lot info
-          const createdLots: { id: string; grade: string }[] = [];
-          for (const gl of gradedLots) {
-            const weight = parseFloat(gl.weight);
-            if (isNaN(weight) || weight <= 0) continue;
-            const score = gl.score ? parseFloat(gl.score) : undefined;
-            const price = gl.price ? parseFloat(gl.price) : undefined;
-
-            const createdLot = await createGreenBeanLot({
-              sourceType: "Internal",
-              parchmentLotId: selectedParchment.id,
-              grade: gl.grade,
-              initialWeightKg: weight,
-              currentWeightKg: weight,
-              availabilityStatus: "Available",
-              processorScore: score,
-              pricePerKg: price,
-              currency: price !== undefined ? "THB" : undefined,
-            });
-
-            if (createdLot?.id) {
-              createdLots.push({ id: createdLot.id, grade: gl.grade });
-            }
-          }
-
-          // Calculate remaining parchment weight
-          // Direct 1:1 subtraction: if you hull 20 kg, subtract 20 kg from parchment
-          const currentParchmentWeight =
-            selectedParchment.currentWeightKg ||
-            selectedParchment.initialWeightKg;
-          const remainingWeight = Math.max(
-            0,
-            currentParchmentWeight - greenWeight,
-          );
-
-          // Update parchment lot status based on remaining weight
-          // If remaining_weight > 0 → status = Awaiting Hulling
-          // If remaining_weight == 0 → status = Hulled
-          const newStatus =
-            remainingWeight > 0 ? "AwaitingHulling" : "Hulled";
-          await updateParchmentLot(selectedParchment.id, {
-            status: newStatus,
-            currentWeightKg: Math.round(remainingWeight * 100) / 100,
+          await createParchmentWithdrawal(selectedParchment.id, {
+            amountKg: selectedParchment.currentWeightKg,
+            withdrawalType: "HullAndGrade",
+            purpose: "Hull and grade",
+            totalGreenBeanWeight: greenWeight,
+            gradedLots: gradedLots.map((lot) => ({
+              grade: lot.grade,
+              weight: parseFloat(lot.weight) || 0,
+              price: lot.price ? parseFloat(lot.price) : undefined,
+              score: lot.score ? parseFloat(lot.score) : undefined,
+            })),
           });
 
-          // Refresh data from backend
           await refreshData();
 
-          // Show finished toast
           addToast({
             type: "success",
             message: "Hull and Grade Finished!",
           });
 
-          // Close modal and reset form
           setModal(null);
           setSelectedParchment(null);
           setTotalGreenWeight("");
@@ -997,7 +998,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           ]);
           setFormError(null);
 
-          // Scroll to Green Bean Stock section
           setTimeout(() => {
             greenBeanStockRef.current?.scrollIntoView({
               behavior: "smooth",
@@ -1008,10 +1008,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           console.error("Failed to hull and grade:", error);
           addToast({
             type: "error",
-            message: "Failed to update parchment lot status. Please try again.",
+            message: error?.message || "Failed to hull and grade. Please try again.",
           });
           setFormError(error?.message || "Failed to save. Please try again.");
-          // Don't close modal on error so user can retry
         } finally {
           setIsSubmitting(false);
         }
@@ -1078,6 +1077,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           setWithdrawalCustomerName("");
           setWithdrawalDeliveryAddress("");
           setWithdrawalTargetRoasterId("");
+          setSelectedGreenBean(null);
+          setFormError(null);
+          setModal(null);
         } catch (err: any) {
           const msg =
             err?.message || "เกิดข้อผิดพลาดในการ Withdraw Stock";
@@ -1091,7 +1093,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       }
 
     }
-    setModal(null);
   };
 
   const openModal = (type: string, item: any) => {
@@ -1124,6 +1125,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const handleToggleAvailability = async (lotId: string) => {
     const lot = data.greenBeanLots.find((g) => g.id === lotId);
     if (!lot) return;
+    if (lot.currentWeightKg <= 0) {
+      addToast({
+        type: "error",
+        message: "Cannot change availability for a depleted lot.",
+      });
+      return;
+    }
     const newStatus = lot.availabilityStatus === "Available" ? "Withdrawn" : "Available";
     try {
       const updatedLot = await updateGreenBeanLotAvailability(lotId, newStatus);
@@ -2943,7 +2951,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </div>
                         <button
                           onClick={() => handleToggleAvailability(g.id)}
-                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${g.availabilityStatus === "Available" ? "bg-teal-50 text-teal-700 hover:bg-teal-100" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                          disabled={g.currentWeightKg <= 0}
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${g.availabilityStatus === "Available" ? "bg-teal-50 text-teal-700 hover:bg-teal-100" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
                         >
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${g.availabilityStatus === "Available" ? "bg-teal-500" : "bg-gray-400"}`}
@@ -3410,7 +3419,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                     )
                                   }
                                   index={index}
-                                  usedGrades={gradedLots.map((l) => l.grade).filter((g) => g)}
+                                  usedGrades={selectedHullGrades}
                                 />
                                 <input
                                   type="number"
@@ -3463,17 +3472,31 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               { grade: "", weight: "", price: "", score: "" },
                             ])
                           }
-                          className="w-full py-2.5 border border-dashed border-green-300 rounded-xl text-xs font-bold text-green-600 hover:bg-green-50 hover:border-green-400 transition-all flex items-center justify-center gap-1.5"
+                          disabled={!canAddMoreHullGrades}
+                          className="w-full py-2.5 border border-dashed border-green-300 rounded-xl text-xs font-bold text-green-600 hover:bg-green-50 hover:border-green-400 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Plus size={14} /> Add Grade
                         </button>
+
+                        {hasDuplicateHullGrades && (
+                          <div className="mt-3 flex items-start gap-2 bg-red-50 rounded-lg p-3 border border-red-200">
+                            <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
+                            <p className="text-xs font-semibold text-red-700">
+                              Each graded lot must use a different grade. Duplicate grade:{" "}
+                              {duplicateHullGrades.join(", ")}
+                            </p>
+                          </div>
+                        )}
 
                         {/* Summary Bar */}
                         {(() => {
                           const pct = totalWeightNum > 0
                             ? (gradedWeightSum / totalWeightNum) * 100
                             : 0;
-                          const hasError = weightMismatch || exceedsParchmentWeight;
+                          const hasError =
+                            weightMismatch ||
+                            exceedsParchmentWeight ||
+                            hasDuplicateHullGrades;
                           const isComplete = !hasError && totalWeightNum > 0;
                           return (
                             <div className={`mt-4 rounded-xl p-3 border transition-colors ${hasError ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"}`}>
@@ -3798,6 +3821,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         (Math.abs(
                           gradedWeightSum - (parseFloat(totalGreenWeight) || 0),
                         ) > 0.01 ||
+                          hasDuplicateHullGrades ||
+                          gradedLots.some(
+                            (lot) =>
+                              !lot.grade ||
+                              (parseFloat(lot.weight) || 0) <= 0,
+                          ) ||
                           (parseFloat(totalGreenWeight) || 0) <= 0 ||
                           (parseFloat(totalGreenWeight) || 0) >
                             (selectedParchment?.currentWeightKg || 0)))

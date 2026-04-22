@@ -14,6 +14,17 @@ import {
 } from "lucide-react";
 import DatePicker from "../../common/DatePicker";
 
+const GRADE_OPTIONS = [
+  { value: "Grade A", label: "Grade A" },
+  { value: "Grade B", label: "Grade B" },
+  { value: "Grade C", label: "Grade C" },
+  { value: "Peaberry", label: "Peaberry" },
+  { value: "Screen 18", label: "Screen 18" },
+  { value: "Screen 17", label: "Screen 17" },
+  { value: "Screen 16", label: "Screen 16" },
+  { value: "Screen 15", label: "Screen 15" },
+];
+
 // --- Inline sub-components (copied from StartProcessingModal / HullAndGradeModal) ---
 
 // Custom Dropdown Component for Process Type Selection
@@ -167,21 +178,14 @@ const CropYearChips: React.FC<{
 const GradeDropdown: React.FC<{
   value: string;
   onChange: (value: string) => void;
-  index: number;
-}> = ({ value, onChange, index }) => {
+  usedGrades?: string[];
+}> = ({ value, onChange, usedGrades = [] }) => {
   const [isOpen, setIsOpen] = React.useState(false);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
 
-  const options = [
-    { value: "Grade A", label: "Grade A" },
-    { value: "Grade B", label: "Grade B" },
-    { value: "Grade C", label: "Grade C" },
-    { value: "Peaberry", label: "Peaberry" },
-    { value: "Screen 18", label: "Screen 18" },
-    { value: "Screen 17", label: "Screen 17" },
-    { value: "Screen 16", label: "Screen 16" },
-    { value: "Screen 15", label: "Screen 15" },
-  ];
+  const options = GRADE_OPTIONS.filter(
+    (option) => !usedGrades.includes(option.value) || option.value === value,
+  );
 
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -196,7 +200,7 @@ const GradeDropdown: React.FC<{
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const selectedOption = options.find((opt) => opt.value === value);
+  const selectedOption = GRADE_OPTIONS.find((opt) => opt.value === value);
 
   return (
     <div ref={dropdownRef} className="relative">
@@ -418,6 +422,34 @@ const ProcessAndHullModal: React.FC<ProcessAndHullModalProps> = ({
         ).toFixed(1)
       : "0";
 
+  const hasInvalidDryingRange =
+    Boolean(dryingStartDate) &&
+    Boolean(dryingEndDate) &&
+    new Date(dryingEndDate) < new Date(dryingStartDate);
+
+  const selectedGrades = useMemo(
+    () => gradedLots.map((lot) => lot.grade).filter(Boolean),
+    [gradedLots],
+  );
+
+  const duplicateGrades = useMemo(() => {
+    const seen = new Set<string>();
+    const duplicates = new Set<string>();
+
+    selectedGrades.forEach((grade) => {
+      if (seen.has(grade)) {
+        duplicates.add(grade);
+      } else {
+        seen.add(grade);
+      }
+    });
+
+    return Array.from(duplicates);
+  }, [selectedGrades]);
+
+  const hasDuplicateGrades = duplicateGrades.length > 0;
+  const canAddMoreGrades = gradedLots.length < GRADE_OPTIONS.length;
+
   // ---- Validation ----
   const isValid = useMemo(() => {
     if (!harvestLotId) return false;
@@ -426,6 +458,7 @@ const ProcessAndHullModal: React.FC<ProcessAndHullModalProps> = ({
     if (parchmentWeightNum > lotMaxWeight) return false;
     if (moistureContentNum < 0 || moistureContentNum > 100) return false;
     if (!dryingStartDate || !dryingEndDate) return false;
+    if (hasInvalidDryingRange) return false;
     if (gradedLots.length < 1) return false;
     if (totalGreenWeightNum <= 0) return false;
     if (totalGreenWeightNum > parchmentWeightNum) return false;
@@ -434,6 +467,7 @@ const ProcessAndHullModal: React.FC<ProcessAndHullModalProps> = ({
       (lot) => lot.grade && parseFloat(lot.weight) > 0,
     );
     if (!allGradesValid) return false;
+    if (hasDuplicateGrades) return false;
     // Sum of graded lot weights must match total green bean weight
     if (Math.abs(gradedWeightSum - totalGreenWeightNum) > 0.01) return false;
     return true;
@@ -445,7 +479,9 @@ const ProcessAndHullModal: React.FC<ProcessAndHullModalProps> = ({
     moistureContentNum,
     dryingStartDate,
     dryingEndDate,
+    hasInvalidDryingRange,
     gradedLots,
+    hasDuplicateGrades,
     totalGreenWeightNum,
     gradedWeightSum,
   ]);
@@ -654,6 +690,14 @@ const ProcessAndHullModal: React.FC<ProcessAndHullModalProps> = ({
             />
           </div>
         </div>
+        {hasInvalidDryingRange && (
+          <div className="mt-3 flex items-start gap-2 bg-red-50 rounded-xl p-4 border border-red-200">
+            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm font-semibold text-red-800">
+              Drying End Date cannot be before Drying Start Date.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Visual Divider - Hull & Grade */}
@@ -761,7 +805,7 @@ const ProcessAndHullModal: React.FC<ProcessAndHullModalProps> = ({
                         ),
                       )
                     }
-                    index={index}
+                    usedGrades={selectedGrades}
                   />
                 </div>
                 <div>
@@ -853,10 +897,26 @@ const ProcessAndHullModal: React.FC<ProcessAndHullModalProps> = ({
             { grade: "", weight: "", price: "", score: "" },
           ])
         }
-        className="w-full py-3 px-4 border border-dashed border-green-300 rounded-xl text-sm font-bold text-green-600 hover:bg-green-50 hover:border-green-400 transition-all flex items-center justify-center gap-2"
+        disabled={!canAddMoreGrades}
+        className="w-full py-3 px-4 border border-dashed border-green-300 rounded-xl text-sm font-bold text-green-600 hover:bg-green-50 hover:border-green-400 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        title={
+          canAddMoreGrades
+            ? "Add another graded lot"
+            : "All available grades have already been used"
+        }
       >
         <Plus size={18} /> Add Another Grade
       </button>
+
+      {hasDuplicateGrades && (
+        <div className="mt-4 flex items-start gap-2 bg-red-50 rounded-xl p-4 border border-red-200">
+          <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <p className="text-sm font-semibold text-red-800">
+            Each graded lot must use a different grade. Duplicate grade:{" "}
+            {duplicateGrades.join(", ")}
+          </p>
+        </div>
+      )}
 
       {/* Weight Validation Summary */}
       <div

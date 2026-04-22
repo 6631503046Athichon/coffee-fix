@@ -17,27 +17,31 @@ import {
   X,
 } from "lucide-react";
 
+const GRADE_OPTIONS = [
+  { value: "Grade A", label: "Grade A" },
+  { value: "Grade B", label: "Grade B" },
+  { value: "Grade C", label: "Grade C" },
+  { value: "Peaberry", label: "Peaberry" },
+  { value: "Screen 18", label: "Screen 18" },
+  { value: "Screen 17", label: "Screen 17" },
+  { value: "Screen 16", label: "Screen 16" },
+  { value: "Screen 15", label: "Screen 15" },
+];
+
 // ---------------------------------------------------------------------------
 // GradeDropdown (inlined from HullAndGradeModal pattern)
 // ---------------------------------------------------------------------------
 const GradeDropdown: React.FC<{
   value: string;
   onChange: (value: string) => void;
-  index: number;
-}> = ({ value, onChange, index }) => {
+  usedGrades?: string[];
+}> = ({ value, onChange, usedGrades = [] }) => {
   const [isOpen, setIsOpen] = React.useState(false);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
 
-  const options = [
-    { value: "Grade A", label: "Grade A" },
-    { value: "Grade B", label: "Grade B" },
-    { value: "Grade C", label: "Grade C" },
-    { value: "Peaberry", label: "Peaberry" },
-    { value: "Screen 18", label: "Screen 18" },
-    { value: "Screen 17", label: "Screen 17" },
-    { value: "Screen 16", label: "Screen 16" },
-    { value: "Screen 15", label: "Screen 15" },
-  ];
+  const options = GRADE_OPTIONS.filter(
+    (option) => !usedGrades.includes(option.value) || option.value === value,
+  );
 
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -52,7 +56,7 @@ const GradeDropdown: React.FC<{
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const selectedOption = options.find((opt) => opt.value === value);
+  const selectedOption = GRADE_OPTIONS.find((opt) => opt.value === value);
 
   return (
     <div ref={dropdownRef} className="relative">
@@ -124,6 +128,7 @@ export interface ParchmentWithdrawModalProps {
     targetRoasterId?: string;
     roastProfileNotes?: string;
     cuppingScore?: number;
+    totalGreenBeanWeight?: number;
     gradedLots?: { grade: string; weight: number; price?: number; score?: number }[];
   }) => Promise<void>;
   onCancel: () => void;
@@ -193,7 +198,31 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
   );
   const weightMismatch =
     totalGreenNum > 0 && Math.abs(gradedWeightSum - totalGreenNum) > 0.01;
-  const exceedsParchmentWeight = totalGreenNum > parchmentLot.currentWeightKg;
+  const exceedsSelectedHullAmount =
+    withdrawalType === "HullAndGrade" && totalGreenNum > amtNum;
+  const selectedGrades = useMemo(
+    () => gradedLots.map((lot) => lot.grade).filter(Boolean),
+    [gradedLots],
+  );
+  const duplicateGrades = useMemo(() => {
+    const seen = new Set<string>();
+    const duplicates = new Set<string>();
+
+    selectedGrades.forEach((grade) => {
+      if (seen.has(grade)) {
+        duplicates.add(grade);
+      } else {
+        seen.add(grade);
+      }
+    });
+
+    return Array.from(duplicates);
+  }, [selectedGrades]);
+  const hasDuplicateGrades = duplicateGrades.length > 0;
+  const allHullGradesValid = gradedLots.every(
+    (lot) => lot.grade && parseFloat(lot.weight) > 0,
+  );
+  const canAddMoreGrades = gradedLots.length < GRADE_OPTIONS.length;
 
   const lotId =
     parchmentLot.displayId || parchmentLot.id.substring(0, 8).toUpperCase();
@@ -201,9 +230,12 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
   // ---- submission ----
   const canSubmit = (() => {
     if (isSubmitting || amtNum <= 0 || isOver) return false;
+    if (!purpose.trim()) return false;
+    if (withdrawalType === "RoastingStock" && !targetRoasterId) return false;
     if (withdrawalType === "HullAndGrade") {
-      if (totalGreenNum <= 0 || exceedsParchmentWeight || weightMismatch)
+      if (totalGreenNum <= 0 || exceedsSelectedHullAmount || weightMismatch)
         return false;
+      if (!allHullGradesValid || hasDuplicateGrades) return false;
     }
     return true;
   })();
@@ -232,6 +264,7 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
     }
 
     if (withdrawalType === "HullAndGrade") {
+      base.totalGreenBeanWeight = totalGreenNum;
       base.gradedLots = gradedLots.map((l) => ({
         grade: l.grade,
         weight: parseFloat(l.weight) || 0,
@@ -459,22 +492,22 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
             <input
               type="number"
               step="0.1"
-              max={parchmentLot.currentWeightKg}
+              max={withdrawalType === "HullAndGrade" ? amtNum || undefined : parchmentLot.currentWeightKg}
               value={totalGreenWeight}
               onChange={(e) => setTotalGreenWeight(e.target.value)}
-              placeholder={`Max: ${parchmentLot.currentWeightKg.toFixed(2)} kg`}
+              placeholder={`Max: ${(withdrawalType === "HullAndGrade" && amtNum > 0 ? amtNum : parchmentLot.currentWeightKg).toFixed(2)} kg`}
               className={`block w-full border rounded-lg py-2 px-3 text-sm font-semibold focus:outline-none focus:ring-1 transition-all ${
-                exceedsParchmentWeight
+                exceedsSelectedHullAmount
                   ? "border-red-500 focus:ring-red-500 focus:border-red-500 bg-red-50"
                   : "border-gray-300 focus:ring-green-500 focus:border-green-500"
               }`}
             />
-            {exceedsParchmentWeight && (
+            {exceedsSelectedHullAmount && (
               <div className="mt-2 flex items-start gap-2 bg-red-50 rounded-lg p-3 border border-red-200">
                 <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
                 <p className="text-xs font-semibold text-red-800">
                   Total Green Bean Weight ({totalGreenNum.toFixed(2)} kg) cannot exceed
-                  Parchment Weight ({parchmentLot.currentWeightKg.toFixed(2)} kg)
+                  Amount to Hull ({amtNum.toFixed(2)} kg)
                 </p>
               </div>
             )}
@@ -519,7 +552,7 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
                               ),
                             )
                           }
-                          index={index}
+                          usedGrades={selectedGrades}
                         />
                       </div>
                       <div>
@@ -609,15 +642,31 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
                   { grade: "", weight: "", price: "", score: "" },
                 ])
               }
-              className="w-full mt-2 py-2 px-3 border border-dashed border-green-300 rounded-lg text-xs font-bold text-green-600 hover:bg-green-50 hover:border-green-400 transition-all flex items-center justify-center gap-1.5"
+              disabled={!canAddMoreGrades}
+              className="w-full mt-2 py-2 px-3 border border-dashed border-green-300 rounded-lg text-xs font-bold text-green-600 hover:bg-green-50 hover:border-green-400 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={
+                canAddMoreGrades
+                  ? "Add another graded lot"
+                  : "All available grades have already been used"
+              }
             >
               <Plus size={14} /> Add Another Grade
             </button>
 
+            {hasDuplicateGrades && (
+              <div className="mt-3 flex items-start gap-1.5 bg-red-100 rounded-md p-2 border border-red-200">
+                <AlertCircle size={12} className="text-red-600 flex-shrink-0 mt-0.5" />
+                <p className="text-[10px] font-semibold text-red-800">
+                  Each graded lot must use a different grade. Duplicate grade:{" "}
+                  {duplicateGrades.join(", ")}
+                </p>
+              </div>
+            )}
+
             {/* Weight validation summary */}
             <div
               className={`mt-3 rounded-lg p-3 border transition-all ${
-                weightMismatch
+                weightMismatch || exceedsSelectedHullAmount
                   ? "bg-red-50 border-red-300"
                   : "bg-green-50 border-green-300"
               }`}
@@ -626,7 +675,7 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
                 <span className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">
                   Total Accounted For
                 </span>
-                {weightMismatch ? (
+                {weightMismatch || exceedsSelectedHullAmount ? (
                   <AlertCircle className="h-4 w-4 text-red-600" />
                 ) : (
                   <Check className="h-4 w-4 text-green-600" />
@@ -635,7 +684,9 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
               <div className="flex items-baseline gap-1.5">
                 <span
                   className={`text-xl font-extrabold ${
-                    weightMismatch ? "text-red-600" : "text-green-600"
+                    weightMismatch || exceedsSelectedHullAmount
+                      ? "text-red-600"
+                      : "text-green-600"
                   }`}
                 >
                   {gradedWeightSum.toFixed(2)}
@@ -653,7 +704,15 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
                   </p>
                 </div>
               )}
-              {!weightMismatch && totalGreenNum > 0 && (
+              {exceedsSelectedHullAmount && (
+                <div className="mt-2 flex items-start gap-1.5 bg-red-100 rounded-md p-2 border border-red-200">
+                  <AlertCircle size={12} className="text-red-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-[10px] font-semibold text-red-800">
+                    Total green bean weight cannot exceed the parchment amount selected for hulling.
+                  </p>
+                </div>
+              )}
+              {!weightMismatch && !exceedsSelectedHullAmount && totalGreenNum > 0 && (
                 <div className="mt-2 flex items-center gap-1.5 bg-green-100 rounded-md p-2 border border-green-200">
                   <Check size={12} className="text-green-600 flex-shrink-0" />
                   <p className="text-[10px] font-semibold text-green-800">

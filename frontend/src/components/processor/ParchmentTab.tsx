@@ -20,7 +20,10 @@ import {
   ExternalLink,
   ArrowRight,
 } from "lucide-react";
-import { formatParchmentId } from "../../utils/formatDisplayId";
+import {
+  formatGreenBeanId,
+  formatParchmentId,
+} from "../../utils/formatDisplayId";
 import {
   createParchmentWithdrawal,
   processAndHull,
@@ -87,6 +90,8 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   const [showProcessAndHullModal, setShowProcessAndHullModal] = useState(false);
   const [preSelectedHarvestLotId, setPreSelectedHarvestLotId] = useState<string | undefined>();
   const [selectedParchmentForWithdraw, setSelectedParchmentForWithdraw] =
+    useState<ParchmentLot | null>(null);
+  const [selectedParchmentForHistory, setSelectedParchmentForHistory] =
     useState<ParchmentLot | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -188,6 +193,20 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     }
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
   }, [filteredLots]);
+
+  const greenBeansByParchmentLotId = useMemo(() => {
+    return data.greenBeanLots.reduce<Record<string, typeof data.greenBeanLots>>(
+      (acc, lot) => {
+        if (!lot.parchmentLotId) return acc;
+        if (!acc[lot.parchmentLotId]) {
+          acc[lot.parchmentLotId] = [];
+        }
+        acc[lot.parchmentLotId].push(lot);
+        return acc;
+      },
+      {},
+    );
+  }, [data.greenBeanLots]);
 
   // ---- Handlers ----
 
@@ -635,6 +654,14 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                       {lots.map((lot) => {
                         const historyCount =
                           lot.withdrawalHistory?.length || 0;
+                        const relatedGreenBeanLots =
+                          greenBeansByParchmentLotId[lot.id] || [];
+                        const hasHistory =
+                          historyCount > 0 || relatedGreenBeanLots.length > 0;
+                        const historyBadgeCount =
+                          historyCount > 0
+                            ? historyCount
+                            : relatedGreenBeanLots.length;
                         const isExternal = lot.sourceType === "External";
                         return (
                           <tr
@@ -698,11 +725,18 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                               </span>
                             </td>
                             <td className="px-4 py-3 text-center">
-                              {historyCount > 0 ? (
-                                <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                              {hasHistory ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setSelectedParchmentForHistory(lot)
+                                  }
+                                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-all"
+                                  title="View lot history"
+                                >
                                   <History className="h-3 w-3" />
-                                  {historyCount}
-                                </span>
+                                  {historyBadgeCount}
+                                </button>
                               ) : (
                                 <span className="text-xs text-gray-300">
                                   —
@@ -781,6 +815,239 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
       )}
 
       {/* ─── Excel Import Modal ─── */}
+      {selectedParchmentForHistory && (
+        <ModalPortal>
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
+              <div className="flex flex-col h-full overflow-y-auto p-8">
+                {(() => {
+                  const withdrawalHistory =
+                    selectedParchmentForHistory.withdrawalHistory || [];
+                  const relatedGreenBeanLots =
+                    greenBeansByParchmentLotId[
+                      selectedParchmentForHistory.id
+                    ] || [];
+
+                  return (
+                    <>
+                      <div className="flex items-center gap-4 mb-8">
+                        <div className="p-4 bg-amber-500 rounded-2xl shadow-lg">
+                          <History className="h-10 w-10 text-white" />
+                        </div>
+                        <div>
+                          <h2 className="text-3xl font-bold text-gray-900">
+                            Parchment Lot History
+                          </h2>
+                          <p className="text-base text-gray-600 mt-1">
+                            Lot {formatParchmentId(selectedParchmentForHistory)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                        <div className="bg-amber-50 rounded-2xl p-5 border border-amber-200">
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                            Status
+                          </p>
+                          <p className="text-2xl font-bold text-amber-700">
+                            {formatStatus(selectedParchmentForHistory.status)}
+                          </p>
+                        </div>
+                        <div className="bg-blue-50 rounded-2xl p-5 border border-blue-200">
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                            Withdrawal Records
+                          </p>
+                          <p className="text-2xl font-bold text-blue-700">
+                            {withdrawalHistory.length}
+                          </p>
+                        </div>
+                        <div className="bg-emerald-50 rounded-2xl p-5 border border-emerald-200">
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                            Green Bean Lots
+                          </p>
+                          <p className="text-2xl font-bold text-emerald-700">
+                            {relatedGreenBeanLots.length}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-8">
+                        <section>
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-lg font-bold text-gray-900">
+                              Withdrawal Activity
+                            </h3>
+                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                              {withdrawalHistory.length} record
+                              {withdrawalHistory.length !== 1 ? "s" : ""}
+                            </span>
+                          </div>
+                          {withdrawalHistory.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+                              No parchment withdrawal records were saved for this lot.
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {withdrawalHistory.map((entry) => {
+                                const roasterName = entry.targetRoasterId
+                                  ? data.users.find(
+                                      (user) =>
+                                        user.id === entry.targetRoasterId,
+                                    )?.name
+                                  : undefined;
+                                const destination =
+                                  entry.customerName ||
+                                  roasterName ||
+                                  (entry.withdrawalType === "HullAndGrade"
+                                    ? "Split into green bean lots"
+                                    : entry.purpose);
+
+                                return (
+                                  <div
+                                    key={entry.id}
+                                    className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+                                  >
+                                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                                      <div>
+                                        <div className="flex items-center gap-2 mb-1.5">
+                                          <span className="inline-flex items-center rounded-full bg-white border border-gray-200 px-2.5 py-0.5 text-xs font-bold text-gray-700">
+                                            {entry.withdrawalType}
+                                          </span>
+                                          <span className="text-xs text-gray-500">
+                                            {new Date(entry.date).toLocaleString()}
+                                          </span>
+                                        </div>
+                                        <p className="text-sm font-semibold text-gray-900">
+                                          {destination || "Recorded activity"}
+                                        </p>
+                                        {entry.notes && (
+                                          <p className="text-xs text-gray-500 mt-1">
+                                            {entry.notes}
+                                          </p>
+                                        )}
+                                      </div>
+                                      <div className="text-left sm:text-right">
+                                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                                          Amount
+                                        </p>
+                                        <p className="text-lg font-bold text-gray-900">
+                                          {entry.amountKg.toLocaleString(
+                                            undefined,
+                                            {
+                                              maximumFractionDigits: 2,
+                                            },
+                                          )}{" "}
+                                          kg
+                                        </p>
+                                        {entry.totalAmount && (
+                                          <p className="text-xs text-gray-500 mt-1">
+                                            {entry.totalAmount.toLocaleString(
+                                              undefined,
+                                              {
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2,
+                                              },
+                                            )}{" "}
+                                            {entry.currency || "THB"}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </section>
+
+                        <section>
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-lg font-bold text-gray-900">
+                              Green Bean Lots Created
+                            </h3>
+                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                              {relatedGreenBeanLots.length} lot
+                              {relatedGreenBeanLots.length !== 1 ? "s" : ""}
+                            </span>
+                          </div>
+                          {relatedGreenBeanLots.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+                              No green bean lots linked to this parchment lot yet.
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {relatedGreenBeanLots.map((greenBeanLot) => (
+                                <div
+                                  key={greenBeanLot.id}
+                                  className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"
+                                >
+                                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                                    <div>
+                                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                        Lot ID
+                                      </p>
+                                      <p className="text-sm font-bold text-gray-900">
+                                        {formatGreenBeanId(greenBeanLot)}
+                                      </p>
+                                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                                        <span className="inline-flex items-center rounded-full bg-white border border-emerald-200 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                                          {greenBeanLot.grade}
+                                        </span>
+                                        <span className="inline-flex items-center rounded-full bg-white border border-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-600">
+                                          {greenBeanLot.availabilityStatus}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="text-left sm:text-right">
+                                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                                        Current Weight
+                                      </p>
+                                      <p className="text-lg font-bold text-emerald-700">
+                                        {greenBeanLot.currentWeightKg.toLocaleString(
+                                          undefined,
+                                          {
+                                            maximumFractionDigits: 2,
+                                          },
+                                        )}{" "}
+                                        kg
+                                      </p>
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        Initial{" "}
+                                        {greenBeanLot.initialWeightKg.toLocaleString(
+                                          undefined,
+                                          {
+                                            maximumFractionDigits: 2,
+                                          },
+                                        )}{" "}
+                                        kg
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </section>
+                      </div>
+
+                      <div className="sticky bottom-0 mt-8 bg-white pt-4 border-t border-gray-100 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedParchmentForHistory(null)}
+                          className="px-6 py-2.5 border border-gray-300 rounded-xl shadow-sm text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
       {showImportModal && (
         <ModalPortal>
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">

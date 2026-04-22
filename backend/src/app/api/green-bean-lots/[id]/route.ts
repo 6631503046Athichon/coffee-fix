@@ -198,6 +198,22 @@ export async function PUT(
     requireRole(user, ['Processor', 'Admin']);
     const { id } = await params;
 
+    const existingLot = await prisma.greenBeanLot.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        currentWeightKg: true,
+        availabilityStatus: true,
+      },
+    });
+
+    if (!existingLot) {
+      return NextResponse.json(
+        { error: "Green bean lot not found" },
+        { status: 404 },
+      );
+    }
+
     const body = await request.json();
     const {
       grade,
@@ -212,18 +228,43 @@ export async function PUT(
     // without needing a nested `connect`.
     const updateData: Prisma.GreenBeanLotUncheckedUpdateInput = {};
     if (grade !== undefined) updateData.grade = grade;
+    let nextWeight = existingLot.currentWeightKg;
     if (currentWeightKg !== undefined) {
       const weight = safeParseFloat(currentWeightKg);
-      if (weight !== null) updateData.currentWeightKg = weight;
+      if (weight === null || weight < 0) {
+        return NextResponse.json(
+          { error: "Invalid currentWeightKg value" },
+          { status: 400 },
+        );
+      }
+      nextWeight = weight;
+      updateData.currentWeightKg = weight;
     }
-    if (availabilityStatus !== undefined)
+    if (nextWeight <= 0) {
+      updateData.availabilityStatus = 'Withdrawn';
+    } else if (availabilityStatus !== undefined) {
       updateData.availabilityStatus = availabilityStatus;
+    }
     if (pricePerKg !== undefined) {
-      updateData.pricePerKg = safeParseFloat(pricePerKg);
+      const parsedPrice = safeParseFloat(pricePerKg);
+      if (parsedPrice === null || parsedPrice < 0) {
+        return NextResponse.json(
+          { error: "Invalid pricePerKg value" },
+          { status: 400 },
+        );
+      }
+      updateData.pricePerKg = parsedPrice;
     }
     if (currency !== undefined) updateData.currency = currency;
     if (priceSetDate !== undefined) {
-      updateData.priceSetDate = priceSetDate ? new Date(priceSetDate) : null;
+      const parsedPriceSetDate = priceSetDate ? new Date(priceSetDate) : null;
+      if (priceSetDate && parsedPriceSetDate && Number.isNaN(parsedPriceSetDate.getTime())) {
+        return NextResponse.json(
+          { error: "Invalid priceSetDate value" },
+          { status: 400 },
+        );
+      }
+      updateData.priceSetDate = parsedPriceSetDate;
       updateData.priceSetBy = user.id;
     }
 
@@ -258,9 +299,9 @@ export async function PUT(
     });
 
     // Create pricing history entry if price was set
-    if (pricePerKg && currency) {
+    if (pricePerKg !== undefined && currency) {
       const price = safeParseFloat(pricePerKg);
-      if (price !== null) {
+      if (price !== null && price >= 0) {
         await prisma.pricingHistory.create({
           data: {
             greenBeanLotId: id,

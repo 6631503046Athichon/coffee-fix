@@ -21,9 +21,16 @@ export async function POST(
       gradedLots, totalGreenBeanWeight,
     } = body
 
-    if (!amountKg || !withdrawalType || !purpose) {
+    if (amountKg === undefined || !withdrawalType || !purpose) {
       return NextResponse.json(
         { error: 'Amount, withdrawal type, and purpose are required' },
+        { status: 400 }
+      )
+    }
+
+    if (withdrawalType === 'RoastingStock' && !targetRoasterId) {
+      return NextResponse.json(
+        { error: 'Target roaster is required for Roasting Stock withdrawal' },
         { status: 400 }
       )
     }
@@ -63,6 +70,55 @@ export async function POST(
           { status: 400 }
         )
       }
+
+      const declaredGreenWeight = safeParseFloat(totalGreenBeanWeight)
+      let gradedWeightSum = 0
+      const seenGrades = new Set<string>()
+
+      for (let i = 0; i < gradedLots.length; i++) {
+        const gl = gradedLots[i]
+        const grade = typeof gl?.grade === 'string' ? gl.grade.trim() : ''
+        const weight = safeParseFloat(gl?.weight)
+
+        if (!grade || weight === null || weight <= 0) {
+          return NextResponse.json(
+            { error: 'Each graded lot must include a unique grade and a weight greater than 0' },
+            { status: 400 }
+          )
+        }
+
+        if (seenGrades.has(grade)) {
+          return NextResponse.json(
+            { error: `Duplicate grade is not allowed: ${grade}` },
+            { status: 400 }
+          )
+        }
+
+        seenGrades.add(grade)
+        gradedWeightSum += weight
+      }
+
+      const effectiveGreenWeight = declaredGreenWeight ?? gradedWeightSum
+      if (effectiveGreenWeight <= 0) {
+        return NextResponse.json(
+          { error: 'Total green bean weight must be greater than 0' },
+          { status: 400 }
+        )
+      }
+
+      if (effectiveGreenWeight - amount > 0.01) {
+        return NextResponse.json(
+          { error: 'Total green bean weight cannot exceed the parchment amount withdrawn' },
+          { status: 400 }
+        )
+      }
+
+      if (declaredGreenWeight !== null && Math.abs(gradedWeightSum - declaredGreenWeight) > 0.01) {
+        return NextResponse.json(
+          { error: 'The sum of graded lots must exactly match the declared total green bean weight' },
+          { status: 400 }
+        )
+      }
     }
 
     // Calculate total amount for sales
@@ -75,7 +131,7 @@ export async function POST(
     let greenBeanDisplayIds: string[] = []
     if (withdrawalType === 'HullAndGrade' && gradedLots) {
       for (let i = 0; i < gradedLots.length; i++) {
-        const displayId = await nextDisplayId(prisma.greenBeanLot, 'GB')
+        const displayId = await nextDisplayId(prisma.greenBeanLot, 'GBL')
         greenBeanDisplayIds.push(displayId)
       }
     }

@@ -154,12 +154,12 @@ function extractLotAnalysisData(appData: AppData) {
             if (session && sample && session.finalResults && session.finalResults[sample.id]) {
                 finalScore = session.finalResults[sample.id].totalScore;
                 finalNotes = session.finalResults[sample.id].finalNotes;
-            } else if (scoreInfo.score) {
+            } else if (scoreInfo.score != null) {
                 finalScore = scoreInfo.score;
             }
         }
 
-        if (!finalScore) return null;
+        if (finalScore == null) return null;
 
         return {
             lotId: gbl.id,
@@ -364,12 +364,12 @@ function extractTrendAnalysisData(appData: AppData) {
             if (session && sample && session.finalResults && session.finalResults[sample.id]) {
                 finalScore = session.finalResults[sample.id].totalScore;
                 finalNotes = session.finalResults[sample.id].finalNotes;
-            } else if (scoreInfo.score) {
+            } else if (scoreInfo.score != null) {
                 finalScore = scoreInfo.score;
             }
         }
 
-        if (!finalScore) return null;
+        if (finalScore == null) return null;
 
         return {
             score: finalScore.toFixed(2),

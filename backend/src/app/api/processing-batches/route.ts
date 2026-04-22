@@ -134,6 +134,32 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      if (!dryingStartDate || !dryingEndDate) {
+        return NextResponse.json(
+          { error: "Drying start date and drying end date are required for completed batches" },
+          { status: 400 },
+        );
+      }
+
+      const parsedDryingStartDate = new Date(dryingStartDate);
+      const parsedDryingEndDate = new Date(dryingEndDate);
+      if (
+        Number.isNaN(parsedDryingStartDate.getTime()) ||
+        Number.isNaN(parsedDryingEndDate.getTime())
+      ) {
+        return NextResponse.json(
+          { error: "Drying dates must be valid dates" },
+          { status: 400 },
+        );
+      }
+
+      if (parsedDryingEndDate < parsedDryingStartDate) {
+        return NextResponse.json(
+          { error: "Drying end date cannot be before drying start date" },
+          { status: 400 },
+        );
+      }
+
       const availableWeight =
         harvestLot.remainingWeightKg ?? harvestLot.weightKg;
       if (parsedParchmentWeight > availableWeight) {

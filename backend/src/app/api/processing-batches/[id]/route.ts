@@ -74,14 +74,58 @@ export async function PUT(
     if (processType !== undefined) updateData.processType = processType
     if (processNotes !== undefined) updateData.processNotes = processNotes
     if (parchmentWeightKg !== undefined) {
-      updateData.parchmentWeightKg = safeParseFloat(parchmentWeightKg)
+      const parsedParchmentWeight = safeParseFloat(parchmentWeightKg)
+      if (parsedParchmentWeight === null || parsedParchmentWeight <= 0) {
+        return NextResponse.json(
+          { error: 'Parchment weight must be greater than 0' },
+          { status: 400 }
+        )
+      }
+      updateData.parchmentWeightKg = parsedParchmentWeight
     }
     if (moistureContent !== undefined) {
-      updateData.moistureContent = safeParseFloat(moistureContent)
+      const parsedMoistureContent = safeParseFloat(moistureContent)
+      if (parsedMoistureContent === null || parsedMoistureContent < 0 || parsedMoistureContent > 100) {
+        return NextResponse.json(
+          { error: 'Moisture content must be between 0 and 100' },
+          { status: 400 }
+        )
+      }
+      updateData.moistureContent = parsedMoistureContent
     }
-    if (baggingDate !== undefined) updateData.baggingDate = baggingDate ? new Date(baggingDate) : null
-    if (dryingStartDate !== undefined) updateData.dryingStartDate = dryingStartDate ? new Date(dryingStartDate) : null
-    if (dryingEndDate !== undefined) updateData.dryingEndDate = dryingEndDate ? new Date(dryingEndDate) : null
+    const parsedBaggingDate = baggingDate !== undefined ? (baggingDate ? new Date(baggingDate) : null) : undefined
+    const parsedDryingStartDate = dryingStartDate !== undefined ? (dryingStartDate ? new Date(dryingStartDate) : null) : undefined
+    const parsedDryingEndDate = dryingEndDate !== undefined ? (dryingEndDate ? new Date(dryingEndDate) : null) : undefined
+
+    for (const [field, value] of [
+      ['baggingDate', parsedBaggingDate],
+      ['dryingStartDate', parsedDryingStartDate],
+      ['dryingEndDate', parsedDryingEndDate],
+    ] as const) {
+      if (value && Number.isNaN(value.getTime())) {
+        return NextResponse.json(
+          { error: `Invalid ${field} value` },
+          { status: 400 }
+        )
+      }
+    }
+
+    const effectiveDryingStart = parsedDryingStartDate !== undefined
+      ? parsedDryingStartDate
+      : undefined
+    const effectiveDryingEnd = parsedDryingEndDate !== undefined
+      ? parsedDryingEndDate
+      : undefined
+    if (effectiveDryingStart && effectiveDryingEnd && effectiveDryingEnd < effectiveDryingStart) {
+      return NextResponse.json(
+        { error: 'Drying end date cannot be before drying start date' },
+        { status: 400 }
+      )
+    }
+
+    if (baggingDate !== undefined) updateData.baggingDate = parsedBaggingDate
+    if (dryingStartDate !== undefined) updateData.dryingStartDate = parsedDryingStartDate
+    if (dryingEndDate !== undefined) updateData.dryingEndDate = parsedDryingEndDate
     if (cropYearId !== undefined) updateData.cropYearId = cropYearId
 
     const updatedBatch = await prisma.processingBatch.update({

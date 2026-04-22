@@ -77,12 +77,12 @@ const TraceabilityHub: React.FC = () => {
                         const sample = session?.samples?.find(s => s?.greenBeanLotId === gbl.id);
                         if (session && sample && session.finalResults && session.finalResults[sample.id]) {
                             finalScore = session.finalResults[sample.id].totalScore.toFixed(2);
-                        } else if (scoreInfo.score) {
+                        } else if (scoreInfo.score != null) {
                             finalScore = scoreInfo.score.toFixed(2);
                         }
                     } catch (error) {
                         console.error('Error processing cupping score:', error);
-                        if (scoreInfo.score) {
+                        if (scoreInfo.score != null) {
                             finalScore = scoreInfo.score.toFixed(2);
                         }
                     }
@@ -113,8 +113,11 @@ const TraceabilityHub: React.FC = () => {
                 const matchesVariety = varietyFilter === 'All' || lot.variety === varietyFilter;
                 const matchesProcess = processFilter === 'All' || lot.processType === processFilter;
                 const matchesGrade = gradeFilter === 'All' || lot.grade === gradeFilter;
+                const formattedLotId = formatGreenBeanId(lot).toLowerCase();
                 return (
                     (lot.id?.toLowerCase() || '').includes(searchLower) ||
+                    formattedLotId.includes(searchLower) ||
+                    (lot.publicTraceId?.toLowerCase() || '').includes(searchLower) ||
                     (lot.grade?.toLowerCase() || '').includes(searchLower) ||
                     (lot.processType?.toLowerCase() || '').includes(searchLower) ||
                     (lot.variety?.toLowerCase() || '').includes(searchLower)
@@ -185,11 +188,21 @@ const TraceabilityHub: React.FC = () => {
     };
 
     const handleSelectAll = () => {
-        if (selectedLots.size === paginatedLots.length) {
-            setSelectedLots(new Set());
-        } else {
-            setSelectedLots(new Set(paginatedLots.map(lot => lot.id)));
-        }
+        const currentPageLotIds = paginatedLots.map(lot => lot.id);
+        setSelectedLots(prev => {
+            const next = new Set(prev);
+            const allSelectedOnPage = currentPageLotIds.every(id => next.has(id));
+
+            currentPageLotIds.forEach(id => {
+                if (allSelectedOnPage) {
+                    next.delete(id);
+                } else {
+                    next.add(id);
+                }
+            });
+
+            return next;
+        });
     };
 
     const clearSelection = () => {
@@ -230,7 +243,8 @@ const TraceabilityHub: React.FC = () => {
         );
     }
 
-    const isAllSelected = paginatedLots.length > 0 && selectedLots.size === paginatedLots.length;
+    const selectedOnPageCount = paginatedLots.filter(lot => selectedLots.has(lot.id)).length;
+    const isAllSelected = paginatedLots.length > 0 && selectedOnPageCount === paginatedLots.length;
     const isSomeSelected = selectedLots.size > 0;
 
     return (
@@ -337,6 +351,15 @@ const TraceabilityHub: React.FC = () => {
                     <table className="min-w-full">
                         <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
+                                <th className="px-4 py-4 text-left">
+                                    <input
+                                        type="checkbox"
+                                        checked={isAllSelected}
+                                        onChange={handleSelectAll}
+                                        aria-label="Select all lots on this page"
+                                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                </th>
                                 <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Lot ID</th>
                                 <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Variety</th>
                                 <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Process</th>
@@ -350,7 +373,7 @@ const TraceabilityHub: React.FC = () => {
                         <tbody className="bg-white divide-y divide-gray-100">
                             {paginatedLots.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="px-6 py-12 text-center">
+                                    <td colSpan={9} className="px-6 py-12 text-center">
                                         <Search className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                                         <p className="text-sm font-medium text-gray-500">
                                             {enrichedLots.length === 0
@@ -363,7 +386,7 @@ const TraceabilityHub: React.FC = () => {
                                 paginatedLots.map(lot => {
                                     if (!lot || !lot.id) return null;
                                     const hasPublicId = !!lot.publicTraceId;
-                                    const displayScore = lot.processorScore
+                                    const displayScore = lot.processorScore != null
                                         ? lot.processorScore.toFixed(1)
                                         : lot.finalScore;
                                     const isNew = isRecentLot(lot.createdAt);
@@ -373,6 +396,15 @@ const TraceabilityHub: React.FC = () => {
                                             key={lot.id}
                                             className="hover:bg-gray-50 transition-colors duration-200"
                                         >
+                                            <td className="px-4 py-4 whitespace-nowrap">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedLots.has(lot.id)}
+                                                    onChange={() => handleSelectLot(lot.id)}
+                                                    aria-label={`Select ${formatGreenBeanId(lot)}`}
+                                                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                                />
+                                            </td>
                                             <td className="px-4 py-4 whitespace-nowrap">
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-sm font-mono font-semibold text-gray-900" title={lot.id}>
@@ -396,7 +428,7 @@ const TraceabilityHub: React.FC = () => {
                                             </td>
                                             <td className="px-4 py-4 whitespace-nowrap">
                                                 <div className="flex items-center gap-1.5">
-                                                    {lot.processorScore && lot.processorScore >= 80 && (
+                                                    {lot.processorScore != null && lot.processorScore >= 80 && (
                                                         <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
                                                     )}
                                                     <span className="text-sm font-bold text-indigo-600">{displayScore}</span>
