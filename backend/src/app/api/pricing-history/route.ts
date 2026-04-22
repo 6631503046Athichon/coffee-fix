@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, handleApiError } from '@/lib/middleware'
 
@@ -7,7 +8,7 @@ export async function GET(request: NextRequest) {
   try {
     await requireAuth(request)
 
-    const where: any = {}
+    const where: Prisma.PricingHistoryWhereInput = {}
     
     // Filter by greenBeanLotId if provided
     const greenBeanLotId = request.nextUrl.searchParams.get('greenBeanLotId')

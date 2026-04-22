@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
-import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package } from 'lucide-react';
+import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package, Box } from 'lucide-react';
 
 import { UserRole, CuppingSessionType, Customer } from './types';
 import { MOCK_DATA } from './constants';
@@ -29,6 +29,7 @@ import ResetPassword from './components/auth/ResetPassword';
 import { FirstLoginSetup } from './components/auth/FirstLoginSetup';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import ProcessorWorkbench from './components/processor/ProcessorWorkbench';
+import ParchmentPage from './components/processor/ParchmentTab';
 import CuppingHub from './components/cupper/CuppingHub';
 import TraceabilityPage from './components/TraceabilityPage';
 import PublicTraceabilityPage from './components/PublicTraceabilityPage';
@@ -380,6 +381,7 @@ const ProtectedRoutes: React.FC = () => {
 
       // Processor Section
       { name: 'Processor Workbench', href: '/processor', icon: Droplets, roles: [UserRole.Processor, UserRole.Admin], section: 'processor' },
+      { name: 'Parchment', href: '/parchment', icon: Box, roles: [UserRole.Processor, UserRole.Admin], section: 'processor' },
       { name: 'Traceability Hub', href: '/traceability', icon: Search, roles: [UserRole.Admin, UserRole.Processor], section: 'processor' },
       { name: 'Quality Insights', href: '/insights', icon: Lightbulb, roles: [UserRole.Processor], section: 'processor' },
 
@@ -431,6 +433,14 @@ const ProtectedRoutes: React.FC = () => {
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Processor, UserRole.Admin]}>
                     <ProcessorWorkbench currentUser={currentUser!} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/parchment"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Processor, UserRole.Admin]}>
+                    <ParchmentPage currentUser={currentUser!} />
                   </ProtectedRoute>
                 }
               />

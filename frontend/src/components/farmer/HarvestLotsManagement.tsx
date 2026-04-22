@@ -53,6 +53,10 @@ const HarvestLotsManagement: React.FC = () => {
     return filtered.sort((a, b) => {
         const aValue = a[sortColumn];
         const bValue = b[sortColumn];
+        // Treat undefined as smallest so missing values group together consistently.
+        if (aValue === undefined && bValue === undefined) return 0;
+        if (aValue === undefined) return sortDirection === 'asc' ? -1 : 1;
+        if (bValue === undefined) return sortDirection === 'asc' ? 1 : -1;
         if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
         if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
         return 0;

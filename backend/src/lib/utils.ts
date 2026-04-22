@@ -2,12 +2,12 @@
  * Safely parse float value
  * Returns null if value is undefined, null, or not a valid number
  */
-export function safeParseFloat(value: any): number | null {
+export function safeParseFloat(value: unknown): number | null {
   if (value === undefined || value === null || value === '') {
     return null
   }
 
-  const parsed = parseFloat(value)
+  const parsed = parseFloat(String(value))
   return isNaN(parsed) ? null : parsed
 }
 
@@ -15,12 +15,12 @@ export function safeParseFloat(value: any): number | null {
  * Safely parse integer value
  * Returns null if value is undefined, null, or not a valid number
  */
-export function safeParseInt(value: any): number | null {
+export function safeParseInt(value: unknown): number | null {
   if (value === undefined || value === null || value === '') {
     return null
   }
 
-  const parsed = parseInt(value, 10)
+  const parsed = parseInt(String(value), 10)
   return isNaN(parsed) ? null : parsed
 }
 

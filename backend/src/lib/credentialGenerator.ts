@@ -1,5 +1,18 @@
 import crypto from 'crypto'
 
+// Minimal structural type so we can pass either a plain PrismaClient or the
+// $extends()-wrapped singleton from src/lib/prisma.ts (which has a different
+// nominal type than PrismaClient).
+type UserLookupDb = {
+  user: {
+    findMany: (args: {
+      where: { username: { startsWith: string } }
+      select: { username: true }
+      orderBy: { username: 'desc' }
+    }) => Promise<Array<{ username: string | null }>>
+  }
+}
+
 /**
  * Generate a unique username based on role
  * Format: {role_lowercase}_{number}
@@ -7,8 +20,7 @@ import crypto from 'crypto'
  */
 export async function generateUsername(
   role: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any
+  db: UserLookupDb,
 ): Promise<string> {
   const rolePrefix = role.toLowerCase()
 

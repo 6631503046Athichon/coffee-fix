@@ -17,7 +17,11 @@ export async function POST(
     const body = await request.json()
     const { amountKg, withdrawalType, purpose, notes, salePrice, currency, customerName, invoiceNumber, deliveryAddress, targetRoasterId } = body
 
-    if (!amountKg || !withdrawalType || !purpose) {
+    // Presence check: distinguish "field missing" from "field has invalid value".
+    // A literal 0, negative number, NaN (serialised as null by JSON.stringify),
+    // or non-numeric string should reach the parsing branch below so the error
+    // is the more specific "Invalid amount" rather than "required".
+    if (amountKg === undefined || !withdrawalType || !purpose) {
       return NextResponse.json(
         { error: 'Amount, withdrawal type, and purpose are required' },
         { status: 400 }

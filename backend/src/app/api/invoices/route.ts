@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma, InvoiceStatus } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
@@ -7,18 +8,18 @@ export async function GET(request: NextRequest) {
   try {
     await requireAuth(request)
 
-    const where: any = {}
-    
+    const where: Prisma.InvoiceWhereInput = {}
+
     // Filter by saleOrderId if provided
     const saleOrderId = request.nextUrl.searchParams.get('saleOrderId')
     if (saleOrderId) {
       where.saleOrderId = saleOrderId
     }
 
-    // Filter by status if provided
+    // Filter by status if provided (validated against enum)
     const status = request.nextUrl.searchParams.get('status')
-    if (status) {
-      where.status = status
+    if (status && (Object.values(InvoiceStatus) as string[]).includes(status)) {
+      where.status = status as InvoiceStatus
     }
 
     const invoices = await prisma.invoice.findMany({

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma, ParchmentLotStatus } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { nextDisplayId } from '@/lib/utils'
@@ -8,18 +9,24 @@ export async function GET(request: NextRequest) {
   try {
     await requireAuth(request)
 
-    const where: any = {}
-    
+    const where: Prisma.ParchmentLotWhereInput = {}
+
     // Filter by processingBatchId if provided
     const processingBatchId = request.nextUrl.searchParams.get('processingBatchId')
     if (processingBatchId) {
       where.processingBatchId = processingBatchId
     }
 
-    // Filter by status if provided
+    // Filter by status if provided (validated against enum)
     const status = request.nextUrl.searchParams.get('status')
-    if (status) {
-      where.status = status
+    if (status && (Object.values(ParchmentLotStatus) as string[]).includes(status)) {
+      where.status = status as ParchmentLotStatus
+    }
+
+    // processType is a String field in schema, accepts any value
+    const processType = request.nextUrl.searchParams.get('processType')
+    if (processType) {
+      where.processType = processType
     }
 
     const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '100', 10), 200)
@@ -43,6 +50,7 @@ export async function GET(request: NextRequest) {
           },
         },
         physicalTestResults: true,
+        withdrawalHistory: { orderBy: { date: 'desc' as const } },
       },
       orderBy: { createdAt: 'desc' },
     })
@@ -61,12 +69,20 @@ export async function POST(request: NextRequest) {
     requireRole(user, ['Processor', 'Admin'])
 
     const body = await request.json()
-    const { processingBatchId, harvestLotId, initialWeightKg, currentWeightKg, moistureContent, processType, status } = body
+    const { processingBatchId, harvestLotId, initialWeightKg, currentWeightKg, moistureContent, processType, status, sourceType, externalSource } = body
+
+    const isExternal = sourceType === 'External'
 
     // Validation
-    if (!processingBatchId || !harvestLotId || !initialWeightKg || !moistureContent || !processType) {
+    if (!isExternal && (!processingBatchId || !harvestLotId)) {
       return NextResponse.json(
-        { error: 'Processing batch ID, harvest lot ID, initial weight, moisture content, and process type are required' },
+        { error: 'Processing batch ID and harvest lot ID are required for internal parchment lots' },
+        { status: 400 }
+      )
+    }
+    if (!initialWeightKg || !moistureContent || !processType) {
+      return NextResponse.json(
+        { error: 'Initial weight, moisture content, and process type are required' },
         { status: 400 }
       )
     }
@@ -76,8 +92,10 @@ export async function POST(request: NextRequest) {
     const parchmentLot = await prisma.parchmentLot.create({
       data: {
         displayId,
-        processingBatchId,
-        harvestLotId,
+        processingBatchId: processingBatchId || null,
+        harvestLotId: harvestLotId || null,
+        sourceType: isExternal ? 'External' : 'Internal',
+        externalSource: isExternal && externalSource ? externalSource : undefined,
         initialWeightKg: parseFloat(initialWeightKg),
         currentWeightKg: currentWeightKg ? parseFloat(currentWeightKg) : parseFloat(initialWeightKg),
         moistureContent: parseFloat(moistureContent),
@@ -122,7 +140,7 @@ export async function PUT(
     const body = await request.json()
     const { currentWeightKg, moistureContent, status, physicalTestResults } = body
 
-    const updateData: any = {}
+    const updateData: Prisma.ParchmentLotUpdateInput = {}
     if (currentWeightKg !== undefined) updateData.currentWeightKg = parseFloat(currentWeightKg)
     if (moistureContent !== undefined) updateData.moistureContent = parseFloat(moistureContent)
     if (status !== undefined) updateData.status = status

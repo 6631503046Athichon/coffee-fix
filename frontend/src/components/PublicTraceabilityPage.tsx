@@ -186,6 +186,15 @@ const PublicTraceabilityPage: React.FC = () => {
     avgCoffeeMoisture = `${parchmentLot.moistureContent}%`;
   }
 
+  const escapeHtml = (str: string): string => {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
   const pageUrl = window.location.href;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(pageUrl)}`;
 
@@ -217,8 +226,8 @@ const PublicTraceabilityPage: React.FC = () => {
             </style>
           </head>
           <body>
-            <img id="qr-img" src="${qrCodeUrl}" alt="QR Code" onload="window.print(); window.close();" />
-            <p>${pageUrl}</p>
+            <img id="qr-img" src="${escapeHtml(qrCodeUrl)}" alt="QR Code" onload="window.print(); window.close();" />
+            <p>${escapeHtml(pageUrl)}</p>
           </body>
         </html>
       `);

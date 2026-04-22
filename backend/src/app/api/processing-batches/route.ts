@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma, ProcessingBatchStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
 import { nextDisplayId, safeParseFloat } from "@/lib/utils";
@@ -8,7 +9,7 @@ export async function GET(request: NextRequest) {
   try {
     await requireAuth(request);
 
-    const where: any = {};
+    const where: Prisma.ProcessingBatchWhereInput = {};
 
     // Filter by harvestLotId if provided
     const harvestLotId = request.nextUrl.searchParams.get("harvestLotId");
@@ -16,10 +17,10 @@ export async function GET(request: NextRequest) {
       where.harvestLotId = harvestLotId;
     }
 
-    // Filter by status if provided
+    // Filter by status if provided (validated against enum)
     const status = request.nextUrl.searchParams.get("status");
-    if (status) {
-      where.status = status;
+    if (status && (Object.values(ProcessingBatchStatus) as string[]).includes(status)) {
+      where.status = status as ProcessingBatchStatus;
     }
 
     const limit = Math.min(parseInt(request.nextUrl.searchParams.get("limit") || "50", 10), 200);

@@ -161,6 +161,15 @@ export const withdrawalTypeSchema = z.enum([
   'Other',
 ], { message: 'ประเภทการถอนไม่ถูกต้อง' });
 
+export const parchmentWithdrawalTypeSchema = z.enum([
+  'Sale',
+  'RoastingStock',
+  'HullAndGrade',
+  'Sample',
+  'Export',
+  'Other',
+], { message: 'ประเภทการเบิกกะลาไม่ถูกต้อง' });
+
 export const cuppingSessionTypeSchema = z.enum([
   'QC',
   'Competition',

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
@@ -55,7 +56,7 @@ export async function PUT(
     const body = await request.json()
     const { name, type, contactEmail, contactPhone, address, notes } = body
 
-    const updateData: any = {}
+    const updateData: Prisma.CustomerUpdateInput = {}
     if (name !== undefined) updateData.name = name
     if (type !== undefined) updateData.type = type
     if (contactEmail !== undefined) updateData.contactEmail = contactEmail

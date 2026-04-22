@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, handleApiError } from '@/lib/middleware'
+import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import bcrypt from 'bcryptjs'
 
 /**
@@ -10,6 +11,10 @@ import bcrypt from 'bcryptjs'
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit: 10 first-login updates per 15 minutes per IP
+    const limited = await rateLimit(request, RATE_LIMITS.FIRST_LOGIN)
+    if (limited) return limited
+
     // SECURITY: Use requireAuth instead of manual token extraction
     const currentUser = await requireAuth(request)
 
@@ -42,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Prepare update data
-    const updateData: any = {
+    const updateData: Record<string, string | boolean | Date> = {
       updatedAt: new Date()
     }
 

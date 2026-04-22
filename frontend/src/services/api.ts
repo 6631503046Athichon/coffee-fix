@@ -1,6 +1,6 @@
 // Base API utility for making requests to backend
 import { connectionManager } from '../utils/connectionManager'
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string>
@@ -129,7 +129,7 @@ async function request<T>(
   }
 }
 
-function getAuthToken(): string | null {
+export function getAuthToken(): string | null {
   // httpOnly cookies cannot be read from JavaScript, so we rely on localStorage token
   // The cookie is still sent automatically by the browser for same-origin requests
   // But for cross-origin (localhost:5173 -> localhost:3001), we need Authorization header

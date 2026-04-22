@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
 import { safeParseFloat } from "@/lib/utils";
@@ -207,7 +208,9 @@ export async function PUT(
       priceSetDate,
     } = body;
 
-    const updateData: any = {};
+    // Use UncheckedUpdateInput so we can assign scalar FKs (priceSetBy) directly
+    // without needing a nested `connect`.
+    const updateData: Prisma.GreenBeanLotUncheckedUpdateInput = {};
     if (grade !== undefined) updateData.grade = grade;
     if (currentWeightKg !== undefined) {
       const weight = safeParseFloat(currentWeightKg);

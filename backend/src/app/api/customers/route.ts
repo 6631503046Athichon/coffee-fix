@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma, CustomerType } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
@@ -7,12 +8,12 @@ export async function GET(request: NextRequest) {
   try {
     await requireAuth(request)
 
-    const where: any = {}
-    
-    // Filter by type if provided
+    const where: Prisma.CustomerWhereInput = {}
+
+    // Filter by type if provided (validated against enum)
     const type = request.nextUrl.searchParams.get('type')
-    if (type) {
-      where.type = type
+    if (type && (Object.values(CustomerType) as string[]).includes(type)) {
+      where.type = type as CustomerType
     }
 
     const customers = await prisma.customer.findMany({
