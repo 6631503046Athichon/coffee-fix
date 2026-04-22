@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { api } from '../../services/api'
+import { firstLoginUpdate } from '../../services/authService'
 import { User } from '../../types'
 
 interface FirstLoginSetupProps {
@@ -70,7 +70,7 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
     setLoading(true)
 
     try {
-      const response = await api.post<{ user: User; message: string }>('/auth/first-login-update', {
+      const response = await firstLoginUpdate({
         currentPassword,
         newUsername: user.mustChangeUsername ? newUsername : undefined,
         newEmail: user.mustChangeEmail ? newEmail : undefined,

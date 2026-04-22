@@ -6,8 +6,11 @@ import { generateUsername, generatePassword } from '@/lib/credentialGenerator'
 import { validateBody, createUserSchema } from '@/lib/validations'
 import { z } from 'zod'
 
-// Extended schema for user creation with autoGenerate option
-const createUserWithOptionsSchema = createUserSchema.extend({
+// Extended schema for user creation with autoGenerate option.
+// Zod v4 removed the `extend()` method from object schemas; use the shape spread
+// pattern instead (see https://zod.dev/v4/changelog#breaking-removed-extend).
+const createUserWithOptionsSchema = z.object({
+  ...createUserSchema.shape,
   autoGenerate: z.boolean().optional().default(true),
 })
 
@@ -184,7 +187,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Return generated credentials to admin
-    const response: any = {
+    const response: Record<string, unknown> = {
       user: newUser,
       message: 'User created successfully'
     }

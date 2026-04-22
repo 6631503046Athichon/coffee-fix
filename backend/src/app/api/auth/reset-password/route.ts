@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { hashPassword, verifyPassword } from '@/lib/auth'
 import { handleApiError } from '@/lib/middleware'
+import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit: 5 reset attempts per 15 minutes per IP (prevents token brute-force)
+    const limited = await rateLimit(request, RATE_LIMITS.RESET_PASSWORD)
+    if (limited) return limited
+
     const body = await request.json()
     const { token, password } = body
 
@@ -16,9 +21,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (password.length < 6) {
+    if (password.length < 8) {
       return NextResponse.json(
-        { error: 'Password must be at least 6 characters' },
+        { error: 'Password must be at least 8 characters' },
         { status: 400 }
       )
     }

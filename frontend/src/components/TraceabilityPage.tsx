@@ -6,6 +6,7 @@ import { useDataContext } from '../hooks/useDataContext';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { SCA_ATTRIBUTES, User, CuppingSession } from '../types';
 import { Coffee, Thermometer, Droplets, Droplet, QrCode, Printer, Flame, Copy, Check } from 'lucide-react';
+import { formatGreenBeanId } from '../utils/formatDisplayId';
 
 const FlavorProfileChart: React.FC<{ data: any[] }> = ({ data }) => (
     <ResponsiveContainer width="100%" height={300}>
@@ -25,13 +26,14 @@ const TraceabilityPage: React.FC = () => {
 
     const greenBeanLot = data.greenBeanLots.find(lot => lot.id === lotId);
     if (!greenBeanLot) return <div className="p-8 text-center"><h1>Lot not found</h1><p>The requested coffee lot could not be found.</p></div>;
+    const displayLotId = formatGreenBeanId(greenBeanLot);
 
     const parchmentLot = data.parchmentLots.find(p => p.id === greenBeanLot.parchmentLotId);
     const processingBatch = data.processingBatches.find(b => b.id === parchmentLot?.processingBatchId);
     const harvestLot = data.harvestLots.find(h => h.id === parchmentLot?.harvestLotId);
     
     const scoreInfo = greenBeanLot.cuppingScores[0];
-    let cuppingResult: CuppingSession['finalResults'][string] | undefined;
+    let cuppingResult: NonNullable<CuppingSession['finalResults']>[string] | undefined;
     let cuppingScore: number | undefined;
     let cuppingNotes: string = '';
     
@@ -51,7 +53,7 @@ const TraceabilityPage: React.FC = () => {
             }
         }
         // Final fallback to score on greenBeanLot
-        if (!cuppingScore && scoreInfo.score) {
+        if (cuppingScore == null && scoreInfo.score != null) {
             cuppingScore = scoreInfo.score;
         }
     }
@@ -88,10 +90,9 @@ const TraceabilityPage: React.FC = () => {
         if (qrCodeElement) {
             const printWindow = window.open('', '', 'height=400,width=400');
             if (printWindow) {
-                printWindow.document.write('<html><head><title>Print QR Code</title></head><body style="text-align: center; margin-top: 50px;">');
-                printWindow.document.write(qrCodeElement.innerHTML);
-                printWindow.document.write('</body></html>');
+                printWindow.document.write('<html><head><title>Print QR Code</title></head><body style="text-align: center; margin-top: 50px;"></body></html>');
                 printWindow.document.close();
+                printWindow.document.body.appendChild(qrCodeElement.cloneNode(true));
                 printWindow.focus();
                 printWindow.print();
                 printWindow.close();
@@ -117,7 +118,7 @@ const TraceabilityPage: React.FC = () => {
         const tempSum = processingBatch.dryingLog.reduce((sum, log) => sum + log.ambientTemp, 0);
         const humiditySum = processingBatch.dryingLog.reduce((sum, log) => sum + log.relativeHumidity, 0);
         const coffeeMoistureSum = processingBatch.dryingLog.reduce((sum, log) => sum + (log.moistureContent || 0), 0);
-        avgTemp = `${(tempSum / processingBatch.dryingLog.length).toFixed(0)}°C`;
+        avgTemp = `${(tempSum / processingBatch.dryingLog.length).toFixed(0)} C`;
         avgHumidity = `${(humiditySum / processingBatch.dryingLog.length).toFixed(0)}%`;
         if (coffeeMoistureSum > 0) {
             avgCoffeeMoisture = `${(coffeeMoistureSum / processingBatch.dryingLog.length).toFixed(0)}%`;
@@ -146,7 +147,7 @@ const TraceabilityPage: React.FC = () => {
                         {/* Lot ID Badge on Image */}
                         <div className="absolute top-8 right-8 bg-white/95 backdrop-blur-sm px-5 py-2.5 rounded-full shadow-lg">
                             <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Lot</p>
-                            <p className="text-xl font-extrabold text-indigo-600">{lotId}</p>
+                            <p className="text-xl font-extrabold text-indigo-600">{displayLotId}</p>
                         </div>
 
                         {/* Title Overlay */}
@@ -205,7 +206,7 @@ const TraceabilityPage: React.FC = () => {
                     <div id="qr-code-container" className="flex-shrink-0">
                         <img 
                             src={qrCodeUrl}
-                            alt={`QR Code for Lot ${lotId}`}
+                            alt={`QR Code for Lot ${displayLotId}`}
                             className="rounded-xl shadow-lg border-4 border-white w-48 h-48"
                         />
                     </div>

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
@@ -48,7 +49,7 @@ export async function PUT(
     const body = await request.json()
     const { name, description, colorScheme, isActive } = body
 
-    const updateData: any = {}
+    const updateData: Prisma.ProcessTypeUpdateInput = {}
     if (name !== undefined) updateData.name = name
     if (description !== undefined) updateData.description = description
     if (colorScheme !== undefined) {

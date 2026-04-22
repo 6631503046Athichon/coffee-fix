@@ -17,15 +17,37 @@ const SCA_ATTRIBUTES = [
   'Overall'
 ];
 
-const FlavorProfileChart: React.FC<{ data: any[] }> = ({ data }) => (
-  <ResponsiveContainer width="100%" height={300}>
-    <RadarChart cx="50%" cy="50%" outerRadius="80%" data={data}>
-      <PolarGrid />
-      <PolarAngleAxis dataKey="attribute" tick={{ fill: '#4A5568', fontSize: 12 }} />
-      <PolarRadiusAxis angle={30} domain={[6, 10]} tickCount={5} />
-      <Radar name="Score" dataKey="score" stroke="#4f46e5" fill="#6366f1" fillOpacity={0.6} />
-    </RadarChart>
-  </ResponsiveContainer>
+const FlavorProfileChart: React.FC<{ data: any[]; totalScore?: number }> = ({
+  data,
+  totalScore,
+}) => (
+  <div>
+    {typeof totalScore === 'number' && !Number.isNaN(totalScore) && (
+      <div className="mb-3 text-center">
+        <span className="inline-flex items-center rounded-full bg-teal-600 px-3 py-1 text-xs font-bold text-white shadow-sm">
+          QC {totalScore.toFixed(2)}
+        </span>
+      </div>
+    )}
+    <ResponsiveContainer width="100%" height={300}>
+      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={data}>
+        <PolarGrid />
+        <PolarAngleAxis dataKey="attribute" tick={{ fill: '#4A5568', fontSize: 12 }} />
+        <PolarRadiusAxis angle={30} domain={[0, 10]} tickCount={6} />
+        <Radar name="Score" dataKey="score" stroke="#0f766e" fill="#14b8a6" fillOpacity={0.55} />
+      </RadarChart>
+    </ResponsiveContainer>
+    <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+      {data.map((item) => (
+        <div key={item.attribute} className="flex items-center justify-between">
+          <span className="text-gray-600">{item.attribute}</span>
+          <span className="font-semibold text-gray-900">
+            {item.score.toFixed(2)}
+          </span>
+        </div>
+      ))}
+    </div>
+  </div>
 );
 
 const PublicTraceabilityPage: React.FC = () => {
@@ -73,6 +95,44 @@ const PublicTraceabilityPage: React.FC = () => {
     const uniqueNotes = [...new Set(allNotes)].filter(Boolean);
     return uniqueNotes.map((note: string) => note.charAt(0).toUpperCase() + note.slice(1));
   }, [roastBatches]);
+
+  const radarData = useMemo(() => {
+    if (!lot) return [];
+    const valueMap: Record<string, number | undefined> = {
+      'Fragrance/Aroma': lot.cuppingFragrance,
+      Flavor: lot.cuppingFlavor,
+      Aftertaste: lot.cuppingAftertaste,
+      Acidity: lot.cuppingAcidity,
+      Body: lot.cuppingBody,
+      Balance: lot.cuppingBalance,
+      Uniformity: lot.cuppingUniformity,
+      'Clean Cup': lot.cuppingCleanCup,
+      Sweetness: lot.cuppingSweetness,
+      Overall: lot.cuppingOverall,
+    };
+
+    return SCA_ATTRIBUTES.map((attribute) => {
+      const rawValue = valueMap[attribute];
+      const score = typeof rawValue === 'number' && !Number.isNaN(rawValue)
+        ? Math.max(0, Math.min(10, rawValue))
+        : 0;
+      return { attribute, score };
+    });
+  }, [lot]);
+
+  const hasDetailedScores = useMemo(
+    () => radarData.some((item) => item.score > 0),
+    [radarData],
+  );
+
+  const qcTotalScore = useMemo(() => {
+    if (typeof cuppingScore === 'number' && !Number.isNaN(cuppingScore)) {
+      return cuppingScore;
+    }
+    if (!hasDetailedScores) return undefined;
+    const total = radarData.reduce((sum, item) => sum + item.score, 0);
+    return total > 0 ? total : undefined;
+  }, [cuppingScore, hasDetailedScores, radarData]);
 
   // Loading state
   if (loading) {
@@ -126,6 +186,15 @@ const PublicTraceabilityPage: React.FC = () => {
     avgCoffeeMoisture = `${parchmentLot.moistureContent}%`;
   }
 
+  const escapeHtml = (str: string): string => {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  };
+
   const pageUrl = window.location.href;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(pageUrl)}`;
 
@@ -157,8 +226,8 @@ const PublicTraceabilityPage: React.FC = () => {
             </style>
           </head>
           <body>
-            <img id="qr-img" src="${qrCodeUrl}" alt="QR Code" onload="window.print(); window.close();" />
-            <p>${pageUrl}</p>
+            <img id="qr-img" src="${escapeHtml(qrCodeUrl)}" alt="QR Code" onload="window.print(); window.close();" />
+            <p>${escapeHtml(pageUrl)}</p>
           </body>
         </html>
       `);
@@ -451,6 +520,23 @@ const PublicTraceabilityPage: React.FC = () => {
                   )}
                 </div>
               )}
+
+              <div className="bg-white rounded-xl p-5 shadow-md border border-gray-200">
+                <h3 className="font-bold text-gray-900 text-base mb-3 flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-teal-600"></div>
+                  QC Flavor Profile
+                </h3>
+                {hasDetailedScores ? (
+                  <FlavorProfileChart
+                    data={radarData}
+                    totalScore={qcTotalScore}
+                  />
+                ) : (
+                  <p className="text-sm text-gray-600">
+                    Detailed QC scores are not available for this lot yet.
+                  </p>
+                )}
+              </div>
 
               {lot.externalSource?.tasteNote && (
                 <div className="bg-white rounded-xl p-5 shadow-md border border-gray-200">

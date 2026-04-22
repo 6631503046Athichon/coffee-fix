@@ -25,10 +25,12 @@ model User {
   cuppingSessions      CuppingSession[]       @relation("SessionCreator")
   cuppingJudges        CuppingSessionJudge[]
   createdFarms         Farm[]                 @relation("FarmOwner")
+  farmCollaborations   FarmCollaborator[]     @relation("CollaboratorUser")
   gapLogs              GAPLogEntry[]
   greenBeanLots        GreenBeanLot[]         @relation("GreenBeanLotCreator")
   priceSetGreenBeans   GreenBeanLot[]         @relation("PriceSetter")
   withdrawalHistory    GreenBeanWithdrawal[]  @relation("WithdrawalUser")
+  parchmentWithdrawals ParchmentWithdrawal[]  @relation("ParchmentWithdrawalUser")
   harvestLots          HarvestLot[]           @relation("HarvestLotCreator")
   invoices             Invoice[]
   judgeScores          JudgeScore[]
@@ -67,6 +69,7 @@ model Farm {
   weatherAutoFetchEnabled  Boolean         @default(false)
   weatherAutoFetchInterval Int             @default(5)
   owner                    User            @relation("FarmOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  collaborators  FarmCollaborator[]
   gapLogs        GAPLogEntry[]
   harvestLots    HarvestLot[]
   soilAnalyses   SoilAnalysis[]
@@ -171,8 +174,10 @@ model PhysicalTestResults {
 model ParchmentLot {
   id                  String               @id @default(uuid())
   displayId           String?              @unique
-  processingBatchId   String
-  harvestLotId        String
+  processingBatchId   String?
+  harvestLotId        String?
+  sourceType          ParchmentSourceType  @default(Internal)
+  externalSource      Json?
   initialWeightKg     Float
   currentWeightKg     Float
   moistureContent     Float
@@ -181,12 +186,14 @@ model ParchmentLot {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   greenBeanLots       GreenBeanLot[]
-  harvestLot          HarvestLot           @relation(fields: [harvestLotId], references: [id], onDelete: Cascade)
-  processingBatch     ProcessingBatch      @relation(fields: [processingBatchId], references: [id], onDelete: Cascade)
+  harvestLot          HarvestLot?          @relation(fields: [harvestLotId], references: [id], onDelete: Cascade)
+  processingBatch     ProcessingBatch?     @relation(fields: [processingBatchId], references: [id], onDelete: Cascade)
   physicalTestResults PhysicalTestResults?
+  withdrawalHistory   ParchmentWithdrawal[]
 
   @@index([processingBatchId])
   @@index([status])
+  @@index([sourceType])
 }
 
 model GreenBeanLot {
@@ -207,6 +214,16 @@ model GreenBeanLot {
   publicTraceId      String?                     @unique
   qrGeneratedAt      DateTime?
   processorScore     Float?
+  cuppingFragrance   Float?
+  cuppingFlavor      Float?
+  cuppingAftertaste  Float?
+  cuppingAcidity     Float?
+  cuppingBody        Float?
+  cuppingBalance     Float?
+  cuppingOverall     Float?
+  cuppingUniformity  Float?
+  cuppingCleanCup    Float?
+  cuppingSweetness   Float?
   createdAt          DateTime                    @default(now())
   updatedAt          DateTime                    @updatedAt
   cuppingSamples     CuppingSample[]
@@ -247,6 +264,32 @@ model GreenBeanWithdrawal {
   withdrawnByUser User?          @relation("WithdrawalUser", fields: [withdrawnBy], references: [id])
 
   @@index([greenBeanLotId])
+  @@index([date])
+}
+
+model ParchmentWithdrawal {
+  id                String                   @id @default(uuid())
+  parchmentLotId    String
+  amountKg          Float
+  withdrawalType    ParchmentWithdrawalType
+  purpose           String
+  notes             String?
+  date              DateTime                 @default(now())
+  withdrawnBy       String?
+  withdrawnByName   String?
+  salePrice         Float?
+  currency          String?
+  customerName      String?
+  deliveryAddress   String?
+  totalAmount       Float?
+  targetRoasterId   String?
+  roastProfileNotes String?
+  cuppingScore      Float?
+  createdAt         DateTime                 @default(now())
+  parchmentLot      ParchmentLot             @relation(fields: [parchmentLotId], references: [id], onDelete: Cascade)
+  withdrawnByUser   User?                    @relation("ParchmentWithdrawalUser", fields: [withdrawnBy], references: [id])
+
+  @@index([parchmentLotId])
   @@index([date])
 }
 
@@ -640,6 +683,11 @@ enum ParchmentLotStatus {
   Hulled
 }
 
+enum ParchmentSourceType {
+  Internal
+  External
+}
+
 enum GreenBeanSourceType {
   Internal
   External
@@ -653,6 +701,15 @@ enum GreenBeanAvailabilityStatus {
 enum WithdrawalType {
   Sale
   RoastingStock
+  Sample
+  Export
+  Other
+}
+
+enum ParchmentWithdrawalType {
+  Sale
+  RoastingStock
+  HullAndGrade
   Sample
   Export
   Other
@@ -700,4 +757,18 @@ enum RoastLevel {
   Light
   Medium
   Dark
+}
+
+model FarmCollaborator {
+  id        String   @id @default(uuid())
+  farmId    String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  farm      Farm     @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  user      User     @relation("CollaboratorUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([farmId, userId])
+  @@index([farmId])
+  @@index([userId])
 }

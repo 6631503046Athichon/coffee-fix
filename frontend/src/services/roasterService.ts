@@ -74,6 +74,20 @@ export const claimGreenBeanLot = async (
   return transformInventoryItem(response.inventoryItem);
 };
 
+/**
+ * Update a roaster inventory item
+ */
+export const updateRoasterInventory = async (
+  id: string,
+  updates: { claimedWeightKg?: number; remainingWeightKg?: number },
+): Promise<RoasterInventoryItem> => {
+  const response = await api.put<{ inventoryItem: any }>(
+    `/roaster-inventory/${id}`,
+    updates,
+  );
+  return transformInventoryItem(response.inventoryItem);
+};
+
 // ============================================
 // Roast Batches
 // ============================================

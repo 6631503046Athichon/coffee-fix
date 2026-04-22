@@ -11,10 +11,16 @@ export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request)
 
-    // Farmers can only see their own farms, admins can see all
-    const where: Record<string, unknown> = {}
-    if (!user.roles.includes('Admin')) {
-      where.ownerId = user.id
+    // Farmers can only see their own farms + farms they collaborate on, admins can see all
+    const isAdmin = user.roles.includes('Admin')
+    let where: Record<string, unknown> = {}
+    if (!isAdmin) {
+      where = {
+        OR: [
+          { ownerId: user.id },
+          { collaborators: { some: { userId: user.id } } },
+        ],
+      }
     }
 
     const farms = await prisma.farm.findMany({
@@ -25,6 +31,11 @@ export async function GET(request: NextRequest) {
             id: true,
             name: true,
             email: true,
+          },
+        },
+        collaborators: {
+          include: {
+            user: { select: { id: true, name: true, email: true, roles: true } },
           },
         },
       },
@@ -96,6 +107,11 @@ export async function POST(request: NextRequest) {
             id: true,
             name: true,
             email: true,
+          },
+        },
+        collaborators: {
+          include: {
+            user: { select: { id: true, name: true, email: true, roles: true } },
           },
         },
       },

@@ -11,7 +11,7 @@ import { Input } from '../common/Input';
 import { PageHeader } from '../common/PageHeader';
 import { Alert } from '../common/Alert';
 import { generateSoilAnalysisId } from '../../utils/idGenerator';
-import { addSoilAnalysis, updateSoilAnalysis } from '../../services/soilAnalysisService';
+import { addSoilAnalysis, deleteSoilAnalysis, updateSoilAnalysis } from '../../services/soilAnalysisService';
 
 // Removed custom farm dropdown in favor of shared Select component
 
@@ -158,7 +158,7 @@ const SoilAnalysisManager: React.FC<SoilAnalysisManagerProps> = ({ currentUser }
         setPH(analysis.pH.toString());
         setPhosphorus(analysis.phosphorus.toString());
         setPotassium(analysis.potassium.toString());
-        setNitrogen(analysis.nitrogen.toString());
+        setNitrogen(analysis.nitrogen?.toString() || '');
         setCalcium(analysis.calcium.toString());
         setMagnesium(analysis.magnesium.toString());
         setOrganicMatter(analysis.organicMatter?.toString() || '');
@@ -182,12 +182,18 @@ const SoilAnalysisManager: React.FC<SoilAnalysisManagerProps> = ({ currentUser }
         resetForm();
     };
 
-    const handleDelete = (analysisId: string) => {
+    const handleDelete = async (analysisId: string) => {
         if (confirm('Are you sure you want to delete this soil analysis?')) {
-            setData(prev => ({
-                ...prev,
-                soilAnalyses: prev.soilAnalyses.filter(analysis => analysis.id !== analysisId)
-            }));
+            try {
+                await deleteSoilAnalysis(analysisId);
+                setData(prev => ({
+                    ...prev,
+                    soilAnalyses: prev.soilAnalyses.filter(analysis => analysis.id !== analysisId)
+                }));
+            } catch (error) {
+                console.error('Failed to delete soil analysis:', error);
+                alert('Failed to delete soil analysis. Please try again.');
+            }
         }
     };
 

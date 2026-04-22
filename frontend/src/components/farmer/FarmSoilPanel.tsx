@@ -7,7 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Farm, SoilAnalysis, UserRole } from '../../types';
 import { generateSoilAnalysisId } from '../../utils/idGenerator';
 import { formatDateDisplay } from '../../utils/formatters';
-import { addSoilAnalysis, updateSoilAnalysis } from '../../services/soilAnalysisService';
+import { addSoilAnalysis, deleteSoilAnalysis, updateSoilAnalysis } from '../../services/soilAnalysisService';
 import { generateSoilRecommendations, extractSoilDataFromImage } from '../../services/geminiService';
 
 export type SoilFormState = {
@@ -219,7 +219,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
     }
 
     // Validate required fields first - but allow partial data for better UX
-    const requiredFields = ['pH', 'phosphorus', 'potassium', 'nitrogen', 'calcium', 'magnesium'];
+    const requiredFields = ['pH', 'phosphorus', 'potassium', 'calcium', 'magnesium'];
     const missingFields = requiredFields.filter(field => !soilForm[field as keyof SoilFormState]?.trim());
     
     if (missingFields.length > 0) {
@@ -233,7 +233,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
     }
 
     // Validate that values are numeric
-    const numericFields = ['pH', 'phosphorus', 'potassium', 'nitrogen', 'calcium', 'magnesium'];
+    const numericFields = ['pH', 'phosphorus', 'potassium', 'calcium', 'magnesium'];
     const invalidFields: string[] = [];
     for (const field of numericFields) {
       const value = soilForm[field as keyof SoilFormState]?.trim();
@@ -256,7 +256,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
         pH: parseFloat(soilForm.pH),
         phosphorus: parseFloat(soilForm.phosphorus),
         potassium: parseFloat(soilForm.potassium),
-        nitrogen: parseFloat(soilForm.nitrogen),
+        nitrogen: soilForm.nitrogen.trim() ? parseFloat(soilForm.nitrogen) : 0,
         calcium: parseFloat(soilForm.calcium),
         magnesium: parseFloat(soilForm.magnesium),
         organicMatter: soilForm.organicMatter?.trim() ? parseFloat(soilForm.organicMatter) : undefined,
@@ -327,7 +327,6 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
       { key: 'pH', label: 'pH' },
       { key: 'phosphorus', label: 'ฟอสฟอรัส (P)' },
       { key: 'potassium', label: 'โพแทสเซียม (K)' },
-      { key: 'nitrogen', label: 'ไนโตรเจน (N)' },
       { key: 'calcium', label: 'แคลเซียม (Ca)' },
       { key: 'magnesium', label: 'แมกนีเซียม (Mg)' },
     ];
@@ -445,7 +444,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
       pH: analysis.pH.toString(),
       phosphorus: analysis.phosphorus.toString(),
       potassium: analysis.potassium.toString(),
-      nitrogen: analysis.nitrogen.toString(),
+      nitrogen: analysis.nitrogen?.toString() ?? '',
       calcium: analysis.calcium.toString(),
       magnesium: analysis.magnesium.toString(),
       organicMatter: analysis.organicMatter?.toString() ?? '',
@@ -460,18 +459,27 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
     }));
   };
 
-  const handleSoilDelete = (analysisId: string) => {
+  const handleSoilDelete = async (analysisId: string) => {
     if (!confirm('ยืนยันการลบผลวิเคราะห์ดินนี้?')) {
       return;
     }
-    setData(prev => ({
-      ...prev,
-      soilAnalyses: prev.soilAnalyses.filter(analysis => analysis.id !== analysisId),
-    }));
-    if (editingSoilId === analysisId) {
-      handleSoilCancelEdit();
+    try {
+      await deleteSoilAnalysis(analysisId);
+      setData(prev => ({
+        ...prev,
+        soilAnalyses: prev.soilAnalyses.filter(analysis => analysis.id !== analysisId),
+      }));
+      if (editingSoilId === analysisId) {
+        handleSoilCancelEdit();
+      }
+      setSoilToast({ type: 'success', message: 'ลบผลวิเคราะห์แล้ว' });
+    } catch (error) {
+      console.error('Failed to delete soil analysis:', error);
+      setSoilToast({
+        type: 'error',
+        message: 'ลบผลวิเคราะห์ไม่สำเร็จ กรุณาลองใหม่',
+      });
     }
-    setSoilToast({ type: 'success', message: 'ลบผลวิเคราะห์แล้ว' });
   };
 
   // If not open, don't render anything
@@ -672,16 +680,6 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                   step="0.1" 
                   value={soilForm.potassium} 
                   onChange={event => handleSoilFieldChange('potassium', event.target.value)} 
-                  required 
-                  fullWidth
-                  disabled={isSubmitting}
-                />
-                <Input 
-                  label="ไนโตรเจน (%)" 
-                  type="number" 
-                  step="0.1" 
-                  value={soilForm.nitrogen} 
-                  onChange={event => handleSoilFieldChange('nitrogen', event.target.value)} 
                   required 
                   fullWidth
                   disabled={isSubmitting}

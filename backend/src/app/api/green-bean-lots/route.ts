@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireAuth, handleApiError } from "@/lib/middleware";
+import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
 import { validateBody, createGreenBeanLotSchema } from "@/lib/validations";
 import { nextDisplayId } from "@/lib/utils";
 
@@ -62,6 +62,17 @@ export async function GET(request: NextRequest) {
               name: true,
             },
           },
+          withdrawalHistory: {
+            include: {
+              withdrawnByUser: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+            orderBy: { date: "desc" },
+          },
           _count: {
             select: { cuppingScores: true },
           },
@@ -82,7 +93,9 @@ export async function GET(request: NextRequest) {
 // POST /api/green-bean-lots - Create new green bean lot
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth(request);
+    const user = await requireAuth(request);
+    // SECURITY: Only Processor and Admin can create green bean lots
+    requireRole(user, ["Processor", "Admin"]);
 
     // Validate request body with Zod
     const validation = await validateBody(request, createGreenBeanLotSchema);

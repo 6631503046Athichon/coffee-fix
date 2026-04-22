@@ -1,25 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma, ParchmentLotStatus } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
-import { nextDisplayId } from '@/lib/utils'
+import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { nextDisplayId, safeParseFloat } from '@/lib/utils'
 
 // GET /api/parchment-lots - List all parchment lots
 export async function GET(request: NextRequest) {
   try {
     await requireAuth(request)
 
-    const where: any = {}
-    
+    const where: Prisma.ParchmentLotWhereInput = {}
+
     // Filter by processingBatchId if provided
     const processingBatchId = request.nextUrl.searchParams.get('processingBatchId')
     if (processingBatchId) {
       where.processingBatchId = processingBatchId
     }
 
-    // Filter by status if provided
+    // Filter by status if provided (validated against enum)
     const status = request.nextUrl.searchParams.get('status')
-    if (status) {
-      where.status = status
+    if (status && (Object.values(ParchmentLotStatus) as string[]).includes(status)) {
+      where.status = status as ParchmentLotStatus
+    }
+
+    // processType is a String field in schema, accepts any value
+    const processType = request.nextUrl.searchParams.get('processType')
+    if (processType) {
+      where.processType = processType
     }
 
     const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '100', 10), 200)
@@ -43,6 +50,7 @@ export async function GET(request: NextRequest) {
           },
         },
         physicalTestResults: true,
+        withdrawalHistory: { orderBy: { date: 'desc' as const } },
       },
       orderBy: { createdAt: 'desc' },
     })
@@ -56,15 +64,58 @@ export async function GET(request: NextRequest) {
 // POST /api/parchment-lots - Create new parchment lot
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    // SECURITY: Only Processor and Admin can create parchment lots
+    requireRole(user, ['Processor', 'Admin'])
 
     const body = await request.json()
-    const { processingBatchId, harvestLotId, initialWeightKg, currentWeightKg, moistureContent, processType, status } = body
+    const { processingBatchId, harvestLotId, initialWeightKg, currentWeightKg, moistureContent, processType, status, sourceType, externalSource } = body
+
+    const isExternal = sourceType === 'External'
 
     // Validation
-    if (!processingBatchId || !harvestLotId || !initialWeightKg || !moistureContent || !processType) {
+    if (!isExternal && (!processingBatchId || !harvestLotId)) {
       return NextResponse.json(
-        { error: 'Processing batch ID, harvest lot ID, initial weight, moisture content, and process type are required' },
+        { error: 'Processing batch ID and harvest lot ID are required for internal parchment lots' },
+        { status: 400 }
+      )
+    }
+    if (initialWeightKg === undefined || moistureContent === undefined || !processType) {
+      return NextResponse.json(
+        { error: 'Initial weight, moisture content, and process type are required' },
+        { status: 400 }
+      )
+    }
+
+    const parsedInitialWeight = safeParseFloat(initialWeightKg)
+    const parsedCurrentWeight =
+      currentWeightKg === undefined ? parsedInitialWeight : safeParseFloat(currentWeightKg)
+    const parsedMoistureContent = safeParseFloat(moistureContent)
+
+    if (parsedInitialWeight === null || parsedInitialWeight <= 0) {
+      return NextResponse.json(
+        { error: 'Initial weight must be greater than 0' },
+        { status: 400 }
+      )
+    }
+
+    if (parsedCurrentWeight === null || parsedCurrentWeight < 0) {
+      return NextResponse.json(
+        { error: 'Current weight must be 0 or greater' },
+        { status: 400 }
+      )
+    }
+
+    if (parsedCurrentWeight - parsedInitialWeight > 0.01) {
+      return NextResponse.json(
+        { error: 'Current weight cannot exceed initial weight' },
+        { status: 400 }
+      )
+    }
+
+    if (parsedMoistureContent === null || parsedMoistureContent < 0 || parsedMoistureContent > 100) {
+      return NextResponse.json(
+        { error: 'Moisture content must be between 0 and 100' },
         { status: 400 }
       )
     }
@@ -74,13 +125,15 @@ export async function POST(request: NextRequest) {
     const parchmentLot = await prisma.parchmentLot.create({
       data: {
         displayId,
-        processingBatchId,
-        harvestLotId,
-        initialWeightKg: parseFloat(initialWeightKg),
-        currentWeightKg: currentWeightKg ? parseFloat(currentWeightKg) : parseFloat(initialWeightKg),
-        moistureContent: parseFloat(moistureContent),
+        processingBatchId: processingBatchId || null,
+        harvestLotId: harvestLotId || null,
+        sourceType: isExternal ? 'External' : 'Internal',
+        externalSource: isExternal && externalSource ? externalSource : undefined,
+        initialWeightKg: parsedInitialWeight,
+        currentWeightKg: parsedCurrentWeight,
+        moistureContent: parsedMoistureContent,
         processType,
-        status: status || 'AwaitingHulling',
+        status: status || (parsedCurrentWeight <= 0 ? 'Hulled' : 'AwaitingHulling'),
       },
       include: {
         processingBatch: {
@@ -120,10 +173,33 @@ export async function PUT(
     const body = await request.json()
     const { currentWeightKg, moistureContent, status, physicalTestResults } = body
 
-    const updateData: any = {}
-    if (currentWeightKg !== undefined) updateData.currentWeightKg = parseFloat(currentWeightKg)
-    if (moistureContent !== undefined) updateData.moistureContent = parseFloat(moistureContent)
-    if (status !== undefined) updateData.status = status
+    const updateData: Prisma.ParchmentLotUpdateInput = {}
+    let parsedCurrentWeight: number | null = null
+    if (currentWeightKg !== undefined) {
+      parsedCurrentWeight = safeParseFloat(currentWeightKg)
+      if (parsedCurrentWeight === null || parsedCurrentWeight < 0) {
+        return NextResponse.json(
+          { error: 'Current weight must be 0 or greater' },
+          { status: 400 }
+        )
+      }
+      updateData.currentWeightKg = parsedCurrentWeight
+    }
+    if (moistureContent !== undefined) {
+      const parsedMoistureContent = safeParseFloat(moistureContent)
+      if (parsedMoistureContent === null || parsedMoistureContent < 0 || parsedMoistureContent > 100) {
+        return NextResponse.json(
+          { error: 'Moisture content must be between 0 and 100' },
+          { status: 400 }
+        )
+      }
+      updateData.moistureContent = parsedMoistureContent
+    }
+    if (parsedCurrentWeight !== null && parsedCurrentWeight <= 0) {
+      updateData.status = 'Hulled'
+    } else if (status !== undefined) {
+      updateData.status = status
+    }
 
     // Update or create physical test results
     if (physicalTestResults) {

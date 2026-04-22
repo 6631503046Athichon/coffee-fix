@@ -59,16 +59,15 @@ export const updateWeatherRecord = async (
  * Delete a weather record
  */
 export const deleteWeatherRecord = async (recordId: string): Promise<void> => {
-  await api.delete(`/weather-records/${recordId}`);
+  try {
+    await api.delete(`/weather-records/${recordId}`);
+  } catch (error) {
+    // If backend no longer has this record, treat delete as idempotent success.
+    if (error instanceof Error && error.message.toLowerCase().includes('record not found')) {
+      console.warn('[WeatherService] Delete skipped, record already missing:', recordId);
+      return;
+    }
+    throw error;
+  }
 };
 
-// Legacy localStorage functions for backward compatibility
-const WEATHER_RECORDS_STORAGE_KEY = 'coffee_lab_weather_records';
-
-export const initializeWeatherRecords = (defaultRecords: WeatherRecord[]) => {
-  localStorage.setItem(WEATHER_RECORDS_STORAGE_KEY, JSON.stringify(defaultRecords));
-};
-
-const saveAllWeatherRecords = (records: WeatherRecord[]) => {
-  localStorage.setItem(WEATHER_RECORDS_STORAGE_KEY, JSON.stringify(records));
-};

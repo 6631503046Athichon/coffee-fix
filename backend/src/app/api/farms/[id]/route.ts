@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
@@ -21,6 +22,11 @@ export async function GET(
             email: true,
           },
         },
+        collaborators: {
+          include: {
+            user: { select: { id: true, name: true, email: true, roles: true } },
+          },
+        },
         harvestLots: {
           take: 10,
           orderBy: { harvestDate: 'desc' },
@@ -35,8 +41,9 @@ export async function GET(
       )
     }
 
-    // Check permission
-    if (!user.roles.includes('Admin') && farm.ownerId !== user.id) {
+    // Check permission: owner, collaborator, or admin
+    const isCollaborator = farm.collaborators.some((c: { userId: string }) => c.userId === user.id)
+    if (!user.roles.includes('Admin') && farm.ownerId !== user.id && !isCollaborator) {
       return NextResponse.json(
         { error: 'Forbidden' },
         { status: 403 }
@@ -69,7 +76,7 @@ export async function PUT(
       )
     }
 
-    // Check permission
+    // Check permission: owner or admin can edit (collaborators cannot change farm settings)
     if (!user.roles.includes('Admin') && farm.ownerId !== user.id) {
       return NextResponse.json(
         { error: 'Forbidden' },
@@ -78,9 +85,11 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, caretakerNames, archived, googleMapsUrl, ownerNames, weatherAutoFetchEnabled, weatherAutoFetchInterval } = body
+    const { farmName, location, latitude, longitude, altitude, sizeHectares, varieties, caretakerName, caretakerNames, archived, googleMapsUrl, ownerNames, ownerId, weatherAutoFetchEnabled, weatherAutoFetchInterval } = body
 
-    const updateData: any = {}
+    // Use UncheckedUpdateInput so we can assign scalar FKs (ownerId) directly
+    // without needing a nested `connect` — see Prisma generated types.
+    const updateData: Prisma.FarmUncheckedUpdateInput = {}
     if (farmName !== undefined) updateData.farmName = farmName
     if (location !== undefined) updateData.location = location
     if (latitude !== undefined) updateData.latitude = latitude ? parseFloat(latitude) : null
@@ -88,15 +97,20 @@ export async function PUT(
     if (altitude !== undefined) updateData.altitude = altitude
     if (sizeHectares !== undefined) updateData.sizeHectares = sizeHectares ? parseFloat(sizeHectares) : null
     if (varieties !== undefined) updateData.varieties = varieties
+    // Compute the normalized caretakerNames array locally so we can read its
+    // length without fighting Prisma's union type on the scalar-list field
+    // (string[] | FarmUpdatecaretakerNamesInput).
+    let normalizedCaretakerNames: string[] | undefined
     if (caretakerNames !== undefined || caretakerName !== undefined) {
-      updateData.caretakerNames = Array.isArray(caretakerNames)
+      normalizedCaretakerNames = Array.isArray(caretakerNames)
         ? caretakerNames.map((name: unknown) => String(name).trim()).filter(Boolean)
         : (typeof caretakerName === 'string'
             ? caretakerName.split(',').map((name: string) => name.trim()).filter(Boolean)
             : [])
+      updateData.caretakerNames = normalizedCaretakerNames
     }
     if (caretakerName !== undefined) updateData.caretakerName = caretakerName || null
-    if (caretakerNames !== undefined && updateData.caretakerNames?.length > 0) {
+    if (caretakerNames !== undefined && normalizedCaretakerNames && normalizedCaretakerNames.length > 0) {
       updateData.caretakerName = null
     }
     if (googleMapsUrl !== undefined) updateData.googleMapsUrl = googleMapsUrl || null
@@ -108,6 +122,17 @@ export async function PUT(
     if (archived !== undefined) {
       updateData.archived = archived
       updateData.archivedAt = archived ? new Date() : null
+    }
+
+    // Owner reassignment - Admin only
+    if (ownerId !== undefined && ownerId !== farm.ownerId) {
+      if (!user.roles.includes('Admin') && !user.isSuperAdmin) {
+        return NextResponse.json(
+          { error: 'Only admin can change farm ownership' },
+          { status: 403 }
+        )
+      }
+      updateData.ownerId = ownerId
     }
 
     // Weather auto-fetch settings - Admin only
@@ -134,6 +159,11 @@ export async function PUT(
             id: true,
             name: true,
             email: true,
+          },
+        },
+        collaborators: {
+          include: {
+            user: { select: { id: true, name: true, email: true, roles: true } },
           },
         },
       },

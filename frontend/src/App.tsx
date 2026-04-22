@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
-import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package } from 'lucide-react';
+import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package, Box } from 'lucide-react';
 
 import { UserRole, CuppingSessionType, Customer } from './types';
 import { MOCK_DATA } from './constants';
@@ -12,10 +12,9 @@ import { ToastProvider, useToast } from './contexts/ToastContext';
 import { connectionManager } from './utils/connectionManager';
 import ToastContainer from './components/common/ToastContainer';
 import { initWeatherAutoFetchService, stopWeatherAutoFetchService } from './services/weatherAutoFetchService';
-import { getAllSaleOrders, getAllInvoices, getAllPricingHistory, initializeCustomers, initializeSaleOrders, initializeInvoices, initializePricingHistory } from './services/salesService';
-import { initializeActivityTypes } from './services/activityTypeService';
-import { initializeProcessTypes, resetProcessTypes } from './services/processTypeService';
-import { initializeFarms } from './services/farmService';
+import { getAllSaleOrders } from './services/saleOrderService';
+import { getAllInvoices } from './services/invoiceService';
+import { getAllPricingHistory } from './services/pricingHistoryService';
 import { api, bulkLoadPhase1, bulkLoadPhase2 } from './services/api';
 import { transformFarmFromBackend, transformHarvestLotFromBackend, transformSoilAnalysisFromBackend, transformWeatherRecordFromBackend, transformGAPLogFromBackend } from './services/utils/transformers';
 import { transformProcessingBatchFromBackend } from './services/processingBatchService';
@@ -30,6 +29,7 @@ import ResetPassword from './components/auth/ResetPassword';
 import { FirstLoginSetup } from './components/auth/FirstLoginSetup';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import ProcessorWorkbench from './components/processor/ProcessorWorkbench';
+import ParchmentPage from './components/processor/ParchmentTab';
 import CuppingHub from './components/cupper/CuppingHub';
 import TraceabilityPage from './components/TraceabilityPage';
 import PublicTraceabilityPage from './components/PublicTraceabilityPage';
@@ -156,10 +156,19 @@ const ProtectedRoutes: React.FC = () => {
   // Load data from backend API using parallel bulk-loads then a single state update
   const loadDataFromBackend = useCallback(async () => {
     try {
-      // localStorage reads (no network, instant)
-      const storedSaleOrders = getAllSaleOrders();
-      const storedInvoices = getAllInvoices();
-      const storedPricingHistory = getAllPricingHistory();
+      // Load sale orders, invoices, pricing history from backend API
+      let storedSaleOrders: any[] = [];
+      let storedInvoices: any[] = [];
+      let storedPricingHistory: any[] = [];
+      try {
+        [storedSaleOrders, storedInvoices, storedPricingHistory] = await Promise.all([
+          getAllSaleOrders(),
+          getAllInvoices(),
+          getAllPricingHistory(),
+        ]);
+      } catch (err) {
+        console.warn('Failed to load sales data from backend:', err);
+      }
 
       // Run both phases in parallel for faster load
       const [phase1, phase2] = await Promise.all([bulkLoadPhase1(), bulkLoadPhase2()]);
@@ -361,6 +370,7 @@ const ProtectedRoutes: React.FC = () => {
 
       // Processor Section
       { name: 'Processor Workbench', href: '/processor', icon: Droplets, roles: [UserRole.Processor, UserRole.Admin], section: 'processor' },
+      { name: 'Parchment', href: '/parchment', icon: Box, roles: [UserRole.Processor, UserRole.Admin], section: 'processor' },
       { name: 'Traceability Hub', href: '/traceability', icon: Search, roles: [UserRole.Admin, UserRole.Processor], section: 'processor' },
       { name: 'Quality Insights', href: '/insights', icon: Lightbulb, roles: [UserRole.Processor], section: 'processor' },
 
@@ -407,27 +417,105 @@ const ProtectedRoutes: React.FC = () => {
             <Routes>
               <Route path="/farmer" element={<Navigate to="/farmer-dashboard" replace />} />
               <Route path="/dashboard" element={<Navigate to="/farmer-dashboard" replace />} />
-              <Route path="/processor" element={<ProcessorWorkbench currentUser={currentUser!} />} />
+              <Route
+                path="/processor"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Processor, UserRole.Admin]}>
+                    <ProcessorWorkbench currentUser={currentUser!} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/parchment"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Processor, UserRole.Admin]}>
+                    <ParchmentPage currentUser={currentUser!} />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/roaster" element={<ProtectedRoute allowedRoles={[UserRole.Roaster, UserRole.Admin]}><RoasterWorkbench currentUser={currentUser!} /></ProtectedRoute>} />
               <Route path="/cupping" element={<CuppingHub />} />
               <Route path="/cupping/:id" element={<CuppingSessionDetail currentUser={currentUser!} />} />
               <Route path="/scoring" element={<CupperScoringSheet currentUser={currentUser!} />} />
-              <Route path="/insights" element={<QualityInsights />} />
+              <Route
+                path="/insights"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Processor, UserRole.Roaster, UserRole.Admin]}>
+                    <QualityInsights />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/competition/:id" element={<CompetitionDashboard currentUserRoles={currentUser?.roles || [UserRole.Farmer]} />} />
               <Route path="/traceability" element={<ProtectedRoute allowedRoles={[UserRole.Admin, UserRole.Processor]}><TraceabilityHub /></ProtectedRoute>} />
               <Route path="/users" element={<ProtectedRoute allowedRoles={[UserRole.Admin]}><UserManagement /></ProtectedRoute>} />
               <Route path="/customers" element={<ProtectedRoute allowedRoles={[UserRole.Admin, UserRole.Roaster]}><CustomerManagement /></ProtectedRoute>} />
-              <Route path="/farmer-farms" element={<FarmerFarmManagement />} />
-              <Route path="/farmer-farms/add" element={<AddFarmPage />} />
-              <Route path="/farmer-farms/edit/:farmId" element={<AddFarmPage />} />
+              <Route
+                path="/farmer-farms"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
+                    <FarmerFarmManagement />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/farmer-farms/add"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
+                    <AddFarmPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/farmer-farms/edit/:farmId"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
+                    <AddFarmPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/activity-types" element={<ProtectedRoute allowedRoles={[UserRole.Admin]}><ActivityTypeManagement /></ProtectedRoute>} />
               <Route path="/process-types" element={<ProtectedRoute allowedRoles={[UserRole.Admin]}><ProcessTypeManagement /></ProtectedRoute>} />
               <Route path="/coffee-varieties" element={<ProtectedRoute allowedRoles={[UserRole.Admin]}><CoffeeVarietiesManager /></ProtectedRoute>} />
-              <Route path="/farmer-dashboard" element={<FarmerDashboard />} />
-              <Route path="/farmer-dashboard/:lotId" element={<HarvestLotDetail />} />
-              <Route path="/harvest-lots" element={<HarvestLotsManagement />} />
-              <Route path="/farmer-data-hub" element={<FarmerDataHub currentUser={currentUser!} />} />
-              <Route path="/gap-compliance" element={<GAPComplianceHelper />} />
+              <Route
+                path="/farmer-dashboard"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
+                    <FarmerDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/farmer-dashboard/:lotId"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
+                    <HarvestLotDetail />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/harvest-lots"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
+                    <HarvestLotsManagement />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/farmer-data-hub"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
+                    <FarmerDataHub currentUser={currentUser!} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/gap-compliance"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Farmer, UserRole.Admin]}>
+                    <GAPComplianceHelper />
+                  </ProtectedRoute>
+                }
+              />
             </Routes>
           </main>
         </div>
@@ -441,18 +529,7 @@ const App: React.FC = () => {
   const contextValue = useMemo(() => ({ data, setData: () => {}, refreshData: async () => {}, setIsEditing: () => {}, isEditing: false }), [data]);
 
   // Initialize localStorage on app mount (only for non-API data)
-  useEffect(() => {
-    // Only initialize localStorage for data that doesn't come from API
-    // API data (farms, soil analyses, weather records, harvest lots, GAP logs) 
-    // will be loaded in ProtectedRoutes component
-    initializeActivityTypes(MOCK_DATA.activityTypes);
-    // Force: reset to exactly the three defaults on each refresh (per request)
-    resetProcessTypes(MOCK_DATA.processTypes);
-    initializeCustomers(MOCK_DATA.customers);
-    initializeSaleOrders(MOCK_DATA.saleOrders);
-    initializeInvoices(MOCK_DATA.invoices);
-    initializePricingHistory(MOCK_DATA.pricingHistory);
-  }, []);
+  // No localStorage initialization needed — all data comes from API
 
   return (
     <AuthProvider>

@@ -25,7 +25,10 @@ export async function GET(request: NextRequest) {
       // Phase 1: Essential data
       const farmsWhere: Record<string, unknown> = {}
       if (!isAdmin) {
-        farmsWhere.ownerId = user.id
+        farmsWhere.OR = [
+          { ownerId: user.id },
+          { collaborators: { some: { userId: user.id } } },
+        ]
       }
 
       const [farms, harvestLots, cropYears, processTypes, activityTypes, customers, users] = await Promise.all([
@@ -34,6 +37,11 @@ export async function GET(request: NextRequest) {
           where: farmsWhere,
           include: {
             owner: { select: { id: true, name: true, email: true } },
+            collaborators: {
+              include: {
+                user: { select: { id: true, name: true, email: true, roles: true } },
+              },
+            },
           },
           orderBy: { createdAt: 'desc' },
         }),
@@ -116,7 +124,12 @@ export async function GET(request: NextRequest) {
       let farmIds: string[] = []
       if (isFarmer && !isAdmin) {
         const farms = await prisma.farm.findMany({
-          where: { ownerId: user.id },
+          where: {
+            OR: [
+              { ownerId: user.id },
+              { collaborators: { some: { userId: user.id } } },
+            ],
+          },
           select: { id: true },
         })
         farmIds = farms.map(f => f.id)
@@ -124,6 +137,15 @@ export async function GET(request: NextRequest) {
 
       const farmScopeWhere = isFarmer && !isAdmin
         ? { farmId: { in: farmIds } }
+        : {}
+      const processingScopeWhere = isFarmer && !isAdmin
+        ? { harvestLot: { farmId: { in: farmIds } } }
+        : {}
+      const parchmentScopeWhere = isFarmer && !isAdmin
+        ? { harvestLot: { farmId: { in: farmIds } } }
+        : {}
+      const greenBeanScopeWhere = isFarmer && !isAdmin
+        ? { parchmentLot: { harvestLot: { farmId: { in: farmIds } } } }
         : {}
 
       // Roaster scope
@@ -169,6 +191,7 @@ export async function GET(request: NextRequest) {
 
         // Processing Batches
         prisma.processingBatch.findMany({
+          where: processingScopeWhere,
           take: 50,
           include: {
             harvestLot: {
@@ -188,6 +211,7 @@ export async function GET(request: NextRequest) {
 
         // Parchment Lots
         prisma.parchmentLot.findMany({
+          where: parchmentScopeWhere,
           take: 100,
           include: {
             processingBatch: { select: { id: true, processType: true, status: true } },
@@ -199,6 +223,7 @@ export async function GET(request: NextRequest) {
 
         // Green Bean Lots
         prisma.greenBeanLot.findMany({
+          where: greenBeanScopeWhere,
           include: {
             parchmentLot: {
               include: {
@@ -207,6 +232,14 @@ export async function GET(request: NextRequest) {
               },
             },
             priceSetter: { select: { id: true, name: true } },
+            withdrawalHistory: {
+              include: {
+                withdrawnByUser: {
+                  select: { id: true, name: true },
+                },
+              },
+              orderBy: { date: 'desc' },
+            },
             _count: { select: { cuppingScores: true } },
           },
           orderBy: { createdAt: 'desc' },

@@ -115,25 +115,7 @@ export const deleteProcessType = async (id: string): Promise<boolean> => {
   }
 };
 
-// Legacy functions for backward compatibility (no-op)
-export const initializeProcessTypes = (_defaultTypes: ProcessType[]) => {
-  // No-op: Data comes from API now
-};
-
-export const resetProcessTypes = (_defaultTypes: ProcessType[]) => {
-  // No-op: Data comes from API now
-};
-
 export const processTypeNameExists = async (name: string, excludeId?: string): Promise<boolean> => {
   const all = await getAllProcessTypes();
   return all.some(t => t.name.toLowerCase() === name.toLowerCase() && t.id !== excludeId);
-};
-
-export const ensureProcessTypeExists = async (_pt: any) => {
-  // No-op: Process types are managed via Admin panel and seeded in database
-  return false;
-};
-
-export const ensureDefaultProcessTypes = async () => {
-  // No-op: Default process types are seeded in database
 };

@@ -21,6 +21,7 @@ export const transformFarmFromBackend = (farm: any) => {
 
   return {
     id: farm.id,
+    farmName: farm.farmName || undefined,
     name: farm.farmName || undefined,
     location: farm.location,
     farmerName: farm.owner?.name || "",
@@ -47,6 +48,7 @@ export const transformFarmFromBackend = (farm: any) => {
     archived: farm.archived || false,
     archivedAt: farm.archivedAt || undefined,
     ownerUserId: farm.ownerId,
+    collaborators: farm.collaborators || [],
   };
 };
 
@@ -73,7 +75,7 @@ export const transformFarmToBackend = (farmData: any) => {
       : [];
 
   return {
-    farmName: farmData.name || "",
+    farmName: farmData.farmName || farmData.name || "",
     ownerNames:
       ownerNamesFromArray.length > 0
         ? ownerNamesFromArray
@@ -91,6 +93,7 @@ export const transformFarmToBackend = (farmData: any) => {
         : caretakerNamesFromString,
     caretakerName: null,
     archived: farmData.archived || false,
+    ownerId: farmData.ownerUserId || undefined,
   };
 };
 
@@ -208,6 +211,14 @@ export const transformHarvestLotFromBackend = (lot: any) => ({
   id: lot.id,
   displayId: lot.displayId || undefined,
   farmId: lot.farmId || undefined,
+  farm: lot.farm
+    ? {
+        id: lot.farm.id,
+        farmName: lot.farm.farmName || undefined,
+        name: lot.farm.farmName || undefined,
+        location: lot.farm.location || undefined,
+      }
+    : undefined,
   farmerName: lot.farmerName,
   cherryVariety: lot.cherryVariety,
   weightKg: lot.weightKg,

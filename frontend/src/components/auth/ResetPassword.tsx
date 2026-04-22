@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Coffee, Lock, CheckCircle, XCircle, ArrowLeft, Eye, EyeOff } from 'lucide-react';
-import { api } from '../../services/api';
+import { verifyResetToken, resetPassword } from '../../services/authService';
 
 const ResetPassword: React.FC = () => {
   const navigate = useNavigate();
@@ -39,9 +39,7 @@ const ResetPassword: React.FC = () => {
       }
 
       try {
-        const response = await api.get<{ valid: boolean; email?: string }>(
-          `/auth/verify-reset-token?token=${token}`
-        );
+        const response = await verifyResetToken(token);
         setTokenValid(response.valid);
         if (!response.valid) {
           setError('Invalid or expired token. Please request a new link.');
@@ -80,10 +78,7 @@ const ResetPassword: React.FC = () => {
     setIsLoading(true);
 
     try {
-      await api.post('/auth/reset-password', {
-        token,
-        password: formData.password,
-      });
+      await resetPassword(token, formData.password);
       setSuccess(true);
       setTimeout(() => {
         navigate('/login');

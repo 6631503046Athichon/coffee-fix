@@ -2,10 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyPassword, generateToken } from '@/lib/auth'
 import { handleApiError } from '@/lib/middleware'
+import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { validateBody, loginSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit: 5 login attempts per 15 minutes per IP
+    const limited = await rateLimit(request, RATE_LIMITS.LOGIN)
+    if (limited) return limited
+
     // Validate request body with Zod
     const validation = await validateBody(request, loginSchema)
     if (!validation.success) {
@@ -98,7 +103,7 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: shouldUseSecure, // false for localhost, true for production
       sameSite: sameSiteValue, // 'lax' for localhost, 'none' for cross-domain production
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: 60 * 60 * 24, // 1 day to match JWT 24h expiry
       path: '/',
       // Don't set domain for localhost - let browser handle it
     })

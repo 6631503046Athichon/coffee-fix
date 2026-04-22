@@ -6,6 +6,7 @@ import { GreenBeanLot } from '../../types';
 import { generatePublicTraceId, getPublicTraceUrl, generateQRDataUrl } from '../../services/greenBeanLotService';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+import { formatGreenBeanId } from '../../utils/formatDisplayId';
 
 interface BulkQRGeneratorModalProps {
   isOpen: boolean;
@@ -200,7 +201,7 @@ export const BulkQRGeneratorModal: React.FC<BulkQRGeneratorModalProps> = ({
                 return (
                   <tr key={lot.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-sm font-medium text-gray-900 font-mono">
-                      {lot.id.substring(0, 8)}...
+                      {formatGreenBeanId(lot)}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">{lot.grade}</td>
                     <td className="px-4 py-3 text-sm text-gray-600 font-mono">

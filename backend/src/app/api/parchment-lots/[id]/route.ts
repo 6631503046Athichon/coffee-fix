@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { safeParseFloat } from '@/lib/utils'
@@ -17,7 +18,7 @@ export async function PATCH(
 
     const { status, currentWeightKg } = body
 
-    const updateData: any = {}
+    const updateData: Prisma.ParchmentLotUpdateInput = {}
     if (status !== undefined) updateData.status = status
     if (currentWeightKg !== undefined) {
       const weight = safeParseFloat(currentWeightKg)

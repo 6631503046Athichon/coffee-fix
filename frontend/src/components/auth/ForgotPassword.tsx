@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Coffee, Mail, ArrowLeft } from 'lucide-react';
-import { api } from '../../services/api';
+import { forgotPassword } from '../../services/authService';
 
 const ForgotPassword: React.FC = () => {
   const navigate = useNavigate();
@@ -21,11 +21,7 @@ const ForgotPassword: React.FC = () => {
     setDevResetUrl('');
 
     try {
-      const response = await api.post<{ 
-        message: string; 
-        devToken?: string; 
-        devResetUrl?: string;
-      }>('/auth/forgot-password', { email });
+      const response = await forgotPassword(email);
       setSuccess(true);
       // Store dev token and URL for development mode
       if (response.devToken && response.devResetUrl) {

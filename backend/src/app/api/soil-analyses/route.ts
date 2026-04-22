@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
@@ -7,7 +8,7 @@ export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request)
 
-    const where: any = {}
+    const where: Prisma.SoilAnalysisWhereInput = {}
     
     // Filter by farmId if provided
     const farmId = request.nextUrl.searchParams.get('farmId')
@@ -88,9 +89,9 @@ export async function POST(request: NextRequest) {
     // Validation
     if (!farmId || !farmPlotLocation || !testDate || pH === undefined || 
         phosphorus === undefined || potassium === undefined || 
-        nitrogen === undefined || calcium === undefined || magnesium === undefined) {
+        calcium === undefined || magnesium === undefined) {
       return NextResponse.json(
-        { error: 'Farm ID, farm plot location, test date, and all core nutrients (pH, P, K, N, Ca, Mg) are required' },
+        { error: 'Farm ID, farm plot location, test date, and all core nutrients (pH, P, K, Ca, Mg) are required' },
         { status: 400 }
       )
     }
@@ -105,7 +106,7 @@ export async function POST(request: NextRequest) {
         pH: parseFloat(pH),
         phosphorus: parseFloat(phosphorus),
         potassium: parseFloat(potassium),
-        nitrogen: parseFloat(nitrogen),
+        nitrogen: nitrogen === undefined || nitrogen === null || nitrogen === '' ? 0 : parseFloat(nitrogen),
         calcium: parseFloat(calcium),
         magnesium: parseFloat(magnesium),
         organicMatter: organicMatter ? parseFloat(organicMatter) : null,

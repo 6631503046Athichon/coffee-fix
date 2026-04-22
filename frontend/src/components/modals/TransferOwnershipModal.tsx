@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { User, UserRole } from '../../types'
-import { api } from '../../services/api'
+import { getAllUsers, transferOwnership } from '../../services/userService'
 import { X, AlertCircle, Shield, ArrowRight } from 'lucide-react'
 
 interface TransferOwnershipModalProps {
@@ -34,10 +34,10 @@ const TransferOwnershipModal: React.FC<TransferOwnershipModalProps> = ({
     setError('')
 
     try {
-      const response = await api.get<{ users: User[] }>('/users')
+      const users = await getAllUsers()
 
       // Filter for active admins (excluding current super admin)
-      const adminUsers = response.users.filter(
+      const adminUsers = users.filter(
         (user) =>
           user.roles.includes(UserRole.Admin) &&
           user.isActive !== false &&
@@ -74,9 +74,7 @@ const TransferOwnershipModal: React.FC<TransferOwnershipModalProps> = ({
     setLoading(true)
 
     try {
-      await api.post('/users/transfer-ownership', {
-        targetUserId: selectedAdminId,
-      })
+      await transferOwnership(selectedAdminId)
 
       onTransferComplete()
       resetForm()

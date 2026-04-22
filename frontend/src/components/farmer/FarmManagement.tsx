@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PlusCircle, Sprout, MapPin, Leaf, Coffee, Search, ShieldCheck, Layers3, Compass, X, MoreVertical, Edit3, Microscope, Trash2, Cloud, Map as MapIcon } from 'lucide-react';
+import { PlusCircle, Sprout, MapPin, Leaf, Coffee, Search, ShieldCheck, Layers3, Compass, X, MoreVertical, Edit3, Microscope, Trash2, Cloud, Map as MapIcon, Users } from 'lucide-react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Farm, UserRole } from '../../types';
@@ -41,7 +41,9 @@ const FarmManagement: React.FC = () => {
 		if (!currentUser) return data.farms;
 		if (isAdminView) return data.farms;
 		return data.farms.filter(
-			farm => farm.ownerUserId === currentUser.id || farm.farmerName === currentUser.name,
+			farm => farm.ownerUserId === currentUser.id
+				|| farm.farmerName === currentUser.name
+				|| (farm.collaborators ?? []).some(c => c.userId === currentUser.id),
 		);
 	}, [currentUser, data.farms, isAdminView]);
 
@@ -399,7 +401,12 @@ const FarmManagement: React.FC = () => {
 						>
 							<div className="flex items-start justify-between mb-4 gap-3">
 								<div className="flex-1 space-y-1.5 min-w-0">
+								<div className="flex items-center gap-2">
 									<h3 className="text-xl font-bold text-gray-900 leading-tight truncate">{farm.name ?? farm.location}</h3>
+									{currentUser && farm.ownerUserId !== currentUser.id && (farm.collaborators ?? []).some(c => c.userId === currentUser.id) && (
+										<span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200 whitespace-nowrap">ผู้ดูแล</span>
+									)}
+								</div>
 									<p className="text-sm text-gray-500 leading-relaxed truncate">{farm.location}</p>
 									<div className="space-y-0.5">
 										<p className="text-xs text-gray-500 leading-relaxed">Owner: <span className="font-medium">{ownerDisplayName}</span></p>
@@ -484,6 +491,18 @@ const FarmManagement: React.FC = () => {
 									<Layers3 className="h-3.5 w-3.5 flex-shrink-0" />
 									<span>{farm.varieties?.length || 0} varieties recorded</span>
 								</div>
+								{(farm.collaborators ?? []).length > 0 && (
+									<div className="flex items-start gap-2 text-xs text-blue-700 leading-relaxed">
+										<Users className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+										<div className="flex flex-wrap gap-1">
+											{farm.collaborators!.map(c => (
+												<span key={c.id} className="px-2 py-0.5 rounded-full bg-blue-50 border border-blue-100 font-medium">
+													{c.user?.name ?? 'Unknown'}
+												</span>
+											))}
+										</div>
+									</div>
+								)}
 								{(() => {
 									const soilSummary = soilSummaryByFarm.get(farm.id);
 									return soilSummary ? (

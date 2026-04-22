@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { User, UserRole } from '../../types'
-import { api } from '../../services/api'
+import { updateUser } from '../../services/userService'
 import { X, AlertCircle, Edit, Shield } from 'lucide-react'
 
 interface EditUserModalProps {
@@ -65,7 +65,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, onClose, on
     setLoading(true)
 
     try {
-      await api.put(`/users/${user.id}`, {
+      await updateUser(user.id, {
         name: name.trim(),
         email: email.trim() || null,
         username: username.trim() || null,

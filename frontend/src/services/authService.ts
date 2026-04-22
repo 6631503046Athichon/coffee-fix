@@ -168,6 +168,31 @@ export const login = authService.login;
 export const register = authService.register;
 export const logout = authService.logout;
 export const getCurrentUser = authService.getCurrentUser;
+
+// First-login credential update
+export const firstLoginUpdate = async (data: {
+  currentPassword: string;
+  newUsername?: string;
+  newEmail?: string;
+  newPassword?: string;
+}): Promise<{ user: User; message: string }> => {
+  return api.post<{ user: User; message: string }>('/auth/first-login-update', data);
+};
+
+// Forgot password
+export const forgotPassword = async (email: string): Promise<{ message: string; devToken?: string; devResetUrl?: string }> => {
+  return api.post<{ message: string; devToken?: string; devResetUrl?: string }>('/auth/forgot-password', { email });
+};
+
+// Verify reset token
+export const verifyResetToken = async (token: string): Promise<{ valid: boolean; email?: string }> => {
+  return api.get<{ valid: boolean; email?: string }>(`/auth/verify-reset-token`, { token });
+};
+
+// Reset password with token
+export const resetPassword = async (token: string, password: string): Promise<void> => {
+  await api.post('/auth/reset-password', { token, password });
+};
 export const isAuthenticated = authService.isAuthenticated;
 
 // Default export

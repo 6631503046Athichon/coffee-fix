@@ -7,6 +7,7 @@ import { getQualityInsights, QualityInsight, generateComprehensiveReport } from 
 import { Lightbulb, Loader2, AlertTriangle, Wand2, BarChart2, CheckSquare, Wind, Bot, TrendingUp, Trophy, FileText, User, Droplets, Flame } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import Select from './common/Select';
+import { formatGreenBeanId } from '../utils/formatDisplayId';
 
 // Removed local CustomDropdown in favor of shared Select component
 
@@ -71,7 +72,7 @@ const QualityInsights: React.FC = () => {
                 }
             }
             return { process, finalScore };
-        }).filter(item => item.process && item.finalScore);
+        }).filter((item): item is { process: string; finalScore: number } => item.process != null && item.finalScore != null);
 
         // fix: Refactored to help TypeScript's type inference by assigning the
         // accumulator property to a variable before accessing its properties.
@@ -124,10 +125,10 @@ const QualityInsights: React.FC = () => {
     }, [data.parchmentLots, data.processingBatches]);
     
     const dryingChartData = useMemo(() => {
-        if (!selectedParchmentLotId) return null;
+        if (!selectedParchmentLotId) return undefined;
         const parchmentLot = data.parchmentLots.find(pl => pl.id === selectedParchmentLotId);
         const batch = data.processingBatches.find(pb => pb.id === parchmentLot?.processingBatchId);
-        return batch?.dryingLog || null;
+        return batch?.dryingLog ?? undefined;
     }, [selectedParchmentLotId, data.parchmentLots, data.processingBatches]);
 
 
@@ -169,21 +170,44 @@ const QualityInsights: React.FC = () => {
                         <div className="mt-8">
                             <h4 className="text-xl font-bold text-gray-800 flex items-center mb-4"><Trophy className="mr-2 text-yellow-500"/> Top Performing Coffees</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {report.topPerformingCoffees.map(coffee => (
-                                    <Link to={`/traceability/${coffee.lotId}`} key={coffee.lotId} className="block bg-white p-4 rounded-lg border hover:shadow-md transition-shadow">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <p className="font-bold text-indigo-700">Lot {coffee.lotId}</p>
-                                                <p className="text-sm text-gray-600">{coffee.variety} - {coffee.process}</p>
+                                {report.topPerformingCoffees.map(coffee => {
+                                    const linkedLot = data.greenBeanLots.find(lot => lot.id === coffee.lotId);
+                                    const lotLabel = linkedLot ? formatGreenBeanId(linkedLot) : coffee.lotId;
+                                    const cardClassName = 'block bg-white p-4 rounded-lg border transition-shadow';
+                                    const cardBody = (
+                                        <>
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <p className="font-bold text-indigo-700">Lot {lotLabel}</p>
+                                                    <p className="text-sm text-gray-600">{coffee.variety} - {coffee.process}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-2xl font-extrabold text-gray-800">{coffee.score.toFixed(2)}</p>
+                                                    <p className="text-xs text-gray-500">Score</p>
+                                                </div>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-2xl font-extrabold text-gray-800">{coffee.score.toFixed(2)}</p>
-                                                <p className="text-xs text-gray-500">Score</p>
+                                            <p className="mt-2 text-sm text-gray-500 italic">"{coffee.tastingNotes}"</p>
+                                        </>
+                                    );
+
+                                    if (!linkedLot) {
+                                        return (
+                                            <div key={coffee.lotId} className={`${cardClassName} bg-gray-50 border-gray-200`}>
+                                                {cardBody}
                                             </div>
-                                        </div>
-                                        <p className="mt-2 text-sm text-gray-500 italic">"{coffee.tastingNotes}"</p>
-                                    </Link>
-                                ))}
+                                        );
+                                    }
+
+                                    return (
+                                        <Link
+                                            to={`/traceability/${linkedLot.id}`}
+                                            key={coffee.lotId}
+                                            className={`${cardClassName} hover:shadow-md`}
+                                        >
+                                            {cardBody}
+                                        </Link>
+                                    );
+                                })}
                             </div>
                         </div>
 

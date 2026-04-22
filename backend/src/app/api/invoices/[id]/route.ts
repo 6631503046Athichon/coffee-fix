@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, handleApiError } from '@/lib/middleware'
 
@@ -72,7 +73,7 @@ export async function PUT(
     const body = await request.json()
     const { status, notes } = body
 
-    const updateData: any = {}
+    const updateData: Prisma.InvoiceUpdateInput = {}
     if (status !== undefined) updateData.status = status
     if (notes !== undefined) updateData.notes = notes
 

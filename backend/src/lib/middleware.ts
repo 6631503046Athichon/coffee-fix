@@ -142,35 +142,37 @@ export function errorResponse(message: string, status: number = 500): NextRespon
 /**
  * Success response helper
  */
-export function successResponse(data: any, status: number = 200): NextResponse {
+export function successResponse(data: unknown, status: number = 200): NextResponse {
   return NextResponse.json(data, { status })
 }
 
 /**
  * Handle API errors
  */
-export function handleApiError(error: any): NextResponse {
+export function handleApiError(error: unknown): NextResponse {
+  const err = error as { message?: string; code?: string; statusCode?: number }
+
   // Avoid noisy logs for expected auth failures
   const isExpectedAuthError =
-    error?.message === 'Unauthorized' ||
-    error?.message === 'Invalid or expired token' ||
-    error?.message === 'Insufficient permissions' ||
-    error?.message === 'User not found or inactive'
+    err?.message === 'Unauthorized' ||
+    err?.message === 'Invalid or expired token' ||
+    err?.message === 'Insufficient permissions' ||
+    err?.message === 'User not found or inactive'
 
   // Check for database connection / pool errors
   const isConnectionError =
-    error?.message?.includes('MaxClientsInSessionMode') ||
-    error?.message?.includes('max clients reached') ||
-    error?.code === 'P1001' || // Can't reach database server
-    error?.code === 'P1008' || // Operations timed out
-    error?.code === 'P1017' || // Server has closed the connection
-    error?.code === 'P2024' || // Timed out fetching connection from pool
-    error?.message?.includes('10054') ||
-    error?.message?.includes('ECONNRESET') ||
-    error?.message?.includes('ECONNREFUSED')
+    err?.message?.includes('MaxClientsInSessionMode') ||
+    err?.message?.includes('max clients reached') ||
+    err?.code === 'P1001' || // Can't reach database server
+    err?.code === 'P1008' || // Operations timed out
+    err?.code === 'P1017' || // Server has closed the connection
+    err?.code === 'P2024' || // Timed out fetching connection from pool
+    err?.message?.includes('10054') ||
+    err?.message?.includes('ECONNRESET') ||
+    err?.message?.includes('ECONNREFUSED')
 
   if (isConnectionError) {
-    console.error('Database Connection Error:', error?.code || '', error?.message?.substring(0, 200))
+    console.error('Database Connection Error:', err?.code || '', err?.message?.substring(0, 200))
     return errorResponse(
       'Database temporarily unavailable. Please try again in a moment.',
       503
@@ -182,36 +184,36 @@ export function handleApiError(error: any): NextResponse {
   }
 
   // Prisma errors
-  if (error.code === 'P2002') {
+  if (err.code === 'P2002') {
     return errorResponse('Record already exists', 409)
   }
 
-  if (error.code === 'P2025') {
+  if (err.code === 'P2025') {
     return errorResponse('Record not found', 404)
   }
 
-  if (error.code === 'P2003') {
+  if (err.code === 'P2003') {
     return errorResponse('Invalid reference', 400)
   }
 
-  if (error.code === 'P2014') {
+  if (err.code === 'P2014') {
     return errorResponse('Required relation missing', 400)
   }
 
   // Authentication errors
-  if (error.message === 'Unauthorized' || error.message === 'Invalid or expired token') {
+  if (err.message === 'Unauthorized' || err.message === 'Invalid or expired token') {
     return errorResponse('Unauthorized', 401)
   }
 
-  if (error.message === 'Insufficient permissions') {
+  if (err.message === 'Insufficient permissions') {
     return errorResponse('Forbidden', 403)
   }
 
-  if (error.message === 'User not found or inactive') {
+  if (err.message === 'User not found or inactive') {
     return errorResponse('User not found or inactive', 401)
   }
 
   // Generic error
-  return errorResponse(error.message || 'Internal server error', error.statusCode || 500)
+  return errorResponse(err.message || 'Internal server error', err.statusCode || 500)
 }
 

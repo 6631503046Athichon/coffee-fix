@@ -10,6 +10,7 @@ import { NextRequest } from 'next/server'
 const mockPrismaUser = {
   findMany: jest.fn(),
   findUnique: jest.fn(),
+  findFirst: jest.fn(),
   create: jest.fn(),
   update: jest.fn(),
 }
@@ -194,10 +195,11 @@ describe('Plaintext Password Removal', () => {
       isSuperAdmin: false,
     })
 
-    const { PATCH } = await import('@/app/api/users/[id]/route')
+    // users/[id]/route.ts exports PUT (not PATCH) for the admin update flow.
+    const { PUT } = await import('@/app/api/users/[id]/route')
 
     const request = new NextRequest('http://localhost:3001/api/users/user-123', {
-      method: 'PATCH',
+      method: 'PUT',
       body: JSON.stringify({
         name: 'Updated Name',
         isActive: false,
@@ -205,7 +207,7 @@ describe('Plaintext Password Removal', () => {
     })
 
     const params = Promise.resolve({ id: 'user-123' })
-    await PATCH(request, { params })
+    await PUT(request, { params })
 
     if (updateUserData) {
       expect(updateUserData.temporaryPassword).toBeUndefined()

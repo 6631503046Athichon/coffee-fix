@@ -51,8 +51,8 @@ export const addProcessingBatch = async (
       processType: batchData.processType,
       processNotes: batchData.processNotes || null,
       cropYearId: batchData.cropYearId || null,
-      parchmentWeightKg: batchData.parchmentWeightKg || null,
-      moistureContent: batchData.moistureContent || null,
+      parchmentWeightKg: batchData.parchmentWeightKg ?? null,
+      moistureContent: batchData.moistureContent ?? null,
       dryingStartDate: batchData.dryingStartDate || null,
       dryingEndDate: batchData.dryingEndDate || null,
       baggingDate: batchData.baggingDate || null,
@@ -75,14 +75,33 @@ export const updateProcessingBatch = async (
       processType: batchData.processType,
       processNotes: batchData.processNotes || null,
       cropYearId: batchData.cropYearId || null,
-      parchmentWeightKg: batchData.parchmentWeightKg || null,
-      moistureContent: batchData.moistureContent || null,
+      parchmentWeightKg: batchData.parchmentWeightKg ?? null,
+      moistureContent: batchData.moistureContent ?? null,
       baggingDate: batchData.baggingDate || null,
       dryingStartDate: batchData.dryingStartDate || null,
       dryingEndDate: batchData.dryingEndDate || null,
     }
   );
   return transformProcessingBatchFromBackend(response.processingBatch);
+};
+
+/**
+ * Add a drying log entry to a processing batch
+ */
+export const addDryingLog = async (
+  batchId: string,
+  logData: {
+    date: string;
+    moistureContent: number;
+    ambientTemp: number;
+    relativeHumidity: number;
+  },
+): Promise<any> => {
+  const response = await api.post<{ dryingLog: any; message: string }>(
+    `/processing-batches/${batchId}/drying-logs`,
+    logData,
+  );
+  return response.dryingLog;
 };
 
 /**
@@ -104,8 +123,8 @@ export function transformProcessingBatchFromBackend(backendBatch: any): Processi
     processType: backendBatch.processType,
     processNotes: backendBatch.processNotes || undefined,
     cropYearId: backendBatch.cropYearId || undefined,
-    parchmentWeightKg: backendBatch.parchmentWeightKg || undefined,
-    moistureContent: backendBatch.moistureContent || undefined,
+    parchmentWeightKg: backendBatch.parchmentWeightKg ?? undefined,
+    moistureContent: backendBatch.moistureContent ?? undefined,
     baggingDate: backendBatch.baggingDate ? new Date(backendBatch.baggingDate).toISOString().split('T')[0] : undefined,
     dryingStartDate: backendBatch.dryingStartDate ? new Date(backendBatch.dryingStartDate).toISOString().split('T')[0] : undefined,
     dryingEndDate: backendBatch.dryingEndDate ? new Date(backendBatch.dryingEndDate).toISOString().split('T')[0] : undefined,

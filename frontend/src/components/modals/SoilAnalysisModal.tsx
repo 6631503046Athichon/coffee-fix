@@ -111,7 +111,7 @@ export const SoilAnalysisModal: React.FC<SoilAnalysisModalProps> = ({
       pH: parseFloat(pH),
       phosphorus: parseFloat(phosphorus),
       potassium: parseFloat(potassium),
-      nitrogen: parseFloat(nitrogen),
+      nitrogen: nitrogen ? parseFloat(nitrogen) : undefined,
       calcium: parseFloat(calcium),
       magnesium: parseFloat(magnesium),
       organicMatter: organicMatter ? parseFloat(organicMatter) : undefined,
@@ -224,7 +224,7 @@ export const SoilAnalysisModal: React.FC<SoilAnalysisModalProps> = ({
             <Beaker className="h-4 w-4 text-gray-500" />
             ค่าสารอาหารหลัก (จำเป็น)
           </h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <label className={labelClass}>pH *</label>
               <input
@@ -261,18 +261,7 @@ export const SoilAnalysisModal: React.FC<SoilAnalysisModalProps> = ({
                 className={inputClass}
               />
             </div>
-            <div>
-              <label className={labelClass}>ไนโตรเจน (%) *</label>
-              <input
-                type="number"
-                step="0.1"
-                value={nitrogen}
-                onChange={e => setNitrogen(e.target.value)}
-                required
-                placeholder="2.8"
-                className={inputClass}
-              />
-            </div>
+
             <div>
               <label className={labelClass}>แคลเซียม (ppm) *</label>
               <input
@@ -285,7 +274,7 @@ export const SoilAnalysisModal: React.FC<SoilAnalysisModalProps> = ({
                 className={inputClass}
               />
             </div>
-            <div>
+            <div className="md:col-start-2">
               <label className={labelClass}>แมกนีเซียม (ppm) *</label>
               <input
                 type="number"

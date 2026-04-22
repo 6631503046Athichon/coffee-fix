@@ -73,17 +73,4 @@ export const deleteFarm = async (farmId: string): Promise<void> => {
   await api.delete(`/farms/${farmId}`);
 };
 
-// Legacy localStorage functions for backward compatibility
-const FARMS_STORAGE_KEY = 'coffee_lab_farms';
 
-const dispatchStorageEvent = () => {
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new Event('localStorageUpdate'));
-  }
-};
-
-export const initializeFarms = (defaultFarms: Farm[]) => {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(FARMS_STORAGE_KEY, JSON.stringify(defaultFarms));
-  dispatchStorageEvent();
-};

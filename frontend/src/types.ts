@@ -13,14 +13,6 @@ export enum ProcessingBatchStatus {
   Completed = "Completed",
 }
 
-// Deprecated: Use ActivityType interface instead
-// Kept for backward compatibility
-export enum GAPActivityType {
-  Fertilizer = "Fertilizer",
-  PestManagement = "Pest Management",
-  WaterManagement = "Water Management",
-}
-
 export interface ActivityType {
   id: string;
   name: string;
@@ -45,6 +37,7 @@ export interface ProcessType {
 
 export interface Farm {
   id: string;
+  farmName?: string;
   name?: string;
   farmerName: string;
   ownerNames?: string[];
@@ -66,12 +59,35 @@ export interface Farm {
   archivedAt?: string;
   /** Optional: the owner user id (farmer) who owns this farm */
   ownerUserId?: string;
+  /** Collaborators assigned to this farm */
+  collaborators?: FarmCollaborator[];
+}
+
+export interface FarmCollaborator {
+  id: string;
+  farmId: string;
+  userId: string;
+  createdAt?: string;
+  user?: {
+    id: string;
+    name: string;
+    email?: string;
+    roles?: string[];
+  };
+}
+
+export interface HarvestLotFarmSummary {
+  id: string;
+  farmName?: string;
+  name?: string;
+  location?: string;
 }
 
 export interface HarvestLot {
   id: string;
   displayId?: string;
   farmId?: string;
+  farm?: HarvestLotFarmSummary;
   farmerName: string;
   cherryVariety: string;
   weightKg: number;
@@ -81,6 +97,7 @@ export interface HarvestLot {
   status: "Ready for Processing" | "Complete";
   cropYearId?: string;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface DryingLogEntry {
@@ -118,17 +135,54 @@ export interface PhysicalTestResults {
   notes?: string;
 }
 
+export interface ParchmentWithdrawalRecord {
+  id: string;
+  amountKg: number;
+  withdrawalType: "Sale" | "RoastingStock" | "HullAndGrade" | "Sample" | "Export" | "Other";
+  purpose: string;
+  notes?: string;
+  date: string;
+  withdrawnBy?: string;
+  withdrawnByName?: string;
+  salePrice?: number;
+  currency?: string;
+  customerName?: string;
+  deliveryAddress?: string;
+  totalAmount?: number;
+  targetRoasterId?: string;
+  roastProfileNotes?: string;
+  cuppingScore?: number;
+}
+
+export enum ParchmentSourceType {
+  Internal = "Internal",
+  External = "External",
+}
+
+export interface ParchmentExternalSource {
+  code: string;
+  variety: string;
+  origin: string;
+  supplierName?: string;
+  importDate: string;
+  importedBy: string;
+  fileName: string;
+}
+
 export interface ParchmentLot {
   id: string;
   displayId?: string;
-  processingBatchId: string;
-  harvestLotId: string;
+  processingBatchId?: string;
+  harvestLotId?: string;
+  sourceType: ParchmentSourceType;
+  externalSource?: ParchmentExternalSource;
   initialWeightKg: number;
   currentWeightKg: number;
   moistureContent: number;
   processType: string;
   status: "AwaitingHulling" | "Hulled";
   physicalTestResults?: PhysicalTestResults;
+  withdrawalHistory?: ParchmentWithdrawalRecord[];
   createdAt?: string;
 }
 
@@ -161,6 +215,16 @@ export interface GreenBeanLot {
   availabilityStatus: "Available" | "Withdrawn";
   cuppingScores: { sessionId: string; score: number }[];
   processorScore?: number; // Score assigned by processor during hulling and grading
+  cuppingFragrance?: number;
+  cuppingFlavor?: number;
+  cuppingAftertaste?: number;
+  cuppingAcidity?: number;
+  cuppingBody?: number;
+  cuppingBalance?: number;
+  cuppingOverall?: number;
+  cuppingUniformity?: number;
+  cuppingCleanCup?: number;
+  cuppingSweetness?: number;
   withdrawalHistory?: {
     amountKg: number;
     withdrawalType: "Sale" | "Roasting Stock" | "Sample" | "Export" | "Other";
@@ -184,6 +248,7 @@ export interface GreenBeanLot {
   publicTraceId?: string;
   qrGeneratedAt?: string;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 export enum RoastLevel {
@@ -363,7 +428,7 @@ export interface SoilAnalysis {
   pH: number;
   phosphorus: number; // P (ppm or mg/kg)
   potassium: number; // K (ppm or mg/kg)
-  nitrogen: number; // N (%)
+  nitrogen?: number; // N (%)
   calcium: number; // Ca (ppm or mg/kg)
   magnesium: number; // Mg (ppm or mg/kg)
 

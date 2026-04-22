@@ -1,19 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Leaf, Plus, Edit, Trash2, Search, X, AlertCircle, ChevronDown } from 'lucide-react';
-import { api } from '../services/api';
-
-interface CoffeeVariety {
-  id: string;
-  name: string;
-  species: string;
-  origin: string | null;
-  description: string | null;
-  characteristics: string | null;
-  altitude: string | null;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+import { getAllCoffeeVarieties, addCoffeeVariety, updateCoffeeVariety, deleteCoffeeVariety, CoffeeVariety } from '../services/coffeeVarietyService';
 
 const SPECIES_OPTIONS = ['Arabica', 'Robusta', 'Liberica', 'Excelsa'];
 
@@ -119,16 +106,12 @@ const CoffeeVarietiesManager: React.FC = () => {
       setLoading(true);
       setError('');
 
-      const params: Record<string, string> = {};
-      if (searchTerm) params.search = searchTerm;
-      if (speciesFilter) params.species = speciesFilter;
+      const filters: Record<string, string> = {};
+      if (searchTerm) filters.search = searchTerm;
+      if (speciesFilter) filters.species = speciesFilter;
 
-      const queryString = Object.keys(params).length > 0
-        ? '?' + new URLSearchParams(params).toString()
-        : '';
-
-      const response = await api.get<{ coffeeVarieties: CoffeeVariety[] }>(`/coffee-varieties${queryString}`);
-      setVarieties(response.coffeeVarieties || []);
+      const result = await getAllCoffeeVarieties(Object.keys(filters).length > 0 ? filters : undefined);
+      setVarieties(result);
     } catch (err) {
       console.error('Error fetching varieties:', err);
       setError('Failed to load coffee varieties.');
@@ -175,9 +158,9 @@ const CoffeeVarietiesManager: React.FC = () => {
 
     try {
       if (editingVariety) {
-        await api.put(`/coffee-varieties/${editingVariety.id}`, formData);
+        await updateCoffeeVariety(editingVariety.id, formData);
       } else {
-        await api.post('/coffee-varieties', formData);
+        await addCoffeeVariety(formData);
       }
       handleCloseModal();
       fetchVarieties();
@@ -194,7 +177,7 @@ const CoffeeVarietiesManager: React.FC = () => {
     if (!confirmed) return;
 
     try {
-      await api.delete(`/coffee-varieties/${variety.id}`);
+      await deleteCoffeeVariety(variety.id);
       fetchVarieties();
     } catch (err: any) {
       alert(err.message || 'Failed to delete coffee variety');

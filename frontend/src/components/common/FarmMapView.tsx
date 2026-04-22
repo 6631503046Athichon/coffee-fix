@@ -27,6 +27,7 @@ const FarmMapView: React.FC<FarmMapViewProps> = ({
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<Map<string, any>>(new Map());
   const isMapInitializedRef = useRef(false);
+  const hasFittedBoundsRef = useRef(false);
 
   // Filter farms with GPS coordinates
   const farmsWithGPS = useMemo(() => {
@@ -128,7 +129,7 @@ const FarmMapView: React.FC<FarmMapViewProps> = ({
     };
   }, [navigate]);
 
-  // Initialize map once
+  // Initialize map when container becomes available.
   useEffect(() => {
     if (isMapInitializedRef.current) return;
 
@@ -158,20 +159,17 @@ const FarmMapView: React.FC<FarmMapViewProps> = ({
     const initializeMap = () => {
       if (!mapRef.current || !window.L || mapInstanceRef.current) return;
 
-      if (farmsWithGPS.length === 0) {
-        return;
-      }
-
       // Calculate center point
-      const avgLat =
-        farmsWithGPS.reduce((sum, farm) => sum + (farm.latitude || 0), 0) /
-        farmsWithGPS.length;
-      const avgLng =
-        farmsWithGPS.reduce((sum, farm) => sum + (farm.longitude || 0), 0) /
-        farmsWithGPS.length;
+      const hasGPSData = farmsWithGPS.length > 0;
+      const avgLat = hasGPSData
+        ? farmsWithGPS.reduce((sum, farm) => sum + (farm.latitude || 0), 0) / farmsWithGPS.length
+        : 13.7563; // Bangkok fallback
+      const avgLng = hasGPSData
+        ? farmsWithGPS.reduce((sum, farm) => sum + (farm.longitude || 0), 0) / farmsWithGPS.length
+        : 100.5018; // Bangkok fallback
 
       // Initialize map
-      const map = window.L.map(mapRef.current).setView([avgLat, avgLng], 10);
+      const map = window.L.map(mapRef.current).setView([avgLat, avgLng], hasGPSData ? 10 : 6);
 
       // Add OpenStreetMap tiles
       window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -182,6 +180,14 @@ const FarmMapView: React.FC<FarmMapViewProps> = ({
 
       mapInstanceRef.current = map;
       isMapInitializedRef.current = true;
+      hasFittedBoundsRef.current = false;
+
+      // Leaflet may calculate size before layout settles; force recalculation once.
+      setTimeout(() => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+        }
+      }, 0);
     };
 
     loadLeaflet();
@@ -193,9 +199,10 @@ const FarmMapView: React.FC<FarmMapViewProps> = ({
         mapInstanceRef.current = null;
         markersRef.current.clear();
         isMapInitializedRef.current = false;
+        hasFittedBoundsRef.current = false;
       }
     };
-  }, []); // Only run once on mount
+  }, [farmsWithGPS.length]);
 
   // Update markers when farms or selection changes (without resetting zoom)
   useEffect(() => {
@@ -240,13 +247,22 @@ const FarmMapView: React.FC<FarmMapViewProps> = ({
       }
     });
 
-    // Fit bounds only on first load (when no markers existed before)
-    if (farmsWithGPS.length > 0 && existingMarkers.size === farmsWithGPS.length) {
+    if (farmsWithGPS.length === 0) {
+      hasFittedBoundsRef.current = false;
+      return;
+    }
+
+    // Fit bounds only once when markers become available (initial load).
+    if (!hasFittedBoundsRef.current && existingMarkers.size === farmsWithGPS.length) {
       const allMarkers = Array.from(existingMarkers.values());
-      if (allMarkers.length > 1 && !isMapInitializedRef.current) {
+      if (allMarkers.length > 1) {
         const group = new window.L.featureGroup(allMarkers);
         map.fitBounds(group.getBounds().pad(0.1));
+      } else if (allMarkers.length === 1) {
+        const farm = farmsWithGPS[0];
+        map.setView([farm.latitude!, farm.longitude!], 12);
       }
+      hasFittedBoundsRef.current = true;
     }
   }, [farmsWithGPS, selectedFarmId, onFarmClick, createMarkerIcon, createPopupContent]);
 

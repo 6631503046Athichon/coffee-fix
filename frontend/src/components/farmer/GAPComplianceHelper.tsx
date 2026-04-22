@@ -13,7 +13,7 @@ import { PageHeader } from '../common/PageHeader';
 import { Badge } from '../common/Badge';
 import { Alert } from '../common/Alert';
 import { generateGAPLogId } from '../../utils/idGenerator';
-import { addGAPLog, updateGAPLog } from '../../services/gapLogService';
+import { addGAPLog, deleteGAPLog, updateGAPLog } from '../../services/gapLogService';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -239,7 +239,7 @@ const GAPComplianceHelper: React.FC = () => {
         setDate(log.date);
         setProductUsed(log.productUsed);
         setQuantity(log.quantity);
-        setNotes(log.notes);
+        setNotes(log.notes ?? '');
         // Scroll to form
         setTimeout(() => {
             formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -256,12 +256,18 @@ const GAPComplianceHelper: React.FC = () => {
         setNotes('');
     };
     
-    const handleDelete = (logId: string) => {
+    const handleDelete = async (logId: string) => {
         if (confirm('Are you sure you want to delete this activity log?')) {
-            setData(prev => ({
-                ...prev,
-                gapLogs: prev.gapLogs.filter(log => log.id !== logId)
-            }));
+            try {
+                await deleteGAPLog(logId);
+                setData(prev => ({
+                    ...prev,
+                    gapLogs: prev.gapLogs.filter(log => log.id !== logId)
+                }));
+            } catch (error) {
+                console.error('Failed to delete GAP log:', error);
+                alert('Failed to delete activity log. Please try again.');
+            }
         }
     };
     
@@ -301,10 +307,10 @@ const GAPComplianceHelper: React.FC = () => {
     }, [filteredLogs]);
 
     const handlePrint = () => {
-        const printContents = reportContentRef.current?.innerHTML;
+        const reportContent = reportContentRef.current;
         const printWindow = window.open('', '', 'height=800,width=900');
 
-        if (printWindow && printContents) {
+        if (printWindow && reportContent) {
             printWindow.document.write(`<html><head><title>GAP Compliance Report</title>
 <style>
   @page { margin: 20mm 15mm; }
@@ -322,10 +328,9 @@ const GAPComplianceHelper: React.FC = () => {
   .section { margin-bottom: 20px; page-break-inside: avoid; }
   .section-title { font-size: 14px; font-weight: 600; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin-bottom: 8px; }
   .badge { display: inline-block; background: #e0e7ff; color: #3730a3; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-</style></head><body>`);
-            printWindow.document.write(printContents);
-            printWindow.document.write('</body></html>');
+</style></head><body></body></html>`);
             printWindow.document.close();
+            printWindow.document.body.appendChild(reportContent.cloneNode(true));
             printWindow.print();
         }
     };

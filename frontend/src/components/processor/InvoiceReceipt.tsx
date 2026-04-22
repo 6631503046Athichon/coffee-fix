@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom';
 import QRCode from 'qrcode';
 import { GreenBeanLot } from '../../types';
 import { FileText, Printer, X } from 'lucide-react';
+import { getPublicTraceUrl } from '../../services/greenBeanLotService';
+import { formatGreenBeanId } from '../../utils/formatDisplayId';
 
 interface InvoiceReceiptProps {
   visible: boolean;
@@ -15,13 +17,17 @@ const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({ visible, onClose, lot, 
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
 
   const traceabilityUrl = useMemo(() => {
+    if (lot.publicTraceId) {
+      return getPublicTraceUrl(lot.publicTraceId);
+    }
+
     try {
       const base = typeof window !== 'undefined' ? window.location.origin : '';
       return `${base}/traceability/${lot.id}`;
     } catch {
       return `/traceability/${lot.id}`;
     }
-  }, [lot.id]);
+  }, [lot.id, lot.publicTraceId]);
 
   useEffect(() => {
     let canceled = false;
@@ -112,8 +118,8 @@ const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({ visible, onClose, lot, 
               <tbody className="divide-y divide-gray-100">
                 <tr>
                   <td className="px-4 py-4">
-                    <div className="font-semibold text-gray-900">Green Bean Lot {lot.id}</div>
-                    <div className="text-sm text-gray-600">Grade: {lot.grade}{lot.sourceType === 'External' && lot.externalSource ? ` • ${lot.externalSource.processType}` : ''}</div>
+                    <div className="font-semibold text-gray-900">Green Bean Lot {formatGreenBeanId(lot)}</div>
+                    <div className="text-sm text-gray-600">Grade: {lot.grade}{lot.sourceType === 'External' && lot.externalSource ? ` - ${lot.externalSource.processType}` : ''}</div>
                   </td>
                   <td className="px-4 py-4 text-right font-semibold text-gray-900">{qtyKg.toFixed(2)}</td>
                   <td className="px-4 py-4 text-right text-gray-900">{pricePerKg.toFixed(2)} {currency}</td>
@@ -137,7 +143,7 @@ const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({ visible, onClose, lot, 
             </div>
             <div className="p-4 rounded-xl border border-gray-200">
               <p className="text-sm font-semibold text-gray-700 mb-2">Notes</p>
-              <p className="text-sm text-gray-700 whitespace-pre-line">{entry.notes || entry.purpose || '—'}</p>
+              <p className="text-sm text-gray-700 whitespace-pre-line">{entry.notes || entry.purpose || '-'}</p>
             </div>
           </div>
         </div>

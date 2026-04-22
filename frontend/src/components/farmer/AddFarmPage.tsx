@@ -1,16 +1,46 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { PlusCircle, Save, MapPin, Compass, X, RefreshCw, ArrowLeft, Sprout, User, Ruler, Coffee, Leaf, Info } from 'lucide-react';
+import { PlusCircle, Save, MapPin, Compass, X, RefreshCw, ArrowLeft, Sprout, User as UserIcon, Ruler, Coffee, Leaf, Info, Users, UserPlus, Trash2 } from 'lucide-react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Farm } from '../../types';
+import { Farm, User, UserRole, FarmCollaborator } from '../../types';
 import { Button, Input } from '../common';
 import Select from '../common/Select';
 import { addFarm, updateFarm } from '../../services/farmService';
+import { addFarmCollaborator, removeFarmCollaborator } from '../../services/farmCollaboratorService';
 import { generateFarmId } from '../../utils/idGenerator';
 import { getActiveCoffeeVarieties, CoffeeVariety } from '../../services/coffeeVarietyService';
+import { getAllUsers } from '../../services/userService';
 
 type ParsedGoogleMaps = { lat: number; lng: number; placeName?: string } | null;
+
+const getDistrictProvince = (placeName?: string): string | undefined => {
+	if (!placeName) return undefined;
+	const parts = placeName
+		.split(',')
+		.map(part => part.trim())
+		.filter(Boolean);
+	if (parts.length < 2) return undefined;
+	const district = parts[parts.length - 2];
+	const province = parts[parts.length - 1];
+	return `${district}, ${province}`;
+};
+
+const getDistrictProvinceFromAddress = (address: Record<string, string>): string | undefined => {
+	const district =
+		address.county ||
+		address.city_district ||
+		address.state_district ||
+		address.municipality ||
+		address.city ||
+		address.town ||
+		address.village ||
+		address.suburb ||
+		address.neighbourhood;
+	const province = address.state || address.region || address.province;
+	if (district && province) return `${district}, ${province}`;
+	return district || province;
+};
 
 function parseGoogleMapsUrl(url: string): ParsedGoogleMaps {
 	if (!url) return null;
@@ -61,8 +91,19 @@ const AddFarmPage: React.FC = () => {
 	const [farmName, setFarmName] = useState('');
 	const [farmLocation, setFarmLocation] = useState('');
 	const [ownerNames, setOwnerNames] = useState<string[]>(['']);
-	const [farmerNames, setFarmerNames] = useState<string[]>(['']);
 	const [selectedVarieties, setSelectedVarieties] = useState<string[]>([]);
+
+	// Farmer (owner) dropdown
+	const [farmerUsers, setFarmerUsers] = useState<User[]>([]);
+	const [selectedOwnerId, setSelectedOwnerId] = useState<string>('');
+	const [farmersLoading, setFarmersLoading] = useState(true);
+	const isAdmin = currentUser?.roles?.includes(UserRole.Admin) ?? false;
+
+	// Collaborators
+	const [collaborators, setCollaborators] = useState<FarmCollaborator[]>([]);
+	const [selectedCollaboratorId, setSelectedCollaboratorId] = useState<string>('');
+	const [collaboratorLoading, setCollaboratorLoading] = useState(false);
+
 	const [customVariety, setCustomVariety] = useState('');
 	const [customVarietiesList, setCustomVarietiesList] = useState<string[]>([]); // varieties ที่ user เพิ่มเอง
 	const [googleMapsUrl, setGoogleMapsUrl] = useState('');
@@ -73,6 +114,7 @@ const AddFarmPage: React.FC = () => {
 	const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 	const [isGeocoding, setIsGeocoding] = useState(false);
 	const [isGettingLocation, setIsGettingLocation] = useState(false);
+	const [isParsingUrl, setIsParsingUrl] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const lastLoadedFarmIdRef = useRef<string | null>(null);
 
@@ -99,6 +141,26 @@ const AddFarmPage: React.FC = () => {
 		fetchVarieties();
 	}, []);
 
+	// Fetch farmer users for dropdown
+	useEffect(() => {
+		const fetchFarmers = async () => {
+			setFarmersLoading(true);
+			try {
+				const users = await getAllUsers();
+				const farmers = users.filter(u => u.roles?.includes(UserRole.Farmer) && u.isActive !== false);
+				setFarmerUsers(farmers);
+				if (currentUser && !isAdmin && farmers.some(f => f.id === currentUser.id)) {
+					setSelectedOwnerId(currentUser.id);
+				}
+			} catch (error) {
+				console.error('Failed to fetch farmers:', error);
+			} finally {
+				setFarmersLoading(false);
+			}
+		};
+		fetchFarmers();
+	}, [currentUser, isAdmin]);
+
 	useEffect(() => {
 		if (isEditing && editingFarm) {
 			if (lastLoadedFarmIdRef.current === editingFarm.id) {
@@ -114,15 +176,14 @@ const AddFarmPage: React.FC = () => {
 					.map(name => name.trim())
 					.filter(Boolean);
 			setOwnerNames(parsedOwners.length > 0 ? parsedOwners : ['']);
-			const parsedFarmers = editingFarm.caretakerNames && editingFarm.caretakerNames.length > 0
-				? editingFarm.caretakerNames
-				: (editingFarm.caretakerName ?? '')
-					.split(',')
-					.map(name => name.trim())
-					.filter(Boolean);
-			setFarmerNames(parsedFarmers.length > 0 ? parsedFarmers : ['']);
+			if (editingFarm.ownerUserId) {
+				setSelectedOwnerId(editingFarm.ownerUserId);
+			} else if (currentUser && !isAdmin) {
+				setSelectedOwnerId(currentUser.id);
+			}
 			setSelectedVarieties(editingFarm.varieties ?? []);
 			setCustomVariety('');
+			setCollaborators(editingFarm.collaborators ?? []);
 			setGoogleMapsUrl(editingFarm.googleMapsUrl ?? '');
 			setLatitudeInput(
 				editingFarm.latitude !== undefined && editingFarm.latitude !== null ? String(editingFarm.latitude) : '',
@@ -139,7 +200,11 @@ const AddFarmPage: React.FC = () => {
 			setFarmName('');
 			setFarmLocation('');
 			setOwnerNames(['']);
-			setFarmerNames(['']);
+			if (currentUser && !isAdmin) {
+				setSelectedOwnerId(currentUser.id);
+			} else {
+				setSelectedOwnerId('');
+			}
 			setSelectedVarieties([]);
 			setCustomVariety('');
 			setGoogleMapsUrl('');
@@ -166,17 +231,63 @@ const AddFarmPage: React.FC = () => {
 		setOwnerNames(prev => (prev.length === 1 ? [''] : prev.filter((_, i) => i !== index)));
 	};
 
-	const handleFarmerNameChange = (index: number, value: string) => {
-		setFarmerNames(prev => prev.map((name, i) => (i === index ? value : name)));
+	// Collaborator handlers
+	const handleAddCollaborator = async () => {
+		if (!selectedCollaboratorId) return;
+		// Can't add owner as collaborator
+		if (selectedCollaboratorId === selectedOwnerId) {
+			setFormError('เจ้าของฟาร์มไม่สามารถเพิ่มเป็นผู้ช่วยได้');
+			return;
+		}
+		// Can't add duplicate
+		if (collaborators.some(c => c.userId === selectedCollaboratorId)) {
+			setFormError('ผู้ใช้นี้เป็นผู้ช่วยอยู่แล้ว');
+			return;
+		}
+		setFormError(null);
+
+		if (isEditing && farmId) {
+			// Editing: call API immediately
+			setCollaboratorLoading(true);
+			const result = await addFarmCollaborator(farmId, selectedCollaboratorId);
+			if (result) {
+				setCollaborators(prev => [...prev, result]);
+				setSelectedCollaboratorId('');
+			}
+			setCollaboratorLoading(false);
+		} else {
+			// Creating: add as pending (local only, will be saved after farm creation)
+			const pendingUser = farmerUsers.find(u => u.id === selectedCollaboratorId);
+			const pending: FarmCollaborator = {
+				id: `pending-${Date.now()}`,
+				farmId: '',
+				userId: selectedCollaboratorId,
+				user: pendingUser ? { id: pendingUser.id, name: pendingUser.name, email: pendingUser.email ?? undefined, roles: pendingUser.roles as string[] } : undefined,
+			};
+			setCollaborators(prev => [...prev, pending]);
+			setSelectedCollaboratorId('');
+		}
 	};
 
-	const handleAddFarmerName = () => {
-		setFarmerNames(prev => [...prev, '']);
+	const handleRemoveCollaborator = async (userId: string) => {
+		if (isEditing && farmId) {
+			// Editing: call API
+			setCollaboratorLoading(true);
+			const success = await removeFarmCollaborator(farmId, userId);
+			if (success) {
+				setCollaborators(prev => prev.filter(c => c.userId !== userId));
+			}
+			setCollaboratorLoading(false);
+		} else {
+			// Creating: just remove from local state
+			setCollaborators(prev => prev.filter(c => c.userId !== userId));
+		}
 	};
 
-	const handleRemoveFarmerName = (index: number) => {
-		setFarmerNames(prev => (prev.length === 1 ? [''] : prev.filter((_, i) => i !== index)));
-	};
+	// Users available as collaborators (farmers not already added and not the owner)
+	const availableCollaborators = farmerUsers.filter(
+		u => u.id !== selectedOwnerId && !collaborators.some(c => c.userId === u.id)
+	);
 
 	const removeVariety = (variety: string) => {
 		setSelectedVarieties(prev => prev.filter(v => v !== variety));
@@ -195,7 +306,7 @@ const AddFarmPage: React.FC = () => {
 		setCustomVariety('');
 	};
 
-	const handleExtractFromGoogleMapsUrl = () => {
+	const handleExtractFromGoogleMapsUrl = async () => {
 		setFormError(null);
 
 		if (!googleMapsUrl.trim()) {
@@ -210,6 +321,7 @@ const AddFarmPage: React.FC = () => {
 		}
 
 		const { lat, lng, placeName } = parsed;
+		let districtProvince = getDistrictProvince(placeName);
 		if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
 			setFormError('The coordinates from this URL are not in a valid range.');
 			return;
@@ -218,24 +330,48 @@ const AddFarmPage: React.FC = () => {
 		setLatitudeInput(lat.toFixed(6));
 		setLongitudeInput(lng.toFixed(6));
 
+		if (!districtProvince) {
+			setIsParsingUrl(true);
+			try {
+				const response = await fetch(
+					`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`,
+					{
+						headers: {
+							'User-Agent': 'CoffeeLab-Platform/1.0',
+						},
+					}
+				);
+				if (response.ok) {
+					const result = await response.json();
+					if (result && result.address) {
+						districtProvince = getDistrictProvinceFromAddress(result.address);
+					}
+				}
+			} catch (error) {
+				console.error('Reverse geocoding error:', error);
+			} finally {
+				setIsParsingUrl(false);
+			}
+		}
+
 		const existingLocation = farmLocation.trim();
 
 		// ถ้ามี Location อยู่แล้ว และดึงชื่อสถานที่จาก URL ได้ ให้เตือนว่าอาจไม่ตรงกัน
-		if (existingLocation && placeName && existingLocation !== placeName) {
-			setFarmLocation(placeName); // อัพเดทเป็นชื่อจาก URL
+		if (existingLocation && districtProvince && existingLocation !== districtProvince) {
+			setFarmLocation(districtProvince); // อัพเดทเป็นอำเภอ, จังหวัดจาก URL
 			setToast({
 				type: 'success',
-				message: `เปลี่ยน Location จาก "${existingLocation}" เป็น "${placeName}" ตาม Google Maps URL`,
+				message: `เปลี่ยน Location จาก "${existingLocation}" เป็น "${districtProvince}" ตาม Google Maps URL`,
 			});
-		} else if (existingLocation && !placeName) {
-			// มี Location อยู่แล้ว แต่ URL ไม่มีชื่อสถานที่ - เตือนให้ตรวจสอบ
-			setFormError(`⚠️ คุณกรอก "${existingLocation}" แต่ลิงค์ Google Maps ไม่มีชื่อสถานที่ กรุณาตรวจสอบว่าพิกัด (${lat.toFixed(4)}, ${lng.toFixed(4)}) ตรงกับ "${existingLocation}" หรือไม่`);
-		} else if (placeName && !existingLocation) {
-			// ไม่มี Location - ใส่ชื่อจาก URL ให้
-			setFarmLocation(placeName);
+		} else if (existingLocation && !districtProvince) {
+			// มี Location อยู่แล้ว แต่ URL ไม่มีข้อมูลอำเภอ, จังหวัด - เตือนให้ตรวจสอบ
+			setFormError(`⚠️ คุณกรอก "${existingLocation}" แต่ลิงค์ Google Maps ไม่มีข้อมูลอำเภอ/จังหวัด กรุณาตรวจสอบว่าพิกัด (${lat.toFixed(4)}, ${lng.toFixed(4)}) ตรงกับ "${existingLocation}" หรือไม่`);
+		} else if (districtProvince && !existingLocation) {
+			// ไม่มี Location - ใส่ชื่ออำเภอ, จังหวัดจาก URL ให้
+			setFarmLocation(districtProvince);
 			setToast({
 				type: 'success',
-				message: `ดึงพิกัดและ Location "${placeName}" จาก Google Maps URL สำเร็จ`,
+				message: `ดึงพิกัดและ Location "${districtProvince}" จาก Google Maps URL สำเร็จ`,
 			});
 		} else {
 			setToast({
@@ -279,7 +415,13 @@ const AddFarmPage: React.FC = () => {
 			setIsSubmitting(false);
 			return;
 		}
-		const sanitizedFarmers = farmerNames.map(name => name.trim()).filter(Boolean);
+		if (!isAdmin && !selectedOwnerId) {
+			setFormError('กรุณาเลือก Farmer ที่จะเป็นเจ้าของสวน');
+			setIsSubmitting(false);
+			return;
+		}
+		const selectedFarmer = selectedOwnerId ? farmerUsers.find(f => f.id === selectedOwnerId) : null;
+		const sanitizedFarmers = selectedFarmer ? [selectedFarmer.name] : [];
 		if (selectedVarieties.length === 0) {
 			setFormError('Please select or add at least 1 coffee variety');
 			setIsSubmitting(false);
@@ -347,6 +489,7 @@ const AddFarmPage: React.FC = () => {
 				caretakerName: undefined,
 				googleMapsUrl: googleMapsUrl.trim() || undefined,
 				location: farmLocation.trim(),
+				ownerUserId: selectedOwnerId || undefined,
 				varieties: [...selectedVarieties].sort(),
 				latitude,
 				longitude,
@@ -388,7 +531,7 @@ const AddFarmPage: React.FC = () => {
 				caretakerName: undefined,
 				googleMapsUrl: googleMapsUrl.trim() || undefined,
 				location: farmLocation.trim(),
-				ownerUserId: currentUser.id,
+				ownerUserId: selectedOwnerId || undefined,
 				varieties: [...selectedVarieties].sort(),
 				archived: false,
 				latitude,
@@ -399,6 +542,14 @@ const AddFarmPage: React.FC = () => {
 			};
 			try {
 				const savedFarm = await addFarm(newFarm);
+
+				// Add pending collaborators after farm creation
+				if (collaborators.length > 0 && savedFarm.id) {
+					await Promise.all(
+						collaborators.map(c => addFarmCollaborator(savedFarm.id, c.userId))
+					);
+				}
+
 				setData(prev => ({
 					...prev,
 					farms: [savedFarm, ...prev.farms],
@@ -584,19 +735,20 @@ const AddFarmPage: React.FC = () => {
 				<div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
 					<div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100">
 						<div className="p-2 bg-blue-50 rounded-lg">
-							<User className="h-5 w-5 text-blue-600" />
+							<UserIcon className="h-5 w-5 text-blue-600" />
 						</div>
 						<h2 className="text-xl font-bold text-gray-900">People</h2>
 					</div>
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 						<div className="space-y-3">
-							<div className="flex items-center justify-between">
+							<div className="flex items-center justify-between min-h-[28px]">
 								<label className="block text-sm font-semibold text-gray-700">Farm Owner Name</label>
 								<Button
 									type="button"
 									variant="secondary"
+									size="sm"
 									onClick={handleAddOwnerName}
-									className="px-3 py-1.5 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+									className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
 								>
 									Add Owner
 								</Button>
@@ -626,42 +778,97 @@ const AddFarmPage: React.FC = () => {
 							</div>
 						</div>
 						<div className="space-y-3">
-							<div className="flex items-center justify-between">
+							<div className="min-h-[28px] flex items-center">
 								<label className="block text-sm font-semibold text-gray-700">Farmer</label>
-								<Button
-									type="button"
-									variant="secondary"
-									onClick={handleAddFarmerName}
-									className="px-3 py-1.5 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
-								>
-									Add Farmer
-								</Button>
 							</div>
-							<div className="space-y-2">
-								{farmerNames.map((name, index) => (
-									<div key={`farmer-${index}`} className="flex items-center gap-2">
-										<Input
-											placeholder={`Farmer name ${index + 1}`}
-											value={name}
-											onChange={e => handleFarmerNameChange(index, e.target.value)}
-											fullWidth
-										/>
-										{farmerNames.length > 1 && (
-											<Button
-												type="button"
-												variant="outline"
-												onClick={() => handleRemoveFarmerName(index)}
-												className="px-2.5 py-2 text-gray-500 hover:text-red-600"
-												aria-label={`Remove farmer ${index + 1}`}
-											>
-												<X className="h-4 w-4" />
-											</Button>
-										)}
-									</div>
-								))}
-							</div>
+							<Select
+								options={farmerUsers}
+								value={selectedOwnerId || null}
+								onChange={(v) => setSelectedOwnerId(v as string)}
+								getValue={(u: User) => u.id}
+								getLabel={(u: User) => `${u.name}${u.email ? ` (${u.email})` : u.username ? ` (${u.username})` : ''}`}
+								placeholder={farmersLoading ? 'กำลังโหลด...' : 'เลือก Farmer...'}
+								disabled={!isAdmin || farmersLoading}
+								colorTheme="blue"
+							/>
+							{!isAdmin && (
+								<p className="text-xs text-gray-500">ฟาร์มจะถูกสร้างในบัญชีของคุณ</p>
+							)}
 						</div>
 					</div>
+
+					{/* Collaborators */}
+					{isAdmin && (
+						<div className="mt-6 pt-6 border-t border-gray-100">
+							<div className="flex items-center gap-2.5 mb-4">
+								<div className="p-1.5 bg-indigo-50 rounded-lg">
+									<Users className="h-4 w-4 text-indigo-600" />
+								</div>
+								<label className="text-sm font-semibold text-gray-700">Farm Caretakers</label>
+							</div>
+
+							{/* Add collaborator row */}
+							<div className="flex items-center gap-2 mb-4">
+								<div className="flex-1">
+									<Select
+										options={availableCollaborators}
+										value={selectedCollaboratorId || null}
+										onChange={(v) => setSelectedCollaboratorId(v as string)}
+										getValue={(u: User) => u.id}
+										getLabel={(u: User) => `${u.name}${u.email ? ` (${u.email})` : u.username ? ` (${u.username})` : ''}`}
+										placeholder={farmersLoading ? 'กำลังโหลด...' : 'เลือกผู้ดูแล...'}
+										disabled={farmersLoading || collaboratorLoading}
+										colorTheme="blue"
+									/>
+								</div>
+								<Button
+									type="button"
+									variant="primary"
+									onClick={handleAddCollaborator}
+									disabled={!selectedCollaboratorId || collaboratorLoading}
+									className="bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap px-5 py-2.5"
+								>
+									<UserPlus className="h-5 w-5 mr-1.5" />
+									เพิ่ม
+								</Button>
+							</div>
+
+							{/* Collaborator list */}
+							{collaborators.length > 0 ? (
+								<div className="space-y-1.5">
+									{collaborators.map((collab) => (
+										<div key={collab.id} className="group flex items-center justify-between bg-gradient-to-r from-indigo-50/80 to-blue-50/50 rounded-xl px-4 py-3 border border-indigo-100/60 transition-all hover:border-indigo-200">
+											<div className="flex items-center gap-3">
+												<div className="w-9 h-9 bg-white rounded-full flex items-center justify-center shadow-sm border border-indigo-100">
+													<UserIcon className="h-4 w-4 text-indigo-500" />
+												</div>
+												<div className="flex flex-col">
+													<span className="text-sm font-semibold text-gray-800">{collab.user?.name || 'Unknown'}</span>
+													{collab.user?.email && (
+														<span className="text-xs text-gray-400">{collab.user.email}</span>
+													)}
+												</div>
+											</div>
+											<button
+												type="button"
+												onClick={() => handleRemoveCollaborator(collab.userId)}
+												disabled={collaboratorLoading}
+												className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50"
+												aria-label={`ลบ ${collab.user?.name}`}
+											>
+												<Trash2 className="h-4 w-4" />
+											</button>
+										</div>
+									))}
+								</div>
+							) : (
+								<div className="flex items-center gap-2 py-4 px-3 rounded-xl bg-gray-50 border border-dashed border-gray-200">
+									<Users className="h-4 w-4 text-gray-300" />
+									<p className="text-sm text-gray-400">ยังไม่มีผู้ดูแล</p>
+								</div>
+							)}
+						</div>
+					)}
 				</div>
 
 				{/* Location Details Section */}
@@ -712,11 +919,11 @@ const AddFarmPage: React.FC = () => {
 									type="button"
 									variant="outline"
 									onClick={handleExtractFromGoogleMapsUrl}
-									disabled={!googleMapsUrl.trim()}
-									icon={<MapPin className="h-4 w-4" />}
+									disabled={!googleMapsUrl.trim() || isParsingUrl}
+									icon={isParsingUrl ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
 									className="bg-white hover:bg-sky-50 border-sky-300 text-sky-700 hover:text-sky-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
 								>
-									Use Google Maps URL
+									{isParsingUrl ? 'Checking...' : 'Use Google Maps URL'}
 								</Button>
 								<Button
 									type="button"

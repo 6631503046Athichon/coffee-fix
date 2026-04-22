@@ -14,39 +14,9 @@
     </style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Coffee Lab Platform</title>
-    <script>
-      window.tailwindConfig = {
-        theme: {
-          extend: {
-            keyframes: {
-              'fade-in': {
-                '0%': { opacity: '0', transform: 'translateY(-10px)' },
-                '100%': { opacity: '1', transform: 'translateY(0)' },
-              },
-            },
-            animation: {
-              'fade-in': 'fade-in 0.5s ease-out',
-            },
-            colors: {
-              indigo: {
-                '50': '#eef2ff',
-                '100': '#e0e7ff',
-                '200': '#c7d2fe',
-                '300': '#a5b4fc',
-                '400': '#818cf8',
-                '500': '#6366f1',
-                '600': '#4f46e5',
-                '700': '#4338ca',
-                '800': '#3730a3',
-                '900': '#312e81',
-                '950': '#1e1b4b',
-              },
-            }
-          }
-        }
-      }
-    </script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind is now built locally via postcss.config.js + tailwind.config.ts
+         and injected through src/styles.css. The CDN script has been removed
+         so production bundles stay lean and theme tokens live in source. -->
   <script type="importmap">
 {
   "imports": {

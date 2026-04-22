@@ -1,6 +1,6 @@
 import { CropYear } from '../types';
 import { api } from './api';
-import { handleApiErrorWithFallback } from '../utils/errorHandler';
+import { handleApiError, handleApiErrorWithFallback } from '../utils/errorHandler';
 
 /**
  * Fetch all crop years from the backend API
@@ -22,6 +22,50 @@ export const getAllCropYears = async (): Promise<CropYear[]> => {
       operation: 'fetch crop years',
       fallbackValue: [],
     });
+  }
+};
+
+/**
+ * Create a new crop year
+ */
+export const createCropYear = async (data: {
+  year: string;
+  startDate: string;
+  endDate: string;
+  description?: string;
+}): Promise<CropYear> => {
+  try {
+    const response = await api.post<{ cropYear: any; message: string }>('/crop-years', data);
+    return {
+      id: response.cropYear.id,
+      year: response.cropYear.year,
+      startDate: response.cropYear.startDate,
+      endDate: response.cropYear.endDate,
+      description: response.cropYear.description || undefined,
+    };
+  } catch (error) {
+    throw new Error(handleApiError(error, 'create crop year'));
+  }
+};
+
+/**
+ * Update an existing crop year
+ */
+export const updateCropYear = async (
+  id: string,
+  data: Partial<{ year: string; startDate: string; endDate: string; description: string }>,
+): Promise<CropYear> => {
+  try {
+    const response = await api.put<{ cropYear: any }>(`/crop-years/${id}`, data);
+    return {
+      id: response.cropYear.id,
+      year: response.cropYear.year,
+      startDate: response.cropYear.startDate,
+      endDate: response.cropYear.endDate,
+      description: response.cropYear.description || undefined,
+    };
+  } catch (error) {
+    throw new Error(handleApiError(error, 'update crop year'));
   }
 };
 

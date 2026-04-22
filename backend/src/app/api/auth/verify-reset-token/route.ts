@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { handleApiError } from '@/lib/middleware'
+import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
+    // Rate limit: 20 token verifications per 15 minutes per IP (prevents enumeration)
+    const limited = await rateLimit(request, RATE_LIMITS.VERIFY_TOKEN)
+    if (limited) return limited
+
     const token = request.nextUrl.searchParams.get('token')
 
     if (!token) {

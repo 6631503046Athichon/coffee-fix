@@ -288,9 +288,8 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         harvestLots: [savedLot, ...prev.harvestLots],
       }));
 
-      // Show success message
+      // Build success message for parent notification/toast
       const successMsg = `Harvest lot ${savedLot.id || 'created'} registered successfully!`;
-      setSuccessMessage(successMsg);
       setFormErrors({});
       
       // Notify parent component if callback provided
@@ -301,13 +300,12 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
       // Clear saved form data on success
       clearSavedData();
 
-      // Reset form (keep selected farm) after a short delay to show success message
-      setTimeout(() => {
-        resetForm();
-        setCherryVariety(selectedFarm.varieties?.[0] || '');
-        setSuccessMessage(null);
-        setIsSubmitting(false);
-      }, 2000);
+      // Reset local modal state and close immediately after successful registration
+      resetForm();
+      setCherryVariety(selectedFarm.varieties?.[0] || '');
+      setSuccessMessage(null);
+      setIsSubmitting(false);
+      onClose();
     } catch (error: any) {
       console.error('Failed to add harvest lot:', error);
       const errorMessage = error?.message || error?.error || 'Failed to register harvest lot. Please try again.';
