@@ -7,6 +7,7 @@ export {
   NEW_TAG_DAYS,
   isRecentItem,
   formatParchmentStatus,
+  findCurrentCropYearId,
 } from './constants'
 export type {
   ViewMode,

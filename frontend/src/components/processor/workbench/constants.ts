@@ -1,7 +1,7 @@
 // Shared constants and pure helpers extracted from ProcessorWorkbench.
 // Kept framework-free so they can be unit-tested and reused without React.
 
-import type { ParchmentLot, GreenBeanLot } from '../../../types'
+import type { ParchmentLot, GreenBeanLot, CropYear } from '../../../types'
 
 export type ViewMode = 'kanban' | 'table'
 export type SortDirection = 'asc' | 'desc'
@@ -31,4 +31,19 @@ export const formatParchmentStatus = (status: string): string => {
     Hulled: 'Hulled',
   }
   return statusMap[status] || status
+}
+
+/**
+ * Returns the id of the CropYear whose date range covers today, or an empty
+ * string if no year matches. Used to pre-select the current year in dropdowns
+ * and chip groups, and to flag the "Current" badge inside CropYearChips.
+ */
+export const findCurrentCropYearId = (years: CropYear[]): string => {
+  const today = new Date()
+  const match = years.find((y) => {
+    const start = new Date(y.startDate)
+    const end = new Date(y.endDate)
+    return today >= start && today <= end
+  })
+  return match?.id ?? ''
 }

@@ -103,6 +103,7 @@ import {
   NEW_TAG_DAYS,
   isRecentItem,
   formatParchmentStatus,
+  findCurrentCropYearId,
   validateScore,
   initialSensoryScores,
   initialCupScores,
@@ -1103,13 +1104,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       if (item?.cropYearId) {
         setCropYearId(item.cropYearId);
       } else {
-        const today = new Date();
-        const currentCropYear = data.cropYears.find(y => {
-          const start = new Date(y.startDate);
-          const end = new Date(y.endDate);
-          return today >= start && today <= end;
-        });
-        setCropYearId(currentCropYear?.id || "");
+        setCropYearId(findCurrentCropYearId(data.cropYears));
       }
     }
     if (type === "hullAndGrade") setSelectedParchment(item);

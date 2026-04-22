@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { HarvestLot, CropYear } from "../../../types";
+import { findCurrentCropYearId } from "../workbench";
 import {
   PlayCircle,
   Scale,
@@ -379,7 +380,20 @@ const ProcessAndHullModal: React.FC<ProcessAndHullModalProps> = ({
     processTypes.length > 0 ? processTypes[0].value : "",
   );
   const [processNotes, setProcessNotes] = useState("");
-  const [cropYearId, setCropYearId] = useState("");
+  // Default to the crop year whose date range covers today so the "Current"
+  // chip lights up on mount. User can still pick a different year manually.
+  const [cropYearId, setCropYearId] = useState<string>(() =>
+    findCurrentCropYearId(cropYears),
+  );
+  // If cropYears arrives asynchronously (e.g. context still loading when the
+  // modal mounts), back-fill the selection once it appears — but don't
+  // overwrite a user's manual pick.
+  useEffect(() => {
+    if (!cropYearId) {
+      const current = findCurrentCropYearId(cropYears)
+      if (current) setCropYearId(current)
+    }
+  }, [cropYears, cropYearId])
   const [parchmentWeight, setParchmentWeight] = useState("");
   const [moistureContent, setMoistureContent] = useState("");
   const [dryingStartDate, setDryingStartDate] = useState("");

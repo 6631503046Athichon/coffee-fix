@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react'
 import type { CropYear } from '../../../types'
+import { findCurrentCropYearId } from './constants'
 
 interface CropYearChipsProps {
   years: CropYear[]
@@ -12,16 +13,7 @@ interface CropYearChipsProps {
  * includes today with a "Current" badge.
  */
 export const CropYearChips: React.FC<CropYearChipsProps> = ({ years, value, onChange }) => {
-  const currentYearId = useMemo(() => {
-    const today = new Date()
-    return (
-      years.find((y) => {
-        const start = new Date(y.startDate)
-        const end = new Date(y.endDate)
-        return today >= start && today <= end
-      })?.id || ''
-    )
-  }, [years])
+  const currentYearId = useMemo(() => findCurrentCropYearId(years), [years])
 
   const baseChipClass =
     'relative flex items-center justify-center py-3 px-4 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer'
