@@ -626,7 +626,7 @@ const ProcessAndHullModal: React.FC<ProcessAndHullModalProps> = ({
             value={processNotes}
             onChange={(e) => setProcessNotes(e.target.value)}
             placeholder="e.g., Ferment 24h in sealed tank, raised-bed drying, frequent turning"
-            className="w-full border border-gray-300 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all resize-none"
+            className="w-full border border-gray-300 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm transition-all resize-none"
           />
           <p className="mt-1 text-xs text-gray-500">
             Use this to capture special steps or parameters for this batch.
@@ -747,7 +747,7 @@ const ProcessAndHullModal: React.FC<ProcessAndHullModalProps> = ({
               ? `Max: ${parchmentWeightNum.toFixed(2)} kg`
               : "Enter parchment weight first"
           }
-          className={`mt-1 block w-full border rounded-xl py-3 px-4 text-lg font-semibold focus:ring-2 shadow-sm transition-all ${
+          className={`mt-1 block w-full border rounded-xl py-3 px-4 text-lg font-semibold focus:outline-none focus:ring-2 shadow-sm transition-all ${
             exceedsParchmentWeight
               ? "border-red-500 focus:ring-red-500 focus:border-red-500 bg-red-50"
               : "border-gray-300 focus:ring-green-500 focus:border-green-500"
@@ -839,7 +839,7 @@ const ProcessAndHullModal: React.FC<ProcessAndHullModalProps> = ({
                       )
                     }
                     required
-                    className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   />
                 </div>
                 <div>
@@ -861,7 +861,7 @@ const ProcessAndHullModal: React.FC<ProcessAndHullModalProps> = ({
                         ),
                       )
                     }
-                    className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   />
                 </div>
                 <div>
@@ -882,7 +882,7 @@ const ProcessAndHullModal: React.FC<ProcessAndHullModalProps> = ({
                         ),
                       )
                     }
-                    className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   />
                 </div>
               </div>
