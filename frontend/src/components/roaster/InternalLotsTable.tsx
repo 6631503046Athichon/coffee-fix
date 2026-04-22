@@ -101,22 +101,22 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
             </colgroup>
             <thead>
               <tr className="bg-black-800 text-left">
-                <th className="px-4 py-3 text-left text-xs font-normal text-white tracking-wide bg-black">
+                <th className="px-6 py-4 text-left text-xs font-normal text-white tracking-wide bg-black">
                   ID
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-normal text-white tracking-wide bg-black">
+                <th className="px-6 py-4 text-center text-xs font-normal text-white tracking-wide bg-black">
                   Details
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-normal text-white tracking-wide bg-black">
+                <th className="px-6 py-4 text-left text-xs font-normal text-white tracking-wide bg-black">
                   Grade
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-normal text-white tracking-wide bg-black">
+                <th className="px-6 py-4 text-right text-xs font-normal text-white tracking-wide bg-black">
                   Score
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-normal text-white tracking-wide bg-black">
+                <th className="px-6 py-4 text-right text-xs font-normal text-white tracking-wide bg-black">
                   Available
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-normal text-white tracking-wide bg-black">
+                <th className="px-6 py-4 text-right text-xs font-normal text-white tracking-wide bg-black">
                   Action
                 </th>
               </tr>
@@ -145,13 +145,13 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
                     className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
                   >
                     {/* ID */}
-                    <td className="px-4 py-3 text-left align-middle">
+                    <td className="px-6 py-4 text-left align-middle">
                       <span className="text-sm font-normal text-black whitespace-nowrap block">
                         {toRoaId(lot.id)}
                       </span>
                     </td>
                     {/* Details (icon only, centered) */}
-                    <td className="px-4 py-3 text-center align-middle">
+                    <td className="px-6 py-4 text-center align-middle">
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
@@ -164,13 +164,13 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
                       </button>
                     </td>
                     {/* Grade */}
-                    <td className="px-4 py-3 text-left align-middle">
+                    <td className="px-6 py-4 text-left align-middle">
                       <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-amber-50 text-sm font-normal text-amber-700 border border-amber-200 whitespace-nowrap">
                         {lot.grade || '—'}
                       </span>
                     </td>
                     {/* Score */}
-                    <td className="px-4 py-3 text-right align-middle">
+                    <td className="px-6 py-4 text-right align-middle">
                       <div className="inline-flex items-center justify-end gap-1 align-middle">
                         <Star className="h-3.5 w-3.5 text-blue-400 shrink-0 align-middle" />
                         <span className="text-sm font-normal text-blue-600 align-middle">
@@ -179,17 +179,17 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
                       </div>
                     </td>
                     {/* Available (normal cell, no bg) */}
-                    <td className="px-4 py-3 text-right align-middle">
+                    <td className="px-6 py-4 text-right align-middle">
                       <span className="text-sm text-black">{toFixed2(lot.remainingWeightKg)}</span>
                       <span className="text-sm text-gray-400 ml-1">kg</span>
                     </td>
                     {/* Action */}
-                    <td className="px-4 py-3 text-right align-middle">
+                    <td className="px-6 py-4 text-right align-middle">
                       <div className="flex justify-end">
                         <Button
                           variant="success"
-                          size="sm"
-                          className="min-w-[92px] justify-center"
+                          size="md"
+                          className="min-w-[120px] justify-center"
                           icon={<PlusCircle className="h-4 w-4" />}
                           onClick={() => onLogRoast(lot)}
                         >
@@ -206,7 +206,7 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
 
         {/* Pagination */}
         {lots.length > 0 && totalPages > 1 && onPageChange && (
-          <div className="px-4 py-3 bg-gray-50 border-t border-gray-100">
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
             <div className="flex justify-center items-center gap-1">
               <button
                 onClick={() => onPageChange(currentPage - 1)}
@@ -281,7 +281,7 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
-          <div className="px-4 py-3 space-y-4">
+          <div className="px-6 py-4 space-y-4">
             <div className="flex justify-between items-center gap-4">
               <span className="text-xs text-gray-500">Variety</span>
               <span className="text-xs font-normal text-gray-800">{activeLot.variety || '—'}</span>
