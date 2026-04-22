@@ -77,17 +77,17 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
         <table className="w-full">
           <colgroup>
             <col className="w-[18%]" />
-            <col className="w-[18%]" />
-            <col className="w-[20%]" />
+            <col className="w-[10%]" />
             <col className="w-[22%]" />
             <col className="w-[22%]" />
+            <col className="w-[28%]" />
           </colgroup>
           <thead>
             <tr className="bg-black-800 text-left">
               <th className="px-6 py-4 text-left text-xs font-normal text-white tracking-wide bg-black">
                 ID
               </th>
-              <th className="px-6 py-4 text-right text-xs font-normal text-white tracking-wide bg-black">
+              <th className="px-6 py-4 text-center text-xs font-normal text-white tracking-wide bg-black">
                 Details
               </th>
               <th className="px-6 py-4 text-left text-xs font-normal text-white tracking-wide bg-black">
@@ -97,13 +97,12 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
                 Available
               </th>
               <th className="px-6 py-4 text-right text-xs font-normal text-white tracking-wide bg-black">
-                <div className="flex items-center justify-end gap-4">
-                  <span className="leading-none">Action</span>
+                <div className="flex justify-end">
                   <Button
                     variant="success"
-                    size="md"
-                    icon={<PlusCircle className="h-4 w-4" />}
-                    className="min-w-[120px] justify-center"
+                    size="sm"
+                    icon={<PlusCircle className="h-3.5 w-3.5" />}
+                    className="min-w-[100px] justify-center"
                     onClick={onAddExternal}
                   >
                     Add Lot
@@ -133,7 +132,7 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
                   <td className="px-6 py-4 text-left font-mono text-sm text-black whitespace-nowrap">
                     {toRoaId(lot.id)}
                   </td>
-                  <td className="px-6 py-4 text-right align-middle">
+                  <td className="px-6 py-4 text-center align-middle">
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
@@ -195,8 +194,8 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
                     <div className="flex justify-end">
                       <Button
                         variant="success"
-                        size="md"
-                        className="min-w-[120px] justify-center"
+                        size="sm"
+                        className="min-w-[100px] justify-center"
                         disabled={loadingLotId === lot.id}
                         onClick={() => onRoast(lot)}
                       >

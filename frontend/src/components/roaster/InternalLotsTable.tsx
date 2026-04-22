@@ -92,12 +92,12 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full table-fixed">
             <colgroup>
-              <col className="w-[14%]" />
-              <col className="w-[18%]" />
               <col className="w-[16%]" />
+              <col className="w-[10%]" />
+              <col className="w-[18%]" />
               <col className="w-[14%]" />
               <col className="w-[18%]" />
-              <col className="w-[20%]" />
+              <col className="w-[24%]" />
             </colgroup>
             <thead>
               <tr className="bg-black-800 text-left">
@@ -117,7 +117,7 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
                   Available
                 </th>
                 <th className="px-6 py-4 text-right text-xs font-normal text-white tracking-wide bg-black">
-                  Action
+                  {/* Column header intentionally blank; Roast button in each row speaks for itself */}
                 </th>
               </tr>
             </thead>
@@ -188,9 +188,9 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
                       <div className="flex justify-end">
                         <Button
                           variant="success"
-                          size="md"
-                          className="min-w-[120px] justify-center"
-                          icon={<PlusCircle className="h-4 w-4" />}
+                          size="sm"
+                          className="min-w-[100px] justify-center"
+                          icon={<PlusCircle className="h-3.5 w-3.5" />}
                           onClick={() => onLogRoast(lot)}
                         >
                           Roast
