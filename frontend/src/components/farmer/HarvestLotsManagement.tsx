@@ -6,6 +6,7 @@ import { HarvestLot, UserRole } from '../../types';
 import { ChevronRight, ArrowUp, ArrowDown, Coffee, PlusCircle, ChevronLeft } from 'lucide-react';
 import { PageHeader } from '../common/PageHeader';
 import { Button } from '../common/Button';
+import Select from '../common/Select';
 import HarvestLotModal from '../modals/HarvestLotModal';
 
 
@@ -18,6 +19,7 @@ const HarvestLotsManagement: React.FC = () => {
 
   // Table State
   const [statusFilter, setStatusFilter] = useState<'All' | 'Ready for Processing' | 'Processing' | 'Complete'>('All');
+  const [farmFilter, setFarmFilter] = useState<string>('All');
   const [sortColumn, setSortColumn] = useState<SortableKeys>('createdAt');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -48,8 +50,16 @@ const HarvestLotsManagement: React.FC = () => {
     return data.harvestLots.filter(hl => hl.farmerName === currentUser.name);
   }, [data.harvestLots, currentUser, isAdmin]);
 
+  const farmFilteredLots = useMemo(() => {
+    return myHarvestLots.filter(lot => farmFilter === 'All' || lot.farmId === farmFilter);
+  }, [myHarvestLots, farmFilter]);
+
   const sortedAndFilteredLots = useMemo(() => {
-    const filtered = myHarvestLots.filter(lot => statusFilter === 'All' || lot.status === statusFilter);
+    const filtered = farmFilteredLots.filter(lot => {
+      const matchesStatus = statusFilter === 'All' || lot.status === statusFilter;
+      return matchesStatus;
+    });
+
     return filtered.sort((a, b) => {
         const aValue = a[sortColumn];
         const bValue = b[sortColumn];
@@ -61,7 +71,7 @@ const HarvestLotsManagement: React.FC = () => {
         if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
         return 0;
     });
-  }, [myHarvestLots, statusFilter, sortColumn, sortDirection]);
+  }, [farmFilteredLots, statusFilter, sortColumn, sortDirection]);
 
   // Pagination
   const totalPages = Math.ceil(sortedAndFilteredLots.length / ITEMS_PER_PAGE);
@@ -73,14 +83,14 @@ const HarvestLotsManagement: React.FC = () => {
   // Reset page when filter changes
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter]);
+  }, [statusFilter, farmFilter]);
 
   const stats = useMemo(() => ({
-    totalLots: myHarvestLots.length,
-    totalWeight: myHarvestLots.reduce((sum, lot) => sum + lot.weightKg, 0),
-    completed: myHarvestLots.filter(l => l.status === 'Complete').length,
-    readyForProcessing: myHarvestLots.filter(l => l.status === 'Ready for Processing').length,
-  }), [myHarvestLots]);
+    totalLots: farmFilteredLots.length,
+    totalWeight: farmFilteredLots.reduce((sum, lot) => sum + lot.weightKg, 0),
+    completed: farmFilteredLots.filter(l => l.status === 'Complete').length,
+    readyForProcessing: farmFilteredLots.filter(l => l.status === 'Ready for Processing').length,
+  }), [farmFilteredLots]);
 
   const filterStatuses: Array<'All' | 'Ready for Processing' | 'Complete'> = ['All', 'Ready for Processing', 'Complete'];
 
@@ -104,6 +114,20 @@ const HarvestLotsManagement: React.FC = () => {
       f.farmerName === currentUser.name
     );
   }, [data.farms, currentUser]);
+
+  const farmFilterOptions = useMemo(() => {
+    const options = availableFarms.map((farm) => ({
+      value: farm.id,
+      label: farm.farmName || farm.name || farm.location || farm.id,
+    }));
+    return [{ value: 'All', label: 'All Farms' }, ...options];
+  }, [availableFarms]);
+
+  const farmNameById = useMemo(() => {
+    return new Map(
+      data.farms.map(farm => [farm.id, farm.farmName || farm.name || farm.location || farm.id])
+    );
+  }, [data.farms]);
 
   const handleOpenAddModal = () => {
     // Don't pre-select a farm - let user choose in modal
@@ -180,6 +204,16 @@ const HarvestLotsManagement: React.FC = () => {
                   </button>
                 ))}
               </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-gray-700">Farm:</span>
+                <Select
+                  options={farmFilterOptions}
+                  value={farmFilter}
+                  onChange={(value) => setFarmFilter(String(value ?? 'All'))}
+                  className="w-52"
+                  placeholder="Select farm"
+                />
+              </div>
               <Button
                 variant="primary"
                 icon={<PlusCircle className="h-4 w-4" />}
@@ -206,6 +240,14 @@ const HarvestLotsManagement: React.FC = () => {
             </div>
           ) : (
             pagedLots.map((lot: HarvestLot) => (
+              (() => {
+                const farmName =
+                  lot.farm?.farmName ||
+                  lot.farm?.name ||
+                  (lot.farmId ? farmNameById.get(lot.farmId) : undefined) ||
+                  'Unknown Farm';
+
+                return (
               <div
                 key={lot.id}
                 onClick={() => handleRowClick(lot.id)}
@@ -223,7 +265,11 @@ const HarvestLotsManagement: React.FC = () => {
                         {lot.status}
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                      <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                        <p className="text-gray-500 text-xs uppercase font-semibold mb-1 tracking-wide">Farm</p>
+                        <p className="text-gray-900 font-medium text-sm">{farmName}</p>
+                      </div>
                       <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
                         <p className="text-gray-500 text-xs uppercase font-semibold mb-1 tracking-wide">Farmer</p>
                         <p className="text-gray-900 font-medium text-sm">{lot.farmerName}</p>
@@ -249,6 +295,8 @@ const HarvestLotsManagement: React.FC = () => {
                   </div>
                 </div>
               </div>
+                );
+              })()
             ))
           )}
 
