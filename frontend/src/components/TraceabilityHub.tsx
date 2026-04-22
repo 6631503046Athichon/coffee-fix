@@ -2,11 +2,10 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../hooks/useDataContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Search, ExternalLink, CheckCircle, Archive, AlertCircle, ChevronLeft, ChevronRight, QrCode, Package, X, Star } from 'lucide-react';
+import { Search, ExternalLink, CheckCircle, Archive, AlertCircle, ChevronLeft, ChevronRight, QrCode, Star } from 'lucide-react';
 import { UserRole, GreenBeanLot } from '../types';
 import { formatGreenBeanId } from '../utils/formatDisplayId';
 import { QRCodeModal } from './modals/QRCodeModal';
-import { BulkQRGeneratorModal } from './modals/BulkQRGeneratorModal';
 
 const PAGE_SIZE = 10;
 const NEW_TAG_HOURS = 24;
@@ -36,12 +35,8 @@ const TraceabilityHub: React.FC = () => {
     const [processFilter, setProcessFilter] = useState('All');
     const [gradeFilter, setGradeFilter] = useState('All');
 
-    // Selection state
-    const [selectedLots, setSelectedLots] = useState<Set<string>>(new Set());
-
     // Modal states
     const [qrModalOpen, setQrModalOpen] = useState(false);
-    const [bulkQrModalOpen, setBulkQrModalOpen] = useState(false);
     const [selectedLotForQR, setSelectedLotForQR] = useState<EnrichedLot | null>(null);
 
     // Check if user has access
@@ -174,41 +169,6 @@ const TraceabilityHub: React.FC = () => {
         currentPage * PAGE_SIZE
     );
 
-    // Selection handlers
-    const handleSelectLot = (lotId: string) => {
-        setSelectedLots(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(lotId)) {
-                newSet.delete(lotId);
-            } else {
-                newSet.add(lotId);
-            }
-            return newSet;
-        });
-    };
-
-    const handleSelectAll = () => {
-        const currentPageLotIds = paginatedLots.map(lot => lot.id);
-        setSelectedLots(prev => {
-            const next = new Set(prev);
-            const allSelectedOnPage = currentPageLotIds.every(id => next.has(id));
-
-            currentPageLotIds.forEach(id => {
-                if (allSelectedOnPage) {
-                    next.delete(id);
-                } else {
-                    next.add(id);
-                }
-            });
-
-            return next;
-        });
-    };
-
-    const clearSelection = () => {
-        setSelectedLots(new Set());
-    };
-
     // QR Modal handlers
     const openQRModal = (lot: EnrichedLot) => {
         setSelectedLotForQR(lot);
@@ -220,11 +180,6 @@ const TraceabilityHub: React.FC = () => {
             refreshData();
         }
     };
-
-    // Get selected lots as GreenBeanLot array for bulk modal
-    const selectedLotsArray = useMemo(() => {
-        return enrichedLots.filter(lot => selectedLots.has(lot.id));
-    }, [enrichedLots, selectedLots]);
 
     // Show error if data processing failed
     if (error) {
@@ -243,10 +198,6 @@ const TraceabilityHub: React.FC = () => {
         );
     }
 
-    const selectedOnPageCount = paginatedLots.filter(lot => selectedLots.has(lot.id)).length;
-    const isAllSelected = paginatedLots.length > 0 && selectedOnPageCount === paginatedLots.length;
-    const isSomeSelected = selectedLots.size > 0;
-
     return (
         <div className="space-y-6">
             {/* Header Section */}
@@ -254,36 +205,6 @@ const TraceabilityHub: React.FC = () => {
                 <h1 className="text-3xl font-bold text-gray-900">Traceability Curation Hub</h1>
                 <p className="text-gray-600 mt-2">Manage and view public traceability pages for green bean lots.</p>
             </div>
-
-            {/* Bulk Action Bar */}
-            {isSomeSelected && (
-                <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-indigo-100 rounded-lg">
-                            <Package className="h-5 w-5 text-indigo-600" />
-                        </div>
-                        <span className="text-sm font-medium text-indigo-900">
-                            {selectedLots.size} lot{selectedLots.size > 1 ? 's' : ''} selected
-                        </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => setBulkQrModalOpen(true)}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
-                        >
-                            <QrCode className="h-4 w-4" />
-                            Generate QR Codes
-                        </button>
-                        <button
-                            onClick={clearSelection}
-                            className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors"
-                            title="Clear selection"
-                        >
-                            <X className="h-5 w-5" />
-                        </button>
-                    </div>
-                </div>
-            )}
 
             {/* Search Bar */}
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200 space-y-4">
@@ -351,15 +272,6 @@ const TraceabilityHub: React.FC = () => {
                     <table className="min-w-full">
                         <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
-                                <th className="px-4 py-4 text-left">
-                                    <input
-                                        type="checkbox"
-                                        checked={isAllSelected}
-                                        onChange={handleSelectAll}
-                                        aria-label="Select all lots on this page"
-                                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                    />
-                                </th>
                                 <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Lot ID</th>
                                 <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Variety</th>
                                 <th className="px-4 py-4 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Process</th>
@@ -373,7 +285,7 @@ const TraceabilityHub: React.FC = () => {
                         <tbody className="bg-white divide-y divide-gray-100">
                             {paginatedLots.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} className="px-6 py-12 text-center">
+                                    <td colSpan={8} className="px-6 py-12 text-center">
                                         <Search className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                                         <p className="text-sm font-medium text-gray-500">
                                             {enrichedLots.length === 0
@@ -396,15 +308,6 @@ const TraceabilityHub: React.FC = () => {
                                             key={lot.id}
                                             className="hover:bg-gray-50 transition-colors duration-200"
                                         >
-                                            <td className="px-4 py-4 whitespace-nowrap">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedLots.has(lot.id)}
-                                                    onChange={() => handleSelectLot(lot.id)}
-                                                    aria-label={`Select ${formatGreenBeanId(lot)}`}
-                                                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                                />
-                                            </td>
                                             <td className="px-4 py-4 whitespace-nowrap">
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-sm font-mono font-semibold text-gray-900" title={lot.id}>
@@ -533,19 +436,6 @@ const TraceabilityHub: React.FC = () => {
                     onPublicIdGenerated={handlePublicIdGenerated}
                 />
             )}
-
-            {/* Bulk QR Generator Modal */}
-            <BulkQRGeneratorModal
-                isOpen={bulkQrModalOpen}
-                onClose={() => {
-                    setBulkQrModalOpen(false);
-                    clearSelection();
-                }}
-                selectedLots={selectedLotsArray}
-                onLotsUpdated={() => {
-                    if (refreshData) refreshData();
-                }}
-            />
         </div>
     );
 };
