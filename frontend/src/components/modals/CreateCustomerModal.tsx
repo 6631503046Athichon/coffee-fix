@@ -4,6 +4,7 @@ import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
 import { Input } from '../common/Input';
 import Select from '../common/Select';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { addCustomer, updateCustomer } from '../../services/customerService';
 
 interface CreateCustomerModalProps {
@@ -72,14 +73,26 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
       return;
     }
 
+    const trimmedEmail = contactEmail.trim();
+    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
+    const trimmedPhone = contactPhone.trim();
+    if (trimmedPhone && !/^[0-9+\-\s()]{8,20}$/.test(trimmedPhone)) {
+      setError('Please enter a valid phone number');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       const customerData: Partial<Customer> = {
         name: name.trim(),
         type,
-        contactEmail: contactEmail.trim() || undefined,
-        contactPhone: contactPhone.trim() || undefined,
+        contactEmail: trimmedEmail || undefined,
+        contactPhone: trimmedPhone || undefined,
         address: address.trim() || undefined,
         notes: notes.trim() || undefined,
       };
@@ -112,20 +125,20 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={isEditMode ? `Edit Customer — ${editCustomer?.name}` : 'Create New Customer'}
+      title={isEditMode ? `Edit Customer: ${editCustomer?.name}` : 'Create New Customer'}
       maxWidth="2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {successMessage && (
           <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-2">
-            <span className="text-green-600 font-semibold">✓</span>
+            <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-green-800 flex-1">{successMessage}</p>
           </div>
         )}
 
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-2">
-            <span className="text-red-600 font-semibold">⚠️</span>
+            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-red-800 flex-1">{error}</p>
           </div>
         )}

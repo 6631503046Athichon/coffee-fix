@@ -73,6 +73,8 @@ const CoffeeVarietiesManager: React.FC = () => {
   const [varieties, setVarieties] = useState<CoffeeVariety[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
+  const [modalError, setModalError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [speciesFilter, setSpeciesFilter] = useState('');
 
@@ -122,6 +124,7 @@ const CoffeeVarietiesManager: React.FC = () => {
   };
 
   const handleOpenModal = (variety?: CoffeeVariety) => {
+    setModalError('');
     if (variety) {
       setEditingVariety(variety);
       setFormData({
@@ -151,21 +154,51 @@ const CoffeeVarietiesManager: React.FC = () => {
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingVariety(null);
+    setModalError('');
+    setIsSubmitting(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setModalError('');
+
+    const normalizedName = formData.name.trim();
+    const normalizedSpecies = formData.species.trim();
+
+    if (!normalizedName) {
+      setModalError('Variety name is required');
+      return;
+    }
+
+    if (!normalizedSpecies) {
+      setModalError('Species is required');
+      return;
+    }
+
+    setIsSubmitting(true);
 
     try {
+      const payload = {
+        name: normalizedName,
+        species: normalizedSpecies,
+        origin: formData.origin.trim() || '',
+        description: formData.description.trim() || '',
+        characteristics: formData.characteristics.trim() || '',
+        altitude: formData.altitude.trim() || '',
+        isActive: formData.isActive,
+      };
+
       if (editingVariety) {
-        await updateCoffeeVariety(editingVariety.id, formData);
+        await updateCoffeeVariety(editingVariety.id, payload);
       } else {
-        await addCoffeeVariety(formData);
+        await addCoffeeVariety(payload);
       }
       handleCloseModal();
       fetchVarieties();
     } catch (err: any) {
-      alert(err.message || 'Failed to save coffee variety');
+      setModalError(err instanceof Error ? err.message : 'Failed to save coffee variety');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -363,6 +396,13 @@ const CoffeeVarietiesManager: React.FC = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {modalError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-700">{modalError}</p>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Variety Name *
@@ -472,9 +512,10 @@ const CoffeeVarietiesManager: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
-                  {editingVariety ? 'Save Changes' : 'Add Variety'}
+                  {isSubmitting ? 'Saving...' : editingVariety ? 'Save Changes' : 'Add Variety'}
                 </button>
               </div>
             </form>

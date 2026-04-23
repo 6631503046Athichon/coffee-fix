@@ -21,9 +21,9 @@ export const simplePasswordSchema = z.string()
   .min(6, 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
 
 export const usernameSchema = z.string()
-  .min(3, 'ชื่อผู้ใช้ต้องมีอย่างน้อย 3 ตัวอักษร')
-  .max(50, 'ชื่อผู้ใช้ต้องไม่เกิน 50 ตัวอักษร')
-  .regex(/^[a-zA-Z0-9_-]+$/, 'ชื่อผู้ใช้ต้องประกอบด้วยตัวอักษร ตัวเลข _ หรือ - เท่านั้น')
+  .min(3, 'Username must be at least 3 characters')
+  .max(50, 'Username must not exceed 50 characters')
+  .regex(/^[a-zA-Z0-9_-]+$/, 'Username may only contain letters, numbers, _ or -')
   .transform((val) => val.toLowerCase());
 
 // ============================================
@@ -31,11 +31,11 @@ export const usernameSchema = z.string()
 // ============================================
 
 export const createUserSchema = z.object({
-  name: nonEmptyStringSchema.pipe(z.string().max(100, 'ชื่อต้องไม่เกิน 100 ตัวอักษร')),
+  name: nonEmptyStringSchema.pipe(z.string().max(100, 'Name must not exceed 100 characters')),
   email: optionalEmailSchema,
   username: usernameSchema.optional().nullable(),
   password: simplePasswordSchema.optional(),
-  roles: z.array(userRoleSchema).min(1, 'ต้องเลือกบทบาทอย่างน้อย 1 บทบาท'),
+  roles: z.array(userRoleSchema).min(1, 'At least one role is required'),
   isActive: z.boolean().optional().default(true),
   isSuperAdmin: z.boolean().optional().default(false),
 });
@@ -44,7 +44,7 @@ export const updateUserSchema = z.object({
   name: nonEmptyStringSchema.pipe(z.string().max(100)).optional(),
   email: optionalEmailSchema,
   username: usernameSchema.optional().nullable(),
-  roles: z.array(userRoleSchema).min(1, 'ต้องเลือกบทบาทอย่างน้อย 1 บทบาท').optional(),
+  roles: z.array(userRoleSchema).min(1, 'At least one role is required').optional(),
   isActive: z.boolean().optional(),
   isSuperAdmin: z.boolean().optional(),
 });

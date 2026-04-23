@@ -53,16 +53,18 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { name, species, origin, description, characteristics, altitude, isActive } = body
+    const normalizedName = typeof name === 'string' ? name.trim() : ''
+    const normalizedSpecies = typeof species === 'string' ? species.trim() : ''
 
     // Validation
-    if (!name) {
+    if (!normalizedName) {
       return NextResponse.json(
         { error: 'Name is required' },
         { status: 400 }
       )
     }
 
-    if (!species) {
+    if (!normalizedSpecies) {
       return NextResponse.json(
         { error: 'Species is required' },
         { status: 400 }
@@ -71,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     // Check if variety already exists
     const existing = await prisma.coffeeVariety.findUnique({
-      where: { name }
+      where: { name: normalizedName }
     })
 
     if (existing) {
@@ -83,12 +85,12 @@ export async function POST(request: NextRequest) {
 
     const coffeeVariety = await prisma.coffeeVariety.create({
       data: {
-        name,
-        species,
-        origin: origin || null,
-        description: description || null,
-        characteristics: characteristics || null,
-        altitude: altitude || null,
+        name: normalizedName,
+        species: normalizedSpecies,
+        origin: typeof origin === 'string' ? origin.trim() || null : null,
+        description: typeof description === 'string' ? description.trim() || null : null,
+        characteristics: typeof characteristics === 'string' ? characteristics.trim() || null : null,
+        altitude: typeof altitude === 'string' ? altitude.trim() || null : null,
         isActive: isActive !== undefined ? isActive : true,
       },
     })

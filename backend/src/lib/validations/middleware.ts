@@ -14,8 +14,8 @@ export interface ValidationFailure {
 export type ValidationResult<T> = ValidationSuccess<T> | ValidationFailure;
 
 /**
- * Validates request body against a Zod schema
- * Returns typed data if valid, or a formatted error response
+ * Validates request body against a Zod schema.
+ * Returns typed data if valid, or a formatted error response.
  */
 export async function validateBody<T>(
   req: NextRequest,
@@ -32,8 +32,7 @@ export async function validateBody<T>(
         error: NextResponse.json(
           {
             error: 'Validation Error',
-            message: 'ข้อมูลไม่ถูกต้อง',
-            // Zod v4 uses PropertyKey[] for path (can include symbols) — let TS infer the issue type.
+            message: 'Request data is invalid',
             details: error.issues.map((e) => ({
               field: e.path.map(String).join('.'),
               message: e.message,
@@ -51,7 +50,7 @@ export async function validateBody<T>(
         error: NextResponse.json(
           {
             error: 'Invalid JSON',
-            message: 'รูปแบบ JSON ไม่ถูกต้อง',
+            message: 'Request body must be valid JSON',
           },
           { status: 400 }
         ),
@@ -63,7 +62,7 @@ export async function validateBody<T>(
 }
 
 /**
- * Validates query parameters against a Zod schema
+ * Validates query parameters against a Zod schema.
  */
 export function validateQuery<T>(
   req: NextRequest,
@@ -95,8 +94,7 @@ export function validateQuery<T>(
         error: NextResponse.json(
           {
             error: 'Validation Error',
-            message: 'พารามิเตอร์ไม่ถูกต้อง',
-            // Zod v4 uses PropertyKey[] for path (can include symbols) — let TS infer the issue type.
+            message: 'Query parameters are invalid',
             details: error.issues.map((e) => ({
               field: e.path.map(String).join('.'),
               message: e.message,
@@ -107,12 +105,13 @@ export function validateQuery<T>(
         ),
       };
     }
+
     throw error;
   }
 }
 
 /**
- * Validates path parameters (like ID)
+ * Validates path parameters (like ID).
  */
 export function validateParams<T>(
   params: Record<string, string>,
@@ -128,8 +127,7 @@ export function validateParams<T>(
         error: NextResponse.json(
           {
             error: 'Validation Error',
-            message: 'พารามิเตอร์ไม่ถูกต้อง',
-            // Zod v4 uses PropertyKey[] for path (can include symbols) — let TS infer the issue type.
+            message: 'Path parameters are invalid',
             details: error.issues.map((e) => ({
               field: e.path.map(String).join('.'),
               message: e.message,
@@ -140,6 +138,7 @@ export function validateParams<T>(
         ),
       };
     }
+
     throw error;
   }
 }

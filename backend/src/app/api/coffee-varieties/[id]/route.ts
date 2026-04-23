@@ -40,6 +40,8 @@ export async function PUT(
 
     const body = await request.json()
     const { name, species, origin, description, characteristics, altitude, isActive } = body
+    const normalizedName = typeof name === 'string' ? name.trim() : undefined
+    const normalizedSpecies = typeof species === 'string' ? species.trim() : undefined
 
     // Check if variety exists
     const existing = await prisma.coffeeVariety.findUnique({
@@ -53,10 +55,24 @@ export async function PUT(
       )
     }
 
+    if (normalizedName !== undefined && !normalizedName) {
+      return NextResponse.json(
+        { error: 'Name is required' },
+        { status: 400 }
+      )
+    }
+
+    if (normalizedSpecies !== undefined && !normalizedSpecies) {
+      return NextResponse.json(
+        { error: 'Species is required' },
+        { status: 400 }
+      )
+    }
+
     // If name is being changed, check for duplicates
-    if (name && name !== existing.name) {
+    if (normalizedName && normalizedName !== existing.name) {
       const duplicate = await prisma.coffeeVariety.findUnique({
-        where: { name }
+        where: { name: normalizedName }
       })
       if (duplicate) {
         return NextResponse.json(
@@ -69,12 +85,12 @@ export async function PUT(
     const coffeeVariety = await prisma.coffeeVariety.update({
       where: { id },
       data: {
-        ...(name !== undefined && { name }),
-        ...(species !== undefined && { species }),
-        ...(origin !== undefined && { origin }),
-        ...(description !== undefined && { description }),
-        ...(characteristics !== undefined && { characteristics }),
-        ...(altitude !== undefined && { altitude }),
+        ...(normalizedName !== undefined && { name: normalizedName }),
+        ...(normalizedSpecies !== undefined && { species: normalizedSpecies }),
+        ...(origin !== undefined && { origin: typeof origin === 'string' ? origin.trim() || null : null }),
+        ...(description !== undefined && { description: typeof description === 'string' ? description.trim() || null : null }),
+        ...(characteristics !== undefined && { characteristics: typeof characteristics === 'string' ? characteristics.trim() || null : null }),
+        ...(altitude !== undefined && { altitude: typeof altitude === 'string' ? altitude.trim() || null : null }),
         ...(isActive !== undefined && { isActive }),
       },
     })

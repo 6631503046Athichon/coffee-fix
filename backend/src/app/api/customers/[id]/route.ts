@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { validateBody, updateCustomerSchema } from '@/lib/validations'
 
 // GET /api/customers/:id
 export async function GET(
@@ -53,16 +54,31 @@ export async function PUT(
     requireRole(user, ['Admin', 'Roaster'])
     const { id } = await params
 
-    const body = await request.json()
-    const { name, type, contactEmail, contactPhone, address, notes } = body
+    const validation = await validateBody(request, updateCustomerSchema)
+    if (!validation.success) {
+      return validation.error
+    }
 
+    const { name, type, contactEmail, contactPhone, address, notes } = validation.data
     const updateData: Prisma.CustomerUpdateInput = {}
     if (name !== undefined) updateData.name = name
     if (type !== undefined) updateData.type = type
     if (contactEmail !== undefined) updateData.contactEmail = contactEmail
-    if (contactPhone !== undefined) updateData.contactPhone = contactPhone
-    if (address !== undefined) updateData.address = address
-    if (notes !== undefined) updateData.notes = notes
+    if (contactPhone !== undefined) updateData.contactPhone = contactPhone?.trim() || null
+    if (address !== undefined) updateData.address = address?.trim() || null
+    if (notes !== undefined) updateData.notes = notes?.trim() || null
+
+    const existingCustomer = await prisma.customer.findUnique({
+      where: { id },
+      select: { id: true },
+    })
+
+    if (!existingCustomer) {
+      return NextResponse.json(
+        { error: 'Customer not found' },
+        { status: 404 }
+      )
+    }
 
     const updatedCustomer = await prisma.customer.update({
       where: { id },

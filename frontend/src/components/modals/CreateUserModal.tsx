@@ -36,6 +36,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    const trimmedEmail = email.trim()
 
     if (!name.trim()) {
       setError('Name is required')
@@ -45,6 +46,14 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
     if (roles.length === 0) {
       setError('At least one role is required')
       return
+    }
+
+    if (trimmedEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(trimmedEmail)) {
+        setError('Invalid email format')
+        return
+      }
     }
 
     setLoading(true)
@@ -58,8 +67,8 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
       }
 
       // Add optional email
-      if (email.trim()) {
-        payload.email = email.trim()
+      if (trimmedEmail) {
+        payload.email = trimmedEmail
       }
 
       const response = await createUser(payload)

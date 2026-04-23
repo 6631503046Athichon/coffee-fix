@@ -2,18 +2,38 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma, CustomerType } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { validateBody, validateQuery, createCustomerSchema, customerQuerySchema } from '@/lib/validations'
 
 // GET /api/customers - List all customers
 export async function GET(request: NextRequest) {
   try {
     await requireAuth(request)
 
+    const queryValidation = validateQuery(request, customerQuerySchema)
+    if (!queryValidation.success) {
+      return queryValidation.error
+    }
+
+    const { type, search } = queryValidation.data
     const where: Prisma.CustomerWhereInput = {}
 
-    // Filter by type if provided (validated against enum)
-    const type = request.nextUrl.searchParams.get('type')
     if (type && (Object.values(CustomerType) as string[]).includes(type)) {
       where.type = type as CustomerType
+    }
+
+    const normalizedSearch = search?.trim()
+    if (normalizedSearch) {
+      const matchedTypes = (Object.values(CustomerType) as string[]).filter((customerType) =>
+        customerType.toLowerCase().includes(normalizedSearch.toLowerCase())
+      )
+
+      where.OR = [
+        { name: { contains: normalizedSearch, mode: 'insensitive' } },
+        { contactEmail: { contains: normalizedSearch, mode: 'insensitive' } },
+        { contactPhone: { contains: normalizedSearch, mode: 'insensitive' } },
+        { address: { contains: normalizedSearch, mode: 'insensitive' } },
+        ...matchedTypes.map((matchedType) => ({ type: matchedType as CustomerType })),
+      ]
     }
 
     const customers = await prisma.customer.findMany({
@@ -40,25 +60,21 @@ export async function POST(request: NextRequest) {
     const user = await requireAuth(request)
     requireRole(user, ['Admin', 'Roaster'])
 
-    const body = await request.json()
-    const { name, type, contactEmail, contactPhone, address, notes } = body
-
-    // Validation
-    if (!name || !type) {
-      return NextResponse.json(
-        { error: 'Name and type are required' },
-        { status: 400 }
-      )
+    const validation = await validateBody(request, createCustomerSchema)
+    if (!validation.success) {
+      return validation.error
     }
+
+    const { name, type, contactEmail, contactPhone, address, notes } = validation.data
 
     const customer = await prisma.customer.create({
       data: {
         name,
         type,
         contactEmail: contactEmail || null,
-        contactPhone: contactPhone || null,
-        address: address || null,
-        notes: notes || null,
+        contactPhone: contactPhone?.trim() || null,
+        address: address?.trim() || null,
+        notes: notes?.trim() || null,
       },
     })
 
