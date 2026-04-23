@@ -40,7 +40,24 @@ export default defineConfig(({ mode }) => {
                 return 'vendor-router';
               }
 
-              if (id.includes('recharts') || id.includes('/d3-') || id.includes('/internmap/')) {
+              // Keep recharts and its full transitive graph together. recharts
+              // 3.x ships with @reduxjs/toolkit, react-redux, redux,
+              // redux-thunk, reselect, and immer as internal state plumbing —
+              // if react-redux lands in vendor-misc instead, its module-init
+              // code (`const useLayoutEffect = React.useLayoutEffect`) runs
+              // before React's namespace is populated and crashes with
+              // "Cannot read properties of undefined (reading 'useLayoutEffect')".
+              if (
+                id.includes('/node_modules/recharts/') ||
+                id.includes('/node_modules/d3-') ||
+                id.includes('/node_modules/internmap/') ||
+                id.includes('/node_modules/@reduxjs/') ||
+                id.includes('/node_modules/react-redux/') ||
+                id.includes('/node_modules/redux/') ||
+                id.includes('/node_modules/redux-thunk/') ||
+                id.includes('/node_modules/reselect/') ||
+                id.includes('/node_modules/immer/')
+              ) {
                 return 'vendor-charts';
               }
 
