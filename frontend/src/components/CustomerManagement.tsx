@@ -20,6 +20,7 @@ const CustomerManagement: React.FC = () => {
   const hasAccess = currentUser?.roles?.some(role => 
     role === UserRole.Admin || role === UserRole.Roaster
   ) ?? false;
+  const isAdmin = currentUser?.roles?.includes(UserRole.Admin) ?? false;
 
   useEffect(() => {
     if (hasAccess) {
@@ -43,6 +44,11 @@ const CustomerManagement: React.FC = () => {
   };
 
   const handleDeleteCustomer = async (customer: Customer) => {
+    if (!isAdmin) {
+      setError('Only admins can delete customers.');
+      return;
+    }
+
     const confirmed = window.confirm(
       `Are you sure you want to delete ${customer.name}? This action cannot be undone.`
     );
@@ -57,7 +63,7 @@ const CustomerManagement: React.FC = () => {
     }
   };
 
-  const handleCustomerSaved = (customer: Customer) => {
+  const handleCustomerSaved = (_customer: Customer) => {
     fetchCustomers();
   };
 
@@ -228,7 +234,7 @@ const CustomerManagement: React.FC = () => {
                           </div>
                         )}
                         {!customer.contactEmail && !customer.contactPhone && (
-                          <span className="text-gray-400">—</span>
+                          <span className="text-gray-400">N/A</span>
                         )}
                       </div>
                     </td>
@@ -240,7 +246,7 @@ const CustomerManagement: React.FC = () => {
                             <span>{customer.address}</span>
                           </div>
                         ) : (
-                          <span className="text-gray-400">—</span>
+                          <span className="text-gray-400">N/A</span>
                         )}
                       </div>
                     </td>
@@ -253,13 +259,15 @@ const CustomerManagement: React.FC = () => {
                           <Pencil className="h-3.5 w-3.5" />
                           Edit
                         </button>
-                        <button
-                          onClick={() => handleDeleteCustomer(customer)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 border border-red-200 font-medium transition-colors"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          Delete
-                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleDeleteCustomer(customer)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 border border-red-200 font-medium transition-colors"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
