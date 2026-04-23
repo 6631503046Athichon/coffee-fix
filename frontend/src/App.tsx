@@ -178,6 +178,7 @@ const ProtectedRoutes: React.FC = () => {
       let storedSaleOrders: any[] = [];
       let storedInvoices: any[] = [];
       let storedPricingHistory: any[] = [];
+      let salesDataLoadFailed = false;
       try {
         [storedSaleOrders, storedInvoices, storedPricingHistory] = await Promise.all([
           getAllSaleOrders(),
@@ -185,6 +186,7 @@ const ProtectedRoutes: React.FC = () => {
           getAllPricingHistory(),
         ]);
       } catch (err) {
+        salesDataLoadFailed = true;
         console.warn('Failed to load sales data from backend:', err);
       }
 
@@ -202,30 +204,40 @@ const ProtectedRoutes: React.FC = () => {
       const storedGreenBeanLots = phase2.greenBeanLots.map(transformGreenBeanLotFromBackend);
       const storedRoasterInventory = phase2.roasterInventory.map(transformInventoryItem);
       const storedRoastBatches = phase2.roastBatches.map(transformRoastBatch);
-
-      // Single state update — no intermediate flicker
+      // Single state update with no intermediate flicker
       setData(prev => ({
         ...prev,
         farms: mergeArrays(storedFarms as any, MOCK_DATA.farms),
         harvestLots: mergeArrays(storedHarvestLots as any, MOCK_DATA.harvestLots),
-        cropYears: phase1.cropYears.length > 0 ? phase1.cropYears : prev.cropYears,
-        processTypes: phase1.processTypes.length > 0 ? phase1.processTypes : prev.processTypes,
-        activityTypes: phase1.activityTypes.length > 0 ? phase1.activityTypes : prev.activityTypes,
+        cropYears: phase1.cropYears,
+        processTypes: phase1.processTypes,
+        activityTypes: phase1.activityTypes,
         customers: mergeArrays(storedCustomers, MOCK_DATA.customers),
-        users: phase1.users.length > 0 ? phase1.users : prev.users,
-        saleOrders: storedSaleOrders.length > 0 ? storedSaleOrders : prev.saleOrders,
-        invoices: storedInvoices.length > 0 ? storedInvoices : prev.invoices,
-        pricingHistory: storedPricingHistory.length > 0 ? storedPricingHistory : prev.pricingHistory,
-        soilAnalyses: storedSoilAnalyses.length > 0 ? storedSoilAnalyses : prev.soilAnalyses,
-        weatherRecords: storedWeatherRecords.length > 0 ? storedWeatherRecords : prev.weatherRecords,
-        gapLogs: storedGAPLogs.length > 0 ? storedGAPLogs : prev.gapLogs,
+        users: phase1.users,
+        saleOrders: salesDataLoadFailed ? prev.saleOrders : storedSaleOrders,
+        invoices: salesDataLoadFailed ? prev.invoices : storedInvoices,
+        pricingHistory: salesDataLoadFailed ? prev.pricingHistory : storedPricingHistory,
+        soilAnalyses: storedSoilAnalyses,
+        weatherRecords: storedWeatherRecords,
+        gapLogs: storedGAPLogs,
         processingBatches: mergeArrays(storedProcessingBatches, MOCK_DATA.processingBatches),
         parchmentLots: mergeArrays(storedParchmentLots, MOCK_DATA.parchmentLots),
         greenBeanLots: mergeArrays(storedGreenBeanLots, MOCK_DATA.greenBeanLots),
-        roasterInventory: storedRoasterInventory.length > 0 ? storedRoasterInventory : prev.roasterInventory,
-        roastBatches: storedRoastBatches.length > 0 ? storedRoastBatches : prev.roastBatches,
+        roasterInventory: storedRoasterInventory,
+        roastBatches: storedRoastBatches,
       }));
+
+      if (salesDataLoadFailed) {
+        lastVersionsRef.current = {};
+      } else {
+        try {
+          lastVersionsRef.current = await api.get<Record<string, string | null>>('/data-version');
+        } catch (versionError) {
+          console.warn('Failed to sync data versions after reload:', versionError);
+        }
+      }
     } catch (error) {
+      lastVersionsRef.current = {};
       console.error('Failed to load data from backend:', error);
       // Fallback to MOCK_DATA if API fails
     }
@@ -289,8 +301,7 @@ const ProtectedRoutes: React.FC = () => {
           key => versions[key] !== lastVersionsRef.current[key]
         );
         if (hasChanges) {
-          lastVersionsRef.current = versions;
-          loadDataFromBackend();
+          await loadDataFromBackend();
         }
       } catch {
         // If version check fails, skip this refresh cycle
@@ -349,7 +360,7 @@ const ProtectedRoutes: React.FC = () => {
     };
   }, [isAuthenticated, isAuthLoading, loadDataFromBackend]);
 
-  const contextValue = useMemo(() => ({ data, setData, refreshData, setIsEditing, isEditing }), [data, setData, setIsEditing, isEditing]);
+  const contextValue = useMemo(() => ({ data, setData, refreshData, setIsEditing, isEditing }), [data, setData, refreshData, setIsEditing, isEditing]);
 
   const navItems = useMemo(() => {
     let competitionAdminHref = '/cupping'; // Default to hub

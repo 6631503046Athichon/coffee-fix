@@ -20,6 +20,21 @@ const TABLE_QUERIES = [
   { key: 'greenBeanLots', query: () => prisma.greenBeanLot.findFirst({ select: { updatedAt: true }, orderBy: { updatedAt: 'desc' } }) },
   { key: 'roasterInventory', query: () => prisma.roasterInventoryItem.findFirst({ select: { updatedAt: true }, orderBy: { updatedAt: 'desc' } }) },
   { key: 'roastBatches', query: () => prisma.roastBatch.findFirst({ select: { updatedAt: true }, orderBy: { updatedAt: 'desc' } }) },
+  { key: 'saleOrders', query: () => prisma.saleOrder.findFirst({ select: { updatedAt: true }, orderBy: { updatedAt: 'desc' } }) },
+  { key: 'invoices', query: () => prisma.invoice.findFirst({ select: { updatedAt: true }, orderBy: { updatedAt: 'desc' } }) },
+  {
+    key: 'pricingHistory',
+    query: async () => {
+      const latestEntry = await prisma.pricingHistory.findFirst({
+        select: { createdAt: true },
+        orderBy: { createdAt: 'desc' },
+      })
+
+      return {
+        updatedAt: latestEntry?.createdAt ?? null,
+      }
+    },
+  },
 ]
 
 /**

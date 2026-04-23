@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { updateInvoiceSchema, validateBody } from '@/lib/validations'
+
+const updateInvoiceRequestSchema = updateInvoiceSchema.pick({
+  status: true,
+  notes: true,
+})
 
 // GET /api/invoices/:id
 export async function GET(
@@ -67,15 +73,32 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    requireRole(user, ['Admin', 'Roaster'])
     const { id } = await params
 
-    const body = await request.json()
-    const { status, notes } = body
+    const validation = await validateBody(request, updateInvoiceRequestSchema)
+    if (!validation.success) {
+      return validation.error
+    }
+
+    const { status, notes } = validation.data
 
     const updateData: Prisma.InvoiceUpdateInput = {}
     if (status !== undefined) updateData.status = status
-    if (notes !== undefined) updateData.notes = notes
+    if (notes !== undefined) updateData.notes = notes?.trim() || null
+
+    const existingInvoice = await prisma.invoice.findUnique({
+      where: { id },
+      select: { id: true },
+    })
+
+    if (!existingInvoice) {
+      return NextResponse.json(
+        { error: 'Invoice not found' },
+        { status: 404 }
+      )
+    }
 
     const updatedInvoice = await prisma.invoice.update({
       where: { id },

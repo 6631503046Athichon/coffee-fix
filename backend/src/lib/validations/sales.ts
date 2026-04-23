@@ -3,6 +3,7 @@ import {
   uuidSchema,
   nonEmptyStringSchema,
   positiveNumberSchema,
+  nonNegativeNumberSchema,
   positiveWeightSchema,
   dateStringSchema,
   optionalEmailSchema,
@@ -19,13 +20,13 @@ import {
 
 export const createCustomerSchema = z.object({
   name: nonEmptyStringSchema.pipe(
-    z.string().max(200, 'ชื่อลูกค้าต้องไม่เกิน 200 ตัวอักษร')
+    z.string().max(200, 'Customer name must be 200 characters or fewer')
   ),
   type: customerTypeSchema,
   contactEmail: optionalEmailSchema,
   contactPhone: phoneSchema,
-  address: z.string().max(500, 'ที่อยู่ต้องไม่เกิน 500 ตัวอักษร').optional().nullable(),
-  notes: z.string().max(1000, 'หมายเหตุต้องไม่เกิน 1000 ตัวอักษร').optional().nullable(),
+  address: z.string().trim().max(500, 'Address must be 500 characters or fewer').optional().nullable(),
+  notes: z.string().trim().max(1000, 'Notes must be 1000 characters or fewer').optional().nullable(),
 });
 
 export const updateCustomerSchema = createCustomerSchema.partial();
@@ -49,14 +50,14 @@ const saleOrderItemSchema = z.object({
 export const createSaleOrderSchema = z.object({
   customerId: uuidSchema,
   customerName: nonEmptyStringSchema.pipe(
-    z.string().max(200, 'ชื่อลูกค้าต้องไม่เกิน 200 ตัวอักษร')
-  ),
+    z.string().max(200, 'Customer name must be 200 characters or fewer')
+  ).optional(),
   orderDate: dateStringSchema.optional(),
   status: saleOrderStatusSchema.optional().default('Draft'),
-  totalAmount: positiveNumberSchema,
-  currency: currencySchema,
-  notes: z.string().max(1000, 'หมายเหตุต้องไม่เกิน 1000 ตัวอักษร').optional().nullable(),
-  items: z.array(saleOrderItemSchema).min(1, 'ต้องมีรายการสินค้าอย่างน้อย 1 รายการ'),
+  totalAmount: positiveNumberSchema.optional(),
+  currency: currencySchema.optional(),
+  notes: z.string().trim().max(1000, 'Notes must be 1000 characters or fewer').optional().nullable(),
+  items: z.array(saleOrderItemSchema).min(1, 'At least one sale order item is required'),
 });
 
 export const updateSaleOrderSchema = z.object({
@@ -66,7 +67,7 @@ export const updateSaleOrderSchema = z.object({
   status: saleOrderStatusSchema.optional(),
   totalAmount: positiveNumberSchema.optional(),
   currency: currencySchema.optional(),
-  notes: z.string().max(1000).optional().nullable(),
+  notes: z.string().trim().max(1000).optional().nullable(),
   items: z.array(saleOrderItemSchema).optional(),
 });
 
@@ -91,12 +92,12 @@ export const createInvoiceSchema = z.object({
   issueDate: dateStringSchema.optional(),
   dueDate: dateStringSchema.optional().nullable(),
   status: invoiceStatusSchema.optional().default('Draft'),
-  subtotal: positiveNumberSchema,
-  tax: positiveNumberSchema.optional().nullable(),
-  totalAmount: positiveNumberSchema,
-  currency: currencySchema,
-  notes: z.string().max(1000, 'หมายเหตุต้องไม่เกิน 1000 ตัวอักษร').optional().nullable(),
-  items: z.array(invoiceItemSchema).min(1, 'ต้องมีรายการสินค้าอย่างน้อย 1 รายการ'),
+  subtotal: positiveNumberSchema.optional(),
+  tax: nonNegativeNumberSchema.optional().nullable(),
+  totalAmount: positiveNumberSchema.optional(),
+  currency: currencySchema.optional(),
+  notes: z.string().trim().max(1000, 'Notes must be 1000 characters or fewer').optional().nullable(),
+  items: z.array(invoiceItemSchema).optional(),
 });
 
 export const updateInvoiceSchema = z.object({
@@ -104,10 +105,10 @@ export const updateInvoiceSchema = z.object({
   dueDate: dateStringSchema.optional().nullable(),
   status: invoiceStatusSchema.optional(),
   subtotal: positiveNumberSchema.optional(),
-  tax: positiveNumberSchema.optional().nullable(),
+  tax: nonNegativeNumberSchema.optional().nullable(),
   totalAmount: positiveNumberSchema.optional(),
   currency: currencySchema.optional(),
-  notes: z.string().max(1000).optional().nullable(),
+  notes: z.string().trim().max(1000).optional().nullable(),
   items: z.array(invoiceItemSchema).optional(),
 });
 
