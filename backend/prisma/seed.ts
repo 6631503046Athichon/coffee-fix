@@ -7,11 +7,10 @@ import { hashPassword } from "../src/lib/auth";
 const prisma = new PrismaClient();
 
 async function main() {
-  // DEV ONLY: All seed users use password "Coffee#Dev2026!" and must change on first login
   console.log("Starting seed...");
 
   // Create default admin user
-  const adminPassword = await hashPassword("Coffee#Dev2026!");
+  const adminPassword = await hashPassword("admin123");
   const admin = await prisma.user.upsert({
     where: { email: "6631503046@lamduan.mfu.ac.th" },
     update: {
@@ -21,7 +20,7 @@ async function main() {
       roles: [UserRole.Admin],
       isActive: true,
       isSuperAdmin: true,
-      mustChangePassword: true,
+      mustChangePassword: false,
     },
     create: {
       email: "6631503046@lamduan.mfu.ac.th",
@@ -31,13 +30,13 @@ async function main() {
       roles: [UserRole.Admin],
       isActive: true,
       isSuperAdmin: true,
-      mustChangePassword: true,
+      mustChangePassword: false,
     },
   });
   console.log("Created/Updated admin user:", admin.email);
 
   // Create second admin user for ownership transfer
-  const secondAdminPassword = await hashPassword("Coffee#Dev2026!");
+  const secondAdminPassword = await hashPassword("admin123");
   const secondAdmin = await prisma.user.upsert({
     where: { email: "admin2@coffee.com" },
     update: {
@@ -47,7 +46,7 @@ async function main() {
       roles: [UserRole.Admin],
       isActive: true,
       isSuperAdmin: false,
-      mustChangePassword: true,
+      mustChangePassword: false,
     },
     create: {
       email: "admin2@coffee.com",
@@ -57,7 +56,7 @@ async function main() {
       roles: [UserRole.Admin],
       isActive: true,
       isSuperAdmin: false,
-      mustChangePassword: true,
+      mustChangePassword: false,
     },
   });
   console.log("Created/Updated second admin user:", secondAdmin.email);
@@ -67,42 +66,42 @@ async function main() {
     {
       email: "farmer@coffee.com",
       username: "farmer1",
-      password: await hashPassword("Coffee#Dev2026!"),
+      password: await hashPassword("farmer123"),
       name: "Farmer User",
       roles: [UserRole.Farmer],
     },
     {
       email: "processor@coffee.com",
       username: "processor1",
-      password: await hashPassword("Coffee#Dev2026!"),
+      password: await hashPassword("processor123"),
       name: "Processor User",
       roles: [UserRole.Processor],
     },
     {
       email: "roaster@coffee.com",
       username: "roaster1",
-      password: await hashPassword("Coffee#Dev2026!"),
+      password: await hashPassword("roaster123"),
       name: "Roaster User",
       roles: [UserRole.Roaster],
     },
     {
       email: "headjudge@coffee.com",
       username: "headjudge",
-      password: await hashPassword("Coffee#Dev2026!"),
+      password: await hashPassword("headjudge123"),
       name: "Head Judge User",
       roles: [UserRole.HeadJudge],
     },
     {
       email: "cupper@coffee.com",
       username: "cupper1",
-      password: await hashPassword("Coffee#Dev2026!"),
+      password: await hashPassword("cupper123"),
       name: "Cupper User",
       roles: [UserRole.Cupper],
     },
     {
       email: "cupper2@coffee.com",
       username: "cupper2",
-      password: await hashPassword("Coffee#Dev2026!"),
+      password: await hashPassword("cupper123"),
       name: "Cupper 2 User",
       roles: [UserRole.Cupper],
     },
@@ -117,12 +116,12 @@ async function main() {
         name: userData.name,
         roles: userData.roles,
         isActive: true,
-        mustChangePassword: true,
+        mustChangePassword: false,
       },
       create: {
         ...userData,
         isActive: true,
-        mustChangePassword: true,
+        mustChangePassword: false,
       },
     });
     console.log("Created/Updated user:", user.email);
