@@ -78,6 +78,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
 }) => {
   const { data, setData } = useDataContext();
   const { currentUser } = useAuth();
+  const isAdmin = currentUser?.roles?.includes(UserRole.Admin) || false;
 
   // Get available farms (farms that user can access)
   const availableFarms = React.useMemo(() => {
@@ -130,13 +131,33 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [selectedFarmerName, setSelectedFarmerName] = useState('');
   const [formErrors, setFormErrors] = useState<{
     farm?: string;
+    farmer?: string;
     variety?: string;
     weight?: string;
     harvestDate?: string;
     general?: string;
   }>({});
+
+  const farmerOptions = useMemo(() => {
+    const farmerNameSet = new Set(
+      data.users
+        .filter(user => user.roles?.includes(UserRole.Farmer) && user.isActive !== false)
+        .map(user => user.name)
+        .filter((name): name is string => !!name && name.trim().length > 0)
+    );
+
+    // Keep backward compatibility for farms that still reference a farmer name not in users list.
+    if (selectedFarm?.farmerName?.trim()) {
+      farmerNameSet.add(selectedFarm.farmerName.trim());
+    }
+
+    return Array.from(farmerNameSet)
+      .sort((a, b) => a.localeCompare(b))
+      .map(name => ({ value: name, label: name }));
+  }, [data.users, selectedFarm?.farmerName]);
 
   // Reset form when modal opens or farm changes
   useEffect(() => {
@@ -149,6 +170,15 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
       // Clear errors and success message when modal opens
       setFormErrors({});
       setSuccessMessage(null);
+
+      if (isAdmin) {
+        const farmerNames = farmerOptions.map(option => option.value as string);
+        const hasCurrentSelection = selectedFarmerName && farmerNames.includes(selectedFarmerName);
+        if (!hasCurrentSelection) {
+          const fallbackName = selectedFarm?.farmerName || farmerNames[0] || '';
+          setSelectedFarmerName(fallbackName);
+        }
+      }
 
       // Auto-select current production year as default
       if (data.cropYears.length > 0) {
@@ -165,7 +195,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         }
       }
     }
-  }, [isOpen, initialFarm, farmsWithVarieties, selectedFarmId, data.cropYears]);
+  }, [isOpen, initialFarm, farmsWithVarieties, selectedFarmId, data.cropYears, isAdmin, farmerOptions, selectedFarmerName, selectedFarm?.farmerName]);
 
   // Update form when selected farm changes (but keep restored data)
   const prevFarmIdRef = useRef<string | null>(null);
@@ -206,6 +236,11 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
     // Validate that farm has varieties and one is selected
     if (!selectedFarm.varieties || selectedFarm.varieties.length === 0) {
       setFormErrors({ farm: 'This farm has no varieties. Please add varieties to the farm first.' });
+      return;
+    }
+
+    if (isAdmin && !selectedFarmerName.trim()) {
+      setFormErrors({ farmer: 'Please select a farmer.' });
       return;
     }
 
@@ -272,7 +307,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
 
       const lotData: Partial<HarvestLot> = {
         farmId: selectedFarm.id,
-        farmerName: selectedFarm.farmerName,
+        farmerName: isAdmin ? selectedFarmerName.trim() : selectedFarm.farmerName,
         farmPlotLocation: selectedFarm.location, // Use farm location as plot location
         cherryVariety,
         weightKg: parseFloat(weightKg),
@@ -427,6 +462,9 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
             </div>
             <div>
               <p className="font-semibold text-green-900">{selectedFarm.farmerName}</p>
+              {isAdmin && selectedFarmerName && (
+                <p className="text-sm text-green-800">Assigned Farmer: {selectedFarmerName}</p>
+              )}
               <p className="text-sm text-green-700">{selectedFarm.location}</p>
               {selectedFarm.varieties && selectedFarm.varieties.length > 0 && (
                 <p className="text-xs text-green-600 mt-1">
@@ -434,6 +472,26 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
                 </p>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Farmer Selection - Admin only */}
+        {isAdmin && (
+          <div>
+            <label className={labelClass}>Select Farmer *</label>
+            <Select
+              value={selectedFarmerName}
+              onChange={(v) => {
+                setSelectedFarmerName((v as string) || '');
+                setFormErrors(prev => ({ ...prev, farmer: undefined }));
+              }}
+              options={farmerOptions}
+              placeholder="Select a farmer..."
+              colorTheme="emerald"
+            />
+            {formErrors.farmer && (
+              <p className="mt-1 text-sm text-red-600">{formErrors.farmer}</p>
+            )}
           </div>
         )}
 

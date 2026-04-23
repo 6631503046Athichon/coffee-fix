@@ -2,10 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { HarvestLot, Farm, CropYear, UserRole, SCA_ATTRIBUTES } from '../../types';
+import { HarvestLot, Farm, CropYear, UserRole } from '../../types';
 import { BarChart, Weight, Wind, Award, MapPin, Leaf, TrendingUp, Clock, ArrowRight, ChevronRight, Flame, Droplets, FlaskConical } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
-import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer } from 'recharts';
 import Select from '../common/Select';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
@@ -39,108 +38,6 @@ const COFFEE_VARIETIES = [
 
 // Removed custom dropdown components in favor of shared Select component
 
-// Sensory Radar Chart Component for Quality Feedback
-const SensoryRadarChart: React.FC<{ avgScores: { [attribute: string]: number } | null }> = ({ avgScores }) => {
-  const chartRef = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    // Fix rotated text labels after chart renders
-    const fixRotatedText = () => {
-      if (!chartRef.current) return;
-      
-      const svg = chartRef.current.querySelector('svg');
-      if (!svg) return;
-
-      // Find all text elements in polar radius axis
-      const textElements = svg.querySelectorAll('.recharts-polar-radius-axis text, .recharts-polar-radius-axis tspan');
-      textElements.forEach((textEl) => {
-        const svgText = textEl as SVGTextElement;
-        const x = parseFloat(svgText.getAttribute('x') || '0');
-        const y = parseFloat(svgText.getAttribute('y') || '0');
-        
-        // Force rotate to 0 degrees at the text position
-        svgText.setAttribute('transform', `rotate(0 ${x} ${y})`);
-        svgText.setAttribute('text-anchor', 'middle');
-        svgText.setAttribute('dominant-baseline', 'middle');
-        
-        // Override inline styles
-        svgText.style.transform = 'rotate(0deg)';
-        svgText.style.textAnchor = 'middle';
-        svgText.style.dominantBaseline = 'middle';
-      });
-    };
-
-    // Run multiple times to ensure it works
-    const timeout1 = setTimeout(fixRotatedText, 100);
-    const timeout2 = setTimeout(fixRotatedText, 300);
-    const timeout3 = setTimeout(fixRotatedText, 500);
-    
-    window.addEventListener('resize', fixRotatedText);
-    
-    return () => {
-      clearTimeout(timeout1);
-      clearTimeout(timeout2);
-      clearTimeout(timeout3);
-      window.removeEventListener('resize', fixRotatedText);
-    };
-  }, [avgScores]);
-
-  if (!avgScores) {
-    return (
-      <div className="flex items-center justify-center h-[250px] text-gray-500 text-sm">
-        Sensory details not available
-      </div>
-    );
-  }
-
-  const chartData = SCA_ATTRIBUTES.map(attr => ({
-    attribute: attr === 'Fragrance/Aroma' ? 'Fragrance' : attr,
-    score: avgScores[attr] || 0,
-    fullMark: 10,
-  }));
-
-  return (
-    <div ref={chartRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <ResponsiveContainer width="100%" height={250}>
-        <RadarChart cx="50%" cy="50%" outerRadius="70%" data={chartData}>
-          <PolarGrid stroke="#e5e7eb" />
-          <PolarAngleAxis
-            dataKey="attribute"
-            tick={{ fill: '#4b5563', fontSize: 10, fontWeight: 600 }}
-          />
-          <PolarRadiusAxis
-            angle={30}
-            domain={[6, 10]}
-            tickCount={5}
-            tick={{ fill: '#9ca3af', fontSize: 9 }}
-            tickFormatter={(value) => value}
-          />
-          <Radar
-            name="Score"
-            dataKey="score"
-            stroke="#6366f1"
-            fill="#818cf8"
-            fillOpacity={0.5}
-            strokeWidth={2}
-          />
-        </RadarChart>
-      </ResponsiveContainer>
-      <style>{`
-        .recharts-polar-radius-axis text,
-        .recharts-polar-radius-axis tspan {
-          transform: rotate(0deg) !important;
-          text-anchor: middle !important;
-          dominant-baseline: middle !important;
-        }
-        .recharts-polar-radius-axis .recharts-text {
-          transform: rotate(0deg) !important;
-          text-anchor: middle !important;
-        }
-      `}</style>
-    </div>
-  );
-};
-
 const FarmerDashboard: React.FC = () => {
   const { data, setData } = useDataContext();
   const { currentUser } = useAuth();
@@ -155,73 +52,6 @@ const FarmerDashboard: React.FC = () => {
     if (isAdmin) return data.harvestLots;
     return data.harvestLots.filter(hl => hl.farmerName === currentUser.name);
   }, [data.harvestLots, currentUser, isAdmin]);
-
-  const qualityFeedbackData = useMemo(() => {
-    const farmerLots = myHarvestLots;
-
-    const scoredLots = farmerLots.map(hl => {
-        const relatedBatches = data.processingBatches.filter(b => b.harvestLotId === hl.id);
-        const relatedParchmentLots = data.parchmentLots.filter(p => relatedBatches.some(b => b.id === p.processingBatchId));
-        const relatedGreenBeanLots = data.greenBeanLots.filter(g => relatedParchmentLots.some(p => p.id === g.parchmentLotId));
-
-        if (relatedGreenBeanLots.length === 0) return null;
-
-        const gbl = relatedGreenBeanLots[0];
-        const scoreInfo = gbl.cuppingScores[0];
-        if (!scoreInfo) return null;
-
-        const session = data.cuppingSessions.find(s => s.id === scoreInfo.sessionId);
-        const sample = session?.samples.find(s => s.greenBeanLotId === gbl.id);
-
-        if (session && sample && session.finalResults && session.finalResults[sample.id]) {
-            // Get the processing batch to extract process type
-            const batch = relatedBatches.find(b => relatedParchmentLots.some(p => p.processingBatchId === b.id));
-
-            return {
-                lotId: hl.id,
-                variety: hl.cherryVariety,
-                score: session.finalResults[sample.id].totalScore,
-                grade: gbl.grade || '-',
-                processType: batch?.processType || '-',
-                harvestDate: hl.harvestDate,
-                greenBeanLotId: gbl.id,
-                avgScores: session.finalResults[sample.id].avgScores || null,
-            };
-        }
-        return null;
-    }).filter(Boolean) as { lotId: string; variety: string; score: number; grade: string; processType: string; harvestDate: string; greenBeanLotId: string; avgScores: { [attribute: string]: number } | null; }[];
-
-    const sortedLots = scoredLots.sort((a, b) => b.score - a.score).slice(0, 3);
-
-    // Mock data for demonstration if no real data exists
-    if (sortedLots.length === 0) {
-        return [{
-            lotId: 'HL001',
-            variety: 'Gesha',
-            score: 87.5,
-            grade: 'Specialty',
-            processType: 'Washed',
-            harvestDate: '2024-01-15',
-            greenBeanLotId: 'GBL001',
-            avgScores: {
-                'Fragrance/Aroma': 8.5,
-                'Flavor': 8.7,
-                'Aftertaste': 8.6,
-                'Acidity': 8.4,
-                'Body': 8.3,
-                'Uniformity': 8.5,
-                'Balance': 8.6,
-                'Clean Cup': 8.8,
-                'Sweetness': 8.5,
-                'Overall': 8.6
-            }
-        }];
-    }
-
-    return sortedLots;
-
-  }, [data, myHarvestLots]);
-
 
   const stats = useMemo(() => ({
     totalLots: myHarvestLots.length,
@@ -498,101 +328,6 @@ const FarmerDashboard: React.FC = () => {
           </div>
         </div>
         
-        <div className="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 border-b border-gray-200">
-                <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                        <Award className="text-blue-600 h-6 w-6" />
-                    </div>
-                    <h2 className="text-2xl font-bold text-gray-900">Quality Feedback</h2>
-                </div>
-                <p className="text-gray-600">Top-performing lots with cupping scores - click to view traceability</p>
-            </div>
-            
-            {/* Table with Spider Charts */}
-            <div className="overflow-x-auto p-6">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                Lot ID
-                            </th>
-                            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                Variety
-                            </th>
-                            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider min-w-[200px] md:min-w-[250px]">
-                                Spider Chart
-                            </th>
-                            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                Total Score
-                            </th>
-                            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                Grade
-                            </th>
-                            <th scope="col" className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                Process Type
-                            </th>
-                            <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                                Harvest Date
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {qualityFeedbackData.length === 0 ? (
-                            <tr>
-                                <td colSpan={7} className="px-6 py-12 text-center">
-                                    <Award className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                                    <p className="text-gray-500 text-lg font-medium">No quality feedback data available</p>
-                                    <p className="text-gray-400 text-sm">Quality feedback will appear here once cupping scores are available</p>
-                                </td>
-                            </tr>
-                        ) : (
-                            qualityFeedbackData.map((item) => (
-                                <tr
-                                    key={item.lotId}
-                                    onClick={() => navigate(`/traceability/${item.greenBeanLotId}`)}
-                                    className="hover:bg-indigo-50 cursor-pointer transition-colors"
-                                >
-                                    <td className="px-4 py-5 whitespace-nowrap">
-                                        <div className="text-sm font-bold text-gray-900">
-                                          {(() => {
-                                            const lot = data.harvestLots.find(l => l.id === item.lotId);
-                                            return lot?.displayId || item.lotId.substring(0, 8).toUpperCase();
-                                          })()}
-                                        </div>
-                                    </td>
-                                    <td className="px-4 py-5 whitespace-nowrap">
-                                        <div className="text-sm font-medium text-gray-700">{item.variety}</div>
-                                    </td>
-                                    <td className="px-4 py-5">
-                                        <div className="w-full h-[250px] flex items-center justify-center">
-                                            <SensoryRadarChart avgScores={item.avgScores} />
-                                        </div>
-                                    </td>
-                                    <td className="px-4 py-5 whitespace-nowrap text-center">
-                                        <div className="text-2xl font-bold text-indigo-600">{toFixed2(item.score)}</div>
-                                    </td>
-                                    <td className="px-4 py-5 whitespace-nowrap text-center">
-                                        <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                            {item.grade}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-5 whitespace-nowrap text-center">
-                                        <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                            {item.processType}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-5 whitespace-nowrap">
-                                        <div className="text-sm text-gray-600">{item.harvestDate}</div>
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
     </div>
   );
 };
