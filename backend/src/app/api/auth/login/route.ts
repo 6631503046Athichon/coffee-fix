@@ -2,13 +2,45 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyPassword, generateToken } from '@/lib/auth'
 import { handleApiError } from '@/lib/middleware'
-import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
+import { rateLimit, RATE_LIMITS, getClientIp } from '@/lib/rateLimit'
 import { validateBody, loginSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
   try {
-    // Rate limit: 5 login attempts per 15 minutes per IP
-    const limited = await rateLimit(request, RATE_LIMITS.LOGIN)
+    // Rate limit: 5 login attempts per 15 minutes per (IP + email) combo.
+    //
+    // Keying on IP alone causes every user sharing an egress IP (office NAT,
+    // ISP CG-NAT, or a dev environment without `x-forwarded-for` where
+    // getClientIp() returns 'anonymous') to collide in a single bucket, so
+    // one person mistyping their password five times locks out everyone
+    // else on that IP. Combining IP with the submitted email gives each
+    // account its own window per IP — an attacker spraying many emails from
+    // one IP still can't exhaust a legitimate user's allowance, while brute
+    // forcing a single account stays capped at 5/15min as before.
+    //
+    // We read email from a cloned body so `validateBody()` below can still
+    // consume the original stream and produce the authoritative 400 error
+    // on malformed input.
+    let emailForRateLimit = ''
+    try {
+      const cloned = (await request.clone().json()) as unknown
+      if (
+        cloned &&
+        typeof cloned === 'object' &&
+        'email' in cloned &&
+        typeof (cloned as { email: unknown }).email === 'string'
+      ) {
+        emailForRateLimit = (cloned as { email: string }).email.trim().toLowerCase()
+      }
+    } catch {
+      // Malformed JSON or empty body — fall back to IP-only keying.
+      // validateBody() below will surface the proper 400 error.
+    }
+
+    const limited = await rateLimit(request, {
+      ...RATE_LIMITS.LOGIN,
+      keyFn: (req) => `${getClientIp(req)}:${emailForRateLimit}`,
+    })
     if (limited) return limited
 
     // Validate request body with Zod
