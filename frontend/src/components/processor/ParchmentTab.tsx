@@ -208,6 +208,77 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     );
   }, [data.greenBeanLots]);
 
+  // Aggregate parchment stock by process type: one summary row per
+  // Honey/Natural/Washed/... with total weight currently on hand and a
+  // collapsible trace showing every lot + its harvest origin.
+  //
+  // Uses `filteredLots` so the summary respects whichever tab/status/search
+  // the user has selected — "In Stock" shows live inventory, "Hulled" shows
+  // depleted batches, "All" shows both.
+  const parchmentProcessSummary = useMemo(() => {
+    type Source = {
+      parchmentDisplayId: string;
+      harvestDisplayId: string;
+      status: ParchmentLot["status"];
+      currentWeightKg: number;
+      initialWeightKg: number;
+    };
+    type Row = {
+      processType: string;
+      totalCurrentWeight: number;
+      totalInitialWeight: number;
+      lotCount: number;
+      sources: Source[];
+    };
+    const byType = new Map<string, Row>();
+
+    for (const lot of filteredLots) {
+      const key = lot.processType || "Unknown";
+      const row =
+        byType.get(key) ?? {
+          processType: key,
+          totalCurrentWeight: 0,
+          totalInitialWeight: 0,
+          lotCount: 0,
+          sources: [],
+        };
+      row.totalCurrentWeight += lot.currentWeightKg ?? 0;
+      row.totalInitialWeight += lot.initialWeightKg ?? 0;
+      row.lotCount += 1;
+
+      const harvest = lot.harvestLotId
+        ? data.harvestLots.find((h) => h.id === lot.harvestLotId)
+        : undefined;
+      row.sources.push({
+        parchmentDisplayId:
+          lot.displayId ?? lot.id.substring(0, 8).toUpperCase(),
+        harvestDisplayId:
+          harvest?.displayId ??
+          lot.externalSource?.origin ??
+          "—",
+        status: lot.status,
+        currentWeightKg: lot.currentWeightKg ?? 0,
+        initialWeightKg: lot.initialWeightKg ?? 0,
+      });
+      byType.set(key, row);
+    }
+    return Array.from(byType.values()).sort(
+      (a, b) => b.totalCurrentWeight - a.totalCurrentWeight,
+    );
+  }, [filteredLots, data.harvestLots]);
+
+  const [expandedProcessSummaries, setExpandedProcessSummaries] = useState<
+    Set<string>
+  >(new Set());
+  const toggleProcessSummary = useCallback((processType: string) => {
+    setExpandedProcessSummaries((prev) => {
+      const next = new Set(prev);
+      if (next.has(processType)) next.delete(processType);
+      else next.add(processType);
+      return next;
+    });
+  }, []);
+
   // ---- Handlers ----
 
   const handleProcessFromHarvestLot = useCallback((lot: HarvestLot) => {
@@ -569,6 +640,102 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
           </button>
         </div>
       </div>
+
+      {/* Parchment Stock Summary — aggregated by process type with trace */}
+      {parchmentProcessSummary.length > 0 && (
+        <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
+          <div className="px-4 py-3 bg-amber-50 border-b border-amber-100 flex items-center gap-2">
+            <div className="p-1.5 bg-amber-600 rounded-lg">
+              <Box className="h-4 w-4 text-white" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-900">
+                Parchment Stock — Process Type Summary
+              </h3>
+              <p className="text-[11px] text-gray-500">
+                Total weight per process type with origin trace. Respects the
+                filters above. Click a row to expand.
+              </p>
+            </div>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {parchmentProcessSummary.map((row) => {
+              const isExpanded = expandedProcessSummaries.has(row.processType);
+              return (
+                <div key={row.processType}>
+                  <button
+                    type="button"
+                    onClick={() => toggleProcessSummary(row.processType)}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <ChevronDown
+                        className={`h-4 w-4 text-gray-400 transition-transform ${isExpanded ? "" : "-rotate-90"}`}
+                      />
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                        {row.processType}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {row.lotCount} lot{row.lotCount !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-lg font-bold text-amber-700">
+                        {row.totalCurrentWeight.toFixed(2)}
+                      </span>
+                      <span className="text-xs font-normal text-gray-500 ml-1">
+                        / {row.totalInitialWeight.toFixed(2)} kg
+                      </span>
+                    </div>
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 pb-3 pt-1 bg-gray-50/60">
+                      <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 pl-6">
+                        Sources
+                      </div>
+                      <div className="space-y-1 pl-6">
+                        {row.sources.map((s, idx) => (
+                          <div
+                            key={`${row.processType}-${idx}`}
+                            className="flex items-center justify-between text-xs bg-white rounded-md px-3 py-2 border border-gray-200"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-semibold text-gray-800">
+                                {s.parchmentDisplayId}
+                              </span>
+                              <span className="text-gray-400">←</span>
+                              <span className="font-mono text-gray-600">
+                                {s.harvestDisplayId}
+                              </span>
+                              <span
+                                className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                  s.status === "Hulled"
+                                    ? "bg-gray-100 text-gray-600 border border-gray-200"
+                                    : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                }`}
+                              >
+                                {s.status === "Hulled"
+                                  ? "Hulled"
+                                  : "Awaiting Hulling"}
+                              </span>
+                            </div>
+                            <span className="font-semibold text-gray-700">
+                              {s.currentWeightKg.toFixed(2)}
+                              <span className="text-gray-400 font-normal text-[10px] ml-1">
+                                / {s.initialWeightKg.toFixed(2)} kg
+                              </span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Grouped Parchment Lots */}
       {grouped.length === 0 ? (
