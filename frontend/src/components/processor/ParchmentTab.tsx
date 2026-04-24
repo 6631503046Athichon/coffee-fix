@@ -217,6 +217,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   // depleted batches, "All" shows both.
   const parchmentProcessSummary = useMemo(() => {
     type Source = {
+      lot: ParchmentLot;
       parchmentDisplayId: string;
       harvestDisplayId: string;
       status: ParchmentLot["status"];
@@ -250,6 +251,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         ? data.harvestLots.find((h) => h.id === lot.harvestLotId)
         : undefined;
       row.sources.push({
+        lot,
         parchmentDisplayId:
           lot.displayId ?? lot.id.substring(0, 8).toUpperCase(),
         harvestDisplayId:
@@ -694,39 +696,60 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                         Sources
                       </div>
                       <div className="space-y-1 pl-6">
-                        {row.sources.map((s, idx) => (
-                          <div
-                            key={`${row.processType}-${idx}`}
-                            className="flex items-center justify-between text-xs bg-white rounded-md px-3 py-2 border border-gray-200"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono font-semibold text-gray-800">
-                                {s.parchmentDisplayId}
-                              </span>
-                              <span className="text-gray-400">←</span>
-                              <span className="font-mono text-gray-600">
-                                {s.harvestDisplayId}
-                              </span>
-                              <span
-                                className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                  s.status === "Hulled"
-                                    ? "bg-gray-100 text-gray-600 border border-gray-200"
-                                    : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                }`}
-                              >
-                                {s.status === "Hulled"
-                                  ? "Hulled"
-                                  : "Awaiting Hulling"}
-                              </span>
+                        {row.sources.map((s, idx) => {
+                          const canWithdraw = s.currentWeightKg > 0;
+                          return (
+                            <div
+                              key={`${row.processType}-${idx}`}
+                              className="flex items-center justify-between text-xs bg-white rounded-md px-3 py-2 border border-gray-200"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-semibold text-gray-800">
+                                  {s.parchmentDisplayId}
+                                </span>
+                                <span className="text-gray-400">←</span>
+                                <span className="font-mono text-gray-600">
+                                  {s.harvestDisplayId}
+                                </span>
+                                <span
+                                  className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                    s.status === "Hulled"
+                                      ? "bg-gray-100 text-gray-600 border border-gray-200"
+                                      : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  }`}
+                                >
+                                  {s.status === "Hulled"
+                                    ? "Hulled"
+                                    : "Awaiting Hulling"}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="font-semibold text-gray-700">
+                                  {s.currentWeightKg.toFixed(2)}
+                                  <span className="text-gray-400 font-normal text-[10px] ml-1">
+                                    / {s.initialWeightKg.toFixed(2)} kg
+                                  </span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setSelectedParchmentForWithdraw(s.lot)
+                                  }
+                                  disabled={!canWithdraw}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                                  title={
+                                    canWithdraw
+                                      ? "Withdraw from this parchment lot"
+                                      : "No stock remaining"
+                                  }
+                                >
+                                  <Package className="h-3 w-3" />
+                                  Withdraw
+                                </button>
+                              </div>
                             </div>
-                            <span className="font-semibold text-gray-700">
-                              {s.currentWeightKg.toFixed(2)}
-                              <span className="text-gray-400 font-normal text-[10px] ml-1">
-                                / {s.initialWeightKg.toFixed(2)} kg
-                              </span>
-                            </span>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
