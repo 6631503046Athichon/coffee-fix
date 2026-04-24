@@ -1416,6 +1416,70 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     greenBeanGradeFilter,
   ]);
 
+  // Aggregate Green Bean lots by grade so the processor sees one line per
+  // grade with total weight + a breakdown of which parchment lots it came
+  // from. Only counts `currentWeightKg` (what's actually still on hand).
+  const greenBeanGradeSummary = useMemo(() => {
+    type Source = {
+      parchmentDisplayId: string;
+      processType: string;
+      sourceType: "Internal" | "External";
+      weightKg: number;
+      greenBeanDisplayId: string;
+    };
+    type Row = {
+      grade: string;
+      totalWeight: number;
+      lotCount: number;
+      sources: Source[];
+    };
+    const byGrade = new Map<string, Row>();
+
+    for (const gbl of processedGreenBeanLots) {
+      const row =
+        byGrade.get(gbl.grade) ?? {
+          grade: gbl.grade,
+          totalWeight: 0,
+          lotCount: 0,
+          sources: [],
+        };
+      row.totalWeight += gbl.currentWeightKg ?? 0;
+      row.lotCount += 1;
+
+      const parchment = gbl.parchmentLotId
+        ? data.parchmentLots.find((p) => p.id === gbl.parchmentLotId)
+        : undefined;
+      row.sources.push({
+        parchmentDisplayId:
+          parchment?.displayId ??
+          (gbl.sourceType === "External" ? "External" : "—"),
+        processType:
+          parchment?.processType ?? gbl.externalSource?.processType ?? "—",
+        sourceType: gbl.sourceType,
+        weightKg: gbl.currentWeightKg ?? 0,
+        greenBeanDisplayId:
+          gbl.displayId ?? gbl.id.substring(0, 8).toUpperCase(),
+      });
+      byGrade.set(gbl.grade, row);
+    }
+
+    return Array.from(byGrade.values()).sort(
+      (a, b) => b.totalWeight - a.totalWeight,
+    );
+  }, [processedGreenBeanLots, data.parchmentLots]);
+
+  const [expandedGradeSummaries, setExpandedGradeSummaries] = useState<
+    Set<string>
+  >(new Set());
+  const toggleGradeSummary = useCallback((grade: string) => {
+    setExpandedGradeSummaries((prev) => {
+      const next = new Set(prev);
+      if (next.has(grade)) next.delete(grade);
+      else next.add(grade);
+      return next;
+    });
+  }, []);
+
   const greenBeanPageCount = Math.ceil(
     processedGreenBeanLots.length / ITEMS_PER_PAGE,
   );
@@ -2067,6 +2131,110 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           onPageChange={setParchmentCurrentPage}
         />
       </div>
+
+      {/* Green Bean Grade Summary — aggregate by grade with source trace */}
+      {greenBeanGradeSummary.length > 0 && (
+        <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
+          <div className="px-4 py-3 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2">
+            <div className="p-1.5 bg-emerald-600 rounded-lg">
+              <Coffee className="h-4 w-4 text-white" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-900">
+                Green Bean Stock — Grade Summary
+              </h3>
+              <p className="text-[11px] text-gray-500">
+                Total weight per grade with origin trace. Click a row to expand sources.
+              </p>
+            </div>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {greenBeanGradeSummary.map((row) => {
+              const isExpanded = expandedGradeSummaries.has(row.grade);
+              return (
+                <div key={row.grade}>
+                  <button
+                    type="button"
+                    onClick={() => toggleGradeSummary(row.grade)}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className={`text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                      >
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                        {row.grade}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {row.lotCount} lot{row.lotCount !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-lg font-bold text-emerald-700">
+                        {row.totalWeight.toFixed(2)}
+                      </span>
+                      <span className="text-xs font-normal text-gray-500 ml-1">
+                        kg
+                      </span>
+                    </div>
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 pb-3 pt-1 bg-gray-50/60">
+                      <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 pl-6">
+                        Sources
+                      </div>
+                      <div className="space-y-1 pl-6">
+                        {row.sources.map((s, idx) => (
+                          <div
+                            key={`${row.grade}-${idx}`}
+                            className="flex items-center justify-between text-xs bg-white rounded-md px-3 py-2 border border-gray-200"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-semibold text-gray-800">
+                                {s.greenBeanDisplayId}
+                              </span>
+                              <span className="text-gray-400">←</span>
+                              <span className="font-mono text-gray-600">
+                                {s.parchmentDisplayId}
+                              </span>
+                              <span
+                                className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                  s.sourceType === "External"
+                                    ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                    : "bg-green-50 text-green-700 border border-green-200"
+                                }`}
+                              >
+                                {s.processType}
+                              </span>
+                            </div>
+                            <span className="font-semibold text-gray-700">
+                              {s.weightKg.toFixed(2)}
+                              <span className="text-gray-400 font-normal text-[10px] ml-1">
+                                kg
+                              </span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Green Bean Stock Table */}
       <div
