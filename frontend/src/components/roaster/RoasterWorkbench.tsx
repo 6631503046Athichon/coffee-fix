@@ -593,7 +593,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                   <Package className="h-4 w-4" />
                   Internal Lots
                   <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700">
-                    {availableInternalLots.length}
+                    {myInventory.length}
                   </span>
                 </div>
               </button>
