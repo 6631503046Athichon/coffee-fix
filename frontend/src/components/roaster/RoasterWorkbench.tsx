@@ -60,7 +60,7 @@ const COFFEE_VARIETIES = [
 // Removed local CustomDropdown in favor of shared Select component
 
 const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
-  const { data, setData } = useDataContext()
+  const { data, setData, refreshData } = useDataContext()
   const location = useLocation()
   const navigate = useNavigate()
   const { addToast } = useToast()
@@ -185,7 +185,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     [data.parchmentLots, data.harvestLots, getFinalScore],
   )
 
-  // Split into External and Internal lists (sorted by ID descending - newest first)
+  // Split into External and Internal lists while preserving backend order.
   const availableExternalLots = useMemo(
     () =>
       data.greenBeanLots
@@ -195,8 +195,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             lot.currentWeightKg > 0 &&
             lot.sourceType === GreenBeanSourceType.External,
         )
-        .map(mapLotForDisplay)
-        .sort((a, b) => b.id.localeCompare(a.id)),
+        .map(mapLotForDisplay),
     [data.greenBeanLots, mapLotForDisplay],
   )
 
@@ -209,8 +208,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             lot.currentWeightKg > 0 &&
             lot.sourceType === GreenBeanSourceType.Internal,
         )
-        .map(mapLotForDisplay)
-        .sort((a, b) => b.id.localeCompare(a.id)),
+        .map(mapLotForDisplay),
     [data.greenBeanLots, mapLotForDisplay],
   )
 
@@ -221,8 +219,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
           if (item.remainingWeightKg <= 0.01) return false
           // Admins see all inventory; roasters see only their own
           return isAdmin || item.roasterId === currentUser.id
-        })
-        .sort((a, b) => b.id.localeCompare(a.id)),
+        }),
     [data.roasterInventory, currentUser.id, isAdmin],
   )
 
@@ -335,13 +332,32 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
       return
     }
     try {
-      const { inventoryItem } = await claimGreenBeanLot(selectedLot.id, amount)
+      const { inventoryItem, updatedSourceLot } = await claimGreenBeanLot(selectedLot.id, amount)
       setData((prev) => ({
         ...prev,
-        roasterInventory: [...prev.roasterInventory, inventoryItem],
+        roasterInventory: [
+          inventoryItem,
+          ...prev.roasterInventory.filter((item) => item.id !== inventoryItem.id),
+        ],
+        greenBeanLots: updatedSourceLot
+          ? prev.greenBeanLots.map((lot) =>
+              lot.id === updatedSourceLot.id
+                ? {
+                    ...lot,
+                    currentWeightKg: updatedSourceLot.currentWeightKg,
+                    availabilityStatus: updatedSourceLot.availabilityStatus,
+                  }
+                : lot,
+            )
+          : prev.greenBeanLots,
       }))
+      setLotsTab('internal')
+      setInventoryPage(1)
       addToast({ type: 'success', message: `Claimed ${amount} kg successfully.` })
       setIsClaimModalOpen(false)
+      void refreshData().catch((error) => {
+        console.warn('Failed to refresh roaster data after claim:', error)
+      })
     } catch (err: unknown) {
       addToast({
         type: 'error',
