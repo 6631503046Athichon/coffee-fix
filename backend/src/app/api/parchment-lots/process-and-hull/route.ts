@@ -128,9 +128,27 @@ export async function POST(request: NextRequest) {
     // Pre-generate display IDs
     const batchDisplayId = await nextDisplayId(prisma.processingBatch, 'PB')
     const parchmentDisplayId = await nextDisplayId(prisma.parchmentLot, 'PCH')
+
+    // nextDisplayId queries the DB for max(num) + 1 — calling it in a loop
+    // returns the SAME id every iteration (no new rows are written until the
+    // transaction below commits). That collided on @unique displayId → P2002
+    // → 409 whenever the form had >= 2 graded lots. Fix: pull the base once
+    // and extend it arithmetically so ids within one submission are unique.
     const greenBeanDisplayIds: string[] = []
-    for (let i = 0; i < gradedLots.length; i++) {
-      greenBeanDisplayIds.push(await nextDisplayId(prisma.greenBeanLot, 'GBL'))
+    if (gradedLots.length > 0) {
+      const baseGbl = await nextDisplayId(prisma.greenBeanLot, 'GBL')
+      const match = baseGbl.match(/^(GBL-\d{4}-)(\d+)$/)
+      if (!match) {
+        return NextResponse.json(
+          { error: 'Failed to generate green bean lot IDs' },
+          { status: 500 }
+        )
+      }
+      const yearPrefix = match[1]
+      const startNum = Number.parseInt(match[2], 10)
+      for (let i = 0; i < gradedLots.length; i++) {
+        greenBeanDisplayIds.push(`${yearPrefix}${startNum + i}`)
+      }
     }
 
     const result = await prisma.$transaction(async (tx) => {
