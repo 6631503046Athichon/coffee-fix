@@ -39,6 +39,7 @@ import ProcessAndHullModal from "./modals/ProcessAndHullModal";
 import ParchmentWithdrawModal from "./modals/ParchmentWithdrawModal";
 import ExcelImportModal from "./modals/ExcelImportModal";
 import DatePicker from "../common/DatePicker";
+import Select from "../common/Select";
 import { useToast } from "../../contexts/ToastContext";
 import { useDataContext } from "../../hooks/useDataContext";
 
@@ -1051,24 +1052,17 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                   <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wider">
                     Process Type *
                   </label>
-                  <select
-                    value={recordProcessForm.processType}
-                    onChange={(e) =>
+                  <Select
+                    options={processTypeOptions}
+                    value={recordProcessForm.processType || null}
+                    onChange={(val) =>
                       setRecordProcessForm((f) => ({
                         ...f,
-                        processType: e.target.value,
+                        processType: val ? String(val) : "",
                       }))
                     }
-                    className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                    required
-                  >
-                    <option value="">Select process type…</option>
-                    {processTypeOptions.map((pt) => (
-                      <option key={pt.value} value={pt.value}>
-                        {pt.label}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Select process type…"
+                  />
                 </div>
 
                 {/* Crop year (optional) */}
@@ -1077,23 +1071,23 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                     <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wider">
                       Crop Year (optional)
                     </label>
-                    <select
-                      value={recordProcessForm.cropYearId}
-                      onChange={(e) =>
+                    <Select
+                      options={[
+                        { value: "", label: "None" },
+                        ...data.cropYears.map((cy) => ({
+                          value: cy.id,
+                          label: cy.year,
+                        })),
+                      ]}
+                      value={recordProcessForm.cropYearId || ""}
+                      onChange={(val) =>
                         setRecordProcessForm((f) => ({
                           ...f,
-                          cropYearId: e.target.value,
+                          cropYearId: val ? String(val) : "",
                         }))
                       }
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                    >
-                      <option value="">None</option>
-                      {data.cropYears.map((cy) => (
-                        <option key={cy.id} value={cy.id}>
-                          {cy.year}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="None"
+                    />
                   </div>
                 )}
 
