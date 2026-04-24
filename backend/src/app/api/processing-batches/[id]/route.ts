@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 import { safeParseFloat } from '@/lib/utils'
 
 // GET /api/processing-batches/:id
@@ -63,6 +63,20 @@ export async function PUT(
     const user = await requireAuth(request)
     // SECURITY: Only Processor and Admin can update processing batches
     requireRole(user, ['Processor', 'Admin'])
+
+    // SECURITY: Ownership check — only the Processor who created this batch
+    // (or Admin) can mutate it. Excel-imported batches fall back to Admin-only.
+    const existingBatch = await prisma.processingBatch.findUnique({
+      where: { id },
+      select: { createdById: true },
+    })
+    if (!existingBatch) {
+      return NextResponse.json(
+        { error: 'Processing batch not found' },
+        { status: 404 }
+      )
+    }
+    requireOwnership(user, existingBatch.createdById, ['Admin'])
 
     const body = await request.json()
     const { status, processType, processNotes, parchmentWeightKg, moistureContent, baggingDate, dryingStartDate, dryingEndDate, cropYearId } = body
@@ -184,6 +198,10 @@ export async function DELETE(
         { status: 404 }
       )
     }
+
+    // SECURITY: Ownership check — only the Processor who created this batch
+    // (or Admin) can delete it.
+    requireOwnership(user, batch.createdById, ['Admin'])
 
     // Check if there are parchment lots linked
     if (batch.parchmentLots && batch.parchmentLots.length > 0) {

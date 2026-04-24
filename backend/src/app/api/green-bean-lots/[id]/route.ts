@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
+import { requireAuth, requireOwnership, requireRole, handleApiError } from "@/lib/middleware";
 import { safeParseFloat } from "@/lib/utils";
 
 // GET /api/green-bean-lots/:id
@@ -99,6 +99,20 @@ export async function PATCH(
     // SECURITY: Only Processor and Admin can update processor scores
     requireRole(user, ['Processor', 'Admin']);
     const { id } = await params;
+
+    // SECURITY: Ownership check — only the Processor who created this lot
+    // (or Admin) can update its scores.
+    const existingScoreLot = await prisma.greenBeanLot.findUnique({
+      where: { id },
+      select: { createdById: true },
+    });
+    if (!existingScoreLot) {
+      return NextResponse.json(
+        { error: "Green bean lot not found" },
+        { status: 404 },
+      );
+    }
+    requireOwnership(user, existingScoreLot.createdById, ['Admin']);
 
     const body = await request.json();
     const {
@@ -204,6 +218,7 @@ export async function PUT(
         id: true,
         currentWeightKg: true,
         availabilityStatus: true,
+        createdById: true,
       },
     });
 
@@ -213,6 +228,10 @@ export async function PUT(
         { status: 404 },
       );
     }
+
+    // SECURITY: Ownership check — only the Processor who created this lot
+    // (or Admin) can mutate it.
+    requireOwnership(user, existingLot.createdById, ['Admin']);
 
     const body = await request.json();
     const {
@@ -346,6 +365,10 @@ export async function DELETE(
         { status: 404 },
       );
     }
+
+    // SECURITY: Ownership check — only the Processor who created this lot
+    // (or Admin) can delete it.
+    requireOwnership(user, lot.createdById, ['Admin']);
 
     // Check if there are roaster inventory or roast batches linked
     if (

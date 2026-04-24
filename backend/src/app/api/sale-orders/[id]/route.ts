@@ -15,7 +15,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    // SECURITY: Sale orders expose pricing + customer PII.
+    // Restrict to Admin and Roaster (the roles that manage sales).
+    requireRole(user, ['Admin', 'Roaster'])
     const { id } = await params
 
     const saleOrder = await prisma.saleOrder.findUnique({

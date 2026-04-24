@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 import { safeParseFloat } from '@/lib/utils'
 
 // PATCH /api/parchment-lots/:id - Update parchment lot
@@ -14,8 +14,20 @@ export async function PATCH(
     // SECURITY: Only Processor and Admin can update parchment lots
     requireRole(user, ['Processor', 'Admin'])
     const { id } = await params
-    const body = await request.json()
 
+    // SECURITY: Ownership check — only the Processor who created the parent
+    // ProcessingBatch (or Admin) can mutate this parchment lot. Excel-imported
+    // lots that have no processingBatch fall back to Admin-only.
+    const existing = await prisma.parchmentLot.findUnique({
+      where: { id },
+      select: { processingBatch: { select: { createdById: true } } },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'Parchment lot not found' }, { status: 404 })
+    }
+    requireOwnership(user, existing.processingBatch?.createdById, ['Admin'])
+
+    const body = await request.json()
     const { status, currentWeightKg } = body
 
     const updateData: Prisma.ParchmentLotUpdateInput = {}
@@ -111,6 +123,7 @@ export async function DELETE(
       where: { id },
       include: {
         greenBeanLots: true,
+        processingBatch: { select: { createdById: true } },
       },
     })
 
@@ -120,6 +133,10 @@ export async function DELETE(
         { status: 404 }
       )
     }
+
+    // SECURITY: Ownership check — only the Processor who created the parent
+    // ProcessingBatch (or Admin) can delete this parchment lot.
+    requireOwnership(user, lot.processingBatch?.createdById, ['Admin'])
 
     // Check if there are green bean lots linked
     if (lot.greenBeanLots && lot.greenBeanLots.length > 0) {

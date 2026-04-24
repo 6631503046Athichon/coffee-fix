@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 import { safeParseFloat, nextDisplayId } from '@/lib/utils'
 
 // POST /api/parchment-lots/:id/withdrawals - Create withdrawal
@@ -35,9 +35,12 @@ export async function POST(
       )
     }
 
-    // Get current lot
+    // Get current lot (with batch creator for ownership check)
     const lot = await prisma.parchmentLot.findUnique({
       where: { id },
+      include: {
+        processingBatch: { select: { createdById: true } },
+      },
     })
 
     if (!lot) {
@@ -46,6 +49,11 @@ export async function POST(
         { status: 404 }
       )
     }
+
+    // SECURITY: Only the Processor who created the parent ProcessingBatch
+    // (or Admin) can draw down this lot. Roasters reaching this endpoint via
+    // RoastingStock flows are covered by their own inventory endpoints.
+    requireOwnership(user, lot.processingBatch?.createdById, ['Admin', 'Roaster'])
 
     const amount = safeParseFloat(amountKg)
     if (amount === null || amount <= 0) {
@@ -158,14 +166,19 @@ export async function POST(
         },
       })
 
-      // Update lot weight
-      const newWeight = Math.max(0, parseFloat((lot.currentWeightKg - amount).toFixed(6)))
+      // Update lot weight. Treat residue <0.01 kg as fully depleted so float
+      // dust (e.g. 1e-15 kg) doesn't leave lots stuck in AwaitingHulling.
+      const rawRemaining = parseFloat((lot.currentWeightKg - amount).toFixed(6))
+      const newWeight = rawRemaining < 0.01 ? 0 : rawRemaining
       const updateData: any = {
         currentWeightKg: newWeight,
       }
 
-      // If HullAndGrade and weight is depleted, mark as Hulled
-      if (withdrawalType === 'HullAndGrade' && newWeight <= 0) {
+      // Once a parchment lot is fully depleted we mark it Hulled regardless of
+      // the withdrawal type — HullAndGrade, Sale, Sample, Export, Other, and
+      // RoastingStock all consume parchment, so none of them should leave a
+      // depleted lot sitting in AwaitingHulling.
+      if (newWeight <= 0) {
         updateData.status = 'Hulled'
       }
 

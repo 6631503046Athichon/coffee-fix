@@ -10,7 +10,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    // SECURITY: Customer records contain PII (email, phone, address).
+    // Restrict to Admin and Roaster (the roles that transact with customers).
+    requireRole(user, ['Admin', 'Roaster'])
     const { id } = await params
 
     const customer = await prisma.customer.findUnique({
