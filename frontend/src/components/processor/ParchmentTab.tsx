@@ -9,7 +9,6 @@ import {
 import {
   Box,
   Search,
-  Plus,
   Scale,
   Droplet,
   Package,
@@ -27,14 +26,11 @@ import {
 } from "../../utils/formatDisplayId";
 import {
   createParchmentWithdrawal,
-  processAndHull,
 } from "../../services/parchmentLotService";
 import { addProcessingBatch } from "../../services/processingBatchService";
 import type {
   CreateParchmentWithdrawalInput,
-  ProcessAndHullInput,
 } from "../../services/parchmentLotService";
-import ProcessAndHullModal from "./modals/ProcessAndHullModal";
 import ParchmentWithdrawModal from "./modals/ParchmentWithdrawModal";
 import ExcelImportModal from "./modals/ExcelImportModal";
 import DatePicker from "../common/DatePicker";
@@ -91,8 +87,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   const [harvestSearchText, setHarvestSearchText] = useState("");
 
   // Modal states
-  const [showProcessAndHullModal, setShowProcessAndHullModal] = useState(false);
-  const [preSelectedHarvestLotId, setPreSelectedHarvestLotId] = useState<string | undefined>();
+  const [showRecordProcessModal, setShowRecordProcessModal] = useState(false);
   const [selectedParchmentForWithdraw, setSelectedParchmentForWithdraw] =
     useState<ParchmentLot | null>(null);
   const [selectedParchmentForHistory, setSelectedParchmentForHistory] =
@@ -306,11 +301,10 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
 
   // ---- Handlers ----
 
-  // Opens the new split-flow modal: creates a ProcessingBatch (Completed) + a
+  // Opens the split-flow modal: creates a ProcessingBatch (Completed) + a
   // ParchmentLot in "AwaitingHulling" state. Users then decide what to do with
   // that parchment via the Withdraw modal (Hull & Grade, Sale, Sample, ...).
-  const handleRecordProcessFromHarvestLot = useCallback((lot: HarvestLot) => {
-    setRecordProcessHarvest(lot);
+  const resetRecordProcessForm = useCallback(() => {
     setRecordProcessForm({
       processType: "",
       cropYearId: "",
@@ -323,10 +317,34 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     setRecordProcessError(null);
   }, []);
 
+  const handleRecordProcessFromHarvestLot = useCallback(
+    (lot: HarvestLot) => {
+      setRecordProcessHarvest(lot);
+      resetRecordProcessForm();
+      setShowRecordProcessModal(true);
+    },
+    [resetRecordProcessForm],
+  );
+
+  const handleOpenRecordProcessStandalone = useCallback(() => {
+    setRecordProcessHarvest(null);
+    resetRecordProcessForm();
+    setShowRecordProcessModal(true);
+  }, [resetRecordProcessForm]);
+
+  const handleCloseRecordProcess = useCallback(() => {
+    setShowRecordProcessModal(false);
+    setRecordProcessHarvest(null);
+    setRecordProcessError(null);
+  }, []);
+
   const handleRecordProcessSubmit = useCallback(
     async (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-      if (!recordProcessHarvest) return;
+      if (!recordProcessHarvest) {
+        setRecordProcessError("Please select a harvest lot");
+        return;
+      }
 
       const {
         processType,
@@ -394,6 +412,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
           message: "Process recorded — parchment is now awaiting hulling",
         });
         await refreshData();
+        setShowRecordProcessModal(false);
         setRecordProcessHarvest(null);
       } catch (error: any) {
         setRecordProcessError(
@@ -404,24 +423,6 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
       }
     },
     [recordProcessForm, recordProcessHarvest, addToast, refreshData],
-  );
-
-  const handleProcessAndHull = useCallback(
-    async (formData: ProcessAndHullInput) => {
-      setIsSubmitting(true);
-      try {
-        await processAndHull(formData);
-        addToast({ type: "success", message: "Process recorded and hulled successfully!" });
-        await refreshData();
-        setShowProcessAndHullModal(false);
-        setPreSelectedHarvestLotId(undefined);
-      } catch (error: any) {
-        addToast({ type: "error", message: error.message || "Failed to process and hull" });
-      } finally {
-        setIsSubmitting(false);
-      }
-    },
-    [addToast, refreshData],
   );
 
   const handleParchmentWithdraw = useCallback(
@@ -750,16 +751,20 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             Import Excel
           </button>
 
-          {/* Record Process & Hull */}
+          {/* Record Process — opens the split-flow modal (no combined hull).
+              Produces parchment in "Awaiting Hulling"; user withdraws later. */}
           <button
-            onClick={() => {
-              setPreSelectedHarvestLotId(undefined);
-              setShowProcessAndHullModal(true);
-            }}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-bold hover:bg-green-700 transition-all shadow-sm whitespace-nowrap"
+            onClick={handleOpenRecordProcessStandalone}
+            disabled={readyHarvestLots.length === 0}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all shadow-sm whitespace-nowrap"
+            title={
+              readyHarvestLots.length === 0
+                ? "No harvest lots ready for processing"
+                : "Record a process — produces parchment in Awaiting Hulling"
+            }
           >
-            <Plus className="h-4 w-4" />
-            Record Process & Hull
+            <PlayCircle className="h-4 w-4" />
+            Record Process
           </button>
         </div>
       </div>
@@ -969,7 +974,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
       )}
 
       {/* ─── Record Process Modal (split flow — no hull) ─── */}
-      {recordProcessHarvest && (
+      {showRecordProcessModal && (
         <ModalPortal>
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
@@ -992,41 +997,67 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                   </div>
                 </div>
 
-                {/* Harvest context card */}
-                <div className="bg-gray-50 rounded-xl p-4 mb-5 border border-gray-200">
-                  <div className="grid grid-cols-3 gap-4 text-center">
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
-                        Lot
-                      </p>
-                      <p className="text-sm font-bold text-gray-900">
-                        {recordProcessHarvest.displayId ||
-                          recordProcessHarvest.id.slice(0, 8)}
-                      </p>
-                    </div>
-                    <div className="border-l border-gray-200">
-                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
-                        Variety
-                      </p>
-                      <p className="text-sm font-bold text-gray-900">
-                        {recordProcessHarvest.cherryVariety}
-                      </p>
-                    </div>
-                    <div className="border-l border-gray-200">
-                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
-                        Available
-                      </p>
-                      <p className="text-sm font-bold text-green-600">
-                        {(
-                          recordProcessHarvest.remainingWeightKg ??
-                          recordProcessHarvest.weightKg ??
-                          0
-                        ).toFixed(2)}{" "}
-                        kg
-                      </p>
+                {/* Harvest picker (pre-filled when opened from a row) */}
+                <div className="mb-4">
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wider">
+                    Harvest Lot *
+                  </label>
+                  <Select
+                    options={readyHarvestLots.map((lot) => ({
+                      value: lot.id,
+                      label: `${lot.displayId || lot.id.slice(0, 8)} — ${lot.cherryVariety} (${(
+                        lot.remainingWeightKg ??
+                        lot.weightKg ??
+                        0
+                      ).toFixed(2)} kg available)`,
+                    }))}
+                    value={recordProcessHarvest?.id || null}
+                    onChange={(val) => {
+                      const lot =
+                        readyHarvestLots.find((l) => l.id === val) || null;
+                      setRecordProcessHarvest(lot);
+                    }}
+                    placeholder="Select a harvest lot…"
+                  />
+                </div>
+
+                {/* Harvest context card — only when a harvest is selected */}
+                {recordProcessHarvest && (
+                  <div className="bg-gray-50 rounded-xl p-4 mb-5 border border-gray-200">
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                          Lot
+                        </p>
+                        <p className="text-sm font-bold text-gray-900">
+                          {recordProcessHarvest.displayId ||
+                            recordProcessHarvest.id.slice(0, 8)}
+                        </p>
+                      </div>
+                      <div className="border-l border-gray-200">
+                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                          Variety
+                        </p>
+                        <p className="text-sm font-bold text-gray-900">
+                          {recordProcessHarvest.cherryVariety}
+                        </p>
+                      </div>
+                      <div className="border-l border-gray-200">
+                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                          Available
+                        </p>
+                        <p className="text-sm font-bold text-green-600">
+                          {(
+                            recordProcessHarvest.remainingWeightKg ??
+                            recordProcessHarvest.weightKg ??
+                            0
+                          ).toFixed(2)}{" "}
+                          kg
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* Process type */}
                 <div className="mb-4">
@@ -1171,7 +1202,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                 <div className="sticky bottom-0 mt-auto bg-white pt-4 border-t border-gray-100 flex justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => setRecordProcessHarvest(null)}
+                    onClick={handleCloseRecordProcess}
                     disabled={isSubmitting}
                     className="px-5 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                   >
@@ -1187,33 +1218,6 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                   </button>
                 </div>
               </form>
-            </div>
-          </div>
-        </ModalPortal>
-      )}
-
-      {/* ─── Process & Hull Modal ─── */}
-      {showProcessAndHullModal && (
-        <ModalPortal>
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
-              <div className="flex flex-col h-full overflow-y-auto p-8">
-                <ProcessAndHullModal
-                  harvestLots={
-                    preSelectedHarvestLotId
-                      ? readyHarvestLots.filter((l) => l.id === preSelectedHarvestLotId)
-                      : readyHarvestLots
-                  }
-                  processTypes={processTypeOptions}
-                  cropYears={data.cropYears}
-                  onSubmit={handleProcessAndHull}
-                  onCancel={() => {
-                    setShowProcessAndHullModal(false);
-                    setPreSelectedHarvestLotId(undefined);
-                  }}
-                  isSubmitting={isSubmitting}
-                />
-              </div>
             </div>
           </div>
         </ModalPortal>
