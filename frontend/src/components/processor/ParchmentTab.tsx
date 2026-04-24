@@ -4,6 +4,7 @@ import {
   User,
   ParchmentLot,
   HarvestLot,
+  ProcessingBatchStatus,
 } from "../../types";
 import {
   Box,
@@ -19,6 +20,7 @@ import {
   Leaf,
   ExternalLink,
   ArrowRight,
+  PlayCircle,
 } from "lucide-react";
 import {
   formatGreenBeanId,
@@ -28,6 +30,7 @@ import {
   createParchmentWithdrawal,
   processAndHull,
 } from "../../services/parchmentLotService";
+import { addProcessingBatch } from "../../services/processingBatchService";
 import type {
   CreateParchmentWithdrawalInput,
   ProcessAndHullInput,
@@ -35,6 +38,7 @@ import type {
 import ProcessAndHullModal from "./modals/ProcessAndHullModal";
 import ParchmentWithdrawModal from "./modals/ParchmentWithdrawModal";
 import ExcelImportModal from "./modals/ExcelImportModal";
+import DatePicker from "../common/DatePicker";
 import { useToast } from "../../contexts/ToastContext";
 import { useDataContext } from "../../hooks/useDataContext";
 
@@ -95,6 +99,25 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     useState<ParchmentLot | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Record-Process (no hull) modal — produces parchment in "Awaiting Hulling"
+  // state. This is the first step of the split flow: users then Withdraw that
+  // parchment (Hull & Grade, Sale, RoastingStock, etc.) instead of being forced
+  // into the combined Record-Process-&-Hull path.
+  const [recordProcessHarvest, setRecordProcessHarvest] =
+    useState<HarvestLot | null>(null);
+  const [recordProcessForm, setRecordProcessForm] = useState({
+    processType: "",
+    cropYearId: "",
+    processNotes: "",
+    parchmentWeightKg: "",
+    moistureContent: "",
+    dryingStartDate: "",
+    dryingEndDate: "",
+  });
+  const [recordProcessError, setRecordProcessError] = useState<string | null>(
+    null,
+  );
 
   // Collapsed sections
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
@@ -283,10 +306,111 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
 
   // ---- Handlers ----
 
-  const handleProcessFromHarvestLot = useCallback((lot: HarvestLot) => {
+  // Kept for the top-level "Record Process & Hull" shortcut (combined flow).
+  const handleProcessAndHullFromHarvestLot = useCallback((lot: HarvestLot) => {
     setPreSelectedHarvestLotId(lot.id);
     setShowProcessAndHullModal(true);
   }, []);
+
+  // Opens the new split-flow modal: creates a ProcessingBatch (Completed) + a
+  // ParchmentLot in "AwaitingHulling" state. Users then decide what to do with
+  // that parchment via the Withdraw modal (Hull & Grade, Sale, Sample, ...).
+  const handleRecordProcessFromHarvestLot = useCallback((lot: HarvestLot) => {
+    setRecordProcessHarvest(lot);
+    setRecordProcessForm({
+      processType: "",
+      cropYearId: "",
+      processNotes: "",
+      parchmentWeightKg: "",
+      moistureContent: "",
+      dryingStartDate: "",
+      dryingEndDate: "",
+    });
+    setRecordProcessError(null);
+  }, []);
+
+  const handleRecordProcessSubmit = useCallback(
+    async (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      if (!recordProcessHarvest) return;
+
+      const {
+        processType,
+        cropYearId,
+        processNotes,
+        parchmentWeightKg,
+        moistureContent,
+        dryingStartDate,
+        dryingEndDate,
+      } = recordProcessForm;
+
+      // Client-side validation — the backend repeats these checks but early
+      // feedback keeps the error in the modal instead of surfacing as a toast.
+      if (!processType) {
+        setRecordProcessError("Please select a process type");
+        return;
+      }
+      const pw = parseFloat(parchmentWeightKg);
+      const mc = parseFloat(moistureContent);
+      if (isNaN(pw) || pw <= 0) {
+        setRecordProcessError("Parchment weight must be greater than 0");
+        return;
+      }
+      const available =
+        recordProcessHarvest.remainingWeightKg ??
+        recordProcessHarvest.weightKg ??
+        0;
+      if (pw > available) {
+        setRecordProcessError(
+          `Parchment weight (${pw} kg) exceeds available cherry weight (${available.toFixed(2)} kg)`,
+        );
+        return;
+      }
+      if (isNaN(mc) || mc < 0 || mc > 100) {
+        setRecordProcessError("Moisture content must be between 0 and 100");
+        return;
+      }
+      if (!dryingStartDate || !dryingEndDate) {
+        setRecordProcessError("Please select both drying start and end dates");
+        return;
+      }
+      if (new Date(dryingEndDate) < new Date(dryingStartDate)) {
+        setRecordProcessError(
+          "Drying end date cannot be before drying start date",
+        );
+        return;
+      }
+
+      setIsSubmitting(true);
+      try {
+        await addProcessingBatch({
+          harvestLotId: recordProcessHarvest.id,
+          status: ProcessingBatchStatus.Completed,
+          processType,
+          processNotes: processNotes || undefined,
+          cropYearId: cropYearId || undefined,
+          parchmentWeightKg: pw,
+          moistureContent: mc,
+          dryingStartDate,
+          dryingEndDate,
+          baggingDate: dryingEndDate,
+        });
+        addToast({
+          type: "success",
+          message: "Process recorded — parchment is now awaiting hulling",
+        });
+        await refreshData();
+        setRecordProcessHarvest(null);
+      } catch (error: any) {
+        setRecordProcessError(
+          error?.message || "Failed to record process",
+        );
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [recordProcessForm, recordProcessHarvest, addToast, refreshData],
+  );
 
   const handleProcessAndHull = useCallback(
     async (formData: ProcessAndHullInput) => {
@@ -534,13 +658,28 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                                 : "—"}
                             </td>
                             <td className="px-4 py-3 text-right">
-                              <button
-                                onClick={() => handleProcessFromHarvestLot(lot)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-all"
-                              >
-                                <ArrowRight className="h-3.5 w-3.5" />
-                                Process
-                              </button>
+                              <div className="inline-flex items-center gap-1.5">
+                                <button
+                                  onClick={() =>
+                                    handleRecordProcessFromHarvestLot(lot)
+                                  }
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all shadow-sm"
+                                  title="Record a process — produces parchment in Awaiting Hulling"
+                                >
+                                  <PlayCircle className="h-3.5 w-3.5" />
+                                  Record Process
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    handleProcessAndHullFromHarvestLot(lot)
+                                  }
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-all"
+                                  title="Combined shortcut — process and hull in one step"
+                                >
+                                  <ArrowRight className="h-3.5 w-3.5" />
+                                  &amp; Hull
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -643,125 +782,8 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         </div>
       </div>
 
-      {/* Parchment Stock Summary — aggregated by process type with trace */}
-      {parchmentProcessSummary.length > 0 && (
-        <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
-          <div className="px-4 py-3 bg-amber-50 border-b border-amber-100 flex items-center gap-2">
-            <div className="p-1.5 bg-amber-600 rounded-lg">
-              <Box className="h-4 w-4 text-white" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-gray-900">
-                Parchment Stock — Process Type Summary
-              </h3>
-              <p className="text-[11px] text-gray-500">
-                Total weight per process type with origin trace. Respects the
-                filters above. Click a row to expand.
-              </p>
-            </div>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {parchmentProcessSummary.map((row) => {
-              const isExpanded = expandedProcessSummaries.has(row.processType);
-              return (
-                <div key={row.processType}>
-                  <button
-                    type="button"
-                    onClick={() => toggleProcessSummary(row.processType)}
-                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left"
-                  >
-                    <div className="flex items-center gap-3">
-                      <ChevronDown
-                        className={`h-4 w-4 text-gray-400 transition-transform ${isExpanded ? "" : "-rotate-90"}`}
-                      />
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 border border-amber-200">
-                        {row.processType}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {row.lotCount} lot{row.lotCount !== 1 ? "s" : ""}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-lg font-bold text-amber-700">
-                        {row.totalCurrentWeight.toFixed(2)}
-                      </span>
-                      <span className="text-xs font-normal text-gray-500 ml-1">
-                        / {row.totalInitialWeight.toFixed(2)} kg
-                      </span>
-                    </div>
-                  </button>
-                  {isExpanded && (
-                    <div className="px-4 pb-3 pt-1 bg-gray-50/60">
-                      <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 pl-6">
-                        Sources
-                      </div>
-                      <div className="space-y-1 pl-6">
-                        {row.sources.map((s, idx) => {
-                          const canWithdraw = s.currentWeightKg > 0;
-                          return (
-                            <div
-                              key={`${row.processType}-${idx}`}
-                              className="flex items-center justify-between text-xs bg-white rounded-md px-3 py-2 border border-gray-200"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono font-semibold text-gray-800">
-                                  {s.parchmentDisplayId}
-                                </span>
-                                <span className="text-gray-400">←</span>
-                                <span className="font-mono text-gray-600">
-                                  {s.harvestDisplayId}
-                                </span>
-                                <span
-                                  className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                    s.status === "Hulled"
-                                      ? "bg-gray-100 text-gray-600 border border-gray-200"
-                                      : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                  }`}
-                                >
-                                  {s.status === "Hulled"
-                                    ? "Hulled"
-                                    : "Awaiting Hulling"}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span className="font-semibold text-gray-700">
-                                  {s.currentWeightKg.toFixed(2)}
-                                  <span className="text-gray-400 font-normal text-[10px] ml-1">
-                                    / {s.initialWeightKg.toFixed(2)} kg
-                                  </span>
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setSelectedParchmentForWithdraw(s.lot)
-                                  }
-                                  disabled={!canWithdraw}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                                  title={
-                                    canWithdraw
-                                      ? "Withdraw from this parchment lot"
-                                      : "No stock remaining"
-                                  }
-                                >
-                                  <Package className="h-3 w-3" />
-                                  Withdraw
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Grouped Parchment Lots */}
-      {grouped.length === 0 ? (
+      {/* Parchment Stock — aggregated by process type with origin trace table */}
+      {parchmentProcessSummary.length === 0 ? (
         <div className="bg-white shadow-sm rounded-lg border border-gray-200 p-12 text-center">
           <Box className="h-12 w-12 mx-auto mb-3 text-gray-300" />
           <p className="text-sm font-medium text-gray-500">
@@ -772,47 +794,48 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
           </p>
         </div>
       ) : (
-        grouped.map(([processType, lots]) => {
-          const isCollapsed = collapsedSections.has(processType);
-          const sectionWeight = lots.reduce(
-            (s, l) => s + l.currentWeightKg,
-            0,
-          );
+        parchmentProcessSummary.map((row) => {
+          const isExpanded = expandedProcessSummaries.has(row.processType);
           return (
             <div
-              key={processType}
+              key={row.processType}
               className="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden"
             >
-              {/* Section Header */}
+              {/* Section Header — process type pill + lot count + total weight */}
               <button
-                onClick={() => toggleSection(processType)}
+                type="button"
+                onClick={() => toggleProcessSummary(row.processType)}
                 className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  {isCollapsed ? (
-                    <ChevronRight className="h-4 w-4 text-gray-400" />
-                  ) : (
+                  {isExpanded ? (
                     <ChevronDown className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-gray-400" />
                   )}
                   <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${processColor(processType)}`}
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${processColor(row.processType)}`}
                   >
-                    {processType}
+                    {row.processType}
                   </span>
                   <span className="text-sm text-gray-500">
-                    {lots.length} lot{lots.length !== 1 ? "s" : ""}
+                    {row.lotCount} lot{row.lotCount !== 1 ? "s" : ""}
                   </span>
                 </div>
-                <span className="text-sm font-semibold text-gray-700">
-                  {sectionWeight.toLocaleString(undefined, {
-                    maximumFractionDigits: 2,
-                  })}{" "}
-                  kg
-                </span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-sm font-bold text-gray-900">
+                    {row.totalCurrentWeight.toLocaleString(undefined, {
+                      maximumFractionDigits: 2,
+                    })}
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    / {row.totalInitialWeight.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg
+                  </span>
+                </div>
               </button>
 
-              {/* Table */}
-              {!isCollapsed && (
+              {/* Origin-trace table — one row per source parchment lot */}
+              {isExpanded && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -841,13 +864,15 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {lots.map((lot) => {
+                      {row.sources.map((s) => {
+                        const lot = s.lot;
                         const historyCount =
                           lot.withdrawalHistory?.length || 0;
                         const relatedGreenBeanLots =
                           greenBeansByParchmentLotId[lot.id] || [];
                         const hasHistory =
-                          historyCount > 0 || relatedGreenBeanLots.length > 0;
+                          historyCount > 0 ||
+                          relatedGreenBeanLots.length > 0;
                         const historyBadgeCount =
                           historyCount > 0
                             ? historyCount
@@ -861,6 +886,9 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                             <td className="px-4 py-3">
                               <div className="font-semibold text-gray-900">
                                 {formatParchmentId(lot)}
+                              </div>
+                              <div className="text-[10px] text-gray-400 mt-0.5 font-mono">
+                                ← {s.harvestDisplayId}
                               </div>
                               {isExternal && lot.externalSource?.code && (
                                 <div className="text-[10px] text-gray-400 mt-0.5">
@@ -956,6 +984,237 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             </div>
           );
         })
+      )}
+
+      {/* ─── Record Process Modal (split flow — no hull) ─── */}
+      {recordProcessHarvest && (
+        <ModalPortal>
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
+              <form
+                onSubmit={handleRecordProcessSubmit}
+                className="flex flex-col h-full overflow-y-auto p-8"
+              >
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="p-3 bg-blue-100 rounded-xl shadow-sm">
+                    <PlayCircle className="h-8 w-8 text-blue-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      Record Process
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      Produces parchment in Awaiting Hulling state —
+                      you can Withdraw / Hull &amp; Grade it later.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Harvest context card */}
+                <div className="bg-gray-50 rounded-xl p-4 mb-5 border border-gray-200">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                        Lot
+                      </p>
+                      <p className="text-sm font-bold text-gray-900">
+                        {recordProcessHarvest.displayId ||
+                          recordProcessHarvest.id.slice(0, 8)}
+                      </p>
+                    </div>
+                    <div className="border-l border-gray-200">
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                        Variety
+                      </p>
+                      <p className="text-sm font-bold text-gray-900">
+                        {recordProcessHarvest.cherryVariety}
+                      </p>
+                    </div>
+                    <div className="border-l border-gray-200">
+                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                        Available
+                      </p>
+                      <p className="text-sm font-bold text-green-600">
+                        {(
+                          recordProcessHarvest.remainingWeightKg ??
+                          recordProcessHarvest.weightKg ??
+                          0
+                        ).toFixed(2)}{" "}
+                        kg
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Process type */}
+                <div className="mb-4">
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wider">
+                    Process Type *
+                  </label>
+                  <select
+                    value={recordProcessForm.processType}
+                    onChange={(e) =>
+                      setRecordProcessForm((f) => ({
+                        ...f,
+                        processType: e.target.value,
+                      }))
+                    }
+                    className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                    required
+                  >
+                    <option value="">Select process type…</option>
+                    {processTypeOptions.map((pt) => (
+                      <option key={pt.value} value={pt.value}>
+                        {pt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Crop year (optional) */}
+                {data.cropYears.length > 0 && (
+                  <div className="mb-4">
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wider">
+                      Crop Year (optional)
+                    </label>
+                    <select
+                      value={recordProcessForm.cropYearId}
+                      onChange={(e) =>
+                        setRecordProcessForm((f) => ({
+                          ...f,
+                          cropYearId: e.target.value,
+                        }))
+                      }
+                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                    >
+                      <option value="">None</option>
+                      {data.cropYears.map((cy) => (
+                        <option key={cy.id} value={cy.id}>
+                          {cy.year}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Weight + moisture */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wider">
+                      Parchment Weight (kg) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      required
+                      value={recordProcessForm.parchmentWeightKg}
+                      onChange={(e) =>
+                        setRecordProcessForm((f) => ({
+                          ...f,
+                          parchmentWeightKg: e.target.value,
+                        }))
+                      }
+                      placeholder="e.g., 85.0"
+                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-base font-bold focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wider">
+                      Moisture (%) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      required
+                      value={recordProcessForm.moistureContent}
+                      onChange={(e) =>
+                        setRecordProcessForm((f) => ({
+                          ...f,
+                          moistureContent: e.target.value,
+                        }))
+                      }
+                      placeholder="e.g., 12.0"
+                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-base font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Drying dates */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <DatePicker
+                    value={recordProcessForm.dryingStartDate}
+                    onChange={(v) =>
+                      setRecordProcessForm((f) => ({
+                        ...f,
+                        dryingStartDate: v,
+                      }))
+                    }
+                    label="Drying Start Date"
+                    required
+                  />
+                  <DatePicker
+                    value={recordProcessForm.dryingEndDate}
+                    onChange={(v) =>
+                      setRecordProcessForm((f) => ({
+                        ...f,
+                        dryingEndDate: v,
+                      }))
+                    }
+                    label="Drying End Date"
+                    required
+                  />
+                </div>
+
+                {/* Notes */}
+                <div className="mb-4">
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wider">
+                    Process Notes (optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={recordProcessForm.processNotes}
+                    onChange={(e) =>
+                      setRecordProcessForm((f) => ({
+                        ...f,
+                        processNotes: e.target.value,
+                      }))
+                    }
+                    placeholder="e.g., Fermented 24h, raised-bed drying"
+                    className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                {recordProcessError && (
+                  <div className="mb-4 bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
+                    {recordProcessError}
+                  </div>
+                )}
+
+                <div className="sticky bottom-0 mt-auto bg-white pt-4 border-t border-gray-100 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRecordProcessHarvest(null)}
+                    disabled={isSubmitting}
+                    className="px-5 py-2.5 border border-gray-300 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 shadow-sm disabled:opacity-50 inline-flex items-center gap-2"
+                  >
+                    <PlayCircle className="h-4 w-4" />
+                    {isSubmitting ? "Recording…" : "Record Process"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </ModalPortal>
       )}
 
       {/* ─── Process & Hull Modal ─── */}
