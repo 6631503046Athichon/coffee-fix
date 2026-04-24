@@ -82,9 +82,6 @@ import {
   createParchmentWithdrawal,
   deleteParchmentLot,
 } from "../../services/parchmentLotService";
-import type {
-  CreateParchmentWithdrawalInput,
-} from "../../services/parchmentLotService";
 import type { CuppingDetailUpdate } from "../../services/greenBeanLotService";
 import DatePicker from "../common/DatePicker";
 import InvoiceReceipt from "./InvoiceReceipt";
@@ -99,7 +96,6 @@ import {
 import StartProcessingModal from "./modals/StartProcessingModal";
 import HullAndGradeModal from "./modals/HullAndGradeModal";
 import CompleteBatchModal from "./modals/CompleteBatchModal";
-import ParchmentWithdrawModal from "./modals/ParchmentWithdrawModal";
 
 import {
   ITEMS_PER_PAGE,
@@ -154,13 +150,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const [selectedGreenBeanForHistory, setSelectedGreenBeanForHistory] =
     useState<GreenBeanLot | null>(null);
   const [selectedParchmentForHistory, setSelectedParchmentForHistory] =
-    useState<ParchmentLot | null>(null);
-  // Separate from selectedParchment (which drives the Hull & Grade modal).
-  // Hull & Grade is one specific withdrawal type; this modal exposes all 6
-  // (HullAndGrade | RoastingStock | Sale | Sample | Export | Other) so the
-  // processor can withdraw parchment for non-hulling purposes without having
-  // to leave the Workbench dashboard.
-  const [selectedParchmentForWithdraw, setSelectedParchmentForWithdraw] =
     useState<ParchmentLot | null>(null);
   const [selectedGreenBeanForSource, setSelectedGreenBeanForSource] =
     useState<GreenBeanLot | null>(null);
@@ -783,37 +772,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       }
     }
   };
-
-  // Generic parchment withdrawal (Sale, RoastingStock, Sample, Export, Other,
-  // or HullAndGrade). The existing Hull & Grade modal inside the Workbench
-  // only handles HullAndGrade — this wrapper covers the remaining 5 types so
-  // the Workbench dashboard isn't a dead end for non-hulling withdrawals.
-  const handleParchmentWithdrawFromCard = useCallback(
-    async (formData: CreateParchmentWithdrawalInput) => {
-      if (!selectedParchmentForWithdraw) return;
-      setIsSubmitting(true);
-      try {
-        await createParchmentWithdrawal(
-          selectedParchmentForWithdraw.id,
-          formData,
-        );
-        addToast({
-          type: "success",
-          message: "Parchment withdrawal recorded!",
-        });
-        await refreshData();
-        setSelectedParchmentForWithdraw(null);
-      } catch (error: any) {
-        addToast({
-          type: "error",
-          message: error?.message || "Failed to withdraw parchment",
-        });
-      } finally {
-        setIsSubmitting(false);
-      }
-    },
-    [selectedParchmentForWithdraw, addToast, refreshData],
-  );
 
   const handleDeleteGreenBeanLot = async (lotId: string) => {
     if (
@@ -3058,15 +3016,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         <History size={14} />
                       </button>
                       <button
-                        onClick={() => setSelectedParchmentForWithdraw(p)}
-                        disabled={p.currentWeightKg <= 0}
-                        className="flex-1 py-2 text-xs font-semibold rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm transition-all inline-flex items-center justify-center gap-1.5"
-                        title="Withdraw parchment — Sale, RoastingStock, Sample, Export, Other, or Hull & Grade"
-                      >
-                        <Package size={14} />
-                        Withdraw
-                      </button>
-                      <button
                         onClick={() => openModal("hullAndGrade", p)}
                         disabled={
                           p.status === "Hulled" || p.currentWeightKg <= 0
@@ -4573,26 +4522,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     Close
                   </button>
                 </div>
-              </div>
-            </div>
-          </div>
-        </ModalPortal>
-      )}
-
-      {/* Generic Parchment Withdraw Modal — 6 withdrawal types
-          (Sale | RoastingStock | Sample | Export | Other | HullAndGrade) */}
-      {selectedParchmentForWithdraw && (
-        <ModalPortal>
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
-              <div className="flex flex-col h-full overflow-y-auto p-8">
-                <ParchmentWithdrawModal
-                  parchmentLot={selectedParchmentForWithdraw}
-                  users={data.users}
-                  onSubmit={handleParchmentWithdrawFromCard}
-                  onCancel={() => setSelectedParchmentForWithdraw(null)}
-                  isSubmitting={isSubmitting}
-                />
               </div>
             </div>
           </div>
