@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 import { updateSaleOrderSchema, validateBody } from '@/lib/validations'
 
 const updateSaleOrderRequestSchema = updateSaleOrderSchema.pick({
@@ -92,7 +92,7 @@ export async function PUT(
 
     const existingOrder = await prisma.saleOrder.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, createdBy: true },
     })
 
     if (!existingOrder) {
@@ -101,6 +101,9 @@ export async function PUT(
         { status: 404 }
       )
     }
+
+    // SECURITY: Ownership — one Roaster cannot edit another Roaster's order.
+    requireOwnership(user, existingOrder.createdBy, ['Admin'])
 
     const updatedOrder = await prisma.saleOrder.update({
       where: { id },

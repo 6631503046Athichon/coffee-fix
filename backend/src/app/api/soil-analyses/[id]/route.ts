@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 
 // GET /api/soil-analyses/:id
 export async function GET(
@@ -50,8 +50,34 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    // SECURITY: Only Farmer and Admin can update soil analyses.
+    requireRole(user, ['Farmer', 'Admin'])
     const { id } = await params
+
+    // SECURITY: Ownership — only the creator or farm owner (or Admin) can
+    // update soil analyses. Mirrors the DELETE handler's rule.
+    const existingAnalysis = await prisma.soilAnalysis.findUnique({
+      where: { id },
+      select: {
+        createdBy: true,
+        farm: { select: { ownerId: true } },
+      },
+    })
+    if (!existingAnalysis) {
+      return NextResponse.json(
+        { error: 'Soil analysis not found' },
+        { status: 404 }
+      )
+    }
+    const isCreator = existingAnalysis.createdBy === user.id
+    const isFarmOwner = existingAnalysis.farm?.ownerId === user.id
+    if (!user.roles.includes('Admin') && !user.isSuperAdmin && !isCreator && !isFarmOwner) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
+      )
+    }
 
     const body = await request.json()
     const {

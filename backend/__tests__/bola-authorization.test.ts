@@ -166,6 +166,8 @@ describe('BOLA Authorization Tests', () => {
         id: 'lot-123',
         currentWeightKg: 100,
         availabilityStatus: 'Available',
+        // Match the authed user so the new ownership check passes.
+        createdById: 'processor-123',
       })
       mockPrisma.greenBeanLot.update.mockResolvedValueOnce({
         id: 'lot-123',
@@ -203,6 +205,8 @@ describe('BOLA Authorization Tests', () => {
         id: 'lot-123',
         currentWeightKg: 100,
         availabilityStatus: 'Available',
+        // Owner is a different user; ownership passes because user is Admin.
+        createdById: 'someone-else',
       })
       mockPrisma.greenBeanLot.update.mockResolvedValueOnce({
         id: 'lot-123',
@@ -382,6 +386,10 @@ describe('BOLA Authorization Tests', () => {
         isSuperAdmin: false,
       }
 
+      // Ownership lookup before the update.
+      mockPrisma.processingBatch.findUnique.mockResolvedValueOnce({
+        createdById: 'processor-123',
+      })
       mockPrisma.processingBatch.update.mockResolvedValueOnce({
         id: 'batch-123',
         status: 'Completed',
@@ -472,6 +480,11 @@ describe('BOLA Authorization Tests', () => {
         isSuperAdmin: false,
       }
 
+      // Ownership lookup before the update. processingBatch is nested so the
+      // route can walk lot -> processingBatch.createdById.
+      mockPrisma.parchmentLot.findUnique.mockResolvedValueOnce({
+        processingBatch: { createdById: 'someone-else' },
+      })
       mockPrisma.parchmentLot.update.mockResolvedValueOnce({
         id: 'lot-123',
         status: 'Ready',

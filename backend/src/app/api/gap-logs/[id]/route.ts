@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 
 // GET /api/gap-logs/:id
 export async function GET(
@@ -57,8 +57,35 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    // SECURITY: Only Farmer and Admin can edit GAP logs.
+    requireRole(user, ['Farmer', 'Admin'])
     const { id } = await params
+
+    // SECURITY: Ownership — only the Farmer who created the entry (or the
+    // farm owner, or Admin) can update it. Legacy rows may have a null
+    // createdBy, in which case only Admin can edit.
+    const existingGapLog = await prisma.gAPLogEntry.findUnique({
+      where: { id },
+      select: {
+        createdBy: true,
+        farm: { select: { ownerId: true } },
+      },
+    })
+    if (!existingGapLog) {
+      return NextResponse.json(
+        { error: 'GAP log not found' },
+        { status: 404 }
+      )
+    }
+    const isCreator = existingGapLog.createdBy === user.id
+    const isFarmOwner = existingGapLog.farm?.ownerId === user.id
+    if (!user.roles.includes('Admin') && !user.isSuperAdmin && !isCreator && !isFarmOwner) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
+      )
+    }
 
     const body = await request.json()
     const { farmId, farmPlotLocation, activityTypeId, date, productUsed, quantity, notes } = body
@@ -122,8 +149,33 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    // SECURITY: Only Farmer and Admin can delete GAP logs.
+    requireRole(user, ['Farmer', 'Admin'])
     const { id } = await params
+
+    // SECURITY: Ownership — same rule as PUT.
+    const existingGapLog = await prisma.gAPLogEntry.findUnique({
+      where: { id },
+      select: {
+        createdBy: true,
+        farm: { select: { ownerId: true } },
+      },
+    })
+    if (!existingGapLog) {
+      return NextResponse.json(
+        { error: 'GAP log not found' },
+        { status: 404 }
+      )
+    }
+    const isCreator = existingGapLog.createdBy === user.id
+    const isFarmOwner = existingGapLog.farm?.ownerId === user.id
+    if (!user.roles.includes('Admin') && !user.isSuperAdmin && !isCreator && !isFarmOwner) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
+      )
+    }
 
     await prisma.gAPLogEntry.delete({
       where: { id },

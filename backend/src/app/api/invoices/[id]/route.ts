@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 import { updateInvoiceSchema, validateBody } from '@/lib/validations'
 
 const updateInvoiceRequestSchema = updateInvoiceSchema.pick({
@@ -15,7 +15,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    // SECURITY: Invoices expose pricing + customer PII.
+    // Restrict to Admin and Roaster (the roles that manage sales).
+    requireRole(user, ['Admin', 'Roaster'])
     const { id } = await params
 
     const invoice = await prisma.invoice.findUnique({
@@ -90,7 +93,7 @@ export async function PUT(
 
     const existingInvoice = await prisma.invoice.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, createdBy: true },
     })
 
     if (!existingInvoice) {
@@ -99,6 +102,9 @@ export async function PUT(
         { status: 404 }
       )
     }
+
+    // SECURITY: Ownership — one Roaster cannot edit another Roaster's invoice.
+    requireOwnership(user, existingInvoice.createdBy, ['Admin'])
 
     const updatedInvoice = await prisma.invoice.update({
       where: { id },
