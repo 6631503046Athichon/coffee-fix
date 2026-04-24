@@ -99,37 +99,6 @@ export const createParchmentWithdrawal = async (
 };
 
 /**
- * Combined Record Process + Hull & Grade
- */
-export interface ProcessAndHullInput {
-  harvestLotId: string;
-  processType: string;
-  processNotes?: string;
-  cropYearId?: string;
-  parchmentWeightKg: number;
-  moistureContent: number;
-  dryingStartDate: string;
-  dryingEndDate: string;
-  gradedLots: { grade: string; weight: number; price?: number; score?: number }[];
-}
-
-export const processAndHull = async (
-  data: ProcessAndHullInput,
-): Promise<{ processingBatch: any; parchmentLot: ParchmentLot; greenBeanLots: any[] }> => {
-  const response = await api.post<{
-    processingBatch: any;
-    parchmentLot: any;
-    greenBeanLots: any[];
-    message: string;
-  }>("/parchment-lots/process-and-hull", data);
-  return {
-    processingBatch: response.processingBatch,
-    parchmentLot: transformParchmentLotFromBackend(response.parchmentLot),
-    greenBeanLots: response.greenBeanLots,
-  };
-};
-
-/**
  * Import parchment lots from Excel file
  */
 export interface ExcelImportResult {

@@ -335,8 +335,10 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   const handleCloseRecordProcess = useCallback(() => {
     setShowRecordProcessModal(false);
     setRecordProcessHarvest(null);
-    setRecordProcessError(null);
-  }, []);
+    // Reset the form so reopening the modal starts clean instead of restoring
+    // whatever the user half-typed before dismissing.
+    resetRecordProcessForm();
+  }, [resetRecordProcessForm]);
 
   const handleRecordProcessSubmit = useCallback(
     async (e: React.FormEvent<HTMLFormElement>) => {
@@ -395,6 +397,10 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
 
       setIsSubmitting(true);
       try {
+        // baggingDate intentionally omitted — bagging happens after drying
+        // ends and the processor can set the real date later via the batch
+        // edit flow. Reusing dryingEndDate as baggingDate produced misleading
+        // timeline data.
         await addProcessingBatch({
           harvestLotId: recordProcessHarvest.id,
           status: ProcessingBatchStatus.Completed,
@@ -405,7 +411,6 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
           moistureContent: mc,
           dryingStartDate,
           dryingEndDate,
-          baggingDate: dryingEndDate,
         });
         addToast({
           type: "success",
@@ -414,6 +419,9 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         await refreshData();
         setShowRecordProcessModal(false);
         setRecordProcessHarvest(null);
+        // Clear form so the next open starts empty instead of restoring the
+        // previous submission's values.
+        resetRecordProcessForm();
       } catch (error: any) {
         setRecordProcessError(
           error?.message || "Failed to record process",
@@ -422,7 +430,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         setIsSubmitting(false);
       }
     },
-    [recordProcessForm, recordProcessHarvest, addToast, refreshData],
+    [recordProcessForm, recordProcessHarvest, addToast, refreshData, resetRecordProcessForm],
   );
 
   const handleParchmentWithdraw = useCallback(

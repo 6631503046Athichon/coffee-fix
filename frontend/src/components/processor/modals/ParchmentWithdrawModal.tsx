@@ -243,11 +243,13 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
   const handleSubmit = async () => {
     if (!canSubmit) return;
 
+    // Notes is intentionally omitted — this modal has no notes field, so sending
+    // anything here just duplicates `purpose` into both columns. Submit purpose
+    // only; a future Notes input can set `notes` explicitly.
     const base: Parameters<typeof onSubmit>[0] = {
       amountKg: amtNum,
       withdrawalType,
       purpose,
-      notes: purpose || undefined,
     };
 
     if (withdrawalType === "Sale") {
