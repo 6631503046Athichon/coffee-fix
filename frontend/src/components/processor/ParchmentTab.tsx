@@ -19,7 +19,6 @@ import {
   FileSpreadsheet,
   Leaf,
   ExternalLink,
-  ArrowRight,
   PlayCircle,
 } from "lucide-react";
 import {
@@ -306,12 +305,6 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   }, []);
 
   // ---- Handlers ----
-
-  // Kept for the top-level "Record Process & Hull" shortcut (combined flow).
-  const handleProcessAndHullFromHarvestLot = useCallback((lot: HarvestLot) => {
-    setPreSelectedHarvestLotId(lot.id);
-    setShowProcessAndHullModal(true);
-  }, []);
 
   // Opens the new split-flow modal: creates a ProcessingBatch (Completed) + a
   // ParchmentLot in "AwaitingHulling" state. Users then decide what to do with
@@ -659,28 +652,16 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                                 : "—"}
                             </td>
                             <td className="px-4 py-3 text-right">
-                              <div className="inline-flex items-center gap-1.5">
-                                <button
-                                  onClick={() =>
-                                    handleRecordProcessFromHarvestLot(lot)
-                                  }
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all shadow-sm"
-                                  title="Record a process — produces parchment in Awaiting Hulling"
-                                >
-                                  <PlayCircle className="h-3.5 w-3.5" />
-                                  Record Process
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    handleProcessAndHullFromHarvestLot(lot)
-                                  }
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-all"
-                                  title="Combined shortcut — process and hull in one step"
-                                >
-                                  <ArrowRight className="h-3.5 w-3.5" />
-                                  &amp; Hull
-                                </button>
-                              </div>
+                              <button
+                                onClick={() =>
+                                  handleRecordProcessFromHarvestLot(lot)
+                                }
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all shadow-sm"
+                                title="Record a process — produces parchment in Awaiting Hulling"
+                              >
+                                <PlayCircle className="h-3.5 w-3.5" />
+                                Record Process
+                              </button>
                             </td>
                           </tr>
                         );
