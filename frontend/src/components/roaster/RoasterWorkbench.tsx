@@ -1101,35 +1101,52 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
           {/* Top summary – only for purchase modal */}
           <div className="mb-6 rounded-2xl border border-gray-200 bg-gray-50 p-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-              <div>
-                <span className="font-semibold text-gray-900">Origin name:</span>{' '}
-                <span className="text-gray-700">{newLotForm.originName || '—'}</span>
-              </div>
-              <div>
-                <span className="font-semibold text-gray-900">Variety:</span>{' '}
-                <span className="text-gray-700">{newLotForm.variety || '—'}</span>
-              </div>
-              <div>
-                <span className="font-semibold text-gray-900">Process name:</span>{' '}
-                <span className="text-gray-700">{newLotForm.processType || '—'}</span>
-              </div>
-              <div>
-                <span className="font-semibold text-gray-900">Producer:</span>{' '}
-                <span className="text-gray-700">{newLotForm.producerName || '—'}</span>
-              </div>
-
-              <div>
-                <span className="font-semibold text-gray-900">Taste note:</span>{' '}
-                <span className="text-gray-700">{newLotForm.tasteNote || '—'}</span>
-              </div>
-              <div className="md:col-span-2">
-                <span className="font-semibold text-gray-900">Price:</span>{' '}
-                <span className="text-gray-700">
-                  {newLotForm.pricePerKg
-                    ? `${parseFloat(newLotForm.pricePerKg).toFixed(2)} ${newLotForm.currency}`
-                    : '—'}
-                </span>
-              </div>
+              {newLotForm.originName.trim() && (
+                <div>
+                  <span className="font-semibold text-gray-900">Origin name:</span>{' '}
+                  <span className="text-gray-700">{newLotForm.originName}</span>
+                </div>
+              )}
+              {newLotForm.variety.trim() && (
+                <div>
+                  <span className="font-semibold text-gray-900">Variety:</span>{' '}
+                  <span className="text-gray-700">{newLotForm.variety}</span>
+                </div>
+              )}
+              {newLotForm.processType.trim() && (
+                <div>
+                  <span className="font-semibold text-gray-900">Process name:</span>{' '}
+                  <span className="text-gray-700">{newLotForm.processType}</span>
+                </div>
+              )}
+              {newLotForm.producerName.trim() && (
+                <div>
+                  <span className="font-semibold text-gray-900">Producer:</span>{' '}
+                  <span className="text-gray-700">{newLotForm.producerName}</span>
+                </div>
+              )}
+              {newLotForm.tasteNote.trim() && (
+                <div>
+                  <span className="font-semibold text-gray-900">Taste note:</span>{' '}
+                  <span className="text-gray-700">{newLotForm.tasteNote}</span>
+                </div>
+              )}
+              {newLotForm.pricePerKg.trim() && (
+                <div className="md:col-span-2">
+                  <span className="font-semibold text-gray-900">Price:</span>{' '}
+                  <span className="text-gray-700">
+                    {`${parseFloat(newLotForm.pricePerKg).toFixed(2)} ${newLotForm.currency}`}
+                  </span>
+                </div>
+              )}
+              {!newLotForm.originName.trim() &&
+                !newLotForm.variety.trim() &&
+                !newLotForm.processType.trim() &&
+                !newLotForm.producerName.trim() &&
+                !newLotForm.tasteNote.trim() &&
+                !newLotForm.pricePerKg.trim() && (
+                  <div className="md:col-span-2 text-gray-500">No details entered yet.</div>
+                )}
             </div>
           </div>
 

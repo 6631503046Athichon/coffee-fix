@@ -7,15 +7,15 @@ import { describe, test, expect, jest, beforeEach } from '@jest/globals'
 import { NextRequest } from 'next/server'
 
 describe('Farm Creation API Integration', () => {
-  const mockPrisma = {
+  const mockPrisma: any = {
     farm: {
       create: jest.fn(),
       findMany: jest.fn(),
     },
   }
 
-  const mockRequireAuth = jest.fn()
-  const mockRequireRole = jest.fn()
+  const mockRequireAuth: any = jest.fn()
+  const mockRequireRole: any = jest.fn()
   const mockHandleApiError = jest.fn((error: any) => {
     const status = error.message === 'Unauthorized' ? 401 : 500
     return new Response(JSON.stringify({ error: error.message }), { status })
@@ -91,7 +91,7 @@ describe('Farm Creation API Integration', () => {
             sizeHectares: 10,
             googleMapsUrl: null,
           }),
-        })
+        }),
       )
     })
 
@@ -136,7 +136,7 @@ describe('Farm Creation API Integration', () => {
           data: expect.objectContaining({
             googleMapsUrl: null,
           }),
-        })
+        }),
       )
     })
 
@@ -181,7 +181,7 @@ describe('Farm Creation API Integration', () => {
           data: expect.objectContaining({
             googleMapsUrl: 'https://maps.google.com/?q=13.7563,100.5018',
           }),
-        })
+        }),
       )
     })
 
@@ -234,11 +234,11 @@ describe('Farm Creation API Integration', () => {
             longitude: 99.8325,
             sizeHectares: 25.5,
           }),
-        })
+        }),
       )
 
       // Verify types are correct
-      const createCall = mockPrisma.farm.create.mock.calls[0]?.[0]
+      const createCall: any = mockPrisma.farm.create.mock.calls[0]?.[0]
       if (createCall && createCall.data) {
         expect(typeof createCall.data.latitude).toBe('number')
         expect(typeof createCall.data.longitude).toBe('number')

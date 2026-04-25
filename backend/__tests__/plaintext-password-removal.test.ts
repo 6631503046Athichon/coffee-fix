@@ -3,11 +3,11 @@
  * Tests to ensure no plaintext passwords are stored or returned
  */
 
-import { describe, test, expect, jest } from '@jest/globals'
+import { describe, test, expect, jest, beforeEach } from '@jest/globals'
 import { NextRequest } from 'next/server'
 
 // Mock Prisma
-const mockPrismaUser = {
+const mockPrismaUser: any = {
   findMany: jest.fn(),
   findUnique: jest.fn(),
   findFirst: jest.fn(),
@@ -15,7 +15,7 @@ const mockPrismaUser = {
   update: jest.fn(),
 }
 
-const mockPrisma = {
+const mockPrisma: any = {
   user: mockPrismaUser,
 }
 
@@ -25,15 +25,15 @@ jest.mock('@/lib/prisma', () => ({
 }))
 
 // Mock auth and middleware
-const mockRequireAuth = jest.fn()
-const mockRequireRole = jest.fn()
+const mockRequireAuth: any = jest.fn()
+const mockRequireRole: any = jest.fn()
 
 jest.mock('@/lib/middleware', () => ({
   requireAuth: mockRequireAuth,
   requireRole: mockRequireRole,
   handleApiError: jest.fn((error: any) => {
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 500
+      status: 500,
     })
   }),
 }))
@@ -51,7 +51,7 @@ jest.mock('@/lib/credentialGenerator', () => ({
 jest.mock('@/lib/validations', () => ({
   validateBody: jest.fn(async (req: any, schema: any) => ({
     success: true,
-    data: await req.json()
+    data: await req.json(),
   })),
   createUserSchema: {},
 }))
@@ -117,7 +117,7 @@ describe('Plaintext Password Removal', () => {
     })
 
     // Verify the Prisma select statement doesn't include password
-    const selectArg = mockPrismaUser.findMany.mock.calls[0][0].select
+    const selectArg: any = mockPrismaUser.findMany.mock.calls[0][0].select
     expect(selectArg).toBeDefined()
     expect(selectArg.password).toBeUndefined()
     expect(selectArg.temporaryPassword).toBeUndefined()
@@ -345,7 +345,7 @@ describe('Plaintext Password Removal', () => {
     await GET(request)
 
     // Verify select clause doesn't include temporaryPassword
-    const selectArg = mockPrismaUser.findMany.mock.calls[0][0].select
+    const selectArg: any = mockPrismaUser.findMany.mock.calls[0][0].select
     expect(selectArg.temporaryPassword).toBeUndefined()
   })
 })
