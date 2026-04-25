@@ -328,6 +328,48 @@ Bundle CSS เพิ่มจาก ~1 kB (nothing — runtime CDN) → 72 kB (p
 
 ต้องรอ DSN จากเจ้าของโปรเจกต์ก่อนตั้งค่า
 
+### 4.14 ✅ BOLA mutation/PII routes — แก้แล้ว (commits dab22e9, 68e2aac, 3b22573)
+
+ก่อนหน้านี้หลาย route `[id]` ตรวจแค่ `requireAuth` หรือ `requireRole` แต่ **ไม่ได้ตรวจว่า user เป็นเจ้าของ record จริง** — Processor A เลยแก้ parchment lot ของ Processor B ได้ Roaster A แก้ invoice ของ Roaster B ได้ ฯลฯ
+
+แก้โดยเดิน ownership chain ที่ระบุใน [`CLAUDE.md`](CLAUDE.md) แล้วเรียก `requireOwnership(user, ownerId, ['Admin'])` จาก [`backend/src/lib/middleware.ts`](backend/src/lib/middleware.ts):
+
+| Route | ownership source | allowed bypass |
+|---|---|---|
+| `parchment-lots/[id]` PATCH/DELETE | `processingBatch.createdById` | `Admin` |
+| `parchment-lots/[id]/withdrawals` POST | `processingBatch.createdById` | `Admin`, `Roaster` |
+| `processing-batches/[id]` PUT/DELETE | `createdById` | `Admin` |
+| `green-bean-lots/[id]` PATCH/PUT/DELETE | `createdById` | `Admin` |
+| `gap-logs/[id]` PUT/DELETE | `createdBy` หรือ `farm.ownerId` | `Admin` |
+| `soil-analyses/[id]` PUT (DELETE มีอยู่แล้ว) | `createdBy` หรือ `farm.ownerId` | `Admin` |
+| `invoices/[id]` PUT | `createdBy` | `Admin` |
+| `sale-orders/[id]` PUT | `createdBy` | `Admin` |
+
+**PII / pricing GETs** — ก่อนหน้านี้เปิดให้ทุก role อ่านได้ เปลี่ยนเป็น `requireRole(['Admin', 'Roaster'])`:
+- `GET /api/customers/:id` (email/phone/address)
+- `GET /api/sale-orders/:id` (pricing + customer)
+- `GET /api/invoices/:id` (pricing + customer)
+
+**Parchment withdrawal status bug** — เดิม set `status='Hulled'` เมื่อ depleted เฉพาะ `withdrawalType='HullAndGrade'` ทำให้ Sale/Sample/Export/Other/RoastingStock ทิ้ง lot ค้างใน `AwaitingHulling` ตลอดกาล แก้ให้ทุกประเภทตั้ง Hulled เมื่อ `currentWeightKg <= 0` และเพิ่ม float residue threshold `< 0.01 kg` กัน 1e-15 dust ค้าง
+
+**Cupping carve-out** — `cupping-sessions/[id] PUT` ก็ยังมีช่องโหว่ (ไม่มี role/ownership check) แต่ตาม policy ใน `CLAUDE.md` ห้ามแตะ cupping ถ้าไม่ได้ขอชัดเจน flagged ใน commit `3b22573` เพื่อให้ pass ครั้งหน้าที่เข้า cupping มาแก้รวมกัน
+
+**Test impact** — มี 3 BOLA test ที่ต้องอัปเดต mock ให้รองรับ ownership lookup ใหม่ (green-bean-lots PUT, processing-batches PUT, parchment-lots PATCH) — ใส่ `createdById` หรือ nested `processingBatch.createdById` ใน mock data ตอนนี้ `npx jest` ผ่าน 180/180 ตามเดิม
+
+### 4.15 ✅ Dead code removal — process-and-hull (commit cd612b9)
+
+flow `Record Process & Hull` ถูกแทนที่ด้วย split flow (Record Process → AwaitingHulling parchment → Withdraw via Hull & Grade / Sale / Sample / etc.) ก่อนหน้านี้ แต่ monolithic modal + service + backend route + zod schema ค้างอยู่ ลบทั้ง 4 จุดเพื่อปิด attack surface:
+
+- `frontend/src/components/processor/modals/ProcessAndHullModal.tsx` (1,040 บรรทัด)
+- `frontend/src/services/parchmentLotService.ts` — ลบ `processAndHull()` + `ProcessAndHullInput`
+- `backend/src/app/api/parchment-lots/process-and-hull/route.ts`
+- `backend/src/lib/validations/parchmentLot.ts` — ลบ `processAndHullSchema` + `ProcessAndHullInput`
+
+**UX polish ที่มากับ commit เดียวกัน**:
+- `ParchmentWithdrawModal` เลิกส่ง `notes: purpose` ทุก submit (modal ไม่มีช่อง notes — เดิม duplicate `purpose` ลง column `notes` ใน DB ทุก row)
+- `ParchmentTab` reset form state ทั้งใน `handleCloseRecordProcess` และ submit success path กันค่าค้างจาก submit ก่อน
+- `ParchmentTab` เลิก hardcode `baggingDate = dryingEndDate` (bagging ทำหลัง drying จบ ไม่ใช่วันเดียวกัน) ปล่อยเป็น `null` ให้ processor set ทีหลังผ่าน batch edit flow
+
 ---
 
 ## 5. Security Checklist
@@ -336,12 +378,15 @@ Bundle CSS เพิ่มจาก ~1 kB (nothing — runtime CDN) → 72 kB (p
 
 - [ ] Endpoint ที่รับ credential หรือส่ง email มี `rateLimit()` ครอบ
 - [ ] ใช้ `requireAuth()` + `requireRole()` ไม่ใช่แปลง token เอง
+- [ ] **Mutation route `[id]` (PATCH/PUT/DELETE) ตรวจ ownership ผ่าน `requireOwnership(user, ownerId, ['Admin'])`** — ดู ownership chain ใน [`CLAUDE.md`](CLAUDE.md) (`parchmentLot → processingBatch.createdById`, `greenBeanLot.createdById`, `harvestLot.createdById` หรือ `farm.ownerId`)
+- [ ] **GET route ที่คืน PII (email/phone/address) หรือ pricing** จำกัด role ที่ต้องใช้จริง ไม่เปิดให้ทุก authenticated user
 - [ ] Validate input ด้วย zod schema ก่อนเข้า business logic
 - [ ] Password ผ่าน `hashPassword()` เท่านั้น ห้ามเก็บ plaintext
 - [ ] Token reset ใช้ `crypto.randomBytes(32)` และมี `expiresAt`
 - [ ] Error message ไม่เปิดเผยว่า user มีอยู่จริง (`forgot-password` ต้องคืนข้อความเดียวกันทั้งเคส user เจอและไม่เจอ)
 - [ ] Prisma query ใช้ relation filter ไม่ใช่ raw SQL string concatenation
 - [ ] Log error ผ่าน `handleApiError()` ไม่ `console.error` ใน production code โดยตรง
+- [ ] **ห้ามแก้ไฟล์ใน cupping module** ([§4.14 carve-out](#414--bola-mutationpii-routes--แก้แล้ว-commits-dab22e9-68e2aac-3b22573)) ถ้าไม่ได้ถูกขอชัดเจน — flag เป็น issue ใน commit message แทน
 
 ---
 
