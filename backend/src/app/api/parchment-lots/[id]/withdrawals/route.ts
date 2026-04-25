@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
-import { safeParseFloat, nextDisplayId } from '@/lib/utils'
+import { safeParseFloat, nextDisplayIds, withDisplayIdRetry } from '@/lib/utils'
 
 // POST /api/parchment-lots/:id/withdrawals - Create withdrawal
 export async function POST(
@@ -135,16 +135,19 @@ export async function POST(
       ? amount * price
       : null
 
-    // Pre-generate display IDs for green bean lots if HullAndGrade
-    let greenBeanDisplayIds: string[] = []
-    if (withdrawalType === 'HullAndGrade' && gradedLots) {
-      for (let i = 0; i < gradedLots.length; i++) {
-        const displayId = await nextDisplayId(prisma.greenBeanLot, 'GBL')
-        greenBeanDisplayIds.push(displayId)
-      }
-    }
+    // Allocate sequential displayIds in a single max-read. Looping over
+    // `nextDisplayId` would return the same string each iteration because the
+    // prior tx.create rows aren't committed yet — `nextDisplayIds(N)` returns
+    // [max+1 .. max+N] from one read. Wrap the entire transaction in the
+    // retry helper so concurrent allocators rewind the whole withdrawal +
+    // green-bean creates if displayId collides at commit time.
+    await withDisplayIdRetry(async () => {
+      const greenBeanDisplayIds: string[] =
+        withdrawalType === 'HullAndGrade' && gradedLots
+          ? await nextDisplayIds(prisma.greenBeanLot, 'GBL', gradedLots.length)
+          : []
 
-    await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx) => {
       // Create withdrawal record
       await tx.parchmentWithdrawal.create({
         data: {
@@ -225,6 +228,7 @@ export async function POST(
         // since that requires a greenBeanLotId. The roast profile notes and cupping
         // score are stored in the withdrawal record itself.
       }
+      })
     })
 
     const updatedLot = await prisma.parchmentLot.findUnique({

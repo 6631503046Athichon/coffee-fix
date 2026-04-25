@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { validateBody, createHarvestLotSchema } from '@/lib/validations'
-import { nextDisplayId } from '@/lib/utils'
+import { nextDisplayId, withDisplayIdRetry } from '@/lib/utils'
 
 // This route depends on auth cookies/headers, so it must be dynamic.
 export const dynamic = 'force-dynamic'
@@ -100,35 +100,36 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const displayId = await nextDisplayId(prisma.harvestLot, 'HL')
-
-    const harvestLot = await prisma.harvestLot.create({
-      data: {
-        displayId,
-        farmerName,
-        cherryVariety,
-        weightKg,
-        farmPlotLocation,
-        harvestDate: new Date(harvestDate),
-        status: status || 'ReadyForProcessing',
-        cropYearId: validCropYearId,
-        farmId: farmId || null,
-      },
-      include: {
-        farm: {
-          select: {
-            id: true,
-            farmName: true,
-            location: true,
+    const harvestLot = await withDisplayIdRetry(async () => {
+      const displayId = await nextDisplayId(prisma.harvestLot, 'HL')
+      return prisma.harvestLot.create({
+        data: {
+          displayId,
+          farmerName,
+          cherryVariety,
+          weightKg,
+          farmPlotLocation,
+          harvestDate: new Date(harvestDate),
+          status: status || 'ReadyForProcessing',
+          cropYearId: validCropYearId,
+          farmId: farmId || null,
+        },
+        include: {
+          farm: {
+            select: {
+              id: true,
+              farmName: true,
+              location: true,
+            },
+          },
+          cropYear: {
+            select: {
+              id: true,
+              year: true,
+            },
           },
         },
-        cropYear: {
-          select: {
-            id: true,
-            year: true,
-          },
-        },
-      },
+      })
     })
 
     return NextResponse.json(

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
-import { nextDisplayId } from '@/lib/utils'
+import { nextDisplayId, withDisplayIdRetry } from '@/lib/utils'
 
 // Column name mapping (Thai + English variations)
 const COLUMN_MAP: Record<string, string> = {
@@ -165,8 +165,12 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Create parchment lots in a transaction
-    const createdLots = await prisma.$transaction(async (tx) => {
+    // Create parchment lots in a transaction. The in-loop findMany works
+    // because Postgres read-your-own-writes makes each iteration see the
+    // prior tx.create rows. Inter-request races are still possible though
+    // (another concurrent importer commits between our reads and writes), so
+    // wrap the whole transaction in the retry helper to recover from P2002.
+    const createdLots = await withDisplayIdRetry(async () => prisma.$transaction(async (tx) => {
       const lots = []
       for (const row of validRows) {
         const displayId = await nextDisplayId(tx.parchmentLot as any, 'PCH')
@@ -203,7 +207,7 @@ export async function POST(request: NextRequest) {
         lots.push(lot)
       }
       return lots
-    })
+    }))
 
     return NextResponse.json({
       imported: createdLots.length,

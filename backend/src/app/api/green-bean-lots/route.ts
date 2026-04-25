@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
 import { validateBody, createGreenBeanLotSchema } from "@/lib/validations";
-import { nextDisplayId } from "@/lib/utils";
+import { nextDisplayId, withDisplayIdRetry } from "@/lib/utils";
 
 // GET /api/green-bean-lots - List all green bean lots
 export async function GET(request: NextRequest) {
@@ -116,41 +116,42 @@ export async function POST(request: NextRequest) {
       currency,
     } = validation.data as any;
 
-    const displayId = await nextDisplayId(prisma.greenBeanLot, "GBL")
-
-    const greenBeanLot = await prisma.greenBeanLot.create({
-      data: {
-        displayId,
-        sourceType,
-        parchmentLotId: parchmentLotId || null,
-        grade,
-        initialWeightKg,
-        currentWeightKg: currentWeightKg || initialWeightKg,
-        availabilityStatus: availabilityStatus || "Available",
-        externalSource: externalSource || undefined,
-        processorScore: processorScore ? parseFloat(String(processorScore)) : null,
-        pricePerKg: pricePerKg ? parseFloat(String(pricePerKg)) : null,
-        currency: currency || null,
-      },
-      include: {
-        parchmentLot: {
-          include: {
-            processingBatch: {
-              select: {
-                id: true,
-                processType: true,
+    const greenBeanLot = await withDisplayIdRetry(async () => {
+      const displayId = await nextDisplayId(prisma.greenBeanLot, "GBL")
+      return prisma.greenBeanLot.create({
+        data: {
+          displayId,
+          sourceType,
+          parchmentLotId: parchmentLotId || null,
+          grade,
+          initialWeightKg,
+          currentWeightKg: currentWeightKg || initialWeightKg,
+          availabilityStatus: availabilityStatus || "Available",
+          externalSource: externalSource || undefined,
+          processorScore: processorScore ? parseFloat(String(processorScore)) : null,
+          pricePerKg: pricePerKg ? parseFloat(String(pricePerKg)) : null,
+          currency: currency || null,
+        },
+        include: {
+          parchmentLot: {
+            include: {
+              processingBatch: {
+                select: {
+                  id: true,
+                  processType: true,
+                },
               },
-            },
-            harvestLot: {
-              select: {
-                id: true,
-                farmerName: true,
-                cherryVariety: true,
+              harvestLot: {
+                select: {
+                  id: true,
+                  farmerName: true,
+                  cherryVariety: true,
+                },
               },
             },
           },
         },
-      },
+      });
     });
 
     return NextResponse.json(

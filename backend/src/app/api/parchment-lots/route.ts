@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma, ParchmentLotStatus } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
-import { nextDisplayId, safeParseFloat } from '@/lib/utils'
+import { nextDisplayId, safeParseFloat, withDisplayIdRetry } from '@/lib/utils'
 
 // GET /api/parchment-lots - List all parchment lots
 export async function GET(request: NextRequest) {
@@ -120,37 +120,38 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const displayId = await nextDisplayId(prisma.parchmentLot, 'PCH')
-
-    const parchmentLot = await prisma.parchmentLot.create({
-      data: {
-        displayId,
-        processingBatchId: processingBatchId || null,
-        harvestLotId: harvestLotId || null,
-        sourceType: isExternal ? 'External' : 'Internal',
-        externalSource: isExternal && externalSource ? externalSource : undefined,
-        initialWeightKg: parsedInitialWeight,
-        currentWeightKg: parsedCurrentWeight,
-        moistureContent: parsedMoistureContent,
-        processType,
-        status: status || (parsedCurrentWeight <= 0 ? 'Hulled' : 'AwaitingHulling'),
-      },
-      include: {
-        processingBatch: {
-          select: {
-            id: true,
-            processType: true,
-            status: true,
+    const parchmentLot = await withDisplayIdRetry(async () => {
+      const displayId = await nextDisplayId(prisma.parchmentLot, 'PCH')
+      return prisma.parchmentLot.create({
+        data: {
+          displayId,
+          processingBatchId: processingBatchId || null,
+          harvestLotId: harvestLotId || null,
+          sourceType: isExternal ? 'External' : 'Internal',
+          externalSource: isExternal && externalSource ? externalSource : undefined,
+          initialWeightKg: parsedInitialWeight,
+          currentWeightKg: parsedCurrentWeight,
+          moistureContent: parsedMoistureContent,
+          processType,
+          status: status || (parsedCurrentWeight <= 0 ? 'Hulled' : 'AwaitingHulling'),
+        },
+        include: {
+          processingBatch: {
+            select: {
+              id: true,
+              processType: true,
+              status: true,
+            },
+          },
+          harvestLot: {
+            select: {
+              id: true,
+              farmerName: true,
+              cherryVariety: true,
+            },
           },
         },
-        harvestLot: {
-          select: {
-            id: true,
-            farmerName: true,
-            cherryVariety: true,
-          },
-        },
-      },
+      })
     })
 
     return NextResponse.json(

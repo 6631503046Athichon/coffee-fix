@@ -356,6 +356,27 @@ Bundle CSS เพิ่มจาก ~1 kB (nothing — runtime CDN) → 72 kB (p
 
 **Test impact** — มี 3 BOLA test ที่ต้องอัปเดต mock ให้รองรับ ownership lookup ใหม่ (green-bean-lots PUT, processing-batches PUT, parchment-lots PATCH) — ใส่ `createdById` หรือ nested `processingBatch.createdById` ใน mock data ตอนนี้ `npx jest` ผ่าน 180/180 ตามเดิม
 
+### 4.16 ✅ displayId race condition + loop bug
+
+**สองบั๊กในก้อนเดียวกัน**:
+
+1. **Inter-request race** — `nextDisplayId` อ่าน max แล้วค่อย insert สอง request พร้อมกันคำนวณ `maxNum + 1` เท่ากัน คนแรกผ่าน คนที่สอง P2002 → 500 ใส่หน้าผู้ใช้
+2. **In-loop bug ในการสร้าง green-bean lots ตอน HullAndGrade withdrawal** — โค้ดเดิมเรียก `nextDisplayId` ใน `for` loop แต่ยังไม่มีการ commit insert ระหว่าง iteration ทุกครั้งจึงอ่าน max เดียวกัน → ได้ displayId ซ้ำทุกตัว → grade ที่ 2 เป็นต้นไป fail ที่ insert step
+
+**แก้** ([`backend/src/lib/utils.ts`](backend/src/lib/utils.ts)):
+
+- เพิ่ม `nextDisplayIds(model, prefix, count)` — อ่าน max ครั้งเดียว คืน `[max+1, max+2, ..., max+count]` แก้บั๊กที่ 2
+- เพิ่ม `withDisplayIdRetry(attempt, maxRetries=5)` — ลองใหม่เมื่อเจอ Prisma `P2002` บนคอลัมน์ `displayId` (รับทั้ง `meta.target` แบบ string และ string[]) แก้บั๊กที่ 1
+- ใช้ `withDisplayIdRetry` ครอบทั้ง `nextDisplayId` + `prisma.create` ใน 6 call sites (harvest-lots, green-bean-lots, parchment-lots POST, processing-batches POST, parchment-lots/[id]/withdrawals POST, parchment-lots/import-excel POST)
+
+**Test coverage** ([`backend/__tests__/display-id.test.ts`](backend/__tests__/display-id.test.ts), 12 tests):
+
+- `nextDisplayId` — empty table, gap-filled max, ignores non-numeric suffix
+- `nextDisplayIds` — sequential allocation จาก one read, count <= 0 ไม่ hit DB, empty table เริ่ม 1
+- `withDisplayIdRetry` — ผ่านครั้งแรก, retry บน displayId conflict, รับ target ทั้ง string/array, **ไม่** retry ถ้า unique column อื่น, **ไม่** retry บน error อื่น, exhaust retries แล้ว rethrow
+
+`npx jest` → 192/192 (เดิม 180 + 12 ใหม่)
+
 ### 4.15 ✅ Dead code removal — process-and-hull (commit cd612b9)
 
 flow `Record Process & Hull` ถูกแทนที่ด้วย split flow (Record Process → AwaitingHulling parchment → Withdraw via Hull & Grade / Sale / Sample / etc.) ก่อนหน้านี้ แต่ monolithic modal + service + backend route + zod schema ค้างอยู่ ลบทั้ง 4 จุดเพื่อปิด attack surface:

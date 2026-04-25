@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma, ProcessingBatchStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
-import { nextDisplayId, safeParseFloat } from "@/lib/utils";
+import { nextDisplayId, safeParseFloat, withDisplayIdRetry } from "@/lib/utils";
 
 // GET /api/processing-batches - List all processing batches
 export async function GET(request: NextRequest) {
@@ -172,15 +172,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Pre-generate display IDs outside the transaction
-    const batchDisplayId = await nextDisplayId(prisma.processingBatch, "PB");
-    const parchmentDisplayId =
-      isCompletedBatch
-        ? await nextDisplayId(prisma.parchmentLot, "PCH")
-        : null;
+    // Wrap displayId allocation + the whole transaction in a retry helper.
+    // If a concurrent caller wins the race on either PB or PCH ids, the entire
+    // transaction rolls back and we re-read max for both prefixes.
+    const processingBatch = await withDisplayIdRetry(async () => {
+      const batchDisplayId = await nextDisplayId(prisma.processingBatch, "PB");
+      const parchmentDisplayId =
+        isCompletedBatch
+          ? await nextDisplayId(prisma.parchmentLot, "PCH")
+          : null;
 
-    // Use transaction to create batch and update harvest lot status atomically
-    const processingBatch = await prisma.$transaction(async (tx) => {
+      // Use transaction to create batch and update harvest lot status atomically
+      return prisma.$transaction(async (tx) => {
       // Create processing batch
       const batch = await tx.processingBatch.create({
         data: {
@@ -256,7 +259,8 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      return batch;
+        return batch;
+      });
     });
 
     return NextResponse.json(
