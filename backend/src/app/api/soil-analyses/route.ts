@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { parseDateOnly } from '@/lib/utils'
 
 // GET /api/soil-analyses - List all soil analyses
 export async function GET(request: NextRequest) {
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
       data: {
         farmId,
         farmPlotLocation,
-        testDate: new Date(testDate),
+        testDate: parseDateOnly(testDate) ?? new Date(),
         labName: labName || null,
         certificateNumber: certificateNumber || null,
         pH: parseFloat(pH),

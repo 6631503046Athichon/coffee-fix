@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
+import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { safeParseFloat, nextDisplayIds, withDisplayIdRetry } from '@/lib/utils'
 
 // POST /api/parchment-lots/:id/withdrawals - Create withdrawal
@@ -11,6 +12,13 @@ export async function POST(
   try {
     const user = await requireAuth(request)
     requireRole(user, ['Processor', 'Roaster', 'Admin'])
+    // Per-user write limiter: stops a stuck retry loop or scripted abuse
+    // from generating thousands of withdrawal records.
+    const limited = await rateLimit(request, {
+      ...RATE_LIMITS.WRITE_LOT,
+      keyFn: () => `user:${user.id}`,
+    })
+    if (limited) return limited
     const { id } = await params
 
     const body = await request.json()
@@ -148,6 +156,19 @@ export async function POST(
           : []
 
       await prisma.$transaction(async (tx) => {
+      // Atomic decrement with a where guard so two concurrent withdrawals
+      // cannot both pass the up-front amount-vs-currentWeight check and end
+      // up double-spending the lot. updateMany compiles to a single SQL
+      // UPDATE that Postgres serialises at the row level, so the loser sees
+      // count === 0 and we abort the whole transaction.
+      const guarded = await tx.parchmentLot.updateMany({
+        where: { id, currentWeightKg: { gte: amount } },
+        data: { currentWeightKg: { decrement: amount } },
+      })
+      if (guarded.count === 0) {
+        throw new Error('Insufficient weight (concurrent withdrawal contention)')
+      }
+
       // Create withdrawal record
       await tx.parchmentWithdrawal.create({
         data: {
@@ -169,26 +190,22 @@ export async function POST(
         },
       })
 
-      // Update lot weight. Treat residue <0.01 kg as fully depleted so float
-      // dust (e.g. 1e-15 kg) doesn't leave lots stuck in AwaitingHulling.
-      const rawRemaining = parseFloat((lot.currentWeightKg - amount).toFixed(6))
-      const newWeight = rawRemaining < 0.01 ? 0 : rawRemaining
-      const updateData: any = {
-        currentWeightKg: newWeight,
-      }
-
+      // Re-read the post-decrement weight to clamp float residue and decide
+      // status. We treat residue < 0.01 kg as fully depleted so float dust
+      // (e.g. 1e-15 kg) doesn't leave lots stuck in AwaitingHulling.
+      const fresh = await tx.parchmentLot.findUnique({
+        where: { id },
+        select: { currentWeightKg: true },
+      })
+      const rawRemaining = fresh?.currentWeightKg ?? 0
+      const finalWeight = rawRemaining < 0.01 ? 0 : parseFloat(rawRemaining.toFixed(6))
+      const statusUpdate: any = { currentWeightKg: finalWeight }
       // Once a parchment lot is fully depleted we mark it Hulled regardless of
       // the withdrawal type — HullAndGrade, Sale, Sample, Export, Other, and
       // RoastingStock all consume parchment, so none of them should leave a
       // depleted lot sitting in AwaitingHulling.
-      if (newWeight <= 0) {
-        updateData.status = 'Hulled'
-      }
-
-      await tx.parchmentLot.update({
-        where: { id },
-        data: updateData,
-      })
+      if (finalWeight <= 0) statusUpdate.status = 'Hulled'
+      await tx.parchmentLot.update({ where: { id }, data: statusUpdate })
 
       // If HullAndGrade, create green bean lots
       if (withdrawalType === 'HullAndGrade' && gradedLots) {

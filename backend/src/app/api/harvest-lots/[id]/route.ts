@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireOwnership, handleApiError } from '@/lib/middleware'
-import { safeParseFloat } from '@/lib/utils'
+import { parseDateOnly, safeParseFloat } from '@/lib/utils'
 
 // GET /api/harvest-lots/:id
 export async function GET(
@@ -96,7 +96,16 @@ export async function PUT(
       if (weight !== null) updateData.weightKg = weight
     }
     if (farmPlotLocation !== undefined) updateData.farmPlotLocation = farmPlotLocation
-    if (harvestDate !== undefined) updateData.harvestDate = new Date(harvestDate)
+    if (harvestDate !== undefined) {
+      const parsed = parseDateOnly(harvestDate)
+      if (parsed === null || Number.isNaN(parsed.getTime())) {
+        return NextResponse.json(
+          { error: 'Invalid harvestDate value' },
+          { status: 400 }
+        )
+      }
+      updateData.harvestDate = parsed
+    }
     if (status !== undefined) updateData.status = status
     if (cropYearId !== undefined) updateData.cropYearId = cropYearId
     if (farmId !== undefined) updateData.farmId = farmId

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { validateBody, createHarvestLotSchema } from '@/lib/validations'
-import { nextDisplayId, withDisplayIdRetry } from '@/lib/utils'
+import { nextDisplayId, parseDateOnly, withDisplayIdRetry } from '@/lib/utils'
+import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 
 // This route depends on auth cookies/headers, so it must be dynamic.
 export const dynamic = 'force-dynamic'
@@ -72,6 +73,11 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request)
     requireRole(user, ['Farmer', 'Admin'])
+    const limited = await rateLimit(request, {
+      ...RATE_LIMITS.WRITE_LOT,
+      keyFn: () => `user:${user.id}`,
+    })
+    if (limited) return limited
 
     // Validate request body with Zod
     const validation = await validateBody(request, createHarvestLotSchema)
@@ -109,7 +115,7 @@ export async function POST(request: NextRequest) {
           cherryVariety,
           weightKg,
           farmPlotLocation,
-          harvestDate: new Date(harvestDate),
+          harvestDate: parseDateOnly(harvestDate) ?? new Date(),
           status: status || 'ReadyForProcessing',
           cropYearId: validCropYearId,
           farmId: farmId || null,

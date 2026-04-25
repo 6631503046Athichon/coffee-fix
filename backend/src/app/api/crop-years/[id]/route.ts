@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { parseDateOnly } from '@/lib/utils'
 
 // GET /api/crop-years/:id
 export async function GET(
@@ -60,8 +61,20 @@ export async function PUT(
 
     const updateData: Prisma.CropYearUpdateInput = {}
     if (year !== undefined) updateData.year = year
-    if (startDate !== undefined) updateData.startDate = new Date(startDate)
-    if (endDate !== undefined) updateData.endDate = new Date(endDate)
+    if (startDate !== undefined) {
+      const parsed = parseDateOnly(startDate)
+      if (parsed === null || Number.isNaN(parsed.getTime())) {
+        return NextResponse.json({ error: 'Invalid startDate' }, { status: 400 })
+      }
+      updateData.startDate = parsed
+    }
+    if (endDate !== undefined) {
+      const parsed = parseDateOnly(endDate)
+      if (parsed === null || Number.isNaN(parsed.getTime())) {
+        return NextResponse.json({ error: 'Invalid endDate' }, { status: 400 })
+      }
+      updateData.endDate = parsed
+    }
     if (description !== undefined) updateData.description = description
 
     const updatedCropYear = await prisma.cropYear.update({

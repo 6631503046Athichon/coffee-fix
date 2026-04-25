@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma, ProcessingBatchStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
-import { nextDisplayId, safeParseFloat, withDisplayIdRetry } from "@/lib/utils";
+import { nextDisplayId, parseDateOnly, safeParseFloat, withDisplayIdRetry } from "@/lib/utils";
+import { rateLimit, RATE_LIMITS } from "@/lib/rateLimit";
 
 // GET /api/processing-batches - List all processing batches
 export async function GET(request: NextRequest) {
@@ -72,6 +73,11 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request);
     requireRole(user, ["Processor", "Admin"]);
+    const limited = await rateLimit(request, {
+      ...RATE_LIMITS.WRITE_LOT,
+      keyFn: () => `user:${user.id}`,
+    });
+    if (limited) return limited;
 
     const body = await request.json();
     const {
@@ -141,8 +147,8 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const parsedDryingStartDate = new Date(dryingStartDate);
-      const parsedDryingEndDate = new Date(dryingEndDate);
+      const parsedDryingStartDate = parseDateOnly(dryingStartDate) ?? new Date(NaN);
+      const parsedDryingEndDate = parseDateOnly(dryingEndDate) ?? new Date(NaN);
       if (
         Number.isNaN(parsedDryingStartDate.getTime()) ||
         Number.isNaN(parsedDryingEndDate.getTime())
@@ -196,9 +202,9 @@ export async function POST(request: NextRequest) {
           createdById: user.id,
           parchmentWeightKg: parsedParchmentWeight,
           moistureContent: parsedMoistureContent,
-          dryingStartDate: dryingStartDate ? new Date(dryingStartDate) : null,
-          dryingEndDate: dryingEndDate ? new Date(dryingEndDate) : null,
-          baggingDate: baggingDate ? new Date(baggingDate) : null,
+          dryingStartDate: parseDateOnly(dryingStartDate),
+          dryingEndDate: parseDateOnly(dryingEndDate),
+          baggingDate: parseDateOnly(baggingDate),
         },
         include: {
           harvestLot: {
@@ -241,19 +247,48 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        const availableWeight =
-          harvestLot.remainingWeightKg ?? harvestLot.weightKg;
-        const newRemainingWeight = Math.max(
-          0,
-          parseFloat((availableWeight - parsedParchmentWeight).toFixed(6)),
-        );
+        // Atomic decrement on the harvest lot's remainingWeightKg with a
+        // where guard. Two concurrent processing batches against the same
+        // harvest lot would otherwise both pass the up-front check and
+        // overdraw the lot. updateMany compiles to one SQL UPDATE and
+        // Postgres serialises row writes, so the loser sees count === 0.
+        //
+        // First-time path: legacy harvest lots may have remainingWeightKg
+        // null (only weightKg set on creation). Initialise it to weightKg
+        // before the decrement, conditional on still being null so we
+        // don't clobber an already-decremented value from another tx.
+        await tx.harvestLot.updateMany({
+          where: { id: harvestLotId, remainingWeightKg: null },
+          data: { remainingWeightKg: harvestLot.weightKg },
+        });
+        const guarded = await tx.harvestLot.updateMany({
+          where: {
+            id: harvestLotId,
+            remainingWeightKg: { gte: parsedParchmentWeight },
+          },
+          data: { remainingWeightKg: { decrement: parsedParchmentWeight } },
+        });
+        if (guarded.count === 0) {
+          throw new Error(
+            "Insufficient harvest lot weight (concurrent batch contention)",
+          );
+        }
+
+        // Re-read post-decrement to set status. Clamp float residue.
+        const freshHarvest = await tx.harvestLot.findUnique({
+          where: { id: harvestLotId },
+          select: { remainingWeightKg: true },
+        });
+        const rawRemaining = freshHarvest?.remainingWeightKg ?? 0;
+        const finalRemaining =
+          rawRemaining < 0 ? 0 : parseFloat(rawRemaining.toFixed(6));
         const nextHarvestStatus =
-          newRemainingWeight > 0 ? "ReadyForProcessing" : "Complete";
+          finalRemaining > 0 ? "ReadyForProcessing" : "Complete";
 
         await tx.harvestLot.update({
           where: { id: harvestLotId },
           data: {
-            remainingWeightKg: newRemainingWeight,
+            remainingWeightKg: finalRemaining,
             status: nextHarvestStatus,
           },
         });

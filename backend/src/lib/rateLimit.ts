@@ -138,6 +138,18 @@ export const RATE_LIMITS = {
   REGISTER: { windowMs: 60 * 60 * 1000, max: 10, name: 'register' },
   VERIFY_TOKEN: { windowMs: 15 * 60 * 1000, max: 20, name: 'verify-token' },
   FIRST_LOGIN: { windowMs: 15 * 60 * 1000, max: 10, name: 'first-login' },
+  /**
+   * Write operations on lot/batch endpoints — generous enough that a real
+   * processor working through their day won't trip it (60 writes / 5 min ≈
+   * one every 5 seconds), tight enough to stop a stuck client retrying in
+   * a hot loop or a malicious automated spammer.
+   */
+  WRITE_LOT: { windowMs: 5 * 60 * 1000, max: 60, name: 'write-lot' },
+  /**
+   * Heavy operations: Excel imports, bulk-load resource fanouts. These hit
+   * the database hard and shouldn't be runnable in a tight loop.
+   */
+  EXPENSIVE: { windowMs: 60 * 1000, max: 10, name: 'expensive' },
 } as const
 
 /**

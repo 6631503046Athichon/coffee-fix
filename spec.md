@@ -53,6 +53,14 @@ X-RateLimit-Reset: <unix-seconds>
 | `POST /api/auth/reset-password` | `RESET_PASSWORD` | 15 นาที | 5 |
 | `GET /api/auth/verify-reset-token` | `VERIFY_TOKEN` | 15 นาที | 20 |
 | `POST /api/auth/first-login-update` | `FIRST_LOGIN` | 15 นาที | 10 |
+| `POST /api/harvest-lots` | `WRITE_LOT` (per-user) | 5 นาที | 60 |  *(เพิ่ม §4.19)*
+| `POST /api/parchment-lots` | `WRITE_LOT` (per-user) | 5 นาที | 60 |
+| `POST /api/green-bean-lots` | `WRITE_LOT` (per-user) | 5 นาที | 60 |
+| `POST /api/processing-batches` | `WRITE_LOT` (per-user) | 5 นาที | 60 |
+| `POST /api/parchment-lots/:id/withdrawals` | `WRITE_LOT` (per-user) | 5 นาที | 60 |
+| `POST /api/green-bean-lots/:id/withdrawals` | `WRITE_LOT` (per-user) | 5 นาที | 60 |
+| `POST /api/parchment-lots/import-excel` | `EXPENSIVE` (per-user) | 1 นาที | 10 |
+| `GET /api/bulk-load` | `EXPENSIVE` (per-user) | 1 นาที | 10 |
 
 ตัวเลขปรับให้ (ก) แน่นพอที่จะหยุด automated attack และ (ข) หลวมพอไม่ล็อกผู้ใช้จริงที่พิมพ์รหัสผ่านผิด 2–3 ครั้ง
 
@@ -355,6 +363,76 @@ Bundle CSS เพิ่มจาก ~1 kB (nothing — runtime CDN) → 72 kB (p
 **Cupping carve-out** — `cupping-sessions/[id] PUT` ก็ยังมีช่องโหว่ (ไม่มี role/ownership check) แต่ตาม policy ใน `CLAUDE.md` ห้ามแตะ cupping ถ้าไม่ได้ขอชัดเจน flagged ใน commit `3b22573` เพื่อให้ pass ครั้งหน้าที่เข้า cupping มาแก้รวมกัน
 
 **Test impact** — มี 3 BOLA test ที่ต้องอัปเดต mock ให้รองรับ ownership lookup ใหม่ (green-bean-lots PUT, processing-batches PUT, parchment-lots PATCH) — ใส่ `createdById` หรือ nested `processingBatch.createdById` ใน mock data ตอนนี้ `npx jest` ผ่าน 180/180 ตามเดิม
+
+### 4.19 ✅ Rate limiting expansion (write + expensive endpoints)
+
+ก่อนแก้ rate limit ครอบเฉพาะ auth endpoints (login, forgot/reset password ฯลฯ) endpoint อื่นเปิดให้ใครก็ยิงได้กี่ครั้งก็ได้ → เสี่ยงต่อ retry-loop ติดค้าง, scripted abuse, และ DoS ผ่าน expensive query
+
+**Presets ใหม่** ใน [`backend/src/lib/rateLimit.ts`](backend/src/lib/rateLimit.ts):
+
+| Preset | Window | Max | ใช้กับ |
+|---|---|---|---|
+| `WRITE_LOT` | 5 นาที | 60 | POST ของ lot/batch endpoints (≈12 writes/นาที — เพียงพอสำหรับงานจริง, หยุด tight loop) |
+| `EXPENSIVE` | 1 นาที | 10 | Excel import + bulk-load (heavy DB operation) |
+
+**Key extraction**: ใช้ `keyFn: () => \`user:${user.id}\`` แทน IP เพราะหลัง requireAuth เรามี user.id แล้ว แม่นกว่า (ไม่โดน NAT shared bucket) ผู้ใช้คนเดียวจาก IP ต่างกันยังนับรวม
+
+**Endpoints ที่ใส่ rate limit**: harvest-lots POST, parchment-lots POST, green-bean-lots POST, processing-batches POST, parchment-lots/[id]/withdrawals POST, green-bean-lots/[id]/withdrawals POST, parchment-lots/import-excel POST, bulk-load GET (8 endpoints)
+
+Test setup เดิม `__resetRateLimitForTests()` ทำให้ buckets clear ก่อนแต่ละ test → ทุก test ที่ทดสอบ business logic ไม่เจอ 429 false-positive — 197/197 ผ่านตามเดิม
+
+### 4.17 ✅ Weight drift via TOCTOU on lot mutations
+
+**สามจุดที่ลอตน้ำหนักดริฟ**ก่อนแก้: `processing-batches POST` (harvest lot remaining), `parchment-lots/[id]/withdrawals POST` (parchment current), `green-bean-lots/[id]/withdrawals POST` (green bean current) — ทุกจุดอ่านน้ำหนักจาก `findUnique` **นอก** transaction แล้วเอามา compute ค่าใหม่ใน transaction. Postgres READ COMMITTED + ไม่มี row lock → สอง request พร้อมกันคำนวณ `currentWeightKg - amount` จากค่าเดิมตัวเดียวกัน → ทั้งคู่ update ลงค่าเดียวกัน → double-spending
+
+**แก้** ทั้ง 3 ไฟล์ด้วย atomic `updateMany` + where guard:
+
+```ts
+const guarded = await tx.parchmentLot.updateMany({
+  where: { id, currentWeightKg: { gte: amount } },
+  data: { currentWeightKg: { decrement: amount } },
+})
+if (guarded.count === 0) {
+  throw new Error('Insufficient weight (concurrent withdrawal contention)')
+}
+```
+
+`updateMany` คอมไพล์เป็น `UPDATE ... SET col = col - X WHERE id = ? AND col >= X` Postgres lock แถวระหว่าง UPDATE คู่แข่งจะเห็น `count === 0` เพราะค่าใหม่ < X แล้ว → throw → transaction rollback ทั้งก้อน
+
+**Process batch** ของ harvest lot มี edge case: `remainingWeightKg` อาจเป็น `null` (เลกาซีเอกเซลอิมพอร์ต) decrement บน null = null ⇒ ทำ initial-fill ก่อน:
+
+```ts
+await tx.harvestLot.updateMany({
+  where: { id: harvestLotId, remainingWeightKg: null },
+  data: { remainingWeightKg: harvestLot.weightKg },
+})
+// then the guarded decrement
+```
+
+หลัง decrement re-read fresh value, clamp residue `< 0` (parchment ใช้ `< 0.01`), อัปเดต status (`Hulled`/`Withdrawn`/`Complete`)
+
+### 4.18 ✅ Timezone — date-only fields drift across timezones
+
+**ปัญหา**: `new Date('2026-04-25')` parse เป็น **UTC midnight** ในเขตเวลาลบ (เช่น UTC-08 LA) ค่าจะแสดงเป็น 2026-04-24 16:00 — เลื่อนวันถอยหลัง 1 วัน (Bangkok +07 ไม่เห็นบั๊กเพราะ midnight UTC = 07:00 ที่ไทย ยังเป็นวันเดิม)
+
+**แก้** ([`backend/src/lib/utils.ts`](backend/src/lib/utils.ts)):
+
+```ts
+export function parseDateOnly(value: unknown): Date | null {
+  if (value === null || value === undefined || value === '') return null
+  const s = typeof value === 'string' ? value : String(value)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return new Date(`${s}T12:00:00.000Z`)  // anchor at noon UTC
+  }
+  return new Date(s)  // pass full ISO datetime through
+}
+```
+
+12:00 UTC ± 11 ชั่วโมง = 01:00 ถึง 23:00 same day. ครอบคลุมทุก timezone ของพื้นที่ปลูกกาแฟจริง (-11 Pago Pago ถึง +11 Norfolk Island)
+
+ใช้ใน 6 routes: `harvest-lots POST/PATCH`, `crop-years POST/PATCH`, `soil-analyses POST/PATCH`, `processing-batches POST/PATCH` (drying/bagging dates)
+
+Test ([`backend/__tests__/parse-date-only.test.ts`](backend/__tests__/parse-date-only.test.ts), 5 tests) ตรวจ format toLocaleDateString ใน 5 timezone (Pago Pago, LA, UTC, Bangkok, Norfolk) ทั้งหมดได้ 2026-04-25 ตามคาด
 
 ### 4.16 ✅ displayId race condition + loop bug
 

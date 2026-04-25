@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { parseDateOnly } from '@/lib/utils'
 
 // Helper function to ensure 3 crop years exist: previous, current, next
 async function ensureCropYears() {
@@ -104,8 +105,8 @@ export async function POST(request: NextRequest) {
     const cropYear = await prisma.cropYear.create({
       data: {
         year,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
+        startDate: parseDateOnly(startDate) ?? new Date(),
+        endDate: parseDateOnly(endDate) ?? new Date(),
         description: description || null,
       },
     })

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import * as XLSX from 'xlsx'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
@@ -59,6 +60,15 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request)
     requireRole(user, ['Processor', 'Admin'])
+
+    // Excel imports are expensive (parse + transactional bulk insert).
+    // Cap at 10/min per user to stop a stuck client retry-looping or a
+    // malicious double-click spamming a 5,000-row sheet.
+    const limited = await rateLimit(request, {
+      ...RATE_LIMITS.EXPENSIVE,
+      keyFn: () => `user:${user.id}`,
+    })
+    if (limited) return limited
 
     const formData = await request.formData()
     const file = formData.get('file') as File | null

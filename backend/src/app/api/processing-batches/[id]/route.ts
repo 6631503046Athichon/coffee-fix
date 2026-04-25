@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
-import { safeParseFloat } from '@/lib/utils'
+import { parseDateOnly, safeParseFloat } from '@/lib/utils'
 
 // GET /api/processing-batches/:id
 export async function GET(
@@ -107,9 +107,9 @@ export async function PUT(
       }
       updateData.moistureContent = parsedMoistureContent
     }
-    const parsedBaggingDate = baggingDate !== undefined ? (baggingDate ? new Date(baggingDate) : null) : undefined
-    const parsedDryingStartDate = dryingStartDate !== undefined ? (dryingStartDate ? new Date(dryingStartDate) : null) : undefined
-    const parsedDryingEndDate = dryingEndDate !== undefined ? (dryingEndDate ? new Date(dryingEndDate) : null) : undefined
+    const parsedBaggingDate = baggingDate !== undefined ? parseDateOnly(baggingDate) : undefined
+    const parsedDryingStartDate = dryingStartDate !== undefined ? parseDateOnly(dryingStartDate) : undefined
+    const parsedDryingEndDate = dryingEndDate !== undefined ? parseDateOnly(dryingEndDate) : undefined
 
     for (const [field, value] of [
       ['baggingDate', parsedBaggingDate],

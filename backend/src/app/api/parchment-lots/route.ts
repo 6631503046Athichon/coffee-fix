@@ -3,6 +3,7 @@ import { Prisma, ParchmentLotStatus } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { nextDisplayId, safeParseFloat, withDisplayIdRetry } from '@/lib/utils'
+import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 
 // GET /api/parchment-lots - List all parchment lots
 export async function GET(request: NextRequest) {
@@ -67,6 +68,11 @@ export async function POST(request: NextRequest) {
     const user = await requireAuth(request)
     // SECURITY: Only Processor and Admin can create parchment lots
     requireRole(user, ['Processor', 'Admin'])
+    const limited = await rateLimit(request, {
+      ...RATE_LIMITS.WRITE_LOT,
+      keyFn: () => `user:${user.id}`,
+    })
+    if (limited) return limited
 
     const body = await request.json()
     const { processingBatchId, harvestLotId, initialWeightKg, currentWeightKg, moistureContent, processType, status, sourceType, externalSource } = body

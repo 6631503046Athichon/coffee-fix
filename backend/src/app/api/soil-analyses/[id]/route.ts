@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { parseDateOnly } from '@/lib/utils'
 
 // GET /api/soil-analyses/:id
 export async function GET(
@@ -105,7 +106,13 @@ export async function PUT(
 
     const updateData: Prisma.SoilAnalysisUpdateInput = {}
     if (farmPlotLocation !== undefined) updateData.farmPlotLocation = farmPlotLocation
-    if (testDate !== undefined) updateData.testDate = new Date(testDate)
+    if (testDate !== undefined) {
+      const parsed = parseDateOnly(testDate)
+      if (parsed === null || Number.isNaN(parsed.getTime())) {
+        return NextResponse.json({ error: 'Invalid testDate' }, { status: 400 })
+      }
+      updateData.testDate = parsed
+    }
     if (labName !== undefined) updateData.labName = labName
     if (certificateNumber !== undefined) updateData.certificateNumber = certificateNumber
     if (pH !== undefined) updateData.pH = parseFloat(pH)

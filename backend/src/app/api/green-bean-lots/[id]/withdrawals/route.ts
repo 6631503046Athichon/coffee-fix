@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { safeParseFloat } from '@/lib/utils'
 
 // POST /api/green-bean-lots/:id/withdrawals - Create withdrawal
@@ -12,6 +13,12 @@ export async function POST(
     const user = await requireAuth(request)
     // SECURITY: Only Processor, Roaster, and Admin can create withdrawals
     requireRole(user, ['Processor', 'Roaster', 'Admin'])
+    // Per-user write limiter against retry-loop / scripted abuse.
+    const limited = await rateLimit(request, {
+      ...RATE_LIMITS.WRITE_LOT,
+      keyFn: () => `user:${user.id}`,
+    })
+    if (limited) return limited
     const { id } = await params
 
     const body = await request.json()
@@ -72,6 +79,16 @@ export async function POST(
       : null
 
     await prisma.$transaction(async (tx) => {
+      // Atomic decrement with a where guard so two concurrent withdrawals
+      // cannot both pass the up-front check and overdraw the lot.
+      const guarded = await tx.greenBeanLot.updateMany({
+        where: { id, currentWeightKg: { gte: amount } },
+        data: { currentWeightKg: { decrement: amount } },
+      })
+      if (guarded.count === 0) {
+        throw new Error('Insufficient weight (concurrent withdrawal contention)')
+      }
+
       // Create withdrawal
       await tx.greenBeanWithdrawal.create({
         data: {
@@ -91,13 +108,18 @@ export async function POST(
         },
       })
 
-      // Update lot weight; round to 6dp to avoid float residuals, auto-mark Withdrawn when weight hits 0
-      const newWeight = Math.max(0, parseFloat((lot.currentWeightKg - amount).toFixed(6)))
+      // Re-read post-decrement to clamp float residue and decide status.
+      const fresh = await tx.greenBeanLot.findUnique({
+        where: { id },
+        select: { currentWeightKg: true },
+      })
+      const rawRemaining = fresh?.currentWeightKg ?? 0
+      const finalWeight = rawRemaining < 0 ? 0 : parseFloat(rawRemaining.toFixed(6))
       await tx.greenBeanLot.update({
         where: { id },
         data: {
-          currentWeightKg: newWeight,
-          ...(newWeight <= 0 && { availabilityStatus: 'Withdrawn' }),
+          currentWeightKg: finalWeight,
+          ...(finalWeight <= 0 && { availabilityStatus: 'Withdrawn' }),
         },
       })
 

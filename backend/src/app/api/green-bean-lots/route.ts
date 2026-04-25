@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
 import { validateBody, createGreenBeanLotSchema } from "@/lib/validations";
 import { nextDisplayId, withDisplayIdRetry } from "@/lib/utils";
+import { rateLimit, RATE_LIMITS } from "@/lib/rateLimit";
 
 // GET /api/green-bean-lots - List all green bean lots
 export async function GET(request: NextRequest) {
@@ -96,6 +97,11 @@ export async function POST(request: NextRequest) {
     const user = await requireAuth(request);
     // SECURITY: Only Processor and Admin can create green bean lots
     requireRole(user, ["Processor", "Admin"]);
+    const limited = await rateLimit(request, {
+      ...RATE_LIMITS.WRITE_LOT,
+      keyFn: () => `user:${user.id}`,
+    });
+    if (limited) return limited;
 
     // Validate request body with Zod
     const validation = await validateBody(request, createGreenBeanLotSchema);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, handleApiError } from '@/lib/middleware'
+import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +14,16 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request)
+
+    // Each phase fans out to 7+ Prisma queries with deep includes. Cap at
+    // 10/min per user — clients refresh the dashboard occasionally, not
+    // every second.
+    const limited = await rateLimit(request, {
+      ...RATE_LIMITS.EXPENSIVE,
+      keyFn: () => `user:${user.id}`,
+    })
+    if (limited) return limited
+
     const { searchParams } = new URL(request.url)
     const phase = searchParams.get('phase') || '1'
 

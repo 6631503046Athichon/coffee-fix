@@ -144,6 +144,11 @@ describe('Safe Parsing in API Routes', () => {
     greenBeanLot: {
       findUnique: jest.fn(),
       update: jest.fn(),
+      // updateMany is the new atomic guard the route uses to prevent
+      // double-spending on concurrent withdrawals. Default to count: 1
+      // (success) so tests focused on parsing behaviour aren't broken by
+      // the guard tripping.
+      updateMany: jest.fn(async () => ({ count: 1 })),
     },
     greenBeanWithdrawal: {
       create: jest.fn(),

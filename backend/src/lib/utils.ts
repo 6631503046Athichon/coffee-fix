@@ -25,6 +25,33 @@ export function safeParseInt(value: unknown): number | null {
 }
 
 /**
+ * Parse a "calendar-date" input (YYYY-MM-DD) into a Date that displays as
+ * the same calendar date in every realistic timezone.
+ *
+ * Background: `new Date('2026-04-25')` is parsed as 2026-04-25T00:00:00 UTC.
+ * In a negative-offset timezone (e.g. UTC-08 in Los Angeles) that instant
+ * displays as 2026-04-24 16:00 — the picked date rolls back a day. Anchoring
+ * the instant at 12:00 UTC instead means ±11h shifts (covering every
+ * coffee-growing region from -11 to +11) still land on the same calendar
+ * date, so the date the operator picked is the date everyone reads.
+ *
+ * For inputs that already include a time component (full ISO datetime),
+ * we pass them through to preserve the caller's intent.
+ *
+ * Returns null for null/undefined/empty inputs and an `Invalid Date` for
+ * unparseable strings — callers should reject `Number.isNaN(d.getTime())`.
+ */
+export function parseDateOnly(value: unknown): Date | null {
+  if (value === null || value === undefined || value === '') return null
+  const s = typeof value === 'string' ? value : String(value)
+  // YYYY-MM-DD: anchor at 12:00 UTC so ±11h timezones display same date.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return new Date(`${s}T12:00:00.000Z`)
+  }
+  return new Date(s)
+}
+
+/**
  * Generate the next sequential displayId for a given prefix.
  * Format: {PREFIX}-{YEAR}-{NUMBER} e.g. HL-2026-1, PB-2026-2
  * Queries the table for the highest existing number in the current year.

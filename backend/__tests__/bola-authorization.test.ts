@@ -12,6 +12,9 @@ const mockPrisma = {
     findUnique: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+    // updateMany is the new atomic guard against double-spend in
+    // green-bean-lots/[id]/withdrawals — default to count: 1 (success).
+    updateMany: jest.fn(async () => ({ count: 1 })),
   },
   greenBeanWithdrawal: {
     create: jest.fn(),
@@ -28,6 +31,8 @@ const mockPrisma = {
     findUnique: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+    // Same atomic guard pattern in parchment withdrawals.
+    updateMany: jest.fn(async () => ({ count: 1 })),
   },
   physicalTestResults: {
     deleteMany: jest.fn(),
