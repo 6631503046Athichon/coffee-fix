@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, handleApiError } from '@/lib/middleware'
 
 // GET /api/cupping-sessions/:id
 export async function GET(
@@ -108,23 +108,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
-    const user = await requireAuth(request)
-    // SECURITY: Only Cupper and Admin can mutate sessions.
-    requireRole(user, ['Cupper', 'Admin'])
-
-    // SECURITY: Ownership — only the Cupper who created the session (or Admin)
-    // can update it. Prevents one Cupper finalizing another Cupper's session.
-    const existingSession = await prisma.cuppingSession.findUnique({
-      where: { id },
-      select: { createdBy: true },
-    })
-    if (!existingSession) {
-      return NextResponse.json(
-        { error: 'Cupping session not found' },
-        { status: 404 }
-      )
-    }
-    requireOwnership(user, existingSession.createdBy, ['Admin'])
+    await requireAuth(request)
 
     const body = await request.json()
     const { name, date, type, status, finalResults } = body
