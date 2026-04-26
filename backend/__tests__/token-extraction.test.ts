@@ -7,14 +7,14 @@ import { describe, test, expect, jest, beforeEach } from '@jest/globals'
 import { NextRequest } from 'next/server'
 
 // Mock Prisma
-const mockPrismaUser = {
+const mockPrismaUser: any = {
   findUnique: jest.fn(),
   update: jest.fn(),
 }
 
-const mockPrisma = {
+const mockPrisma: any = {
   user: mockPrismaUser,
-  $transaction: jest.fn(async (callback) => callback(mockPrisma)),
+  $transaction: jest.fn(async (callback: any) => callback(mockPrisma)),
 }
 
 jest.mock('@/lib/prisma', () => ({
@@ -43,7 +43,8 @@ describe('Token Extraction Tests', () => {
     jest.resetModules()
 
     // Set valid JWT secret
-    process.env.JWT_SECRET = 'test_secret_key_with_sufficient_length_and_entropy_for_testing_1234567890'
+    process.env.JWT_SECRET =
+      'test_secret_key_with_sufficient_length_and_entropy_for_testing_1234567890'
   })
 
   describe('extractToken function', () => {
@@ -52,7 +53,7 @@ describe('Token Extraction Tests', () => {
 
       const request = new NextRequest('http://localhost:3001/api/test', {
         headers: {
-          'Authorization': `Bearer ${validToken}`,
+          Authorization: `Bearer ${validToken}`,
         },
       })
 
@@ -66,7 +67,7 @@ describe('Token Extraction Tests', () => {
 
       const request = new NextRequest('http://localhost:3001/api/test', {
         headers: {
-          'Cookie': `auth-token=${validToken}; other-cookie=value`,
+          Cookie: `auth-token=${validToken}; other-cookie=value`,
         },
       })
 
@@ -83,8 +84,8 @@ describe('Token Extraction Tests', () => {
 
       const request = new NextRequest('http://localhost:3001/api/test', {
         headers: {
-          'Authorization': `Bearer ${headerToken}`,
-          'Cookie': `auth-token=${cookieToken}`,
+          Authorization: `Bearer ${headerToken}`,
+          Cookie: `auth-token=${cookieToken}`,
         },
       })
 
@@ -108,7 +109,7 @@ describe('Token Extraction Tests', () => {
 
       const request = new NextRequest('http://localhost:3001/api/test', {
         headers: {
-          'Authorization': 'InvalidFormat token',
+          Authorization: 'InvalidFormat token',
         },
       })
 
@@ -122,7 +123,7 @@ describe('Token Extraction Tests', () => {
 
       const request = new NextRequest('http://localhost:3001/api/test', {
         headers: {
-          'Cookie': `session=abc123; auth-token=${validToken}; user-pref=dark`,
+          Cookie: `session=abc123; auth-token=${validToken}; user-pref=dark`,
         },
       })
 
@@ -173,7 +174,7 @@ describe('Token Extraction Tests', () => {
       const request = new NextRequest('http://localhost:3001/api/auth/first-login-update', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           currentPassword: 'oldpassword',
@@ -227,7 +228,7 @@ describe('Token Extraction Tests', () => {
       const request = new NextRequest('http://localhost:3001/api/auth/first-login-update', {
         method: 'POST',
         headers: {
-          'Cookie': `auth-token=${token}`,
+          Cookie: `auth-token=${token}`,
         },
         body: JSON.stringify({
           currentPassword: 'oldpassword',
@@ -266,16 +267,15 @@ describe('Token Extraction Tests', () => {
       const superAdminId = 'superadmin-123'
       const targetUserId = 'admin-456'
 
-      mockPrismaUser.findUnique
-        .mockResolvedValueOnce({
-          id: targetUserId,
-          username: 'admin',
-          email: 'admin@example.com',
-          name: 'Admin User',
-          roles: ['Admin'],
-          isActive: true,
-          isSuperAdmin: false,
-        })
+      mockPrismaUser.findUnique.mockResolvedValueOnce({
+        id: targetUserId,
+        username: 'admin',
+        email: 'admin@example.com',
+        name: 'Admin User',
+        roles: ['Admin'],
+        isActive: true,
+        isSuperAdmin: false,
+      })
 
       const { generateToken } = await import('@/lib/auth')
       const token = generateToken({ userId: superAdminId, roles: ['Admin'] })
@@ -285,7 +285,7 @@ describe('Token Extraction Tests', () => {
       const request = new NextRequest('http://localhost:3001/api/users/transfer-ownership', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           targetUserId,
@@ -321,7 +321,7 @@ describe('Token Extraction Tests', () => {
       const request = new NextRequest('http://localhost:3001/api/users/transfer-ownership', {
         method: 'POST',
         headers: {
-          'Cookie': `auth-token=${token}`,
+          Cookie: `auth-token=${token}`,
         },
         body: JSON.stringify({
           targetUserId,
@@ -370,7 +370,7 @@ describe('Token Extraction Tests', () => {
 
       const request = new NextRequest('http://localhost:3001/api/test', {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
         },
       })
 
@@ -399,7 +399,7 @@ describe('Token Extraction Tests', () => {
 
       const request = new NextRequest('http://localhost:3001/api/test', {
         headers: {
-          'Cookie': `auth-token=${token}`,
+          Cookie: `auth-token=${token}`,
         },
       })
 
@@ -422,7 +422,7 @@ describe('Token Extraction Tests', () => {
 
       const request = new NextRequest('http://localhost:3001/api/test', {
         headers: {
-          'Authorization': 'Bearer invalid_token_here',
+          Authorization: 'Bearer invalid_token_here',
         },
       })
 

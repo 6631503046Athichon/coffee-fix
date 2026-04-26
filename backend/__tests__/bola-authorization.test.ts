@@ -7,7 +7,7 @@ import { describe, test, expect, jest, beforeEach } from '@jest/globals'
 import { NextRequest } from 'next/server'
 
 // Mock Prisma
-const mockPrisma = {
+const mockPrisma: any = {
   greenBeanLot: {
     findUnique: jest.fn(),
     update: jest.fn(),
@@ -52,7 +52,7 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
-  $transaction: jest.fn(async (callback) => {
+  $transaction: jest.fn(async (callback: any) => {
     return await callback(mockPrisma)
   }),
 }
@@ -79,17 +79,24 @@ const mockRequireRole = jest.fn((user: any, roles: string[]) => {
   }
 })
 
-const mockRequireOwnership = jest.fn((user: any, ownerId: string | null, allowedRoles: string[] = ['Admin']) => {
-  if (user.isSuperAdmin) return
-  const hasAllowedRole = user.roles.some((role: string) => allowedRoles.includes(role))
-  if (hasAllowedRole) return
-  if (!ownerId || user.id !== ownerId) {
-    throw new Error('Insufficient permissions')
-  }
-})
+const mockRequireOwnership = jest.fn(
+  (user: any, ownerId: string | null, allowedRoles: string[] = ['Admin']) => {
+    if (user.isSuperAdmin) return
+    const hasAllowedRole = user.roles.some((role: string) => allowedRoles.includes(role))
+    if (hasAllowedRole) return
+    if (!ownerId || user.id !== ownerId) {
+      throw new Error('Insufficient permissions')
+    }
+  },
+)
 
 const mockHandleApiError = jest.fn((error: any) => {
-  const status = error.message === 'Unauthorized' ? 401 : error.message === 'Insufficient permissions' ? 403 : 500
+  const status =
+    error.message === 'Unauthorized'
+      ? 401
+      : error.message === 'Insufficient permissions'
+        ? 403
+        : 500
   return new Response(JSON.stringify({ error: error.message }), { status })
 })
 
@@ -276,10 +283,13 @@ describe('BOLA Authorization Tests', () => {
 
       const { POST } = await import('@/app/api/green-bean-lots/[id]/withdrawals/route')
 
-      const request = new NextRequest('http://localhost:3001/api/green-bean-lots/lot-123/withdrawals', {
-        method: 'POST',
-        body: JSON.stringify({ amountKg: 10, withdrawalType: 'Sale', purpose: 'Customer Order' }),
-      })
+      const request = new NextRequest(
+        'http://localhost:3001/api/green-bean-lots/lot-123/withdrawals',
+        {
+          method: 'POST',
+          body: JSON.stringify({ amountKg: 10, withdrawalType: 'Sale', purpose: 'Customer Order' }),
+        },
+      )
 
       const params = Promise.resolve({ id: 'lot-123' })
       const response = await POST(request, { params })
@@ -297,10 +307,13 @@ describe('BOLA Authorization Tests', () => {
 
       const { POST } = await import('@/app/api/green-bean-lots/[id]/withdrawals/route')
 
-      const request = new NextRequest('http://localhost:3001/api/green-bean-lots/lot-123/withdrawals', {
-        method: 'POST',
-        body: JSON.stringify({ amountKg: 10, withdrawalType: 'Sale', purpose: 'Customer Order' }),
-      })
+      const request = new NextRequest(
+        'http://localhost:3001/api/green-bean-lots/lot-123/withdrawals',
+        {
+          method: 'POST',
+          body: JSON.stringify({ amountKg: 10, withdrawalType: 'Sale', purpose: 'Customer Order' }),
+        },
+      )
 
       const params = Promise.resolve({ id: 'lot-123' })
       const response = await POST(request, { params })
@@ -331,10 +344,13 @@ describe('BOLA Authorization Tests', () => {
 
       const { POST } = await import('@/app/api/green-bean-lots/[id]/withdrawals/route')
 
-      const request = new NextRequest('http://localhost:3001/api/green-bean-lots/lot-123/withdrawals', {
-        method: 'POST',
-        body: JSON.stringify({ amountKg: 10, withdrawalType: 'Sale', purpose: 'Customer Order' }),
-      })
+      const request = new NextRequest(
+        'http://localhost:3001/api/green-bean-lots/lot-123/withdrawals',
+        {
+          method: 'POST',
+          body: JSON.stringify({ amountKg: 10, withdrawalType: 'Sale', purpose: 'Customer Order' }),
+        },
+      )
 
       const params = Promise.resolve({ id: 'lot-123' })
       const response = await POST(request, { params })

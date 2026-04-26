@@ -74,7 +74,7 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full table-fixed">
           <colgroup>
             <col className="w-[18%]" />
             <col className="w-[10%]" />

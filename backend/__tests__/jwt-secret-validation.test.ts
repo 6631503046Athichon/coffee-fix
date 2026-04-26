@@ -3,7 +3,7 @@
  * Tests for JWT_SECRET validation at startup
  */
 
-import { describe, test, expect, beforeEach, afterEach } from '@jest/globals'
+import { describe, test, expect, jest, beforeEach, afterEach } from '@jest/globals'
 
 describe('JWT Secret Validation', () => {
   let originalJwtSecret: string | undefined
@@ -131,16 +131,12 @@ describe('JWT Secret Validation', () => {
     const jwt = await import('jsonwebtoken')
 
     // Create a token with wrong issuer
-    const token = jwt.sign(
-      { userId: 'test-user', roles: [] },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: '24h',
-        algorithm: 'HS256',
-        issuer: 'wrong-issuer',
-        audience: 'coffee-lab-app'
-      }
-    )
+    const token = jwt.sign({ userId: 'test-user', roles: [] }, process.env.JWT_SECRET, {
+      expiresIn: '24h',
+      algorithm: 'HS256',
+      issuer: 'wrong-issuer',
+      audience: 'coffee-lab-app',
+    })
 
     expect(() => verifyToken(token)).toThrow('Invalid or expired token')
   })
@@ -152,16 +148,12 @@ describe('JWT Secret Validation', () => {
     const jwt = await import('jsonwebtoken')
 
     // Create a token with wrong audience
-    const token = jwt.sign(
-      { userId: 'test-user', roles: [] },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: '24h',
-        algorithm: 'HS256',
-        issuer: 'coffee-lab-api',
-        audience: 'wrong-audience'
-      }
-    )
+    const token = jwt.sign({ userId: 'test-user', roles: [] }, process.env.JWT_SECRET, {
+      expiresIn: '24h',
+      algorithm: 'HS256',
+      issuer: 'coffee-lab-api',
+      audience: 'wrong-audience',
+    })
 
     expect(() => verifyToken(token)).toThrow('Invalid or expired token')
   })
@@ -173,16 +165,12 @@ describe('JWT Secret Validation', () => {
     const jwt = await import('jsonwebtoken')
 
     // Create an already expired token
-    const token = jwt.sign(
-      { userId: 'test-user', roles: [] },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: '-1h', // Expired 1 hour ago
-        algorithm: 'HS256',
-        issuer: 'coffee-lab-api',
-        audience: 'coffee-lab-app'
-      }
-    )
+    const token = jwt.sign({ userId: 'test-user', roles: [] }, process.env.JWT_SECRET, {
+      expiresIn: '-1h', // Expired 1 hour ago
+      algorithm: 'HS256',
+      issuer: 'coffee-lab-api',
+      audience: 'coffee-lab-app',
+    })
 
     expect(() => verifyToken(token)).toThrow('Invalid or expired token')
   })
