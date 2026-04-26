@@ -125,8 +125,21 @@ const startFarmInterval = (farmId: string): void => {
 
   console.log(`[WeatherAutoFetch] Starting auto-fetch for farm: ${config.farmName} every ${config.interval} minutes`);
 
-  // Fetch immediately
-  fetchWeatherForFarm(farmId);
+  // Fire an immediate fetch only if we haven't already fetched recently.
+  // React StrictMode mounts effects twice in dev, and any data refresh
+  // (e.g. the 2-minute version-check poll in App.tsx) re-runs the effect
+  // that calls startFarmInterval — without this gate we'd POST a fresh
+  // weather record every re-init, producing one row per minute instead
+  // of one per `config.interval` minutes.
+  const lastFetch = state.lastFetchTimes.get(farmId);
+  const elapsed = lastFetch ? Date.now() - lastFetch.getTime() : Infinity;
+  if (elapsed >= intervalMs) {
+    fetchWeatherForFarm(farmId);
+  } else {
+    console.log(
+      `[WeatherAutoFetch] Skipping immediate fetch for ${config.farmName}; last fetch ${Math.round(elapsed / 1000)}s ago, interval ${config.interval}min`,
+    );
+  }
 
   // Set up interval
   const intervalId = setInterval(() => {

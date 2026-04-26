@@ -248,6 +248,27 @@ const ProtectedRoutes: React.FC = () => {
     await loadDataFromBackend();
   }, [loadDataFromBackend]);
 
+  // Auto-fetch is keyed off auto-fetch-relevant farm fields only.
+  // The full `data.farms` reference changes on every backend refresh
+  // (see the 2-minute version-check poll above), but the auto-fetch
+  // service only cares about which farms are enabled, their interval,
+  // and lat/lng. Memoising a stable signature here stops the
+  // initWeatherAutoFetchService effect below from cycling on every
+  // poll — without it, each cycle re-fired an immediate fetch and
+  // produced a new weather row every couple of minutes.
+  const autoFetchSignature = useMemo(
+    () =>
+      data.farms
+        .filter((f) => f.weatherAutoFetchEnabled)
+        .map(
+          (f) =>
+            `${f.id}:${f.weatherAutoFetchInterval ?? 5}:${f.latitude ?? ''}:${f.longitude ?? ''}`,
+        )
+        .sort()
+        .join('|'),
+    [data.farms],
+  );
+
   // Initialize weather auto-fetch service using farm data from DB
   useEffect(() => {
     if (!isAuthenticated || isAuthLoading || data.farms.length === 0) return;
@@ -268,7 +289,12 @@ const ProtectedRoutes: React.FC = () => {
     return () => {
       stopWeatherAutoFetchService();
     };
-  }, [isAuthenticated, isAuthLoading, data.farms]);
+    // We intentionally omit `data.farms` from the dep list and key the
+    // effect on the stable `autoFetchSignature` instead. ESLint can't
+    // see that data.farms is read inside, so silence the rule with the
+    // comment below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, isAuthLoading, autoFetchSignature, currentUser?.id]);
 
   // Debounced refresh to prevent burst reloads from rapid events
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
