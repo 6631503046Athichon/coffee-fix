@@ -81,7 +81,19 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
     }
     return data.weatherRecords
       .filter(record => record.farmId === farm.id)
-      .sort((a, b) => new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime());
+      .sort((a, b) => {
+        // Primary: newest recordDate first (the date the weather is for).
+        const dateDiff =
+          new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime();
+        if (dateDiff !== 0) return dateDiff;
+        // Tiebreak: when several records share the same recordDate (e.g. the
+        // auto-fetch that runs every hour all stamps today's date), order by
+        // createdAt so the row the user just saved sits at the top instead of
+        // landing in random insert order.
+        const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bCreated - aCreated;
+      });
   }, [data.weatherRecords, farm]);
 
   // Pagination calculations
