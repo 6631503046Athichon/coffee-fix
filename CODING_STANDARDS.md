@@ -71,13 +71,6 @@ coffee-fix/
 - **Module constants** → UPPER_SNAKE_CASE เช่น `API_BASE_URL`, `SCA_SENSORY_ATTRIBUTES`, `AUTH_CACHE_TTL`
 - **HTTP verbs ไม่อยู่ใน URL** → ใช้ `POST /api/harvest-lots` ไม่ใช่ `/api/createHarvestLot`
 
-### 3.2 ไม่ใช้ (ต่างจากเอกสาร docx เก่า)
-
-- ❌ Hungarian prefix — **ไม่ใช้** `f_`, `str_`, `bln_`, `dt_`, `arr_`, `i_` ทั้งใน schema และโค้ด
-- ❌ Interface `I` prefix — ใช้ `ButtonProps` ไม่ใช่ `IButtonProps`
-- ❌ Type `_Type` suffix — ใช้ `UserRole` ไม่ใช่ `UserRole_Type`
-- ❌ Prisma `@@map` / `@map` — ไม่ map table/column เป็น snake_case ใช้ Prisma default (table = plural PascalCase, column = camelCase)
-
 ---
 
 ## 4. TypeScript
