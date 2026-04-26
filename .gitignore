@@ -31,6 +31,11 @@ backend/.env.local
 backend/prisma/*.db
 backend/prisma/*.db-journal
 
+# Local-only artefacts (don't commit)
+DEMO_CREDENTIALS.md
+coffee-fix-schema.sql
+*.dump
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
