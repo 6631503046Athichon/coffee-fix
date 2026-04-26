@@ -1213,11 +1213,20 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     filteredHarvestLots.length / HARVEST_LOT_PAGE_SIZE,
   );
   const paginatedHarvestLots = useMemo(() => {
-    const sorted = [...filteredHarvestLots].sort(
-      (a, b) =>
+    // Sort by createdAt (when the lot entered the system) so the row that
+    // just shows up with the "NEW" badge actually lands on page 1. Fall back
+    // to harvestDate so legacy rows with no createdAt don't all collapse to
+    // a single timestamp.
+    const sorted = [...filteredHarvestLots].sort((a, b) => {
+      const createdDiff =
+        new Date(b.createdAt || 0).getTime() -
+        new Date(a.createdAt || 0).getTime();
+      if (createdDiff !== 0) return createdDiff;
+      return (
         new Date(b.harvestDate || 0).getTime() -
-        new Date(a.harvestDate || 0).getTime(),
-    );
+        new Date(a.harvestDate || 0).getTime()
+      );
+    });
     const startIndex = (harvestLotPage - 1) * HARVEST_LOT_PAGE_SIZE;
     return sorted.slice(startIndex, startIndex + HARVEST_LOT_PAGE_SIZE);
   }, [filteredHarvestLots, harvestLotPage]);
@@ -1227,11 +1236,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     filteredHarvestLots.length / CARD_PAGE_SIZE,
   );
   const paginatedHarvestCards = useMemo(() => {
-    const sorted = [...filteredHarvestLots].sort(
-      (a, b) =>
+    // Same sort as paginatedHarvestLots — keep card view + table view in
+    // lockstep so NEW-badged rows always sit on page 1 of both.
+    const sorted = [...filteredHarvestLots].sort((a, b) => {
+      const createdDiff =
+        new Date(b.createdAt || 0).getTime() -
+        new Date(a.createdAt || 0).getTime();
+      if (createdDiff !== 0) return createdDiff;
+      return (
         new Date(b.harvestDate || 0).getTime() -
-        new Date(a.harvestDate || 0).getTime(),
-    );
+        new Date(a.harvestDate || 0).getTime()
+      );
+    });
     const startIndex = (harvestCardPage - 1) * CARD_PAGE_SIZE;
     return sorted.slice(
       startIndex,
