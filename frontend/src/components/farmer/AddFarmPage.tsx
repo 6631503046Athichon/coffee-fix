@@ -829,7 +829,7 @@ const AddFarmPage: React.FC = () => {
 									className="bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap px-5 py-2.5"
 								>
 									<UserPlus className="h-5 w-5 mr-1.5" />
-`t`t`t`t`t`t`t`tAdd
+									Add
 								</Button>
 							</div>
 
