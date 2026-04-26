@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { ParchmentLot, User, UserRole } from "../../../types";
 import {
   Package,
@@ -133,9 +133,16 @@ export interface ParchmentWithdrawModalProps {
   }) => Promise<void>;
   onCancel: () => void;
   isSubmitting: boolean;
+  /**
+   * Pre-select a withdrawal type when the modal opens. Used by the
+   * "Hull & Grade" shortcut on each parchment row so the operator
+   * lands directly on the Hull form instead of having to click
+   * Withdraw → Hull as a separate step.
+   */
+  initialWithdrawalType?: WithdrawalType;
 }
 
-type WithdrawalType =
+export type WithdrawalType =
   | "RoastingStock"
   | "Sale"
   | "HullAndGrade"
@@ -152,9 +159,12 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
   onSubmit,
   onCancel,
   isSubmitting,
+  initialWithdrawalType = "RoastingStock",
 }) => {
   // ---- form state ----
-  const [withdrawalType, setWithdrawalType] = useState<WithdrawalType>("RoastingStock");
+  const [withdrawalType, setWithdrawalType] = useState<WithdrawalType>(
+    initialWithdrawalType,
+  );
   const [amount, setAmount] = useState("");
   const [purpose, setPurpose] = useState("");
 
@@ -169,11 +179,23 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
   const [roastProfileNotes, setRoastProfileNotes] = useState("");
   const [cuppingScore, setCuppingScore] = useState("");
 
-  // Hull & Grade fields
+  // Hull & Grade fields. `totalGreenWeight` is now auto-synced from the
+  // sum of graded-lot weights (see effect below) — no separate input.
   const [totalGreenWeight, setTotalGreenWeight] = useState("");
   const [gradedLots, setGradedLots] = useState<
     { grade: string; weight: string; price: string; score: string }[]
   >([{ grade: "", weight: "", price: "", score: "" }]);
+
+  // Auto-recompute totalGreenWeight from graded lots so the user only types
+  // each grade's weight and the modal does the sum + validates against the
+  // parchment amount being hulled.
+  useEffect(() => {
+    const sum = gradedLots.reduce(
+      (acc, l) => acc + (parseFloat(l.weight) || 0),
+      0,
+    );
+    setTotalGreenWeight(sum > 0 ? sum.toFixed(2) : "");
+  }, [gradedLots]);
 
   // ---- derived values ----
   const roasters = useMemo(
@@ -483,37 +505,16 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
       {/* ─── Conditional: Hull & Grade Fields ─── */}
       {withdrawalType === "HullAndGrade" && (
         <div className="mb-5 p-4 bg-green-50/70 rounded-xl border border-green-200 space-y-4">
-          {/* Total Green Bean Weight */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-              <div className="flex items-center gap-1.5">
-                <Scale className="h-3.5 w-3.5 text-green-600" />
-                Total Green Bean Weight (kg)
-              </div>
-            </label>
-            <input
-              type="number"
-              step="0.1"
-              max={withdrawalType === "HullAndGrade" ? amtNum || undefined : parchmentLot.currentWeightKg}
-              value={totalGreenWeight}
-              onChange={(e) => setTotalGreenWeight(e.target.value)}
-              placeholder={`Max: ${(withdrawalType === "HullAndGrade" && amtNum > 0 ? amtNum : parchmentLot.currentWeightKg).toFixed(2)} kg`}
-              className={`block w-full border rounded-lg py-2 px-3 text-sm font-semibold focus:outline-none focus:ring-1 transition-all ${
-                exceedsSelectedHullAmount
-                  ? "border-red-500 focus:ring-red-500 focus:border-red-500 bg-red-50"
-                  : "border-gray-300 focus:ring-green-500 focus:border-green-500"
-              }`}
-            />
-            {exceedsSelectedHullAmount && (
-              <div className="mt-2 flex items-start gap-2 bg-red-50 rounded-lg p-3 border border-red-200">
-                <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
-                <p className="text-xs font-semibold text-red-800">
-                  Total Green Bean Weight ({totalGreenNum.toFixed(2)} kg) cannot exceed
-                  Amount to Hull ({amtNum.toFixed(2)} kg)
-                </p>
-              </div>
-            )}
-          </div>
+          {/* Hull-amount overflow banner (only when graded weights exceed parchment to hull) */}
+          {exceedsSelectedHullAmount && (
+            <div className="flex items-start gap-2 bg-red-50 rounded-lg p-3 border border-red-200">
+              <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-xs font-semibold text-red-800">
+                Total green-bean weight ({totalGreenNum.toFixed(2)} kg) cannot exceed
+                Amount to Hull ({amtNum.toFixed(2)} kg)
+              </p>
+            </div>
+          )}
 
           {/* Graded Lots */}
           <div>
@@ -540,7 +541,7 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
                         #{index + 1}
                       </span>
                     </div>
-                    <div className="flex-1 grid grid-cols-4 gap-2">
+                    <div className="flex-1 grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-[10px] font-bold text-gray-600 mb-0.5 uppercase tracking-wide">
                           Grade
@@ -570,49 +571,6 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
                             setGradedLots(
                               gradedLots.map((l, i) =>
                                 i === index ? { ...l, weight: e.target.value } : l,
-                              ),
-                            )
-                          }
-                          className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-gray-600 mb-0.5 uppercase tracking-wide">
-                          <div className="flex items-center gap-1">
-                            <DollarSign size={10} className="text-gray-500" />
-                            Price/kg
-                          </div>
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="Optional"
-                          value={lot.price}
-                          onChange={(e) =>
-                            setGradedLots(
-                              gradedLots.map((l, i) =>
-                                i === index ? { ...l, price: e.target.value } : l,
-                              ),
-                            )
-                          }
-                          className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-gray-600 mb-0.5 uppercase tracking-wide">
-                          Score
-                        </label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          max="100"
-                          placeholder="Optional"
-                          value={lot.score}
-                          onChange={(e) =>
-                            setGradedLots(
-                              gradedLots.map((l, i) =>
-                                i === index ? { ...l, score: e.target.value } : l,
                               ),
                             )
                           }
@@ -665,19 +623,19 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
               </div>
             )}
 
-            {/* Weight validation summary */}
+            {/* Weight validation summary — total + yield vs amount-to-hull */}
             <div
               className={`mt-3 rounded-lg p-3 border transition-all ${
-                weightMismatch || exceedsSelectedHullAmount
+                exceedsSelectedHullAmount
                   ? "bg-red-50 border-red-300"
                   : "bg-green-50 border-green-300"
               }`}
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">
-                  Total Accounted For
+                  Total Green Bean (auto)
                 </span>
-                {weightMismatch || exceedsSelectedHullAmount ? (
+                {exceedsSelectedHullAmount ? (
                   <AlertCircle className="h-4 w-4 text-red-600" />
                 ) : (
                   <Check className="h-4 w-4 text-green-600" />
@@ -686,26 +644,20 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
               <div className="flex items-baseline gap-1.5">
                 <span
                   className={`text-xl font-extrabold ${
-                    weightMismatch || exceedsSelectedHullAmount
+                    exceedsSelectedHullAmount
                       ? "text-red-600"
                       : "text-green-600"
                   }`}
                 >
                   {gradedWeightSum.toFixed(2)}
                 </span>
-                <span className="text-sm font-bold text-gray-400">/</span>
-                <span className="text-sm font-bold text-gray-600">
-                  {totalGreenNum.toFixed(2)} kg
-                </span>
+                <span className="text-sm font-bold text-gray-500">kg</span>
+                {amtNum > 0 && (
+                  <span className="text-xs text-gray-500 ml-2">
+                    yield {((gradedWeightSum / amtNum) * 100).toFixed(1)}%
+                  </span>
+                )}
               </div>
-              {weightMismatch && (
-                <div className="mt-2 flex items-start gap-1.5 bg-red-100 rounded-md p-2 border border-red-200">
-                  <AlertCircle size={12} className="text-red-600 flex-shrink-0 mt-0.5" />
-                  <p className="text-[10px] font-semibold text-red-800">
-                    The sum of graded lots must exactly match the total green bean weight.
-                  </p>
-                </div>
-              )}
               {exceedsSelectedHullAmount && (
                 <div className="mt-2 flex items-start gap-1.5 bg-red-100 rounded-md p-2 border border-red-200">
                   <AlertCircle size={12} className="text-red-600 flex-shrink-0 mt-0.5" />
@@ -714,11 +666,11 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
                   </p>
                 </div>
               )}
-              {!weightMismatch && !exceedsSelectedHullAmount && totalGreenNum > 0 && (
+              {!exceedsSelectedHullAmount && gradedWeightSum > 0 && (
                 <div className="mt-2 flex items-center gap-1.5 bg-green-100 rounded-md p-2 border border-green-200">
                   <Check size={12} className="text-green-600 flex-shrink-0" />
                   <p className="text-[10px] font-semibold text-green-800">
-                    All weights are accounted for.
+                    Ready to confirm.
                   </p>
                 </div>
               )}

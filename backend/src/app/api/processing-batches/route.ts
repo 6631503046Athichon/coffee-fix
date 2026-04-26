@@ -140,26 +140,40 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (!dryingStartDate || !dryingEndDate) {
+      // Drying dates are optional. The processor can record a completed
+      // batch without exact drying dates and back-fill them later via
+      // the batch edit flow. We only validate them when supplied:
+      // - if either side is set, parse it and reject Invalid Date strings;
+      // - if both are set, enforce end >= start.
+      const parsedDryingStartDate = dryingStartDate
+        ? parseDateOnly(dryingStartDate)
+        : null;
+      const parsedDryingEndDate = dryingEndDate
+        ? parseDateOnly(dryingEndDate)
+        : null;
+      if (
+        parsedDryingStartDate &&
+        Number.isNaN(parsedDryingStartDate.getTime())
+      ) {
         return NextResponse.json(
-          { error: "Drying start date and drying end date are required for completed batches" },
+          { error: "Drying start date is not a valid date" },
           { status: 400 },
         );
       }
-
-      const parsedDryingStartDate = parseDateOnly(dryingStartDate) ?? new Date(NaN);
-      const parsedDryingEndDate = parseDateOnly(dryingEndDate) ?? new Date(NaN);
       if (
-        Number.isNaN(parsedDryingStartDate.getTime()) ||
+        parsedDryingEndDate &&
         Number.isNaN(parsedDryingEndDate.getTime())
       ) {
         return NextResponse.json(
-          { error: "Drying dates must be valid dates" },
+          { error: "Drying end date is not a valid date" },
           { status: 400 },
         );
       }
-
-      if (parsedDryingEndDate < parsedDryingStartDate) {
+      if (
+        parsedDryingStartDate &&
+        parsedDryingEndDate &&
+        parsedDryingEndDate < parsedDryingStartDate
+      ) {
         return NextResponse.json(
           { error: "Drying end date cannot be before drying start date" },
           { status: 400 },

@@ -258,7 +258,6 @@ const StartProcessingModal: React.FC<StartProcessingModalProps> = ({
               value={dryingStartDate}
               onChange={onDryingStartDateChange}
               label="Drying Start Date"
-              required
             />
           </div>
           <div>
@@ -266,7 +265,6 @@ const StartProcessingModal: React.FC<StartProcessingModalProps> = ({
               value={dryingEndDate}
               onChange={onDryingEndDateChange}
               label="Drying End Date"
-              required
             />
           </div>
         </div>

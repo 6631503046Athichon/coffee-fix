@@ -8,7 +8,11 @@ export type SortDirection = 'asc' | 'desc'
 export type ParchmentSortKeys = keyof ParchmentLot | 'id'
 export type GreenBeanSortKeys = keyof GreenBeanLot | 'id' | 'qcScore'
 
-export const ITEMS_PER_PAGE = 3
+// Default number of rows per page for parchment + green-bean tables.
+// Bumped from 3 → 5 to match the harvest/completed panels so the operator
+// sees a consistent five-rows-then-paginate rhythm across the whole
+// workbench.
+export const ITEMS_PER_PAGE = 5
 export const MAX_VISIBLE_PAGES = 5
 export const NEW_TAG_DAYS = 3
 

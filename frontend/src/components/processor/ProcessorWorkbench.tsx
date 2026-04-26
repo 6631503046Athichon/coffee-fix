@@ -244,10 +244,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     setGreenBeanCurrentPage(1);
   }, []);
 
-  // Card View pagination state
+  // Card View pagination state. Match the table-view page size of 5 so the
+  // kanban panels (Incoming Harvest, Completed Batches) stay in lockstep
+  // with the data grid — same row count per page, same numbered pagination.
   const [harvestCardPage, setHarvestCardPage] = useState(1);
   const [completedCardPage, setCompletedCardPage] = useState(1);
-  const CARD_PAGE_SIZE = 3;
+  const CARD_PAGE_SIZE = 5;
 
   // Use the currently logged-in user for QC scoring
   const processorUser = currentUser;
@@ -869,12 +871,14 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           return;
         }
 
-        if (!dryingStartDate || !dryingEndDate) {
-          setFormError("Please select both drying start and end dates.");
-          return;
-        }
-
-        if (new Date(dryingEndDate) < new Date(dryingStartDate)) {
+        // Drying dates are optional now. Only enforce ordering when both
+        // sides are filled — partial entry is allowed and the processor
+        // can complete the timeline later via the batch edit flow.
+        if (
+          dryingStartDate &&
+          dryingEndDate &&
+          new Date(dryingEndDate) < new Date(dryingStartDate)
+        ) {
           setFormError("Drying End Date cannot be before Drying Start Date.");
           return;
         }
@@ -3464,14 +3468,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </div>
                       </div>
 
-                      {/* Drying Dates Row */}
+                      {/* Drying Dates Row — both optional */}
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <DatePicker
                             value={dryingStartDate}
                             onChange={setDryingStartDate}
                             label="Drying Start Date"
-                            required
                           />
                           <input type="hidden" name="dryingStartDate" value={dryingStartDate} />
                         </div>
@@ -3480,7 +3483,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             value={dryingEndDate}
                             onChange={setDryingEndDate}
                             label="Drying End Date"
-                            required
                           />
                           <input type="hidden" name="dryingEndDate" value={dryingEndDate} />
                         </div>
@@ -3539,38 +3541,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           </div>
                         </div>
 
-                        {/* Green Bean Weight (auto) + Hulling Loss */}
-                        <div className="mb-4">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                              Total Green Bean Weight <span className="font-normal normal-case tracking-normal text-gray-400">(auto)</span>
-                            </label>
-                            {totalGreenWeight && !exceedsParchmentWeight && (
-                              <span className="text-xs font-bold text-blue-600">
-                                Hulling loss: {weightLossPercent}%
-                              </span>
-                            )}
+                        {/* Hulling-loss banner (only when over-allocated) */}
+                        {exceedsParchmentWeight && (
+                          <div className="mb-4 flex items-center gap-2 bg-red-50 rounded-lg p-2.5 border border-red-200">
+                            <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                            <p className="text-xs font-semibold text-red-700">
+                              Total exceeds parchment weight ({selectedParchment.currentWeightKg.toFixed(2)} kg)
+                            </p>
                           </div>
-                          <input
-                            type="number"
-                            step="0.1"
-                            value={totalGreenWeight}
-                            readOnly
-                            placeholder="Enter weights below"
-                            className="block w-full h-[46px] border border-gray-300 rounded-xl px-4 text-lg font-bold bg-gray-50 text-green-700 cursor-not-allowed"
-                          />
-                          {exceedsParchmentWeight && (
-                            <div className="mt-2 flex items-center gap-2 bg-red-50 rounded-lg p-2.5 border border-red-200">
-                              <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
-                              <p className="text-xs font-semibold text-red-700">
-                                Exceeds parchment weight ({selectedParchment.currentWeightKg.toFixed(2)} kg)
-                              </p>
-                            </div>
-                          )}
-                        </div>
+                        )}
 
                         {/* Divider */}
-                        <div className="relative my-5">
+                        <div className="relative mb-3">
                           <div className="absolute inset-0 flex items-center">
                             <div className="w-full border-t border-gray-200"></div>
                           </div>
@@ -3579,6 +3561,16 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               Graded Lots
                             </span>
                           </div>
+                        </div>
+
+                        {/* Column headers */}
+                        <div className="flex items-center gap-2 px-3 mb-1">
+                          <div className="w-8" />
+                          <div className="flex-1 grid grid-cols-[1.5fr_1fr] gap-2">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Grade</span>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Weight (kg)</span>
+                          </div>
+                          <div className="w-8" />
                         </div>
 
                         {/* Graded Lots */}
@@ -3593,7 +3585,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                   {index + 1}
                                 </span>
                               </div>
-                              <div className="flex-1 grid grid-cols-[1.5fr_1fr_1fr] gap-2">
+                              <div className="flex-1 grid grid-cols-[1.5fr_1fr] gap-2">
                                 <GradeDropdown
                                   value={lot.grade}
                                   onChange={(value) =>
@@ -3609,7 +3601,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                 <input
                                   type="number"
                                   step="0.1"
-                                  placeholder="kg"
+                                  placeholder="0.00"
                                   value={lot.weight}
                                   onChange={(e) =>
                                     setGradedLots(
@@ -3619,20 +3611,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                     )
                                   }
                                   required
-                                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500"
-                                />
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  placeholder="THB/kg"
-                                  value={lot.price}
-                                  onChange={(e) =>
-                                    setGradedLots(
-                                      gradedLots.map((l, i) =>
-                                        i === index ? { ...l, price: e.target.value } : l,
-                                      ),
-                                    )
-                                  }
                                   className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500"
                                 />
                               </div>
@@ -3673,51 +3651,46 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           </div>
                         )}
 
-                        {/* Summary Bar */}
+                        {/* Summary Bar — Total + Yield vs Parchment */}
                         {(() => {
-                          const pct = totalWeightNum > 0
-                            ? (gradedWeightSum / totalWeightNum) * 100
+                          const parchmentKg = selectedParchment.currentWeightKg;
+                          const yieldPct = parchmentKg > 0
+                            ? (gradedWeightSum / parchmentKg) * 100
                             : 0;
                           const hasError =
-                            weightMismatch ||
-                            exceedsParchmentWeight ||
-                            hasDuplicateHullGrades;
-                          const isComplete = !hasError && totalWeightNum > 0;
+                            exceedsParchmentWeight || hasDuplicateHullGrades;
+                          const isComplete = !hasError && gradedWeightSum > 0;
                           return (
                             <div className={`mt-4 rounded-xl p-3 border transition-colors ${hasError ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"}`}>
-                              {/* Progress bar */}
+                              {/* Yield bar (sum vs parchment) */}
                               <div className="h-1.5 w-full bg-gray-200 rounded-full mb-2.5 overflow-hidden">
                                 <div
                                   className={`h-full rounded-full transition-all duration-300 ${hasError ? "bg-red-400" : isComplete ? "bg-green-400" : "bg-yellow-400"}`}
-                                  style={{ width: `${Math.min(100, pct)}%` }}
+                                  style={{ width: `${Math.min(100, yieldPct)}%` }}
                                 />
                               </div>
                               <div className="flex items-center justify-between">
                                 <div className="flex items-baseline gap-1.5">
+                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mr-1">Total</span>
                                   <span className={`text-2xl font-extrabold ${hasError ? "text-red-600" : "text-green-600"}`}>
                                     {gradedWeightSum.toFixed(2)}
                                   </span>
-                                  <span className="text-sm text-gray-400">/</span>
-                                  <span className="text-sm font-bold text-gray-600">
-                                    {totalWeightNum.toFixed(2)} kg
+                                  <span className="text-sm font-bold text-gray-500">kg</span>
+                                  <span className="text-xs text-gray-400 ml-2">
+                                    yield {yieldPct.toFixed(1)}%
                                   </span>
                                 </div>
                                 {isComplete && <Check className="h-5 w-5 text-green-500" />}
                                 {hasError && <AlertCircle className="h-5 w-5 text-red-500" />}
                               </div>
-                              {weightMismatch && (
+                              {exceedsParchmentWeight && (
                                 <p className="text-[11px] font-semibold text-red-600 mt-1">
-                                  Sum of grades must match total weight
-                                </p>
-                              )}
-                              {exceedsParchmentWeight && !weightMismatch && (
-                                <p className="text-[11px] font-semibold text-red-600 mt-1">
-                                  Exceeds parchment weight ({selectedParchment.currentWeightKg.toFixed(2)} kg)
+                                  Total exceeds parchment weight ({parchmentKg.toFixed(2)} kg)
                                 </p>
                               )}
                               {isComplete && (
                                 <p className="text-[11px] font-semibold text-green-600 mt-1">
-                                  All weights accounted for
+                                  Ready to confirm
                                 </p>
                               )}
                             </div>

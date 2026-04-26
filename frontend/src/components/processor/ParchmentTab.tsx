@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { Pagination, CropYearChips } from "./workbench";
 import ReactDOM from "react-dom";
 import {
   User,
@@ -15,6 +16,7 @@ import {
   History,
   ChevronDown,
   ChevronRight,
+  ChevronsRight,
   FileSpreadsheet,
   Leaf,
   ExternalLink,
@@ -90,6 +92,13 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   const [showRecordProcessModal, setShowRecordProcessModal] = useState(false);
   const [selectedParchmentForWithdraw, setSelectedParchmentForWithdraw] =
     useState<ParchmentLot | null>(null);
+  // Pre-selected withdrawal type when opening the modal. The "Hull & Grade"
+  // shortcut button on each row sets this to "HullAndGrade" so the modal
+  // lands on the Hull form directly; the generic "Withdraw" button leaves
+  // it undefined so the modal falls back to its default ("RoastingStock").
+  const [withdrawInitialType, setWithdrawInitialType] = useState<
+    "RoastingStock" | "Sale" | "HullAndGrade" | "Sample" | "Export" | "Other" | undefined
+  >(undefined);
   const [selectedParchmentForHistory, setSelectedParchmentForHistory] =
     useState<ParchmentLot | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -173,6 +182,38 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         h.cherryVariety.toLowerCase().includes(q),
     );
   }, [readyHarvestLots, harvestSearchText]);
+
+  // Pagination — cap each panel at 5 rows so the page stays scannable.
+  const PAGE_SIZE = 5;
+
+  const [incomingHarvestPage, setIncomingHarvestPage] = useState(1);
+  const incomingHarvestTotalPages = Math.max(
+    1,
+    Math.ceil(filteredHarvestLots.length / PAGE_SIZE),
+  );
+  const paginatedIncomingHarvestLots = useMemo(() => {
+    const start = (incomingHarvestPage - 1) * PAGE_SIZE;
+    return filteredHarvestLots.slice(start, start + PAGE_SIZE);
+  }, [filteredHarvestLots, incomingHarvestPage]);
+
+  // Reset to page 1 whenever the search input changes — otherwise the user
+  // can be stuck on page 5 of an empty result set.
+  useEffect(() => {
+    setIncomingHarvestPage(1);
+  }, [harvestSearchText]);
+
+  // Per-type pagination state: each grouped Parchment-Stock card has its
+  // own page counter keyed by process type. Defaults to page 1 on first
+  // expansion.
+  const [parchmentTypePages, setParchmentTypePages] = useState<
+    Record<string, number>
+  >({});
+  const setParchmentTypePage = useCallback(
+    (processType: string, page: number) => {
+      setParchmentTypePages((prev) => ({ ...prev, [processType]: page }));
+    },
+    [],
+  );
 
   // Filter + search parchment lots
   const filteredLots = useMemo(() => {
@@ -384,11 +425,14 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         setRecordProcessError("Moisture content must be between 0 and 100");
         return;
       }
-      if (!dryingStartDate || !dryingEndDate) {
-        setRecordProcessError("Please select both drying start and end dates");
-        return;
-      }
-      if (new Date(dryingEndDate) < new Date(dryingStartDate)) {
+      // Drying dates are optional now. Only enforce ordering when both
+      // are filled in — partial entry (only start, only end, or neither)
+      // is allowed and the processor can complete the timeline later.
+      if (
+        dryingStartDate &&
+        dryingEndDate &&
+        new Date(dryingEndDate) < new Date(dryingStartDate)
+      ) {
         setRecordProcessError(
           "Drying end date cannot be before drying start date",
         );
@@ -637,7 +681,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {filteredHarvestLots.map((lot) => {
+                      {paginatedIncomingHarvestLots.map((lot) => {
                         const availableWeight = lot.remainingWeightKg ?? lot.weightKg;
                         return (
                           <tr key={lot.id} className="hover:bg-gray-50 transition-colors">
@@ -678,6 +722,13 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                     </tbody>
                   </table>
                 </div>
+                {incomingHarvestTotalPages > 1 && (
+                  <Pagination
+                    currentPage={incomingHarvestPage}
+                    totalPages={incomingHarvestTotalPages}
+                    onPageChange={setIncomingHarvestPage}
+                  />
+                )}
               </>
             )}
           </div>
@@ -791,6 +842,17 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
       ) : (
         parchmentProcessSummary.map((row) => {
           const isExpanded = expandedProcessSummaries.has(row.processType);
+          // Paginate sources within each process-type group at 5 per page.
+          const groupPage = parchmentTypePages[row.processType] ?? 1;
+          const groupTotalPages = Math.max(
+            1,
+            Math.ceil(row.sources.length / PAGE_SIZE),
+          );
+          const safePage = Math.min(groupPage, groupTotalPages);
+          const pagedSources = row.sources.slice(
+            (safePage - 1) * PAGE_SIZE,
+            safePage * PAGE_SIZE,
+          );
           return (
             <div
               key={row.processType}
@@ -859,7 +921,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {row.sources.map((s) => {
+                      {pagedSources.map((s) => {
                         const lot = s.lot;
                         const historyCount =
                           lot.withdrawalHistory?.length || 0;
@@ -958,15 +1020,30 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                             </td>
                             <td className="px-4 py-3 text-right">
                               {lot.currentWeightKg > 0 && (
-                                <button
-                                  onClick={() =>
-                                    setSelectedParchmentForWithdraw(lot)
-                                  }
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-all"
-                                >
-                                  <Package className="h-3.5 w-3.5" />
-                                  Withdraw
-                                </button>
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={() => {
+                                      setWithdrawInitialType("HullAndGrade");
+                                      setSelectedParchmentForWithdraw(lot);
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-all"
+                                    title="Hull & grade — split this parchment into green-bean lots by grade"
+                                  >
+                                    <ChevronsRight className="h-3.5 w-3.5" />
+                                    Hull & Grade
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setWithdrawInitialType(undefined);
+                                      setSelectedParchmentForWithdraw(lot);
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-all"
+                                    title="Withdraw — sale, sample, export, roasting stock, or other"
+                                  >
+                                    <Package className="h-3.5 w-3.5" />
+                                    Withdraw
+                                  </button>
+                                </div>
                               )}
                             </td>
                           </tr>
@@ -974,6 +1051,15 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                       })}
                     </tbody>
                   </table>
+                  {groupTotalPages > 1 && (
+                    <Pagination
+                      currentPage={safePage}
+                      totalPages={groupTotalPages}
+                      onPageChange={(p) =>
+                        setParchmentTypePage(row.processType, p)
+                      }
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -1085,28 +1171,24 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                   />
                 </div>
 
-                {/* Crop year (optional) */}
+                {/* Crop year — chip group, matches the Workbench's Record
+                    Process modal so the operator sees the same picker on
+                    both pages instead of a "None" dropdown here and chips
+                    there. */}
                 {data.cropYears.length > 0 && (
                   <div className="mb-4">
                     <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wider">
-                      Crop Year (optional)
+                      Crop Year
                     </label>
-                    <Select
-                      options={[
-                        { value: "", label: "None" },
-                        ...data.cropYears.map((cy) => ({
-                          value: cy.id,
-                          label: cy.year,
-                        })),
-                      ]}
-                      value={recordProcessForm.cropYearId || ""}
+                    <CropYearChips
+                      years={data.cropYears}
+                      value={recordProcessForm.cropYearId}
                       onChange={(val) =>
                         setRecordProcessForm((f) => ({
                           ...f,
-                          cropYearId: val ? String(val) : "",
+                          cropYearId: val,
                         }))
                       }
-                      placeholder="None"
                     />
                   </div>
                 )}
@@ -1156,7 +1238,11 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                   </div>
                 </div>
 
-                {/* Drying dates */}
+                {/* Drying dates — optional. Operators often record the
+                    process before drying is complete (or back-fill data
+                    where they don't remember exact dates) so the form
+                    saves with empty drying dates and the processor can
+                    fill them later via the batch edit flow. */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <DatePicker
                     value={recordProcessForm.dryingStartDate}
@@ -1167,7 +1253,6 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                       }))
                     }
                     label="Drying Start Date"
-                    required
                   />
                   <DatePicker
                     value={recordProcessForm.dryingEndDate}
@@ -1178,7 +1263,6 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                       }))
                     }
                     label="Drying End Date"
-                    required
                   />
                 </div>
 
@@ -1241,8 +1325,12 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                   parchmentLot={selectedParchmentForWithdraw}
                   users={data.users}
                   onSubmit={handleParchmentWithdraw}
-                  onCancel={() => setSelectedParchmentForWithdraw(null)}
+                  onCancel={() => {
+                    setSelectedParchmentForWithdraw(null);
+                    setWithdrawInitialType(undefined);
+                  }}
                   isSubmitting={isSubmitting}
+                  initialWithdrawalType={withdrawInitialType}
                 />
               </div>
             </div>
