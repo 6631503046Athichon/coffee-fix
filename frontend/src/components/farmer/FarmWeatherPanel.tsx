@@ -786,11 +786,6 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
         </div>
       )}
       </div>
-      <div className="flex justify-end pt-4 border-t border-gray-200">
-        <Button type="button" variant="primary" onClick={onClose}>
-          ยืนยัน
-        </Button>
-      </div>
     </Modal>
   );
 };
