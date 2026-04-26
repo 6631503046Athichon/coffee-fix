@@ -23,6 +23,10 @@ interface AutoFetchState {
   configs: Map<string, FarmAutoFetchConfig>;
   intervals: Map<string, NodeJS.Timeout>;
   lastFetchTimes: Map<string, Date>;
+  // Tracks farms with an in-flight POST so two concurrent fetches for the
+  // same farm (e.g. StrictMode double-mount, rapid effect re-runs) don't
+  // both POST a weather record and create a duplicate row.
+  inFlight: Set<string>;
   onRecordSaved?: (record: WeatherRecord) => void;
 }
 
@@ -30,6 +34,7 @@ const state: AutoFetchState = {
   configs: new Map(),
   intervals: new Map(),
   lastFetchTimes: new Map(),
+  inFlight: new Set(),
 };
 
 // Load configs from Farm data (database)
@@ -78,6 +83,23 @@ const fetchWeatherForFarm = async (farmId: string): Promise<void> => {
   const config = state.configs.get(farmId);
   if (!config || !config.enabled) return;
 
+  // In-flight guard: a second call while the first is still awaiting would
+  // otherwise see no lastFetchTime (since the original sets it only after
+  // the POST resolves) and produce a duplicate record. Bail early when a
+  // fetch is already running for this farm.
+  if (state.inFlight.has(farmId)) {
+    console.log(
+      `[WeatherAutoFetch] Skipping — fetch already in flight for ${config.farmName}`,
+    );
+    return;
+  }
+
+  state.inFlight.add(farmId);
+  // Claim the slot synchronously (before awaiting). Any caller that races
+  // in while we're awaiting the API will see a fresh lastFetchTime in the
+  // immediate-fetch gate and skip its own immediate fetch.
+  state.lastFetchTimes.set(farmId, new Date());
+
   console.log(`[WeatherAutoFetch] Fetching weather for farm: ${config.farmName}`);
 
   try {
@@ -99,7 +121,6 @@ const fetchWeatherForFarm = async (farmId: string): Promise<void> => {
       };
 
       const newRecord = await addWeatherRecord(weatherRecord as Omit<WeatherRecord, 'id'>);
-      state.lastFetchTimes.set(farmId, new Date());
 
       console.log(`[WeatherAutoFetch] Saved weather record for farm: ${config.farmName}`, newRecord);
 
@@ -110,6 +131,8 @@ const fetchWeatherForFarm = async (farmId: string): Promise<void> => {
     }
   } catch (error) {
     console.error(`[WeatherAutoFetch] Error fetching weather for farm ${config.farmName}:`, error);
+  } finally {
+    state.inFlight.delete(farmId);
   }
 };
 

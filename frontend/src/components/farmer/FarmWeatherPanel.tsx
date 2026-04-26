@@ -1,11 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Cloud, Thermometer, Droplets, CloudRain, RefreshCw, X, CheckCircle, Edit3, Trash2, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Cloud, Thermometer, Droplets, CloudRain, RefreshCw, X, CheckCircle, Edit3, Trash2, Loader2, ChevronLeft, ChevronRight, Calendar, ArrowRight } from 'lucide-react';
 import { Button, Input, Modal } from '../common';
 import Select from '../common/Select';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Farm, WeatherRecord, UserRole } from '../../types';
-import { addWeatherRecord, updateWeatherRecord, deleteWeatherRecord } from '../../services/weatherService';
+import {
+  addWeatherRecord,
+  updateWeatherRecord,
+  deleteWeatherRecord,
+  getAllWeatherRecords,
+} from '../../services/weatherService';
 import { fetchWeatherData } from '../../services/weatherApiService';
 import { updateFarmConfig } from '../../services/weatherAutoFetchService';
 import { updateFarmWeatherSettings } from '../../services/farmService';
@@ -45,7 +50,33 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 5;
+  // 10 rows fits ~2 days of every-5-minute auto-fetch on the first page.
+  // 5 was too small — users saw only the most recent few records and
+  // assumed older data was deleted.
+  const ITEMS_PER_PAGE = 10;
+
+  // Date-range filter for the history table. Default to the last 30 days
+  // so the initial fetch is light even when the DB holds years of 5-minute
+  // auto-fetch records. Date inputs are YYYY-MM-DD (ISO date), inclusive
+  // on both ends. Filter changes trigger a backend refetch (see effect
+  // below) so the panel only ever loads what's in the visible range.
+  const todayIso = new Date().toISOString().substring(0, 10);
+  const thirtyDaysAgoIso = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 29);
+    return d.toISOString().substring(0, 10);
+  })();
+  const [filterStartDate, setFilterStartDate] = useState(thirtyDaysAgoIso);
+  const [filterEndDate, setFilterEndDate] = useState(todayIso);
+
+  // Panel-managed weather records. We fetch directly from the backend
+  // with date params so the dataset stays small even when the DB has
+  // hundreds of thousands of rows accumulated over 2+ years of 5-min
+  // auto-fetch. We deliberately do NOT use data.weatherRecords here.
+  const [panelRecords, setPanelRecords] = useState<WeatherRecord[]>([]);
+  const [isLoadingRecords, setIsLoadingRecords] = useState(false);
+  // Bumped on save/edit/delete to retrigger the fetch effect.
+  const [refreshTick, setRefreshTick] = useState(0);
     const [nextAutoFetch, setNextAutoFetch] = useState<Date | null>(null);
   const [isAutoFetchInitialized, setIsAutoFetchInitialized] = useState(false); // ป้องกัน race condition
 
@@ -75,26 +106,75 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
     return () => clearInterval(displayInterval);
   }, [autoFetchEnabled, autoFetchInterval, farm]);
 
-  const selectedFarmRecords = useMemo(() => {
-    if (!farm) {
-      return [];
+  // Syncs the panel with auto-fetch saves. The auto-fetch service
+  // streams new records into data.weatherRecords (via the App.tsx
+  // onRecordSaved callback). Watching the count for this farm bumps
+  // refreshTick so the panel re-runs its backend fetch and the new row
+  // appears in the table without a manual refresh.
+  const farmRecordCount = useMemo(
+    () => data.weatherRecords.filter(r => r.farmId === farm?.id).length,
+    [data.weatherRecords, farm?.id],
+  );
+  useEffect(() => {
+    if (!farm?.id) return;
+    setRefreshTick(t => t + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [farmRecordCount]);
+
+  // Lazy backend-filtered fetch. Fires whenever the farm or filter
+  // changes (or after a save/edit/delete bumps refreshTick). The backend
+  // already filters by date, so we get only the records in range —
+  // critical for scaling to 5-min × 2-year datasets where loading
+  // everything would mean 200k+ rows in the browser.
+  useEffect(() => {
+    if (!farm?.id) {
+      setPanelRecords([]);
+      return;
     }
-    return data.weatherRecords
-      .filter(record => record.farmId === farm.id)
-      .sort((a, b) => {
-        // Primary: newest recordDate first (the date the weather is for).
-        const dateDiff =
-          new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime();
-        if (dateDiff !== 0) return dateDiff;
-        // Tiebreak: when several records share the same recordDate (e.g. the
-        // auto-fetch that runs every hour all stamps today's date), order by
-        // createdAt so the row the user just saved sits at the top instead of
-        // landing in random insert order.
-        const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return bCreated - aCreated;
+    let cancelled = false;
+    setIsLoadingRecords(true);
+    getAllWeatherRecords({
+      farmId: farm.id,
+      startDate: filterStartDate || undefined,
+      endDate: filterEndDate || undefined,
+    })
+      .then(records => {
+        if (!cancelled) {
+          setPanelRecords(records);
+          setIsLoadingRecords(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setIsLoadingRecords(false);
       });
-  }, [data.weatherRecords, farm]);
+    return () => {
+      cancelled = true;
+    };
+  }, [farm?.id, filterStartDate, filterEndDate, refreshTick]);
+
+  // Display records — sorted; backend already applied farmId + date
+  // range filter so we only need to order by recency here.
+  const selectedFarmRecords = useMemo(() => {
+    return [...panelRecords].sort((a, b) => {
+      // Primary: newest recordDate first (the date the weather is for).
+      const dateDiff =
+        new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      // Tiebreak: when several records share the same recordDate (e.g. the
+      // auto-fetch that runs every hour all stamps today's date), order by
+      // createdAt so the row the user just saved sits at the top instead of
+      // landing in random insert order.
+      const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bCreated - aCreated;
+    });
+  }, [panelRecords]);
+
+  // Reset to page 1 when the date filter changes so the user doesn't land
+  // on an empty page.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterStartDate, filterEndDate]);
 
   // Pagination calculations
   const totalPages = Math.ceil(selectedFarmRecords.length / ITEMS_PER_PAGE);
@@ -243,6 +323,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
           ...prev,
           weatherRecords: prev.weatherRecords.map(r => r.id === editingRecordId ? updatedRecord : r)
         }));
+        setRefreshTick(t => t + 1); // panel reads from its own fetch — refetch to reflect change
         setWeatherToast({ type: 'success', message: 'อัปเดตข้อมูลอากาศเรียบร้อยแล้ว' });
       } else {
         const createdRecord = await addWeatherRecord(weatherData);
@@ -250,6 +331,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
           ...prev,
           weatherRecords: [createdRecord, ...prev.weatherRecords.filter(r => r.id !== createdRecord.id)],
         }));
+        setRefreshTick(t => t + 1);
         setWeatherToast({ type: 'success', message: 'บันทึกข้อมูลอากาศใหม่แล้ว' });
       }
 
@@ -298,6 +380,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
         ...prev,
         weatherRecords: prev.weatherRecords.filter(record => record.id !== recordId),
       }));
+      setRefreshTick(t => t + 1);
       if (editingRecordId === recordId) {
         handleWeatherCancelEdit();
       }
@@ -670,13 +753,128 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
           </form>
 
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <h3 className="text-lg font-semibold text-gray-900">ประวัติการบันทึกข้อมูลอากาศ</h3>
-              <p className="text-sm text-gray-500">มี {selectedFarmRecords.length} รายการที่บันทึกไว้</p>
+              <p className="text-sm text-gray-500 inline-flex items-center gap-2">
+                {isLoadingRecords ? (
+                  <span className="inline-flex items-center gap-1.5 text-blue-600">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    กำลังโหลด...
+                  </span>
+                ) : (
+                  <>
+                    ในช่วงที่เลือก{' '}
+                    <span className="font-semibold text-gray-700">
+                      {selectedFarmRecords.length.toLocaleString()}
+                    </span>{' '}
+                    รายการ
+                  </>
+                )}
+              </p>
+            </div>
+
+            {/* Date-range filter — always visible. Default load is the
+                last 30 days so the initial fetch is cheap even when the
+                DB has years of 5-min records. Backend filters by date so
+                expanding the range only pulls what's needed. The two date
+                inputs use the custom DatePicker (same as the recordDate
+                field above) — the previous native <input type="date">
+                rendered as Chrome's plain calendar popup which clashed
+                with the rest of the UI. */}
+            <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50/60 to-white p-4 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="p-1.5 rounded-lg bg-blue-100 text-blue-600">
+                  <Calendar className="h-4 w-4" />
+                </div>
+                <span className="text-sm font-semibold text-slate-700">
+                  ช่วงวันที่
+                </span>
+                <span className="text-xs text-slate-500">
+                  เลือกช่วงเวลาที่ต้องการดู
+                </span>
+              </div>
+              <div className="flex items-end flex-wrap gap-3">
+                <div className="flex-1 min-w-[160px]">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                    จากวันที่
+                  </label>
+                  <DatePicker
+                    value={filterStartDate}
+                    onChange={(v) => setFilterStartDate(v)}
+                    placeholder="เลือกวันที่"
+                  />
+                </div>
+                <div className="hidden md:flex items-center pb-2.5 text-slate-400">
+                  <ArrowRight className="h-4 w-4" />
+                </div>
+                <div className="flex-1 min-w-[160px]">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                    ถึงวันที่
+                  </label>
+                  <DatePicker
+                    value={filterEndDate}
+                    onChange={(v) => setFilterEndDate(v)}
+                    placeholder="เลือกวันที่"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterStartDate('');
+                    setFilterEndDate('');
+                  }}
+                  disabled={!filterStartDate && !filterEndDate}
+                  className="h-[46px] px-4 border-2 border-slate-200 bg-white rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+                >
+                  ล้างตัวกรอง
+                </button>
+              </div>
+
+              {/* Quick-range presets — show active state when the
+                  current filter matches the preset's range. Lets the
+                  operator jump back to common windows in one click. */}
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-blue-100">
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  ทางลัด:
+                </span>
+                {([
+                  { label: 'วันนี้', days: 0 },
+                  { label: '7 วันที่ผ่านมา', days: 6 },
+                  { label: '30 วันที่ผ่านมา', days: 29 },
+                  { label: '90 วันที่ผ่านมา', days: 89 },
+                ] as const).map(p => {
+                  const end = new Date()
+                  const start = new Date()
+                  start.setDate(start.getDate() - p.days)
+                  const startIso = start.toISOString().substring(0, 10)
+                  const endIso = end.toISOString().substring(0, 10)
+                  const isActive =
+                    filterStartDate === startIso && filterEndDate === endIso
+                  return (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => {
+                        setFilterStartDate(startIso)
+                        setFilterEndDate(endIso)
+                      }}
+                      className={`h-8 px-3 rounded-lg text-xs font-semibold transition-all ${
+                        isActive
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'border border-slate-200 bg-white text-slate-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
             {selectedFarmRecords.length === 0 ? (
               <div className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-gray-500">
-                ยังไม่มีการบันทึกข้อมูลอากาศสำหรับฟาร์มนี้
+                {filterStartDate || filterEndDate
+                  ? 'ไม่มีข้อมูลในช่วงวันที่เลือก ลองปรับช่วงเวลาหรือกดล้างตัวกรอง'
+                  : 'ยังไม่มีการบันทึกข้อมูลอากาศสำหรับฟาร์มนี้'}
               </div>
             ) : (
               <div className="overflow-x-auto">

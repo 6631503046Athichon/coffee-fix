@@ -34,7 +34,13 @@ export async function GET(request: NextRequest) {
       where.farmId = { in: farms.map(f => f.id) }
     }
 
-    const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '100', 10), 200)
+    // Cap sized for the worst-case scenario the demo wants to support:
+    // 5-minute auto-fetch × 2 years × 1 farm ≈ 210,000 rows. We bump the
+    // upper bound to 250,000 so the API can return a full historical
+    // window when the client asks for one (typically scoped via
+    // startDate/endDate). Default page is small (1,000) so the DataContext
+    // initial load stays light.
+    const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '1000', 10), 250000)
 
     const weatherRecords = await prisma.weatherRecord.findMany({
       where,
@@ -84,13 +90,55 @@ export async function POST(request: NextRequest) {
     } = body
 
     // Validation
-    if (!farmId || !farmPlotLocation || !recordDate || 
-        temperatureMin === undefined || temperatureMax === undefined || 
+    if (!farmId || !farmPlotLocation || !recordDate ||
+        temperatureMin === undefined || temperatureMax === undefined ||
         temperatureAvg === undefined || rainfall === undefined || humidity === undefined) {
       return NextResponse.json(
         { error: 'Farm ID, farm plot location, record date, and all weather data are required' },
         { status: 400 }
       )
+    }
+
+    // Dedup safety net for API-source auto-fetches: if a fresh API record
+    // for this farm already exists within the last 60s, return it instead
+    // of creating a duplicate. The client side has its own in-flight lock,
+    // but this guards against rogue concurrent callers (multiple browser
+    // tabs, retried requests, StrictMode races) ending up with two rows
+    // at the same minute.
+    if (source === 'API') {
+      const sixtySecondsAgo = new Date(Date.now() - 60_000)
+      const recent = await prisma.weatherRecord.findFirst({
+        where: {
+          farmId,
+          source: 'API',
+          createdAt: { gte: sixtySecondsAgo },
+        },
+        include: {
+          farm: {
+            select: {
+              id: true,
+              farmName: true,
+              location: true,
+            },
+          },
+          recordedByUser: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (recent) {
+        return NextResponse.json(
+          {
+            weatherRecord: recent,
+            message: 'Skipped duplicate API record (within 60s window)',
+          },
+          { status: 200 },
+        )
+      }
     }
 
     const weatherRecord = await prisma.weatherRecord.create({
