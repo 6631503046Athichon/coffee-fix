@@ -402,13 +402,25 @@ model WeatherRecord {
   source           WeatherSource @default(Manual)
   notes            String?
   recordedBy       String?
+  // Minute-truncated fetch timestamp set by the server-side auto-fetch
+  // scheduler. The (farmId, fetchSlot) unique constraint makes "two API
+  // rows for the same farm in the same minute" impossible at the DB level,
+  // regardless of how many app instances or dev machines are running.
+  // Manual records leave it NULL (Postgres allows repeated NULLs in a
+  // unique index).
+  fetchSlot        DateTime?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   farm             Farm          @relation(fields: [farmId], references: [id], onDelete: Cascade)
   recordedByUser   User?         @relation(fields: [recordedBy], references: [id])
 
+  @@unique([farmId, fetchSlot])
   @@index([farmId])
   @@index([recordDate])
+  // Composite index for the weather panel's scoped query
+  // (farmId + recordDate range, newest first) — keeps the date-filtered
+  // history fast even at hundreds of thousands of rows.
+  @@index([farmId, recordDate(sort: Desc)])
 }
 
 model CuppingSession {
