@@ -18,6 +18,12 @@ dist-ssr
 frontend/dist
 backend/.next
 backend/out
+.next
+
+# Test coverage output
+coverage
+backend/coverage
+frontend/coverage
 
 # Environment variables
 *.local
@@ -35,6 +41,8 @@ backend/prisma/*.db-journal
 DEMO_CREDENTIALS.md
 coffee-fix-schema.sql
 *.dump
+# Contains a hardcoded live DB connection string — never commit
+backend/test-db-connection.js
 
 # Editor directories and files
 .vscode/*
