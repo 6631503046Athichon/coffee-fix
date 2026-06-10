@@ -55,7 +55,6 @@ frontend/
 │   │   ├── geminiService.ts               # Gemini AI service
 │   │   ├── userService.ts
 │   │   ├── coffeeVarietyService.ts
-│   │   ├── cropYearService.ts
 │   │   ├── activityTypeService.ts
 │   │   └── processTypeService.ts
 │   ├── utils/                       # Utility modules
