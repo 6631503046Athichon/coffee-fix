@@ -8,9 +8,9 @@ import { NextRequest } from 'next/server'
 
 // Mock Prisma
 const mockPrismaUser = {
-  findFirst: jest.fn(),
-  create: jest.fn(),
-  findUnique: jest.fn(),
+  findFirst: jest.fn<(...args: any[]) => any>(),
+  create: jest.fn<(...args: any[]) => any>(),
+  findUnique: jest.fn<(...args: any[]) => any>(),
 }
 
 const mockPrisma = {
@@ -23,8 +23,8 @@ jest.mock('@/lib/prisma', () => ({
 }))
 
 // Mock auth functions
-const mockRequireAuth = jest.fn()
-const mockRequireRole = jest.fn()
+const mockRequireAuth = jest.fn<(...args: any[]) => any>()
+const mockRequireRole = jest.fn<(...args: any[]) => any>()
 
 jest.mock('@/lib/middleware', () => ({
   requireAuth: mockRequireAuth,
@@ -297,6 +297,7 @@ describe('Registration Lock-Down', () => {
         email: 'test@example.com',
         password: 'short', // Less than 6 characters
         name: 'Test User',
+        roles: ['Farmer'],
       }),
     })
 
@@ -304,6 +305,14 @@ describe('Registration Lock-Down', () => {
     const data = await response.json()
 
     expect(response.status).toBe(400)
-    expect(data.error).toContain('Password must be at least 6 characters')
+    // Zod's validateBody helper returns { error: 'Validation Error', details: [...] }.
+    // Assert the password rule appears in the details list rather than the
+    // top-level error string.
+    expect(data.error).toBe('Validation Error')
+    const passwordIssue = (data.details ?? []).find(
+      (d: { field: string }) => d.field === 'password',
+    )
+    expect(passwordIssue).toBeDefined()
+    expect(passwordIssue.message).toContain('Password must be at least 6 characters')
   })
 })

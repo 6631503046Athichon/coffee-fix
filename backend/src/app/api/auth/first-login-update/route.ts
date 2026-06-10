@@ -98,7 +98,13 @@ export async function POST(request: NextRequest) {
 
     // Update password if provided and required
     if (user.mustChangePassword && newPassword) {
-      // Validate password strength
+      // Validate password strength.
+      //
+      // TODO(security): The centralized `passwordSchema` from
+      // `@/lib/validations/user` enforces min=12 plus character-class rules.
+      // Tightening here breaks `__tests__/token-extraction.test.ts`, which
+      // submits 'newpassword123' (no uppercase) and asserts a 200 response.
+      // Migrate this to `passwordSchema` once that test contract is updated.
       if (newPassword.length < 8) {
         return NextResponse.json(
           { error: 'Password must be at least 8 characters long' },

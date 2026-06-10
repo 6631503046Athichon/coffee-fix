@@ -16,16 +16,16 @@ import { NextRequest } from 'next/server'
 describe('Farm Creation Role-Based Authorization', () => {
   const mockPrisma = {
     farm: {
-      create: jest.fn(),
-      findMany: jest.fn(),
+      create: jest.fn<(...args: any[]) => any>(),
+      findMany: jest.fn<(...args: any[]) => any>(),
     },
     user: {
-      findUnique: jest.fn(),
+      findUnique: jest.fn<(...args: any[]) => any>(),
     },
   }
 
-  const mockRequireAuth = jest.fn()
-  const mockRequireRole = jest.fn()
+  const mockRequireAuth = jest.fn<(...args: any[]) => any>()
+  const mockRequireRole = jest.fn<(...args: any[]) => any>()
   const mockHandleApiError = jest.fn((error: any) => {
     const status =
       error.message === 'Unauthorized' || error.message === 'Invalid or expired token' ? 401 :

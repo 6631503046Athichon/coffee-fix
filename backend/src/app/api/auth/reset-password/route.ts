@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma'
 import { hashPassword, verifyPassword } from '@/lib/auth'
 import { handleApiError } from '@/lib/middleware'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
+import { passwordSchema } from '@/lib/validations/user'
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,9 +22,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (password.length < 8) {
+    // Enforce the centralized password complexity policy (length + character
+    // classes). Returns the first failing rule's message so the user gets a
+    // specific error rather than a generic "weak password".
+    const passwordCheck = passwordSchema.safeParse(password)
+    if (!passwordCheck.success) {
       return NextResponse.json(
-        { error: 'Password must be at least 8 characters' },
+        { error: passwordCheck.error.issues[0]?.message ?? 'Invalid password' },
         { status: 400 }
       )
     }

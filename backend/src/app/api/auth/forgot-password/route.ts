@@ -68,28 +68,20 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Send password reset email
-    // If email fails, return error (no mock mode)
+    // Send password reset email. If sending fails we log it server-side and
+    // STILL return the same generic 200 message — exposing a 500 here turns
+    // the endpoint into a user-enumeration oracle (existing addresses error
+    // out when SMTP misfires, non-existing ones quietly succeed). Whoever's
+    // on call can see the failure in the logs.
     try {
       await sendPasswordResetEmail(user.email, resetToken, user.name)
     } catch (emailError) {
-      // Email failed - return error to user
       console.error('[FORGOT-PASSWORD] Failed to send email:', emailError)
-      const detail = emailError instanceof Error ? emailError.message : String(emailError)
-      return NextResponse.json(
-        {
-          error: `Failed to send password reset email: ${detail}`,
-          emailError: true,
-        },
-        { status: 500 }
-      )
     }
 
-    const response = {
+    return NextResponse.json({
       message: 'If an account with that email exists, we have sent a password reset link.',
-    }
-
-    return NextResponse.json(response)
+    })
   } catch (error) {
     return handleApiError(error)
   }

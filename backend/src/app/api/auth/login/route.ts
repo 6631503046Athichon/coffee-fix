@@ -43,6 +43,20 @@ export async function POST(request: NextRequest) {
     })
     if (limited) return limited
 
+    // Second bucket: IP-only at 50 / 15min. The per-(IP+email) bucket above
+    // is intentionally permissive so legitimate users on a shared NAT aren't
+    // locked out, but that leaves credential-stuffing wide open — an attacker
+    // can hit `attempts × accounts` requests from one IP without tripping it.
+    // This coarse IP-only ceiling caps the total damage one IP can do across
+    // all accounts in the window.
+    const ipLimited = await rateLimit(request, {
+      windowMs: 15 * 60 * 1000,
+      max: 50,
+      name: 'login-ip',
+      keyFn: (req) => getClientIp(req),
+    })
+    if (ipLimited) return ipLimited
+
     // Validate request body with Zod
     const validation = await validateBody(request, loginSchema)
     if (!validation.success) {
@@ -99,6 +113,9 @@ export async function POST(request: NextRequest) {
     })
 
     // Create response
+    // Note: token is intentionally NOT returned in the body. The httpOnly
+    // cookie set below is the only place the browser should see it — keeping
+    // it out of JS-readable storage avoids XSS-driven token exfiltration.
     const response = NextResponse.json({
       user: {
         id: user.id,
@@ -114,7 +131,6 @@ export async function POST(request: NextRequest) {
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       },
-      token, // Also include token in response for localStorage fallback
       message: 'Login successful',
     })
 
@@ -142,11 +158,15 @@ export async function POST(request: NextRequest) {
 
     return response
   } catch (error) {
-    // Log full error for debugging 500 errors
+    // Log full error for debugging 500 errors. Stack traces are noisy and
+    // can leak filesystem paths / sensitive frames to log aggregators — only
+    // emit them outside production.
     console.error('[LOGIN] Error:', error)
     if (error instanceof Error) {
       console.error('[LOGIN] Error message:', error.message)
-      console.error('[LOGIN] Error stack:', error.stack)
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('[LOGIN] Error stack:', error.stack)
+      }
     }
     return handleApiError(error)
   }

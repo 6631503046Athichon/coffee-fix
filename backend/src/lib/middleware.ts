@@ -12,8 +12,16 @@ export interface AuthenticatedUser {
   isSuperAdmin: boolean
 }
 
-// In-memory cache for authenticated users (TTL: 2 minutes)
-const AUTH_CACHE_TTL = 2 * 60 * 1000
+// In-memory cache for authenticated users.
+//
+// TTL is kept short (10s) on purpose: it's just enough to absorb the burst of
+// requests a single page-load fires (each subresource that hits the API
+// re-runs requireAuth), without holding stale state for long. Anything bigger
+// means a user who's been deactivated, had their role revoked, or had their
+// account disabled keeps the run of the app for up to TTL seconds after the
+// admin's change — i.e. revocation latency. 10s is the smallest window that
+// still meaningfully reduces DB load.
+const AUTH_CACHE_TTL = 10 * 1000
 const authCache = new Map<string, { user: AuthenticatedUser; expiresAt: number }>()
 
 function getCachedUser(userId: string): AuthenticatedUser | null {
@@ -47,12 +55,7 @@ export async function requireAuth(request: NextRequest): Promise<AuthenticatedUs
   }
 
   // Verify token
-  let payload;
-  try {
-    payload = verifyToken(token)
-  } catch (error) {
-    throw error;
-  }
+  const payload = verifyToken(token)
 
   // Check cache first
   const cachedUser = getCachedUser(payload.userId)
@@ -180,7 +183,7 @@ export function handleApiError(error: unknown): NextResponse {
   }
 
   if (!isExpectedAuthError) {
-  console.error('API Error:', error)
+    console.error('API Error:', error)
   }
 
   // Prisma errors
