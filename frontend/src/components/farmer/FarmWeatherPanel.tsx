@@ -12,7 +12,6 @@ import {
   getAllWeatherRecords,
 } from '../../services/farm/weatherService';
 import { fetchWeatherData } from '../../services/farm/weatherApiService';
-import { updateFarmConfig } from '../../services/farm/weatherAutoFetchService';
 import { updateFarmWeatherSettings } from '../../services/farm/farmService';
 import DatePicker from '../common/DatePicker';
 import { formatDateDisplay } from '../../utils/formatters';
@@ -77,8 +76,18 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
   const [isLoadingRecords, setIsLoadingRecords] = useState(false);
   // Bumped on save/edit/delete to retrigger the fetch effect.
   const [refreshTick, setRefreshTick] = useState(0);
-    const [nextAutoFetch, setNextAutoFetch] = useState<Date | null>(null);
-  const [isAutoFetchInitialized, setIsAutoFetchInitialized] = useState(false); // ป้องกัน race condition
+
+  // Next server fetch ≈ latest API record + interval. Derived from real
+  // data instead of a local timer, since the schedule lives on the
+  // backend now and the browser has no say in when it fires.
+  const nextAutoFetch = useMemo(() => {
+    if (!autoFetchEnabled) return null;
+    const lastApi = panelRecords
+      .filter(r => r.source === 'API' && r.createdAt)
+      .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())[0];
+    if (!lastApi?.createdAt) return null;
+    return new Date(new Date(lastApi.createdAt).getTime() + autoFetchInterval * 60_000);
+  }, [panelRecords, autoFetchEnabled, autoFetchInterval]);
 
   // Calculate temperature average automatically
   const temperatureAvg = useMemo(() => {
@@ -88,38 +97,15 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
     return '';
   }, [temperatureMin, temperatureMax]);
 
-  // Update next fetch time display (actual fetching is handled by background service)
+  // Soft refresh while the panel is open: auto-fetch now runs on the
+  // backend scheduler, so new rows appear in the DB without any browser
+  // involvement. Re-pull the visible range every 60s so the table keeps
+  // up while the user is looking at it.
   useEffect(() => {
-    if (!autoFetchEnabled || !farm || !farm.latitude || !farm.longitude) {
-      setNextAutoFetch(null);
-      return;
-    }
-
-    // Calculate and update next fetch time for display
-    const updateNextFetchTime = () => {
-      setNextAutoFetch(new Date(Date.now() + autoFetchInterval * 60 * 1000));
-    };
-
-    updateNextFetchTime();
-    const displayInterval = setInterval(updateNextFetchTime, autoFetchInterval * 60 * 1000);
-
-    return () => clearInterval(displayInterval);
-  }, [autoFetchEnabled, autoFetchInterval, farm]);
-
-  // Syncs the panel with auto-fetch saves. The auto-fetch service
-  // streams new records into data.weatherRecords (via the App.tsx
-  // onRecordSaved callback). Watching the count for this farm bumps
-  // refreshTick so the panel re-runs its backend fetch and the new row
-  // appears in the table without a manual refresh.
-  const farmRecordCount = useMemo(
-    () => data.weatherRecords.filter(r => r.farmId === farm?.id).length,
-    [data.weatherRecords, farm?.id],
-  );
-  useEffect(() => {
-    if (!farm?.id) return;
-    setRefreshTick(t => t + 1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [farmRecordCount]);
+    if (!farm?.id || !autoFetchEnabled) return;
+    const id = setInterval(() => setRefreshTick(t => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, [farm?.id, autoFetchEnabled]);
 
   // Lazy backend-filtered fetch. Fires whenever the farm or filter
   // changes (or after a save/edit/delete bumps refreshTick). The backend
@@ -189,19 +175,10 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
   }, [farm?.id]);
 
   useEffect(() => {
-    if (!farm) {
-      resetForm();
-      setEditingRecordId(null);
-      setWeatherFormError(null);
-      setWeatherToast(null);
-      setIsAutoFetchInitialized(false); // reset flag เพื่อให้โหลดค่าใหม่
-      return;
-    }
     resetForm();
     setEditingRecordId(null);
     setWeatherFormError(null);
     setWeatherToast(null);
-    setIsAutoFetchInitialized(false); // reset flag เพื่อให้โหลดค่าใหม่จาก farm ใหม่
   }, [farm]);
 
   // โหลด auto-fetch settings จาก farm data (database) เมื่อ farm เปลี่ยน
@@ -209,17 +186,13 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
     if (farm?.id) {
       setAutoFetchEnabled(farm.weatherAutoFetchEnabled || false);
       setAutoFetchInterval(farm.weatherAutoFetchInterval || 5);
-      setIsAutoFetchInitialized(true);
     }
   }, [farm?.id, farm?.weatherAutoFetchEnabled, farm?.weatherAutoFetchInterval]);
 
-  // Sync auto-fetch config with background service when farm data changes
-  useEffect(() => {
-    if (farm?.id && isAutoFetchInitialized && farm.latitude && farm.longitude) {
-      updateFarmConfig(farm, currentUser?.id);
-      console.log(`[FarmWeatherPanel] Auto-fetch ${autoFetchEnabled ? 'enabled' : 'disabled'} for farm ${farm.name || farm.id}`);
-    }
-  }, [farm?.weatherAutoFetchEnabled, farm?.weatherAutoFetchInterval, farm?.id, isAutoFetchInitialized]);
+  // Auto-fetch runs on the backend scheduler now — it reads
+  // weatherAutoFetchEnabled / Interval straight from the Farm row, so
+  // persisting via updateFarmWeatherSettings (below) is all the panel
+  // needs to do; no browser-side service to keep in sync.
 
   const resetForm = () => {
     setRecordDate(new Date().toISOString().substring(0, 10));
@@ -489,8 +462,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                               weatherAutoFetchEnabled: newEnabled,
                               weatherAutoFetchInterval: autoFetchInterval,
                             });
-                            updateFarmConfig({ ...farm, weatherAutoFetchEnabled: newEnabled, weatherAutoFetchInterval: autoFetchInterval }, currentUser?.id);
-                            setWeatherToast({ type: 'success', message: newEnabled ? 'เปิดดึงข้อมูลอัตโนมัติแล้ว' : 'ปิดดึงข้อมูลอัตโนมัติแล้ว' });
+                            setWeatherToast({ type: 'success', message: newEnabled ? 'เปิดดึงข้อมูลอัตโนมัติแล้ว (ทำงานบนเซิร์ฟเวอร์)' : 'ปิดดึงข้อมูลอัตโนมัติแล้ว' });
                             setTimeout(() => setWeatherToast(null), 3000);
                           } catch (error: any) {
                             // Revert on failure
@@ -515,7 +487,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                       </p>
                       <p className="text-xs text-blue-700">
                         {autoFetchEnabled
-                          ? `ดึงและบันทึกอัตโนมัติทุก ${autoFetchInterval} นาที`
+                          ? `เซิร์ฟเวอร์ดึงและบันทึกให้อัตโนมัติทุก ${autoFetchInterval} นาที — ทำงานตลอดแม้ปิดหน้าเว็บ`
                           : 'เปิดเพื่อดึงข้อมูลอัตโนมัติ'}
                       </p>
                     </div>
@@ -545,7 +517,6 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                             weatherAutoFetchEnabled: autoFetchEnabled,
                             weatherAutoFetchInterval: newInterval,
                           });
-                          updateFarmConfig({ ...farm, weatherAutoFetchEnabled: autoFetchEnabled, weatherAutoFetchInterval: newInterval }, currentUser?.id);
                         } catch (error: any) {
                           // Revert on failure
                           setAutoFetchInterval(oldInterval);

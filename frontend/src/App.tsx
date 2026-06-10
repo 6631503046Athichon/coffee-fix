@@ -13,7 +13,6 @@ import { connectionManager } from './utils/connectionManager';
 import { logger } from './utils/logger';
 import { getDashboardPathByRole } from './utils/routing';
 import ToastContainer from './components/common/ToastContainer';
-import { initWeatherAutoFetchService, stopWeatherAutoFetchService } from './services/farm/weatherAutoFetchService';
 import { getAllSaleOrders } from './services/sales/saleOrderService';
 import { getAllInvoices } from './services/sales/invoiceService';
 import { getAllPricingHistory } from './services/sales/pricingHistoryService';
@@ -241,53 +240,12 @@ const ProtectedRoutes: React.FC = () => {
     await loadDataFromBackend();
   }, [loadDataFromBackend]);
 
-  // Auto-fetch is keyed off auto-fetch-relevant farm fields only.
-  // The full `data.farms` reference changes on every backend refresh
-  // (see the 2-minute version-check poll above), but the auto-fetch
-  // service only cares about which farms are enabled, their interval,
-  // and lat/lng. Memoising a stable signature here stops the
-  // initWeatherAutoFetchService effect below from cycling on every
-  // poll — without it, each cycle re-fired an immediate fetch and
-  // produced a new weather row every couple of minutes.
-  const autoFetchSignature = useMemo(
-    () =>
-      data.farms
-        .filter((f) => f.weatherAutoFetchEnabled)
-        .map(
-          (f) =>
-            `${f.id}:${f.weatherAutoFetchInterval ?? 5}:${f.latitude ?? ''}:${f.longitude ?? ''}`,
-        )
-        .sort()
-        .join('|'),
-    [data.farms],
-  );
-
-  // Initialize weather auto-fetch service using farm data from DB
-  useEffect(() => {
-    if (!isAuthenticated || isAuthLoading || data.farms.length === 0) return;
-
-    // Initialize the service with farm data and callback to update weather records
-    initWeatherAutoFetchService(
-      data.farms,
-      (newRecord) => {
-        logger.debug('[App] Weather auto-fetch saved new record', { newRecord });
-        setData(prev => ({
-          ...prev,
-          weatherRecords: [newRecord, ...prev.weatherRecords.filter(r => r.id !== newRecord.id)]
-        }));
-      },
-      currentUser?.id
-    );
-
-    return () => {
-      stopWeatherAutoFetchService();
-    };
-    // We intentionally omit `data.farms` from the dep list and key the
-    // effect on the stable `autoFetchSignature` instead. ESLint can't
-    // see that data.farms is read inside, so silence the rule with the
-    // comment below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, isAuthLoading, autoFetchSignature, currentUser?.id]);
+  // Weather auto-fetch now runs entirely on the backend (see
+  // backend/src/lib/weatherScheduler.ts, started from instrumentation.ts).
+  // The old browser-side loop only collected data while someone had the
+  // app open — records arrived at random times and two open tabs raced
+  // each other into duplicate rows. The server collects on schedule 24/7;
+  // the frontend just reads.
 
   // Debounced refresh to prevent burst reloads from rapid events
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
