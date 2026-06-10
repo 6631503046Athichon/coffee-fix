@@ -1,6 +1,6 @@
 import React from 'react';
 // Import base types
-import type { GreenBeanLot } from '../types';
+import type { GreenBeanLot } from './greenBean';
 
 // Display types for various tables and components
 
