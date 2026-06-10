@@ -25,23 +25,22 @@ async function request<T>(
     url += `?${searchParams.toString()}`
   }
 
-  // Get auth token from cookie or localStorage
-  const token = getAuthToken()
-
   // Create AbortController for timeout
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
 
   try {
+    // Auth is carried entirely by the httpOnly cookie attached via
+    // `credentials: 'include'`. No Authorization header — never read a
+    // JWT from localStorage (XSS surface).
     const response = await fetch(url, {
       ...fetchOptions,
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
         ...fetchOptions.headers,
       },
-      credentials: 'include', // Include cookies
+      credentials: 'include', // Include httpOnly auth cookie
     })
     
     clearTimeout(timeoutId)
@@ -69,14 +68,14 @@ async function request<T>(
         const isAuthMeEndpoint = endpoint.includes('/auth/me')
         
         if (!isLoginEndpoint && !isAuthMeEndpoint) {
-          // Clear invalid token and user data for other endpoints
-          localStorage.removeItem('auth-token')
+          // Clear cached user blob for other endpoints
+          // (auth token lives in httpOnly cookie and is cleared by /auth/logout)
           localStorage.removeItem('coffee_lab_user')
-          
+
           // Dispatch custom event to notify AuthContext to logout
           // This ensures the app state is cleared and user is redirected to login
-          window.dispatchEvent(new CustomEvent('auth:logout', { 
-            detail: { reason: 'token_expired' } 
+          window.dispatchEvent(new CustomEvent('auth:logout', {
+            detail: { reason: 'token_expired' }
           }))
         }
         
@@ -127,14 +126,6 @@ async function request<T>(
     
     throw error
   }
-}
-
-export function getAuthToken(): string | null {
-  // httpOnly cookies cannot be read from JavaScript, so we rely on localStorage token
-  // The cookie is still sent automatically by the browser for same-origin requests
-  // But for cross-origin (localhost:5173 -> localhost:3001), we need Authorization header
-  const token = localStorage.getItem('auth-token')
-  return token
 }
 
 // Bulk-load types

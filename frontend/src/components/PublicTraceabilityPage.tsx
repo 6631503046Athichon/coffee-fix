@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { Coffee, Thermometer, Droplets, Droplet, QrCode, Printer, Flame, Copy, Check, Loader, AlertCircle } from 'lucide-react';
-import { getPublicTraceData, PublicTraceData } from '../services/greenBeanLotService';
+import { getPublicTraceData, PublicTraceData } from '../services/lots/greenBeanLotService';
+import { formatDateDisplay } from '../utils/formatters';
 
 const SCA_ATTRIBUTES = [
   'Fragrance/Aroma',
@@ -242,15 +243,8 @@ const PublicTraceabilityPage: React.FC = () => {
     });
   };
 
-  // Format date helper
-  const formatDate = (dateStr: string | Date | undefined) => {
-    if (!dateStr) return 'N/A';
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
+  const formatDate = (date?: string | Date | null) =>
+    formatDateDisplay(date, undefined, 'N/A', 'en-US');
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -262,6 +256,8 @@ const PublicTraceabilityPage: React.FC = () => {
               src="https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=1200&h=600&fit=crop"
               alt="Coffee Farm"
               className="w-full h-full object-cover"
+              loading="lazy"
+              decoding="async"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
 

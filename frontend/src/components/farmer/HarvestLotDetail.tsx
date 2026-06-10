@@ -3,7 +3,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { ArrowLeft, User, MapPin, Weight, Calendar, Tag, Info, CheckCircle, Award, ExternalLink, Package, Coffee, Star } from 'lucide-react';
-import { updateHarvestLot } from '../../services/harvestLotService';
+import { updateHarvestLot } from '../../services/lots/harvestLotService';
+import { formatDateDisplay } from '../../utils/formatters';
 
 
 const DetailItem: React.FC<{ icon: React.ElementType; label: string; value: string | number | React.ReactNode; }> = ({ icon: Icon, label, value }) => (
@@ -57,16 +58,8 @@ const HarvestLotDetail: React.FC = () => {
     const [openStep, setOpenStep] = useState<'harvested' | 'parchment' | 'greenBean' | 'qcScore' | null>(null);
     const isBindingFarmRef = useRef(false);
 
-    const formatDate = (dateValue?: string | Date | null) => {
-        if (!dateValue) return 'N/A';
-        const date = new Date(dateValue);
-        if (Number.isNaN(date.getTime())) return 'N/A';
-        return date.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-        });
-    };
+    const formatDate = (date?: string | Date | null) =>
+        formatDateDisplay(date, undefined, 'N/A', 'en-US');
 
     const lot = data.harvestLots.find(h => h.id === lotId);
     const plotLocation = lot?.farmPlotLocation?.trim().toLowerCase() || '';

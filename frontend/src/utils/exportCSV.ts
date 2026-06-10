@@ -25,24 +25,3 @@ export function exportToCSV({ filename, headers, data }: CSVExportOptions): void
     URL.revokeObjectURL(url);
   }
 }
-
-// Helper to convert objects to CSV rows
-export function objectsToCSV<T extends Record<string, any>>(
-  objects: T[],
-  columns: (keyof T)[],
-  filename: string
-): void {
-  const headers = columns.map(col => String(col));
-  const data = objects.map(obj =>
-    columns.map(col => {
-      const value = obj[col];
-      // Handle values with commas by wrapping in quotes
-      if (typeof value === 'string' && value.includes(',')) {
-        return `"${value}"`;
-      }
-      return String(value ?? '');
-    })
-  );
-
-  exportToCSV({ filename, headers, data });
-}

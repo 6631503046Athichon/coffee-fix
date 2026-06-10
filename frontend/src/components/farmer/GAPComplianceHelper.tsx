@@ -13,7 +13,7 @@ import { PageHeader } from '../common/PageHeader';
 import { Badge } from '../common/Badge';
 import { Alert } from '../common/Alert';
 import { generateGAPLogId } from '../../utils/idGenerator';
-import { addGAPLog, deleteGAPLog, updateGAPLog } from '../../services/gapLogService';
+import { addGAPLog, deleteGAPLog, updateGAPLog } from '../../services/farm/gapLogService';
 
 const ITEMS_PER_PAGE = 10;
 

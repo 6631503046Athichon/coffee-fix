@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Leaf, Plus, Edit, Trash2, Search, X, AlertCircle, ChevronDown } from 'lucide-react';
-import { getAllCoffeeVarieties, addCoffeeVariety, updateCoffeeVariety, deleteCoffeeVariety, CoffeeVariety } from '../services/coffeeVarietyService';
+import { getAllCoffeeVarieties, addCoffeeVariety, updateCoffeeVariety, deleteCoffeeVariety, CoffeeVariety } from '../services/reference/coffeeVarietyService';
 
 const SPECIES_OPTIONS = ['Arabica', 'Robusta', 'Liberica', 'Excelsa'];
 

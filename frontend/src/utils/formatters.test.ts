@@ -94,8 +94,9 @@ describe('formatDateDisplay', () => {
     expect(formatDateDisplay(undefined)).toBe('')
   })
 
-  test('echoes the raw string when the date cannot be parsed', () => {
-    expect(formatDateDisplay('not-a-date')).toBe('not-a-date')
+  test('returns the fallback when the date cannot be parsed', () => {
+    expect(formatDateDisplay('not-a-date')).toBe('')
+    expect(formatDateDisplay('not-a-date', undefined, 'N/A')).toBe('N/A')
   })
 
   test('formats a valid ISO date into a locale string', () => {

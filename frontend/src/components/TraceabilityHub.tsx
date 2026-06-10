@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Search, ExternalLink, CheckCircle, Archive, AlertCircle, ChevronLeft, ChevronRight, QrCode, Star } from 'lucide-react';
 import { UserRole, GreenBeanLot } from '../types';
 import { formatGreenBeanId } from '../utils/formatDisplayId';
-import { QRCodeModal } from './modals/QRCodeModal';
+import { QRCodeModal } from './modals/qr/QRCodeModal';
 
 const PAGE_SIZE = 10;
 const NEW_TAG_HOURS = 24;

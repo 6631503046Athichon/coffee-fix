@@ -6,11 +6,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Farm, User, UserRole, FarmCollaborator } from '../../types';
 import { Button, Input } from '../common';
 import Select from '../common/Select';
-import { addFarm, updateFarm } from '../../services/farmService';
-import { addFarmCollaborator, removeFarmCollaborator } from '../../services/farmCollaboratorService';
+import { addFarm, updateFarm } from '../../services/farm/farmService';
+import { addFarmCollaborator, removeFarmCollaborator } from '../../services/farm/farmCollaboratorService';
 import { generateFarmId } from '../../utils/idGenerator';
-import { getActiveCoffeeVarieties, CoffeeVariety } from '../../services/coffeeVarietyService';
-import { getAllUsers } from '../../services/userService';
+import { getActiveCoffeeVarieties, CoffeeVariety } from '../../services/reference/coffeeVarietyService';
+import { getAllUsers } from '../../services/auth/userService';
 
 type ParsedGoogleMaps = { lat: number; lng: number; placeName?: string } | null;
 

@@ -10,10 +10,10 @@ import {
   updateWeatherRecord,
   deleteWeatherRecord,
   getAllWeatherRecords,
-} from '../../services/weatherService';
-import { fetchWeatherData } from '../../services/weatherApiService';
-import { updateFarmConfig } from '../../services/weatherAutoFetchService';
-import { updateFarmWeatherSettings } from '../../services/farmService';
+} from '../../services/farm/weatherService';
+import { fetchWeatherData } from '../../services/farm/weatherApiService';
+import { updateFarmConfig } from '../../services/farm/weatherAutoFetchService';
+import { updateFarmWeatherSettings } from '../../services/farm/farmService';
 import DatePicker from '../common/DatePicker';
 import { formatDateDisplay } from '../../utils/formatters';
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Coffee, Mail, ArrowLeft } from 'lucide-react';
-import { forgotPassword } from '../../services/authService';
+import { forgotPassword } from '../../services/auth/authService';
 
 const ForgotPassword: React.FC = () => {
   const navigate = useNavigate();

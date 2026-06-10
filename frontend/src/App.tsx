@@ -5,23 +5,25 @@ import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package, Box } from 'lucide-react';
 
 import { UserRole, CuppingSessionType, Customer } from './types';
-import { MOCK_DATA } from './constants';
+import { INITIAL_APP_DATA } from './constants';
 import { DataContext } from './hooks/useDataContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { connectionManager } from './utils/connectionManager';
+import { logger } from './utils/logger';
+import { getDashboardPathByRole } from './utils/routing';
 import ToastContainer from './components/common/ToastContainer';
-import { initWeatherAutoFetchService, stopWeatherAutoFetchService } from './services/weatherAutoFetchService';
-import { getAllSaleOrders } from './services/saleOrderService';
-import { getAllInvoices } from './services/invoiceService';
-import { getAllPricingHistory } from './services/pricingHistoryService';
+import { initWeatherAutoFetchService, stopWeatherAutoFetchService } from './services/farm/weatherAutoFetchService';
+import { getAllSaleOrders } from './services/sales/saleOrderService';
+import { getAllInvoices } from './services/sales/invoiceService';
+import { getAllPricingHistory } from './services/sales/pricingHistoryService';
 import { api, bulkLoadPhase1, bulkLoadPhase2 } from './services/api';
 import { transformFarmFromBackend, transformHarvestLotFromBackend, transformSoilAnalysisFromBackend, transformWeatherRecordFromBackend, transformGAPLogFromBackend } from './services/utils/transformers';
-import { transformProcessingBatchFromBackend } from './services/processingBatchService';
-import { transformParchmentLotFromBackend } from './services/parchmentLotService';
-import { transformGreenBeanLotFromBackend } from './services/greenBeanLotService';
-import { transformCustomerFromBackend } from './services/customerService';
-import { transformInventoryItem, transformRoastBatch } from './services/roasterService';
+import { transformProcessingBatchFromBackend } from './services/processing/processingBatchService';
+import { transformParchmentLotFromBackend } from './services/lots/parchmentLotService';
+import { transformGreenBeanLotFromBackend } from './services/lots/greenBeanLotService';
+import { transformCustomerFromBackend } from './services/sales/customerService';
+import { transformInventoryItem, transformRoastBatch } from './services/roaster/roasterService';
 import { Sidebar, Header } from './components/layout';
 import Login from './components/auth/Login';
 import ForgotPassword from './components/auth/ForgotPassword';
@@ -69,15 +71,6 @@ const withRouteLoader = (element: React.ReactNode) => (
     {element}
   </Suspense>
 );
-
-// Helper function to get dashboard path by role
-const getDashboardPathByRole = (roles: UserRole[]): string => {
-  if (roles.includes(UserRole.Processor)) return '/processor';
-  if (roles.includes(UserRole.Roaster)) return '/roaster';
-  if (roles.includes(UserRole.Cupper) || roles.includes(UserRole.HeadJudge)) return '/cupping';
-  if (roles.includes(UserRole.Farmer) || roles.includes(UserRole.Admin)) return '/farmer-dashboard';
-  return '/farmer-dashboard'; // default
-};
 
 // Root Redirect Component - redirects to login if not authenticated
 const RootRedirect: React.FC = () => {
@@ -151,7 +144,7 @@ const ConnectionToastListener: React.FC = () => {
 // Protected routes component
 const ProtectedRoutes: React.FC = () => {
   const { isAuthenticated, isAuthLoading, currentUser } = useAuth();
-  const [data, setData] = useState(MOCK_DATA);
+  const [data, setData] = useState(INITIAL_APP_DATA);
   const [isEditing, setIsEditingState] = useState(false);
   const isEditingRef = useRef(false);
 
@@ -207,12 +200,12 @@ const ProtectedRoutes: React.FC = () => {
       // Single state update with no intermediate flicker
       setData(prev => ({
         ...prev,
-        farms: mergeArrays(storedFarms as any, MOCK_DATA.farms),
-        harvestLots: mergeArrays(storedHarvestLots as any, MOCK_DATA.harvestLots),
+        farms: mergeArrays(storedFarms as any, INITIAL_APP_DATA.farms),
+        harvestLots: mergeArrays(storedHarvestLots as any, INITIAL_APP_DATA.harvestLots),
         cropYears: phase1.cropYears,
         processTypes: phase1.processTypes,
         activityTypes: phase1.activityTypes,
-        customers: mergeArrays(storedCustomers, MOCK_DATA.customers),
+        customers: mergeArrays(storedCustomers, INITIAL_APP_DATA.customers),
         users: phase1.users,
         saleOrders: salesDataLoadFailed ? prev.saleOrders : storedSaleOrders,
         invoices: salesDataLoadFailed ? prev.invoices : storedInvoices,
@@ -220,9 +213,9 @@ const ProtectedRoutes: React.FC = () => {
         soilAnalyses: storedSoilAnalyses,
         weatherRecords: storedWeatherRecords,
         gapLogs: storedGAPLogs,
-        processingBatches: mergeArrays(storedProcessingBatches, MOCK_DATA.processingBatches),
-        parchmentLots: mergeArrays(storedParchmentLots, MOCK_DATA.parchmentLots),
-        greenBeanLots: mergeArrays(storedGreenBeanLots, MOCK_DATA.greenBeanLots),
+        processingBatches: mergeArrays(storedProcessingBatches, INITIAL_APP_DATA.processingBatches),
+        parchmentLots: mergeArrays(storedParchmentLots, INITIAL_APP_DATA.parchmentLots),
+        greenBeanLots: mergeArrays(storedGreenBeanLots, INITIAL_APP_DATA.greenBeanLots),
         roasterInventory: storedRoasterInventory,
         roastBatches: storedRoastBatches,
       }));
@@ -239,7 +232,7 @@ const ProtectedRoutes: React.FC = () => {
     } catch (error) {
       lastVersionsRef.current = {};
       console.error('Failed to load data from backend:', error);
-      // Fallback to MOCK_DATA if API fails
+      // Fallback to INITIAL_APP_DATA if API fails
     }
   }, [mergeArrays]);
 
@@ -277,7 +270,7 @@ const ProtectedRoutes: React.FC = () => {
     initWeatherAutoFetchService(
       data.farms,
       (newRecord) => {
-        console.log('[App] Weather auto-fetch saved new record:', newRecord);
+        logger.debug('[App] Weather auto-fetch saved new record', { newRecord });
         setData(prev => ({
           ...prev,
           weatherRecords: [newRecord, ...prev.weatherRecords.filter(r => r.id !== newRecord.id)]
@@ -520,6 +513,14 @@ const ProtectedRoutes: React.FC = () => {
                 }
               />
               <Route
+                path="/traceability/:lotId"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Admin, UserRole.Processor]}>
+                    {withRouteLoader(<TraceabilityPage />)}
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/users"
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Admin]}>
@@ -632,12 +633,9 @@ const ProtectedRoutes: React.FC = () => {
 };
 
 const App: React.FC = () => {
-  const [data] = useState(MOCK_DATA);
-  const contextValue = useMemo(() => ({ data, setData: () => {}, refreshData: async () => {}, setIsEditing: () => {}, isEditing: false }), [data]);
-
-  // Initialize localStorage on app mount (only for non-API data)
-  // No localStorage initialization needed — all data comes from API
-
+  // No app-level data state: internal traceability moved inside
+  // ProtectedRoutes (auth-gated). The only public-facing trace view is
+  // `/trace/:publicId` which fetches its own data from the public API.
   return (
     <AuthProvider>
       <ToastProvider>
@@ -649,14 +647,6 @@ const App: React.FC = () => {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/first-login-setup" element={<FirstLoginSetupWrapper />} />
-          <Route
-            path="/traceability/:lotId"
-            element={
-              <DataContext.Provider value={contextValue}>
-                {withRouteLoader(<TraceabilityPage />)}
-              </DataContext.Provider>
-            }
-          />
           <Route
             path="/trace/:publicId"
             element={withRouteLoader(<PublicTraceabilityPage />)}

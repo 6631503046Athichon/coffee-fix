@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, UserRole } from '../types';
-import { authService } from '../services/authService';
+import { User } from '../types';
+import { authService } from '../services/auth/authService';
 import { getCurrentHashRoute, redirectToHashRoute } from '../utils/hashRouting';
 
 interface AuthContextType {
@@ -8,7 +8,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isAuthLoading: boolean; // Renamed for clarity
   login: (identifier: string, password: string) => Promise<User>;
-  logout: () => void;
+  logout: () => Promise<void>;
   setUser: (user: User) => void;
 }
 
@@ -21,48 +21,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Check if user is already logged in on mount
   useEffect(() => {
+    let cancelled = false;
+
     const loadUser = async () => {
       setIsAuthLoading(true);
-      
-      // Set a maximum timeout to prevent infinite loading
+
+      // Hard cap on the loading spinner. If the backend call hasn't
+      // resolved in 2s, we stop blocking the UI and treat the user as
+      // logged out. SECURITY: do NOT restore identity (especially roles)
+      // from localStorage — XSS could forge an admin blob. The cost of
+      // one extra login is worth not trusting client storage.
       const timeoutId = setTimeout(() => {
+        if (cancelled) return;
+        setCurrentUser(null);
+        setIsAuthenticated(false);
         setIsAuthLoading(false);
-        // If timeout, check localStorage for stored user
-        const storedUser = localStorage.getItem('coffee_lab_user');
-        if (storedUser) {
-          try {
-            const user = JSON.parse(storedUser) as User;
-            setCurrentUser(user);
-            setIsAuthenticated(true);
-          } catch {
-            setCurrentUser(null);
-            setIsAuthenticated(false);
-          }
-        } else {
-          setCurrentUser(null);
-          setIsAuthenticated(false);
-        }
-      }, 2000); // 2 second timeout
+      }, 2000);
 
       try {
         const user = await authService.getCurrentUser();
+        if (cancelled) return;
         clearTimeout(timeoutId);
-        
+
         if (user) {
           setCurrentUser(user);
           setIsAuthenticated(true);
         } else {
-          // Clear invalid state
           setCurrentUser(null);
           setIsAuthenticated(false);
         }
       } catch (error) {
+        if (cancelled) return;
         clearTimeout(timeoutId);
-        // User not authenticated - clear state
+        // Any failure => logged out (auth service already cleared cache).
         console.debug('User not authenticated:', error);
         setCurrentUser(null);
         setIsAuthenticated(false);
       } finally {
+        if (cancelled) return;
         clearTimeout(timeoutId);
         setIsAuthLoading(false);
       }
@@ -70,23 +66,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     loadUser();
 
-    // Listen for auth logout events (triggered by 401 errors)
+    // Listen for auth logout events (triggered by 401 errors).
+    // Guard against redirect storms when several 401s race in.
     const handleAuthLogout = () => {
-      // Clear user state and redirect to login
       setCurrentUser(null);
       setIsAuthenticated(false);
       localStorage.removeItem('coffee_lab_user');
-      localStorage.removeItem('auth-token');
-      
-      // Redirect to login if not already there
-      if (getCurrentHashRoute() !== '/login') {
-        redirectToHashRoute('/login');
+
+      // If we're already on the login page, don't kick off another
+      // navigation — multiple concurrent 401s can dispatch this event
+      // in quick succession.
+      const currentRoute = getCurrentHashRoute();
+      if (currentRoute === '/login' || window.location.hash.endsWith('/login')) {
+        return;
       }
+      redirectToHashRoute('/login');
     };
 
     window.addEventListener('auth:logout', handleAuthLogout);
 
     return () => {
+      cancelled = true;
       window.removeEventListener('auth:logout', handleAuthLogout);
     };
   }, []);
@@ -98,10 +98,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return user;
   };
 
-  const logout = () => {
-    authService.logout();
-    setCurrentUser(null);
-    setIsAuthenticated(false);
+  const logout = async () => {
+    try {
+      await authService.logout();
+    } catch (error) {
+      // Backend logout failed — still clear local state so the user
+      // isn't trapped in a "logged in" UI with a dead session.
+      console.error('Backend logout failed, clearing local state anyway:', error);
+    } finally {
+      setCurrentUser(null);
+      setIsAuthenticated(false);
+    }
   };
 
   const setUser = (user: User) => {

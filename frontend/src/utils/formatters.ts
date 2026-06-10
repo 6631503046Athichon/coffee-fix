@@ -74,17 +74,19 @@ export function formatDateTime(date: Date | string): string {
 }
 
 export function formatDateDisplay(
-  isoDate?: string,
+  date?: string | Date | null,
   options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' },
+  fallback: string = '',
+  locale?: string,
 ): string {
-  if (!isoDate) {
-    return '';
+  if (date == null || date === '') {
+    return fallback;
   }
 
-  const parsed = new Date(isoDate);
+  const parsed = date instanceof Date ? date : new Date(date);
   if (Number.isNaN(parsed.getTime())) {
-    return isoDate;
+    return fallback;
   }
 
-  return parsed.toLocaleDateString(undefined, options);
+  return parsed.toLocaleDateString(locale, options);
 }

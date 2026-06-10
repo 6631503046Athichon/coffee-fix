@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
@@ -23,6 +23,16 @@ const maxWidthClasses = {
   auto: 'max-w-fit',
 };
 
+// Elements considered focusable inside the modal for the focus trap.
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
 export const Modal: React.FC<ModalProps> = ({
   isOpen,
   onClose,
@@ -33,6 +43,84 @@ export const Modal: React.FC<ModalProps> = ({
   className = '',
   overlayClassName = '',
 }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  // Escape-to-close and focus trap on Tab/Shift+Tab.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Remember whatever had focus before we opened so we can restore it.
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+
+    // Focus the first focusable element inside the modal on open.
+    // Defer one frame to let the portal mount the DOM first.
+    const focusFirst = () => {
+      const root = containerRef.current;
+      if (!root) return;
+      const focusables = root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+      if (focusables.length > 0) {
+        focusables[0].focus();
+      } else {
+        // No focusable child — make the container itself focusable.
+        root.setAttribute('tabindex', '-1');
+        root.focus();
+      }
+    };
+
+    const rafId = window.requestAnimationFrame(focusFirst);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+
+      if (e.key !== 'Tab') return;
+
+      const root = containerRef.current;
+      if (!root) return;
+      const focusables = Array.from(
+        root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      ).filter((el) => !el.hasAttribute('disabled'));
+
+      if (focusables.length === 0) {
+        e.preventDefault();
+        return;
+      }
+
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+
+      if (e.shiftKey) {
+        if (active === first || !root.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      document.removeEventListener('keydown', handleKeyDown);
+      // Restore focus to the element that was focused before open.
+      const previouslyFocused = previouslyFocusedRef.current;
+      if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+        // Defer one tick so React has unmounted the modal DOM.
+        setTimeout(() => previouslyFocused.focus(), 0);
+      }
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   // Check if document.body exists (for SSR)
@@ -40,8 +128,20 @@ export const Modal: React.FC<ModalProps> = ({
     return null;
   }
 
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only close when the user clicked the backdrop itself, not when
+    // the click bubbled up from a child element inside the dialog.
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   const modalContent = (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title || 'Dialog'}
+      onClick={handleBackdropClick}
       className={`fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 ${overlayClassName}`}
       style={{
         position: 'fixed',
@@ -56,6 +156,7 @@ export const Modal: React.FC<ModalProps> = ({
       }}
     >
       <div
+        ref={containerRef}
         className={`bg-white rounded-3xl p-8 shadow-2xl ${maxWidth === 'auto' ? 'w-auto min-w-[400px]' : 'w-full'} ${maxWidthClasses[maxWidth]} max-h-[90vh] overflow-y-auto ${className}`}
         onClick={(e) => e.stopPropagation()}
         style={{ margin: '1rem' }}

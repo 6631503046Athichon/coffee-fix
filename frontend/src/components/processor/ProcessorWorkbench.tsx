@@ -71,18 +71,18 @@ import {
   addProcessingBatch,
   updateProcessingBatch,
   deleteProcessingBatch,
-} from "../../services/processingBatchService";
+} from "../../services/processing/processingBatchService";
 import {
   updateGreenBeanLotScore,
   updateGreenBeanLotAvailability,
   createWithdrawal,
   deleteGreenBeanLot,
-} from "../../services/greenBeanLotService";
+} from "../../services/lots/greenBeanLotService";
 import {
   createParchmentWithdrawal,
   deleteParchmentLot,
-} from "../../services/parchmentLotService";
-import type { CuppingDetailUpdate } from "../../services/greenBeanLotService";
+} from "../../services/lots/parchmentLotService";
+import type { CuppingDetailUpdate } from "../../services/lots/greenBeanLotService";
 import DatePicker from "../common/DatePicker";
 import InvoiceReceipt from "./InvoiceReceipt";
 import Select from "../common/Select";
@@ -96,6 +96,7 @@ import {
 import StartProcessingModal from "./modals/StartProcessingModal";
 import HullAndGradeModal from "./modals/HullAndGradeModal";
 import CompleteBatchModal from "./modals/CompleteBatchModal";
+import { logger } from "../../utils/logger";
 
 import {
   ITEMS_PER_PAGE,
@@ -265,7 +266,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     ];
 
     const activeTypes = data.processTypes.filter((pt) => pt.isActive);
-    let options = activeTypes.map((pt) => ({
+    const options = activeTypes.map((pt) => ({
       value: pt.name,
       label: `${pt.name} Process`,
     }));
@@ -284,17 +285,32 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     return options;
   }, [data.processTypes]);
 
+  // Stable row id helper for editor lists (graded lots). Using the
+  // array index as a React key here loses input focus when rows are
+  // deleted or reordered. Each row gets a uuid at creation time.
+  const newRowId = useCallback(
+    () =>
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `row-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+    [],
+  );
+
   // Hull & Grade Modal State
   const [gradedLots, setGradedLots] = useState<
-    { grade: string; weight: string; price: string; score: string }[]
-  >([{ grade: "Grade A", weight: "", price: "", score: "" }]);
+    { rowKey: string; grade: string; weight: string; price: string; score: string }[]
+  >(() => [
+    { rowKey: newRowId(), grade: "Grade A", weight: "", price: "", score: "" },
+  ]);
   const [totalGreenWeight, setTotalGreenWeight] = useState("");
 
   const resetHullAndGradeForm = useCallback(() => {
     setSelectedParchment(null);
     setTotalGreenWeight("");
-    setGradedLots([{ grade: "Grade A", weight: "", price: "", score: "" }]);
-  }, []);
+    setGradedLots([
+      { rowKey: newRowId(), grade: "Grade A", weight: "", price: "", score: "" },
+    ]);
+  }, [newRowId]);
 
   // Auto-calculate total green weight from graded lots
   useEffect(() => {
@@ -468,7 +484,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   }, [sensoryScores, cupScores, defects]);
 
   const handleSaveScore = async () => {
-    console.log("handleSaveScore called", { processorUser, scoringLot });
+    logger.debug("handleSaveScore called", { processorUser, scoringLot });
 
     if (!processorUser) {
       alert(
@@ -847,7 +863,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         // Validate against remaining weight in harvest lot
         const availableWeight = getAvailableHarvestWeight(selectedHarvestLot);
 
-        console.log("Validation check:", {
+        logger.debug("Validation check", {
           parchmentWeightKg,
           availableWeight,
           remainingWeightKg: selectedHarvestLot.remainingWeightKg,
@@ -899,16 +915,16 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             baggingDate: dryingEndDate,
           };
 
-          console.log("Creating processing batch with payload:", batchPayload);
+          logger.debug("Creating processing batch with payload", { batchPayload });
 
           await addProcessingBatch(batchPayload);
 
-          console.log("Processing batch created successfully!");
+          logger.debug("Processing batch created successfully!");
 
           // Refresh data from backend to get the updated batch and parchment lot
           await refreshData();
 
-          console.log("Data refreshed successfully!");
+          logger.debug("Data refreshed successfully!");
 
           // Update selected harvest lot with fresh data from context
           // Note: After refreshData(), the context will be updated automatically
@@ -999,7 +1015,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           setSelectedParchment(null);
           setTotalGreenWeight("");
           setGradedLots([
-            { grade: "Grade A", weight: "", price: "", score: "" },
+            { rowKey: newRowId(), grade: "Grade A", weight: "", price: "", score: "" },
           ]);
           setFormError(null);
 
@@ -3577,7 +3593,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         <div className="space-y-2 mb-3">
                           {gradedLots.map((lot, index) => (
                             <div
-                              key={index}
+                              key={lot.rowKey}
                               className="flex items-center gap-2 bg-gray-50 rounded-xl p-3 border border-gray-200"
                             >
                               <div className="flex-shrink-0 w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
@@ -3632,7 +3648,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           onClick={() =>
                             setGradedLots([
                               ...gradedLots,
-                              { grade: "", weight: "", price: "", score: "" },
+                              { rowKey: newRowId(), grade: "", weight: "", price: "", score: "" },
                             ])
                           }
                           disabled={!canAddMoreHullGrades}
@@ -4176,7 +4192,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               {Array.from({ length: 5 }).map((_, i) => (
                                 <button
                                   type="button"
-                                  key={i}
+                                  key={`${attr}-rating-${i + 1}`}
                                   onClick={() =>
                                     setCupScores((prev) => ({
                                       ...prev,
@@ -4837,7 +4853,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
                           return (
                             <div
-                              key={index}
+                              // Withdrawal records have no backend id;
+                              // compose a content-stable key.
+                              key={`${selectedGreenBeanForHistory.id}-${entry.date}-${entry.withdrawalType}-${entry.amountKg}-${index}`}
                               className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-blue-300 transition-all"
                             >
                             <div className="flex items-start justify-between mb-3">

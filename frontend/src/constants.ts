@@ -4,7 +4,7 @@ import { AppData } from "./types";
 // ========== INITIAL EMPTY DATA ==========
 // ============================================================
 
-export const MOCK_DATA: AppData = {
+export const INITIAL_APP_DATA: AppData = {
   users: [],
   farms: [],
   harvestLots: [],

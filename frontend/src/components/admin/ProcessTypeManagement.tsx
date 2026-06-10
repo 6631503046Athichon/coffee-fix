@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { ProcessType } from '../../types';
-import { addProcessType, updateProcessType, deleteProcessType, processTypeNameExists } from '../../services/processTypeService';
+import { addProcessType, updateProcessType, deleteProcessType, processTypeNameExists } from '../../services/processing/processTypeService';
 import { Plus, Edit, Trash2, CheckCircle, XCircle, AlertCircle, X, Save, Coffee, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Predefined color schemes for process types

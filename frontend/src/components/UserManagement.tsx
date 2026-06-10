@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, UserRole } from '../types';
 import { Users as UsersIcon, AlertCircle, UserPlus, Edit, Trash2, Shield, Search, Key, X, Filter, ChevronDown, ChevronLeft, ChevronRight, Check } from 'lucide-react';
-import { getAllUsers, updateUser, deleteUser } from '../services/userService';
+import { getAllUsers, updateUser, deleteUser } from '../services/auth/userService';
 import { useAuth } from '../contexts/AuthContext';
-import CreateUserModal from './modals/CreateUserModal';
-import EditUserModal from './modals/EditUserModal';
-import TransferOwnershipModal from './modals/TransferOwnershipModal';
+import CreateUserModal from './modals/user/CreateUserModal';
+import EditUserModal from './modals/user/EditUserModal';
+import TransferOwnershipModal from './modals/user/TransferOwnershipModal';
 
 // Custom Dropdown Component
 interface DropdownOption {

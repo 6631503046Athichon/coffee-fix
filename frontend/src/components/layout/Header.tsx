@@ -12,9 +12,16 @@ const Header: React.FC<HeaderProps> = ({ currentUserRoles }) => {
   const navigate = useNavigate();
   const { logout, currentUser } = useAuth();
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      // AuthContext.logout already clears local state on failure, so we
+      // still want to navigate to /login even when the backend call errors.
+      console.error('Logout failed:', error);
+    } finally {
+      navigate('/login');
+    }
   };
 
   const getRoleBadgeColor = (role: UserRole) => {

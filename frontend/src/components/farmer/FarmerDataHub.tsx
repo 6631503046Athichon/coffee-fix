@@ -11,7 +11,7 @@ import { Input } from '../common/Input';
 import { PageHeader } from '../common/PageHeader';
 import { Badge } from '../common/Badge';
 import { exportToCSV } from '../../utils/exportCSV';
-import { deleteHarvestLot, updateHarvestLot } from '../../services/harvestLotService';
+import { deleteHarvestLot, updateHarvestLot } from '../../services/lots/harvestLotService';
 
 import { formatDateDisplay } from '../../utils/formatters';
 

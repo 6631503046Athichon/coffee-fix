@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { firstLoginUpdate } from '../../services/authService'
+import { firstLoginUpdate } from '../../services/auth/authService'
 import { User } from '../../types'
 
 interface FirstLoginSetupProps {
@@ -108,11 +108,12 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Current Password */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="first-login-current-password" className="block text-sm font-medium text-gray-700 mb-1">
               Current Password *
             </label>
             <div className="relative">
               <input
+                id="first-login-current-password"
                 type={showCurrentPassword ? 'text' : 'password'}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
@@ -132,10 +133,11 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
           {/* New Username (if required) */}
           {user.mustChangeUsername && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="first-login-new-username" className="block text-sm font-medium text-gray-700 mb-1">
                 New Username *
               </label>
               <input
+                id="first-login-new-username"
                 type="text"
                 value={newUsername}
                 onChange={(e) => setNewUsername(e.target.value)}
@@ -152,10 +154,11 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
           {/* Email (if required) */}
           {user.mustChangeEmail && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="first-login-new-email" className="block text-sm font-medium text-gray-700 mb-1">
                 Email Address *
               </label>
               <input
+                id="first-login-new-email"
                 type="email"
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
@@ -170,11 +173,12 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
           {user.mustChangePassword && (
             <>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="first-login-new-password" className="block text-sm font-medium text-gray-700 mb-1">
                   New Password *
                 </label>
                 <div className="relative">
                   <input
+                    id="first-login-new-password"
                     type={showNewPassword ? 'text' : 'password'}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
@@ -193,11 +197,12 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="first-login-confirm-password" className="block text-sm font-medium text-gray-700 mb-1">
                   Confirm New Password *
                 </label>
                 <div className="relative">
                   <input
+                    id="first-login-confirm-password"
                     type={showConfirmPassword ? 'text' : 'password'}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}

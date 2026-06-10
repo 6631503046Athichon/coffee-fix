@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { ActivityType } from '../../types';
-import { addActivityType, updateActivityType, deleteActivityType } from '../../services/activityTypeService';
+import { addActivityType, updateActivityType, deleteActivityType } from '../../services/reference/activityTypeService';
 import { Plus, Edit, Trash2, CheckCircle, XCircle, AlertCircle, X, Save, Tag, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const PAGE_SIZE = 10;

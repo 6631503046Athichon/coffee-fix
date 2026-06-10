@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 // fix: Removed non-existent CuppingSessionStatus from import.
 import { UserRole, JudgeScore, SCA_ATTRIBUTES, CuppingSample, CuppingSession } from '../../types';
-import { synthesizeCuppingNotes } from '../../services/geminiService';
+import { synthesizeCuppingNotes } from '../../services/external/geminiService';
 import { Bot, Loader2, Edit, Save, Lock, Trophy, Clock, ClipboardList, ShieldCheck, Check, AlertTriangle, PlayCircle, Flag } from 'lucide-react';
 
 const ScoreCell: React.FC<{ score: number }> = ({ score }) => {

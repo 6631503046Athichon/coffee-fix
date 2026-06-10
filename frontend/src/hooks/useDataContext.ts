@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { AppData } from '../types';
-import { MOCK_DATA } from '../constants';
+import { INITIAL_APP_DATA } from '../constants';
 
 interface DataContextType {
   data: AppData;
@@ -12,7 +12,7 @@ interface DataContextType {
 }
 
 export const DataContext = React.createContext<DataContextType>({
-  data: MOCK_DATA,
+  data: INITIAL_APP_DATA,
   setData: () => {},
   refreshData: async () => {},
   setIsEditing: () => {},

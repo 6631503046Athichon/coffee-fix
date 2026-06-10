@@ -36,12 +36,12 @@ import {
 } from '../../types'
 import { useDataContext } from '../../hooks/useDataContext'
 import { useToast } from '../../contexts/ToastContext'
-import { addProcessingBatch } from '../../services/processingBatchService'
+import { addProcessingBatch } from '../../services/processing/processingBatchService'
 import {
   createParchmentWithdrawal,
   getAllParchmentLots,
-} from '../../services/parchmentLotService'
-import { createWithdrawal as createGBLWithdrawal } from '../../services/greenBeanLotService'
+} from '../../services/lots/parchmentLotService'
+import { createWithdrawal as createGBLWithdrawal } from '../../services/lots/greenBeanLotService'
 import DatePicker from '../common/DatePicker'
 import {
   CropYearChips,
@@ -141,9 +141,15 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     dryingEndDate: '',
     notes: '',
   })
+  // Stable row id helper for editor lists. Using array index as a React
+  // key here loses input focus when rows are removed/reordered.
+  const newRowId = () =>
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `row-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
   const [gradeRows, setGradeRows] = useState<
-    { grade: string; weight: string }[]
-  >([{ grade: 'Grade A', weight: '' }])
+    { rowKey: string; grade: string; weight: string }[]
+  >(() => [{ rowKey: newRowId(), grade: 'Grade A', weight: '' }])
   const [processError, setProcessError] = useState<string | null>(null)
   const [processSubmitting, setProcessSubmitting] = useState(false)
 
@@ -309,7 +315,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
       dryingEndDate: '',
       notes: '',
     })
-    setGradeRows([{ grade: 'Grade A', weight: '' }])
+    setGradeRows([{ rowKey: newRowId(), grade: 'Grade A', weight: '' }])
     setProcessError(null)
   }
 
@@ -909,7 +915,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                   .filter(Boolean)
                 return (
                   <div
-                    key={i}
+                    key={row.rowKey}
                     className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-2 py-2"
                   >
                     <span className="flex-shrink-0 w-7 h-7 bg-amber-600 text-white rounded-md flex items-center justify-center text-xs font-bold">
@@ -958,7 +964,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             <button
               type="button"
               onClick={() =>
-                setGradeRows([...gradeRows, { grade: '', weight: '' }])
+                setGradeRows([...gradeRows, { rowKey: newRowId(), grade: '', weight: '' }])
               }
               disabled={gradeRows.length >= GRADE_OPTIONS.length}
               className="w-full py-2.5 border border-dashed border-amber-300 rounded-xl text-sm font-bold text-amber-700 hover:bg-amber-50 hover:border-amber-400 disabled:opacity-30 inline-flex items-center justify-center gap-1.5 transition-all"
@@ -1300,7 +1306,10 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                         <div className="space-y-1">
                           {gbl.withdrawalHistory.map((w, i) => (
                             <div
-                              key={i}
+                              // No backend id on these immutable records;
+                              // compose a content-stable key. Sort order
+                              // is fixed once written.
+                              key={`${gbl.id}-${w.date}-${w.withdrawalType}-${w.amountKg}-${i}`}
                               className="text-[11px] flex items-center justify-between text-gray-600"
                             >
                               <span className="truncate">

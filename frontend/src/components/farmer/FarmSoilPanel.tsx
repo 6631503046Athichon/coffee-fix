@@ -7,8 +7,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Farm, SoilAnalysis, UserRole } from '../../types';
 import { generateSoilAnalysisId } from '../../utils/idGenerator';
 import { formatDateDisplay } from '../../utils/formatters';
-import { addSoilAnalysis, deleteSoilAnalysis, updateSoilAnalysis } from '../../services/soilAnalysisService';
-import { generateSoilRecommendations, extractSoilDataFromImage } from '../../services/geminiService';
+import { addSoilAnalysis, deleteSoilAnalysis, updateSoilAnalysis } from '../../services/farm/soilAnalysisService';
+import { generateSoilRecommendations, extractSoilDataFromImage } from '../../services/external/geminiService';
 
 export type SoilFormState = {
   farmPlotLocation: string;

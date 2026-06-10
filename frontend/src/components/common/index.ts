@@ -8,9 +8,6 @@ export type { ButtonProps } from './Button';
 export { Input } from './Input';
 export type { InputProps } from './Input';
 
-export { Table } from './Table';
-export type { TableProps, Column } from './Table';
-
 export { Badge } from './Badge';
 export type { BadgeProps } from './Badge';
 
@@ -29,5 +26,3 @@ export { default as DatePicker } from './DatePicker';
 // New reusable components
 export { Dropdown } from './Dropdown';
 export type { DropdownOption } from './Dropdown';
-
-export { default as ErrorBoundary } from './ErrorBoundary';

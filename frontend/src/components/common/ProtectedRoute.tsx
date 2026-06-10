@@ -2,13 +2,17 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserRole } from '../../types';
+import { getDashboardPathByRole } from '../../utils/routing';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   allowedRoles: UserRole[];
 }
 
-const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
+// Return ReactNode (not ReactElement) so we can render `children`
+// directly without the extra `<></>` wrapper. React 19 + react-router 7
+// accept any ReactNode here.
+const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps): React.ReactNode => {
   const { currentUser, isAuthenticated, isAuthLoading } = useAuth();
 
   if (isAuthLoading) {
@@ -30,20 +34,11 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
   const hasRequiredRole = currentUser.roles.some(role => allowedRoles.includes(role));
 
   if (!hasRequiredRole) {
-    // Redirect to dashboard based on user's role
-    const getDashboardPathByRole = (roles: UserRole[]): string => {
-      if (roles.includes(UserRole.Processor)) return '/processor';
-      if (roles.includes(UserRole.Roaster)) return '/roaster';
-      if (roles.includes(UserRole.Cupper) || roles.includes(UserRole.HeadJudge)) return '/cupping';
-      if (roles.includes(UserRole.Farmer) || roles.includes(UserRole.Admin)) return '/farmer-dashboard';
-      return '/farmer-dashboard';
-    };
-
     // Immediately redirect instead of showing error page
     return <Navigate to={getDashboardPathByRole(currentUser.roles)} replace />;
   }
 
-  return <>{children}</>;
+  return children;
 };
 
 export { ProtectedRoute };

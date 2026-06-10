@@ -6,11 +6,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Farm, UserRole } from '../../types';
 import { Button, Input, Modal, StatCard } from '../common';
 import Select from '../common/Select';
-import { deleteFarm } from '../../services/farmService';
+import { deleteFarm } from '../../services/farm/farmService';
 import { formatDateDisplay } from '../../utils/formatters';
 import FarmSoilPanel from './FarmSoilPanel';
 import FarmWeatherPanel from './FarmWeatherPanel';
-import HarvestLotModal from '../modals/HarvestLotModal';
+import HarvestLotModal from '../modals/farm/HarvestLotModal';
 import FarmMapView from '../common/FarmMapView';
 
 const FarmManagement: React.FC = () => {
@@ -27,8 +27,8 @@ const FarmManagement: React.FC = () => {
 	const [farmToDelete, setFarmToDelete] = useState<Farm | null>(null);
 
 	// Modal states for farm actions
-	const [isSoilModalOpen, setIsSoilModalOpen] = useState(false);
-	const [isWeatherModalOpen, setIsWeatherModalOpen] = useState(false);
+	const [isSoilPanelOpen, setIsSoilPanelOpen] = useState(false);
+	const [isWeatherPanelOpen, setIsWeatherPanelOpen] = useState(false);
 	const [isHarvestModalOpen, setIsHarvestModalOpen] = useState(false);
 	const [modalFarm, setModalFarm] = useState<Farm | null>(null);
 
@@ -542,7 +542,7 @@ const FarmManagement: React.FC = () => {
 									onClick={(e) => {
 										e.stopPropagation();
 										setModalFarm(farm);
-										setIsSoilModalOpen(true);
+										setIsSoilPanelOpen(true);
 									}}
 									className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
 								>
@@ -554,7 +554,7 @@ const FarmManagement: React.FC = () => {
 									onClick={(e) => {
 										e.stopPropagation();
 										setModalFarm(farm);
-										setIsWeatherModalOpen(true);
+										setIsWeatherPanelOpen(true);
 									}}
 									className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-100 transition-colors"
 								>
@@ -667,12 +667,12 @@ const FarmManagement: React.FC = () => {
 				})()}
 			</Modal>
 
-			{/* Soil Analysis Modal */}
+			{/* Soil Analysis Panel */}
 			{modalFarm && (
 				<FarmSoilPanel
-					isOpen={isSoilModalOpen}
+					isOpen={isSoilPanelOpen}
 					onClose={() => {
-						setIsSoilModalOpen(false);
+						setIsSoilPanelOpen(false);
 						setModalFarm(null);
 					}}
 					farm={modalFarm}
@@ -682,9 +682,9 @@ const FarmManagement: React.FC = () => {
 			{/* Weather Panel */}
 			{modalFarm && (
 				<FarmWeatherPanel
-					isOpen={isWeatherModalOpen}
+					isOpen={isWeatherPanelOpen}
 					onClose={() => {
-						setIsWeatherModalOpen(false);
+						setIsWeatherPanelOpen(false);
 						setModalFarm(null);
 					}}
 					farm={modalFarm}

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { GreenBeanLot } from '../../types';
 import { FileText, Printer, X } from 'lucide-react';
-import { generateQRDataUrl, getPublicTraceUrl, getTraceabilityLotUrl } from '../../services/greenBeanLotService';
+import { generateQRDataUrl, getPublicTraceUrl, getTraceabilityLotUrl } from '../../services/lots/greenBeanLotService';
 import { formatGreenBeanId } from '../../utils/formatDisplayId';
 
 interface InvoiceReceiptProps {
