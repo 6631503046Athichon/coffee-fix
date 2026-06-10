@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 import { randomUUID } from 'crypto'
 
 export const dynamic = 'force-dynamic'
@@ -11,13 +11,14 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    requireRole(user, ['Processor', 'Admin'])
     const { id } = await params
 
     // Check if lot exists
     const lot = await prisma.greenBeanLot.findUnique({
       where: { id },
-      select: { id: true, publicTraceId: true }
+      select: { id: true, publicTraceId: true, createdById: true }
     })
 
     if (!lot) {
@@ -26,6 +27,9 @@ export async function POST(
         { status: 404 }
       )
     }
+
+    // SECURITY: Only the lot creator (or Admin) can generate a public trace ID.
+    requireOwnership(user, lot.createdById, ['Admin'])
 
     // Generate new public ID
     const publicTraceId = randomUUID()

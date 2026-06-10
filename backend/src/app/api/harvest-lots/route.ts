@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 import { validateBody, createHarvestLotSchema } from '@/lib/validations'
 import { nextDisplayId, parseDateOnly, withDisplayIdRetry } from '@/lib/utils'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
@@ -86,6 +86,23 @@ export async function POST(request: NextRequest) {
     }
 
     const { farmerName, cherryVariety, weightKg, farmPlotLocation, harvestDate, status, cropYearId, farmId } = validation.data
+
+    // SECURITY: If farmId is provided, verify ownership before creating the lot.
+    if (farmId) {
+      const farm = await prisma.farm.findUnique({
+        where: { id: farmId },
+        select: { ownerId: true },
+      })
+
+      if (!farm) {
+        return NextResponse.json(
+          { error: 'Farm not found' },
+          { status: 404 }
+        )
+      }
+
+      requireOwnership(user, farm.ownerId, ['Admin'])
+    }
 
     // Validate cropYearId if provided
     let validCropYearId = cropYearId || null

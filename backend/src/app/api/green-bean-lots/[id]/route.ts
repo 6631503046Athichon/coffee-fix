@@ -287,51 +287,60 @@ export async function PUT(
       updateData.priceSetBy = user.id;
     }
 
-    const updatedLot = await prisma.greenBeanLot.update({
-      where: { id },
-      data: updateData,
-      include: {
-        parchmentLot: {
-          include: {
-            processingBatch: {
-              select: {
-                id: true,
-                processType: true,
+    // Update the lot AND write the pricing-history audit row in a single
+    // transaction. Previously the audit log was a fire-and-forget call after
+    // the update committed — if the audit insert failed, the price change
+    // silently persisted with no history record. Wrapping both ensures the
+    // price update rolls back together with the audit on any failure.
+    const updatedLot = await prisma.$transaction(async (tx) => {
+      const lot = await tx.greenBeanLot.update({
+        where: { id },
+        data: updateData,
+        include: {
+          parchmentLot: {
+            include: {
+              processingBatch: {
+                select: {
+                  id: true,
+                  processType: true,
+                },
               },
-            },
-            harvestLot: {
-              select: {
-                id: true,
-                farmerName: true,
-                cherryVariety: true,
+              harvestLot: {
+                select: {
+                  id: true,
+                  farmerName: true,
+                  cherryVariety: true,
+                },
               },
             },
           },
-        },
-        priceSetter: {
-          select: {
-            id: true,
-            name: true,
+          priceSetter: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
-      },
-    });
+      });
 
-    // Create pricing history entry if price was set
-    if (pricePerKg !== undefined && currency) {
-      const price = safeParseFloat(pricePerKg);
-      if (price !== null && price >= 0) {
-        await prisma.pricingHistory.create({
-          data: {
-            greenBeanLotId: id,
-            pricePerKg: price,
-            currency,
-            effectiveDate: priceSetDate ? new Date(priceSetDate) : new Date(),
-            setBy: user.id,
-          },
-        });
+      // Create pricing history entry if price was set
+      if (pricePerKg !== undefined && currency) {
+        const price = safeParseFloat(pricePerKg);
+        if (price !== null && price >= 0) {
+          await tx.pricingHistory.create({
+            data: {
+              greenBeanLotId: id,
+              pricePerKg: price,
+              currency,
+              effectiveDate: priceSetDate ? new Date(priceSetDate) : new Date(),
+              setBy: user.id,
+            },
+          });
+        }
       }
-    }
+
+      return lot;
+    });
 
     return NextResponse.json({ greenBeanLot: updatedLot });
   } catch (error) {
@@ -384,20 +393,13 @@ export async function DELETE(
       );
     }
 
-    // Delete related data first
-    await prisma.cuppingScore.deleteMany({
-      where: { greenBeanLotId: id },
-    });
-    await prisma.greenBeanWithdrawal.deleteMany({
-      where: { greenBeanLotId: id },
-    });
-    await prisma.pricingHistory.deleteMany({
-      where: { greenBeanLotId: id },
-    });
-
-    // Delete the lot
-    await prisma.greenBeanLot.delete({
-      where: { id },
+    // CuppingScore, GreenBeanWithdrawal, and PricingHistory all cascade on
+    // delete in the schema, so a single transactional delete is atomic — no
+    // separate deleteMany() calls are needed.
+    await prisma.$transaction(async (tx) => {
+      await tx.greenBeanLot.delete({
+        where: { id },
+      });
     });
 
     return NextResponse.json({

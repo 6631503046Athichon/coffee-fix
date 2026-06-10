@@ -94,40 +94,61 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (parseFloat(batchSizeKg) > inventory.remainingWeightKg) {
+    const amount = parseFloat(batchSizeKg)
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return NextResponse.json(
+        { error: 'Invalid batch size' },
+        { status: 400 }
+      )
+    }
+
+    if (amount > inventory.remainingWeightKg) {
       return NextResponse.json(
         { error: 'Insufficient weight in inventory' },
         { status: 400 }
       )
     }
 
-    const roastBatch = await prisma.$transaction(async (tx) => {
-      // Create roast batch
-      const batch = await tx.roastBatch.create({
-        data: {
-          roasterId: user.id,
-          roasterInventoryId,
-          greenBeanLotId,
-          batchSizeKg: parseFloat(batchSizeKg),
-          yieldPercentage: parseFloat(yieldPercentage),
-          roastedWeightKg: roastedWeightKg ? parseFloat(roastedWeightKg) : null,
-          weightLossPct: weightLossPct ? parseFloat(weightLossPct) : null,
-          roastLevel: roastLevel || null,
-          roastProfileNotes,
-          flavorNotes: flavorNotes || null,
-        },
-      })
+    let roastBatch
+    try {
+      roastBatch = await prisma.$transaction(async (tx) => {
+        // Atomic guarded decrement: two concurrent roasts cannot both pass the
+        // up-front weight check and overdraw the inventory item.
+        const decResult = await tx.roasterInventoryItem.updateMany({
+          where: { id: roasterInventoryId, remainingWeightKg: { gte: amount } },
+          data: { remainingWeightKg: { decrement: amount } },
+        })
+        if (decResult.count === 0) {
+          throw new Error('INSUFFICIENT_INVENTORY')
+        }
 
-      // Update inventory
-      await tx.roasterInventoryItem.update({
-        where: { id: roasterInventoryId },
-        data: {
-          remainingWeightKg: inventory.remainingWeightKg - parseFloat(batchSizeKg),
-        },
-      })
+        // Create roast batch
+        const batch = await tx.roastBatch.create({
+          data: {
+            roasterId: user.id,
+            roasterInventoryId,
+            greenBeanLotId,
+            batchSizeKg: amount,
+            yieldPercentage: parseFloat(yieldPercentage),
+            roastedWeightKg: roastedWeightKg ? parseFloat(roastedWeightKg) : null,
+            weightLossPct: weightLossPct ? parseFloat(weightLossPct) : null,
+            roastLevel: roastLevel || null,
+            roastProfileNotes,
+            flavorNotes: flavorNotes || null,
+          },
+        })
 
-      return batch
-    })
+        return batch
+      })
+    } catch (error) {
+      if ((error as Error)?.message === 'INSUFFICIENT_INVENTORY') {
+        return NextResponse.json(
+          { error: 'Insufficient weight in inventory' },
+          { status: 400 }
+        )
+      }
+      throw error
+    }
 
     const fullBatch = await prisma.roastBatch.findUnique({
       where: { id: roastBatch.id },

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 import { parseDateOnly } from '@/lib/utils'
 
 // GET /api/soil-analyses - List all soil analyses
@@ -88,14 +88,29 @@ export async function POST(request: NextRequest) {
     } = body
 
     // Validation
-    if (!farmId || !farmPlotLocation || !testDate || pH === undefined || 
-        phosphorus === undefined || potassium === undefined || 
+    if (!farmId || !farmPlotLocation || !testDate || pH === undefined ||
+        phosphorus === undefined || potassium === undefined ||
         calcium === undefined || magnesium === undefined) {
       return NextResponse.json(
         { error: 'Farm ID, farm plot location, test date, and all core nutrients (pH, P, K, Ca, Mg) are required' },
         { status: 400 }
       )
     }
+
+    // SECURITY: Verify the farm exists and is owned by the caller.
+    const farm = await prisma.farm.findUnique({
+      where: { id: farmId },
+      select: { ownerId: true },
+    })
+
+    if (!farm) {
+      return NextResponse.json(
+        { error: 'Farm not found' },
+        { status: 404 }
+      )
+    }
+
+    requireOwnership(user, farm.ownerId, ['Admin'])
 
     const soilAnalysis = await prisma.soilAnalysis.create({
       data: {

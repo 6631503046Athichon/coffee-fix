@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, handleApiError } from '@/lib/middleware'
+import { safeParseFloat } from '@/lib/utils'
 
 // GET /api/roaster-inventory/:id
 export async function GET(
@@ -101,8 +102,43 @@ export async function PUT(
     const { claimedWeightKg, remainingWeightKg } = body
 
     const updateData: Prisma.RoasterInventoryItemUpdateInput = {}
-    if (claimedWeightKg !== undefined) updateData.claimedWeightKg = parseFloat(claimedWeightKg)
-    if (remainingWeightKg !== undefined) updateData.remainingWeightKg = parseFloat(remainingWeightKg)
+
+    // Use safeParseFloat + Number.isFinite so a junk payload like
+    // `{ remainingWeightKg: 'abc' }` doesn't silently store NaN in the DB
+    // (Prisma writes through to a Float column, and once NaN lands there
+    // every downstream math operation poisons too).
+    let nextClaimed: number | null = null
+    if (claimedWeightKg !== undefined) {
+      const parsed = safeParseFloat(claimedWeightKg)
+      if (parsed === null || !Number.isFinite(parsed) || parsed < 0) {
+        return NextResponse.json(
+          { error: 'Invalid claimedWeightKg' },
+          { status: 400 }
+        )
+      }
+      nextClaimed = parsed
+      updateData.claimedWeightKg = parsed
+    }
+
+    if (remainingWeightKg !== undefined) {
+      const parsed = safeParseFloat(remainingWeightKg)
+      if (parsed === null || !Number.isFinite(parsed) || parsed < 0) {
+        return NextResponse.json(
+          { error: 'Invalid remainingWeightKg' },
+          { status: 400 }
+        )
+      }
+      // Remaining must not exceed the claimed amount — either the new value
+      // being set in this request, or the existing one on the row.
+      const cap = nextClaimed ?? inventoryItem.claimedWeightKg
+      if (typeof cap === 'number' && parsed > cap) {
+        return NextResponse.json(
+          { error: 'remainingWeightKg cannot exceed claimedWeightKg' },
+          { status: 400 }
+        )
+      }
+      updateData.remainingWeightKg = parsed
+    }
 
     const updatedItem = await prisma.roasterInventoryItem.update({
       where: { id },

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { safeParseFloat } from '@/lib/utils'
 
@@ -56,6 +56,9 @@ export async function POST(
         { status: 404 }
       )
     }
+
+    // SECURITY: Only the lot creator (or Admin/Roaster) can draw down the lot.
+    requireOwnership(user, lot.createdById, ['Admin', 'Roaster'])
 
     const amount = safeParseFloat(amountKg);
     if (amount === null || amount <= 0) {

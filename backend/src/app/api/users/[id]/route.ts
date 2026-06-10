@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
-import { hashPassword } from '@/lib/auth'
+import { hashPassword, verifyPassword } from '@/lib/auth'
 
 // GET /api/users/:id
 export async function GET(
@@ -71,14 +71,84 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { name, email, username, roles, isActive, password } = body
+    const { name, email, username, roles, isActive, password, currentPassword } = body
 
-    // Non-admins can only update their own name
+    // Duplicate email/username pre-flight check.
+    //
+    // Hoisted out of the admin branch so non-admins changing their own
+    // email/username also get a clean 409 instead of a P2002 leaking
+    // through `handleApiError`. We use `findUnique` on the unique columns
+    // here (rather than the old `findFirst(... id: { not: id })`) so the
+    // lookup hits the unique index — Postgres returns at most one row, and
+    // we just compare `.id` to ignore the current user.
+    if (typeof email === 'string' && email.length > 0) {
+      const conflict = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true },
+      })
+      if (conflict && conflict.id !== id) {
+        return NextResponse.json(
+          { error: 'Email already exists' },
+          { status: 409 }
+        )
+      }
+    }
+
+    if (typeof username === 'string' && username.length > 0) {
+      const conflict = await prisma.user.findUnique({
+        where: { username },
+        select: { id: true },
+      })
+      if (conflict && conflict.id !== id) {
+        return NextResponse.json(
+          { error: 'Username already exists' },
+          { status: 409 }
+        )
+      }
+    }
+
+    // Non-admins editing their own profile can change name/email/username and
+    // (optionally) their password — but ANY sensitive change (email,
+    // username, password) requires re-proving the current password. This
+    // blocks the classic "session-hijack → silently swap email then trigger
+    // password reset" account-takeover chain.
     if (isOwnProfile && !isAdmin) {
+      const wantsSensitiveChange =
+        email !== undefined || username !== undefined || password !== undefined
+
+      if (wantsSensitiveChange) {
+        if (typeof currentPassword !== 'string' || currentPassword.length === 0) {
+          return NextResponse.json(
+            { error: 'Current password is required to change email, username, or password' },
+            { status: 400 }
+          )
+        }
+        const me = await prisma.user.findUnique({
+          where: { id },
+          select: { password: true },
+        })
+        if (!me) {
+          return NextResponse.json(
+            { error: 'User not found' },
+            { status: 404 }
+          )
+        }
+        const ok = await verifyPassword(currentPassword, me.password)
+        if (!ok) {
+          return NextResponse.json(
+            { error: 'Current password is incorrect' },
+            { status: 401 }
+          )
+        }
+      }
+
       const updateData: Prisma.UserUpdateInput = {}
-      if (name) updateData.name = name
-      if (email) updateData.email = email
-      if (username) updateData.username = username
+      if (name !== undefined) updateData.name = name
+      if (email !== undefined) updateData.email = email
+      if (username !== undefined) updateData.username = username
+      if (password) {
+        updateData.password = await hashPassword(password)
+      }
 
       const updatedUser = await prisma.user.update({
         where: { id },
@@ -132,37 +202,6 @@ export async function PUT(
         return NextResponse.json(
           { error: 'Cannot modify another admin account without super admin privileges' },
           { status: 403 }
-        )
-      }
-    }
-
-    // Check for duplicate email/username before updating
-    if (email !== undefined && email) {
-      const existingUser = await prisma.user.findFirst({
-        where: {
-          email: email,
-          id: { not: id }, // Exclude current user
-        },
-      })
-      if (existingUser) {
-        return NextResponse.json(
-          { error: 'Email already exists' },
-          { status: 409 }
-        )
-      }
-    }
-
-    if (username !== undefined && username) {
-      const existingUser = await prisma.user.findFirst({
-        where: {
-          username: username,
-          id: { not: id }, // Exclude current user
-        },
-      })
-      if (existingUser) {
-        return NextResponse.json(
-          { error: 'Username already exists' },
-          { status: 409 }
         )
       }
     }

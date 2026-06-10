@@ -7,7 +7,11 @@ import { validateBody, validateQuery, createCustomerSchema, customerQuerySchema 
 // GET /api/customers - List all customers
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    // Customer rows are PII (contact emails, phone numbers, addresses).
+    // Farmers / Cuppers have no business reason to read the full list, so
+    // restrict it to roles that actually fulfil sales orders.
+    requireRole(user, ['Admin', 'Roaster'])
 
     const queryValidation = validateQuery(request, customerQuerySchema)
     if (!queryValidation.success) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 
 // GET /api/gap-logs - List all GAP logs
 export async function GET(request: NextRequest) {
@@ -91,6 +91,23 @@ export async function POST(request: NextRequest) {
         { error: 'Farm plot location, activity type, date, product used, and quantity are required' },
         { status: 400 }
       )
+    }
+
+    // SECURITY: If farmId is provided, verify ownership before creating.
+    if (farmId) {
+      const farm = await prisma.farm.findUnique({
+        where: { id: farmId },
+        select: { ownerId: true },
+      })
+
+      if (!farm) {
+        return NextResponse.json(
+          { error: 'Farm not found' },
+          { status: 404 }
+        )
+      }
+
+      requireOwnership(user, farm.ownerId, ['Admin'])
     }
 
     // Get activity type to get the name

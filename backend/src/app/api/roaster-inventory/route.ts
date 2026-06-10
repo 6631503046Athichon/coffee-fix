@@ -87,11 +87,13 @@ export async function POST(request: NextRequest) {
 
     const weight = parseFloat(claimedWeightKg)
 
+    if (!Number.isFinite(weight) || weight <= 0) {
+      return NextResponse.json({ error: 'Invalid claimed weight' }, { status: 400 })
+    }
+
     if (weight > lot.currentWeightKg) {
       return NextResponse.json({ error: 'Insufficient weight available' }, { status: 400 })
     }
-
-    const newLotWeight = lot.currentWeightKg - weight
 
     const inventoryInclude = {
       roaster: {
@@ -118,12 +120,29 @@ export async function POST(request: NextRequest) {
     } as const
 
     const claimResult = await prisma.$transaction(async (tx) => {
-      // Deduct from the source lot; mark Withdrawn when fully claimed
+      // Atomic guarded decrement: two concurrent claims cannot both pass the
+      // up-front weight check and overdraw the lot. updateMany compiles to
+      // a single SQL UPDATE that Postgres serialises at the row level.
+      const decResult = await tx.greenBeanLot.updateMany({
+        where: { id: greenBeanLotId, currentWeightKg: { gte: weight } },
+        data: { currentWeightKg: { decrement: weight } },
+      })
+      if (decResult.count === 0) {
+        throw new Error('INSUFFICIENT_STOCK')
+      }
+
+      // Re-read post-decrement weight to decide availabilityStatus. Only flip
+      // to Withdrawn when stock is depleted — never clobber an existing
+      // Withdrawn status back to Available.
+      const fresh = await tx.greenBeanLot.findUnique({
+        where: { id: greenBeanLotId },
+        select: { currentWeightKg: true, availabilityStatus: true },
+      })
+      const remaining = fresh?.currentWeightKg ?? 0
       const updatedSourceLot = await tx.greenBeanLot.update({
         where: { id: greenBeanLotId },
         data: {
-          currentWeightKg: newLotWeight,
-          availabilityStatus: newLotWeight <= 0 ? 'Withdrawn' : 'Available',
+          ...(remaining <= 0 && { availabilityStatus: 'Withdrawn' }),
         },
         select: {
           id: true,
@@ -133,12 +152,18 @@ export async function POST(request: NextRequest) {
       })
 
       let inventoryItem
-      const existingItem = await tx.roasterInventoryItem.findFirst({
+      // RoasterInventoryItem has `@@unique([roasterId, greenBeanLotId])`, so
+      // there is at most one row per (roaster, greenBeanLot) pair. Use
+      // findUnique on the composite key — it's a direct index hit and removes
+      // the misleading "orderBy createdAt desc" that suggested duplicates
+      // could exist.
+      const existingItem = await tx.roasterInventoryItem.findUnique({
         where: {
-          roasterId: user.id,
-          greenBeanLotId,
+          roasterId_greenBeanLotId: {
+            roasterId: user.id,
+            greenBeanLotId,
+          },
         },
-        orderBy: { createdAt: 'desc' },
         select: { id: true },
       })
 
@@ -178,6 +203,12 @@ export async function POST(request: NextRequest) {
       { status: 201 },
     )
   } catch (error) {
+    if ((error as Error)?.message === 'INSUFFICIENT_STOCK') {
+      return NextResponse.json(
+        { error: 'Insufficient weight available' },
+        { status: 400 },
+      )
+    }
     return handleApiError(error)
   }
 }

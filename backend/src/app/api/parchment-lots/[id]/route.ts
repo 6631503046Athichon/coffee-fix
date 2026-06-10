@@ -146,14 +146,13 @@ export async function DELETE(
       )
     }
 
-    // Delete physical test results first
-    await prisma.physicalTestResults.deleteMany({
-      where: { parchmentLotId: id },
-    })
-
-    // Delete the lot
-    await prisma.parchmentLot.delete({
-      where: { id },
+    // PhysicalTestResults and ParchmentWithdrawal both cascade on delete in
+    // the schema, so a single delete inside a transaction is sufficient and
+    // atomic — no separate deleteMany() is needed.
+    await prisma.$transaction(async (tx) => {
+      await tx.parchmentLot.delete({
+        where: { id },
+      })
     })
 
     return NextResponse.json({ message: 'Parchment lot deleted successfully' })

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 
 // GET /api/weather-records/:id
 export async function GET(
@@ -50,12 +50,27 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    requireRole(user, ['Farmer', 'Admin'])
     const { id } = await params
+
+    // SECURITY: Load the record + farm owner for ownership check.
+    const existing = await prisma.weatherRecord.findUnique({
+      where: { id },
+      include: { farm: { select: { ownerId: true } } },
+    })
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Weather record not found' },
+        { status: 404 }
+      )
+    }
+
+    requireOwnership(user, existing.farm.ownerId, ['Admin'])
 
     const body = await request.json()
     const {
-      farmId,
       farmPlotLocation,
       recordDate,
       temperatureMin,
@@ -67,10 +82,9 @@ export async function PUT(
       notes,
     } = body
 
-    // Use UncheckedUpdateInput so we can assign scalar FKs (farmId) directly
-    // without needing a nested `connect`.
+    // SECURITY: Do NOT allow reassigning farmId — that would let a user move
+    // a record they own to a farm they don't.
     const updateData: Prisma.WeatherRecordUncheckedUpdateInput = {}
-    if (farmId !== undefined) updateData.farmId = farmId
     if (farmPlotLocation !== undefined) updateData.farmPlotLocation = farmPlotLocation
     if (recordDate !== undefined) updateData.recordDate = new Date(recordDate)
     if (temperatureMin !== undefined) updateData.temperatureMin = parseFloat(temperatureMin)
@@ -113,8 +127,23 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    requireRole(user, ['Farmer', 'Admin'])
     const { id } = await params
+
+    const existing = await prisma.weatherRecord.findUnique({
+      where: { id },
+      include: { farm: { select: { ownerId: true } } },
+    })
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: 'Weather record not found' },
+        { status: 404 }
+      )
+    }
+
+    requireOwnership(user, existing.farm.ownerId, ['Admin'])
 
     await prisma.weatherRecord.delete({
       where: { id },

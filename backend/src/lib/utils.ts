@@ -61,6 +61,16 @@ export function parseDateOnly(value: unknown): Date | null {
  * `@unique`, so the database rejects the second insert with P2002. Wrap the
  * `nextDisplayId` + `create` pair in `withDisplayIdRetry` so the second
  * caller re-reads max and retries.
+ *
+ * IMPLEMENTATION NOTE: a `findFirst({ orderBy: { displayId: 'desc' } })`
+ * fast path would let Postgres pick the max via index, but only if the
+ * numeric suffix is fixed-width zero-padded (e.g. `HL-2026-0007`). Current
+ * production data and the `__tests__/display-id.test.ts` contract both use
+ * unpadded suffixes (`HL-2026-7`), where lexical desc order returns `-9`
+ * before `-10`. A switch would therefore require a data migration AND a
+ * test update — both intentionally out of scope here. Leaving the linear
+ * scan in place is correct; revisit if the table grows past ~10k rows per
+ * year per prefix.
  */
 export async function nextDisplayId(
   model: { findMany: (args: any) => Promise<any[]> },

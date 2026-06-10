@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
+import { safeParseFloat } from '@/lib/utils'
 
 // POST /api/processing-batches/:id/drying-logs - Add drying log entry
 export async function POST(
@@ -8,8 +9,24 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    requireRole(user, ['Processor', 'Admin'])
     const { id } = await params
+
+    // Load the parent batch for ownership check
+    const batch = await prisma.processingBatch.findUnique({
+      where: { id },
+      select: { createdById: true },
+    })
+
+    if (!batch) {
+      return NextResponse.json(
+        { error: 'Processing batch not found' },
+        { status: 404 }
+      )
+    }
+
+    requireOwnership(user, batch.createdById, ['Admin'])
 
     const body = await request.json()
     const { date, moistureContent, ambientTemp, relativeHumidity } = body
@@ -21,13 +38,24 @@ export async function POST(
       )
     }
 
+    const moisture = safeParseFloat(moistureContent)
+    const ambient = safeParseFloat(ambientTemp)
+    const humidity = safeParseFloat(relativeHumidity)
+
+    if (moisture === null || ambient === null || humidity === null) {
+      return NextResponse.json(
+        { error: 'Moisture content, ambient temperature, and relative humidity must be valid numbers' },
+        { status: 400 }
+      )
+    }
+
     const dryingLog = await prisma.dryingLogEntry.create({
       data: {
         processingBatchId: id,
         date: new Date(date),
-        moistureContent: parseFloat(moistureContent),
-        ambientTemp: parseFloat(ambientTemp),
-        relativeHumidity: parseFloat(relativeHumidity),
+        moistureContent: moisture,
+        ambientTemp: ambient,
+        relativeHumidity: humidity,
       },
     })
 

@@ -12,57 +12,89 @@ export async function GET(
   try {
     const { publicId } = await params
 
+    // SECURITY: This is a PUBLIC (unauthenticated) endpoint. Do not fetch
+    // sensitive fields here — even if downstream code forgets to strip them,
+    // they are never read out of the DB.
+    //   - currentWeightKg / availabilityStatus: business inventory data
+    //   - farmerName / farm.ownerNames: PII
+    //   - latitude / longitude / googleMapsUrl: precise GPS coordinates
     const greenBeanLot = await prisma.greenBeanLot.findFirst({
       where: { publicTraceId: publicId },
-      include: {
+      select: {
+        id: true,
+        grade: true,
+        sourceType: true,
+        externalSource: true,
+        cuppingFragrance: true,
+        cuppingFlavor: true,
+        cuppingAftertaste: true,
+        cuppingAcidity: true,
+        cuppingBody: true,
+        cuppingBalance: true,
+        cuppingOverall: true,
+        cuppingUniformity: true,
+        cuppingCleanCup: true,
+        cuppingSweetness: true,
         parchmentLot: {
-          include: {
+          select: {
+            id: true,
+            processType: true,
+            moistureContent: true,
+            createdAt: true,
             processingBatch: {
-              include: {
+              select: {
+                id: true,
+                processType: true,
+                processNotes: true,
+                baggingDate: true,
+                dryingStartDate: true,
+                dryingEndDate: true,
                 harvestLot: {
-                  include: {
+                  select: {
+                    id: true,
+                    cherryVariety: true,
+                    harvestDate: true,
                     farm: {
                       select: {
                         id: true,
                         farmName: true,
-                        ownerNames: true,
                         location: true,
                         altitude: true,
-                        latitude: true,
-                        longitude: true,
-                        googleMapsUrl: true,
-                        caretakerNames: true,
-                        caretakerName: true,
                         varieties: true,
                       },
                     },
                   },
                 },
                 dryingLogs: {
-                  orderBy: { date: 'asc' }
-                }
+                  orderBy: { date: 'asc' },
+                },
               },
             },
             harvestLot: {
               select: {
                 id: true,
-                farmerName: true,
                 cherryVariety: true,
                 harvestDate: true,
                 farmPlotLocation: true,
-              }
+              },
             },
           },
         },
-        cuppingScores: true,
         roastBatches: {
-          include: {
+          select: {
+            id: true,
+            roastDate: true,
+            roastLevel: true,
+            roastProfileNotes: true,
+            flavorNotes: true,
+            batchSizeKg: true,
+            yieldPercentage: true,
             roaster: {
               select: {
                 id: true,
-                name: true
-              }
-            }
+                name: true,
+              },
+            },
           },
           orderBy: { roastDate: 'desc' },
         },
@@ -76,16 +108,14 @@ export async function GET(
       )
     }
 
-    // Return sanitized public data (no sensitive info like prices or internal IDs)
+    // Return sanitized public data (no sensitive info like prices, owner PII,
+    // GPS coordinates, or inventory state).
     const publicData = {
       lot: {
         id: greenBeanLot.id,
         grade: greenBeanLot.grade,
         sourceType: greenBeanLot.sourceType,
-        currentWeightKg: greenBeanLot.currentWeightKg,
-        availabilityStatus: greenBeanLot.availabilityStatus,
         externalSource: greenBeanLot.externalSource,
-        cuppingScores: greenBeanLot.cuppingScores,
         cuppingFragrance: greenBeanLot.cuppingFragrance,
         cuppingFlavor: greenBeanLot.cuppingFlavor,
         cuppingAftertaste: greenBeanLot.cuppingAftertaste,
@@ -97,18 +127,9 @@ export async function GET(
         cuppingCleanCup: greenBeanLot.cuppingCleanCup,
         cuppingSweetness: greenBeanLot.cuppingSweetness,
         parchmentLot: greenBeanLot.parchmentLot,
-        roastBatches: greenBeanLot.roastBatches.map(rb => ({
-          id: rb.id,
-          roastDate: rb.roastDate,
-          roastLevel: rb.roastLevel,
-          roastProfileNotes: rb.roastProfileNotes,
-          flavorNotes: rb.flavorNotes,
-          batchSizeKg: rb.batchSizeKg,
-          yieldPercentage: rb.yieldPercentage,
-          roaster: rb.roaster
-        }))
+        roastBatches: greenBeanLot.roastBatches,
       },
-      traceId: publicId
+      traceId: publicId,
     }
 
     return NextResponse.json(publicData)

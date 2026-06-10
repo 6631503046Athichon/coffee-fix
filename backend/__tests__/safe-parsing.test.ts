@@ -142,8 +142,8 @@ describe('Safe Parsing Utility Functions', () => {
 describe('Safe Parsing in API Routes', () => {
   const mockPrisma = {
     greenBeanLot: {
-      findUnique: jest.fn(),
-      update: jest.fn(),
+      findUnique: jest.fn<(...args: any[]) => any>(),
+      update: jest.fn<(...args: any[]) => any>(),
       // updateMany is the new atomic guard the route uses to prevent
       // double-spending on concurrent withdrawals. Default to count: 1
       // (success) so tests focused on parsing behaviour aren't broken by
@@ -151,13 +151,17 @@ describe('Safe Parsing in API Routes', () => {
       updateMany: jest.fn(async () => ({ count: 1 })),
     },
     greenBeanWithdrawal: {
-      create: jest.fn(),
+      create: jest.fn<(...args: any[]) => any>(),
     },
-    $transaction: jest.fn(async (callback) => callback(mockPrisma)),
+    $transaction: jest.fn(async (callback: (tx: typeof mockPrisma) => any) => callback(mockPrisma)),
   }
 
-  const mockRequireAuth = jest.fn()
-  const mockRequireRole = jest.fn()
+  const mockRequireAuth = jest.fn<(...args: any[]) => any>()
+  const mockRequireRole = jest.fn<(...args: any[]) => any>()
+  // The withdrawals route now calls requireOwnership(user, lot.createdById)
+  // after loading the lot. Default to a no-op so tests focused on parsing
+  // behaviour aren't blocked by ownership.
+  const mockRequireOwnership = jest.fn<(...args: any[]) => any>()
   const mockHandleApiError = jest.fn((error: any) => {
     const status = error.message === 'Unauthorized' ? 401 : 500
     return new Response(JSON.stringify({ error: error.message }), { status })
@@ -171,6 +175,7 @@ describe('Safe Parsing in API Routes', () => {
   jest.mock('@/lib/middleware', () => ({
     requireAuth: mockRequireAuth,
     requireRole: mockRequireRole,
+    requireOwnership: mockRequireOwnership,
     handleApiError: mockHandleApiError,
   }))
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 
 // GET /api/weather-records - List all weather records
 export async function GET(request: NextRequest) {
@@ -99,6 +99,38 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // SECURITY: Verify the farm exists and is owned by the caller.
+    const farm = await prisma.farm.findUnique({
+      where: { id: farmId },
+      select: { ownerId: true, createdAt: true },
+    })
+
+    if (!farm) {
+      return NextResponse.json(
+        { error: 'Farm not found' },
+        { status: 404 }
+      )
+    }
+
+    requireOwnership(user, farm.ownerId, ['Admin'])
+
+    // Clamp recordDate to [farm.createdAt, now + 1 day] so callers cannot
+    // backfill records before the farm existed or fabricate far-future data.
+    const parsedRecordDate = new Date(recordDate)
+    if (Number.isNaN(parsedRecordDate.getTime())) {
+      return NextResponse.json(
+        { error: 'Invalid recordDate' },
+        { status: 400 }
+      )
+    }
+    const oneDayAhead = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    if (parsedRecordDate < farm.createdAt || parsedRecordDate > oneDayAhead) {
+      return NextResponse.json(
+        { error: 'recordDate must be between the farm creation date and one day from now' },
+        { status: 400 }
+      )
+    }
+
     // Dedup safety net for API-source auto-fetches: if a fresh API record
     // for this farm already exists within the last 60s, return it instead
     // of creating a duplicate. The client side has its own in-flight lock,
@@ -145,7 +177,7 @@ export async function POST(request: NextRequest) {
       data: {
         farmId,
         farmPlotLocation,
-        recordDate: new Date(recordDate),
+        recordDate: parsedRecordDate,
         temperatureMin: parseFloat(temperatureMin),
         temperatureMax: parseFloat(temperatureMax),
         temperatureAvg: parseFloat(temperatureAvg),

@@ -68,7 +68,11 @@ export async function PUT(
     // (or Admin) can mutate it. Excel-imported batches fall back to Admin-only.
     const existingBatch = await prisma.processingBatch.findUnique({
       where: { id },
-      select: { createdById: true },
+      select: {
+        createdById: true,
+        harvestLotId: true,
+        parchmentWeightKg: true,
+      },
     })
     if (!existingBatch) {
       return NextResponse.json(
@@ -87,8 +91,9 @@ export async function PUT(
     if (status !== undefined) updateData.status = status
     if (processType !== undefined) updateData.processType = processType
     if (processNotes !== undefined) updateData.processNotes = processNotes
+    let parsedParchmentWeight: number | null = null
     if (parchmentWeightKg !== undefined) {
-      const parsedParchmentWeight = safeParseFloat(parchmentWeightKg)
+      parsedParchmentWeight = safeParseFloat(parchmentWeightKg)
       if (parsedParchmentWeight === null || parsedParchmentWeight <= 0) {
         return NextResponse.json(
           { error: 'Parchment weight must be greater than 0' },
@@ -142,30 +147,80 @@ export async function PUT(
     if (dryingEndDate !== undefined) updateData.dryingEndDate = parsedDryingEndDate
     if (cropYearId !== undefined) updateData.cropYearId = cropYearId
 
-    const updatedBatch = await prisma.processingBatch.update({
-      where: { id },
-      data: updateData,
-      include: {
-        harvestLot: {
-          select: {
-            id: true,
-            farmerName: true,
-            cherryVariety: true,
-            weightKg: true,
+    // Compute the parchmentWeightKg delta vs the previous value. When the
+    // batch is bound to a harvestLot we have to apply the delta atomically to
+    // harvestLot.remainingWeightKg, otherwise raising parchmentWeightKg would
+    // silently allow harvest stock to be double-counted.
+    const previousParchmentWeight = existingBatch.parchmentWeightKg ?? 0
+    const parchmentDelta =
+      parsedParchmentWeight !== null
+        ? parsedParchmentWeight - previousParchmentWeight
+        : 0
+
+    let updatedBatch
+    try {
+      updatedBatch = await prisma.$transaction(async (tx) => {
+        if (
+          parsedParchmentWeight !== null &&
+          existingBatch.harvestLotId &&
+          parchmentDelta !== 0
+        ) {
+          if (parchmentDelta > 0) {
+            // Need to draw down more harvest stock. Guarded decrement so the
+            // update fails (count === 0) if stock is insufficient.
+            const dec = await tx.harvestLot.updateMany({
+              where: {
+                id: existingBatch.harvestLotId,
+                remainingWeightKg: { gte: parchmentDelta },
+              },
+              data: { remainingWeightKg: { decrement: parchmentDelta } },
+            })
+            if (dec.count === 0) {
+              throw new Error('INSUFFICIENT_HARVEST_STOCK')
+            }
+          } else {
+            // parchmentWeightKg was lowered — return stock to the harvest lot.
+            await tx.harvestLot.update({
+              where: { id: existingBatch.harvestLotId },
+              data: { remainingWeightKg: { increment: -parchmentDelta } },
+            })
+          }
+        }
+
+        return tx.processingBatch.update({
+          where: { id },
+          data: updateData,
+          include: {
+            harvestLot: {
+              select: {
+                id: true,
+                farmerName: true,
+                cherryVariety: true,
+                weightKg: true,
+              },
+            },
+            cropYear: {
+              select: {
+                id: true,
+                year: true,
+              },
+            },
+            dryingLogs: {
+              orderBy: { date: 'asc' },
+            },
+            parchmentLots: true,
           },
-        },
-        cropYear: {
-          select: {
-            id: true,
-            year: true,
-          },
-        },
-        dryingLogs: {
-          orderBy: { date: 'asc' },
-        },
-        parchmentLots: true,
-      },
-    })
+        })
+      })
+    } catch (error) {
+      if ((error as Error)?.message === 'INSUFFICIENT_HARVEST_STOCK') {
+        return NextResponse.json(
+          { error: 'INSUFFICIENT_HARVEST_STOCK' },
+          { status: 400 }
+        )
+      }
+      throw error
+    }
 
     return NextResponse.json({ processingBatch: updatedBatch })
   } catch (error) {

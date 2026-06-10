@@ -233,6 +233,11 @@ export async function GET(request: NextRequest) {
         }),
 
         // Green Bean Lots
+        // No `take` cap: Farmer-scoped queries are already bounded by the
+        // farm ownership filter above, and Admin/non-farmer callers are
+        // expected to see the full list on the dashboard. A misleading
+        // `take: 50` here previously silently truncated farmer dashboards
+        // once they had >50 lots across all their farms.
         prisma.greenBeanLot.findMany({
           where: greenBeanScopeWhere,
           include: {
@@ -254,7 +259,6 @@ export async function GET(request: NextRequest) {
             _count: { select: { cuppingScores: true } },
           },
           orderBy: { createdAt: 'desc' },
-          take: 50,
         }),
 
         // Roaster Inventory

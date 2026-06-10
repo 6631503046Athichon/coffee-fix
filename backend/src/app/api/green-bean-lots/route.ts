@@ -109,6 +109,9 @@ export async function POST(request: NextRequest) {
       return validation.error;
     }
 
+    // createGreenBeanLotSchema doesn't declare `processorScore`, but the route
+    // historically accepts it from clients that send a pre-cupping processor
+    // score. Treat it as an unknown extra field we'll coerce below.
     const {
       sourceType,
       parchmentLotId,
@@ -117,10 +120,10 @@ export async function POST(request: NextRequest) {
       currentWeightKg,
       externalSource,
       availabilityStatus,
-      processorScore,
       pricePerKg,
       currency,
-    } = validation.data as any;
+    } = validation.data;
+    const processorScore = (validation.data as { processorScore?: unknown }).processorScore;
 
     const greenBeanLot = await withDisplayIdRetry(async () => {
       const displayId = await nextDisplayId(prisma.greenBeanLot, "GBL")
