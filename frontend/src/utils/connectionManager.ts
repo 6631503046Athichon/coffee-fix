@@ -10,7 +10,11 @@
  *   - Guard outgoing calls with connectionManager.shouldSuppress().
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+// Production: same-origin /api (Vercel proxies to Railway, keeps auth
+// cookie first-party). Dev: local backend. Mirrors services/api.ts.
+const API_BASE_URL = import.meta.env.PROD
+  ? '/api'
+  : import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 
 /** Duration (ms) after the first failure during which all API calls are suppressed. */
 const SUPPRESS_WINDOW_MS = 30_000
