@@ -241,7 +241,7 @@ const TransferOwnershipModal: React.FC<TransferOwnershipModalProps> = ({
                 type="text"
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 font-mono"
                 placeholder="TRANSFER"
                 disabled={!selectedAdminId || admins.length === 0}
               />
