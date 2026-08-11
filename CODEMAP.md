@@ -5,11 +5,9 @@ Quick navigation to where things live. If you can't find something, search this 
 ## Top-level layout
 
 - `backend/`   — Next.js 14 App Router API + Prisma + PostgreSQL
-- `frontend/`  — Vite + React 19 SPA (TypeScript, non-strict)
+- `frontend/`  — Vite + React 19 SPA (TypeScript, `strict: true`)
 - `CLAUDE.md`  — working notes & rules (READ FIRST for hands-off zones)
 - `CODING_STANDARDS.md` — code style reference (single quotes, no semicolons)
-- `coffee-fix-schema.sql` — SQL snapshot of the DB schema
-- `DEMO_CREDENTIALS.md` — login credentials for demo accounts
 - `spec.md` — product spec
 
 ---
@@ -93,6 +91,8 @@ Routes follow Next.js App Router file conventions. Each `route.ts` exports HTTP 
 ### Backend middleware — `backend/src/middleware.ts`
 Edge middleware (rate-limit / CORS / cookie passthrough). Not to be confused with `lib/middleware.ts` which is request-handler middleware.
 
+`backend/src/instrumentation.ts` sits next to it — Next.js startup hook, boots the server-side weather scheduler. Both filenames are fixed by Next.js and must stay at `src/`.
+
 ### Backend library — `backend/src/lib/`
 - `auth.ts` — JWT sign/verify, password hashing, token extraction
 - `middleware.ts` — `requireAuth`, `requireRole`, `requireOwnership`, `optionalAuth`, `errorResponse`, auth cache
@@ -107,12 +107,20 @@ Edge middleware (rate-limit / CORS / cookie passthrough). Not to be confused wit
 ### Prisma — `backend/prisma/`
 - `schema.prisma` — single-source-of-truth data model
 - `seed.ts` — seed script (demo data)
-- `migrations/` — migration history
+
+There is no `migrations/` directory — it is gitignored and deploys run `prisma db push` (see `backend/railway.json`), so the schema file is the only history.
 
 Key models: `User`, `Farm`, `FarmCollaborator`, `CropYear`, `HarvestLot`, `ProcessingBatch`, `DryingLogEntry`, `PhysicalTestResults`, `ParchmentLot`, `ParchmentWithdrawal`, `GreenBeanLot`, `GreenBeanWithdrawal`, `RoasterInventoryItem`, `RoastBatch`, `SaleOrder`, `SaleOrderItem`, `Invoice`, `InvoiceItem`, `Customer`, `PricingHistory`, `WeatherRecord`, `SoilAnalysis`, `GAPLogEntry`, `ActivityType`, `CoffeeVariety`, `ProcessType`, `PasswordResetToken`, plus cupping models (HANDS-OFF).
 
 ### Backend scripts — `backend/scripts/`
-One-off DB maintenance tools: `check-db.ts`, `check-display-ids.js`, `check-relations.js`, `find-duplicates.ts`, `merge-duplicate-inventory.ts`, `populate-display-ids.ts`, `setup.ts`.
+
+Split by blast radius, so it is obvious what is safe to point at production.
+
+- `diagnostics/` — **read only**, never writes: `check-data.js`, `check-db.ts`, `check-display-ids.js`, `check-relations.js`, `find-duplicates.ts`, `measure-db-latency.js`, `test-supabase.js`, `verify-migration.js`, `weather-stats.js`
+- `maintenance/` — **writes rows**: `dedupe-weather-records.js`, `merge-duplicate-inventory.ts`, `populate-display-ids.ts`
+- `win/` — PowerShell helpers: `deploy-migrate.ps1`, `deploy-push.ps1`, `kill-port.ps1`
+
+Run everything from `backend/`, e.g. `node scripts/diagnostics/check-data.js supabase` or `.\scripts\win\deploy-push.ps1`. `check-data.js`, `test-supabase.js` and `verify-migration.js` read `backend/.env` directly rather than taking the URL on the command line, so passwords never land in shell history.
 
 ### Tests — `backend/__tests__/`
 Jest suites:
@@ -128,8 +136,12 @@ Jest suites:
 
 ## Frontend
 
+### Import style — `@/` alias
+
+`@/` resolves to `frontend/src/`, wired identically in `vite.config.ts`, `vitest.config.ts` and `tsconfig.json`. Most of the tree still uses relative imports; prefer `@/` in new code and when moving a file, so paths stop depending on nesting depth. Both styles work.
+
 ### Entry — `frontend/src/`
-- `index.tsx` — Vite entry, mounts React
+- `index.tsx` — Vite entry, mounts React (referenced by `index.html` as `/src/index.tsx`, so it cannot be moved)
 - `App.tsx` — top-level routing (hash-based via `utils/hashRouting.ts`)
 - `constants.ts` — shared constants
 - `types.ts` — legacy single-file types (being split into `types/`)
@@ -139,29 +151,28 @@ Jest suites:
 
 ### Components — `frontend/src/components/`
 
-Top-level pages (loose files):
-- `CoffeeVarietiesManager.tsx`, `CustomerManagement.tsx`, `UserManagement.tsx`
-- `PublicTraceabilityPage.tsx`, `TraceabilityHub.tsx`, `TraceabilityPage.tsx`
-- `QualityInsights.tsx`
+Every file lives in a domain folder; the root holds only those folders and a `README.md`. **A modal belongs to the domain that opens it**, as `<domain>/modals/` — there is no shared top-level `modals/` folder.
 
-Grouped folders:
 - `auth/` — `Login`, `ForgotPassword`, `ResetPassword`, `FirstLoginSetup`
 - `common/` — `Button`, `Input`, `Select`, `Modal`, `DatePicker`, `Dropdown`, `Badge`, `Alert`, `StatCard`, `FarmMapView`, `ProtectedRoute`, `ToastContainer`, `PageHeader`, `RestoredDataBanner`
 - `layout/` — `Header`, `Sidebar`
-- `admin/` — `ActivityTypeManagement`, `ProcessTypeManagement`
+- `admin/` — `ActivityTypeManagement`, `ProcessTypeManagement`, `CoffeeVarietiesManager`, `UserManagement`
+  - `admin/modals/` — `CreateUserModal`, `EditUserModal`, `TransferOwnershipModal`
 - `farmer/` — `FarmerDashboard`, `FarmManagement`, `AddFarmPage`, `HarvestLotsManagement`, `HarvestLotDetail`, `FarmSoilPanel`, `FarmWeatherPanel`, `FarmerDataHub`, `GAPComplianceHelper`
+  - `farmer/modals/` — `HarvestLotModal`
 - `processor/` — `ProcessorWorkbench` (large), `ParchmentTab`, `InvoiceReceipt`
   - `processor/workbench/` — sub-components: `KanbanCard`, `KanbanColumn`, `Pagination`, `DebouncedSearchInput`, `GradeDropdown`, `ProcessTypeDropdown`, `CropYearChips`, `ModalPortal`, `scoring.ts`, `constants.ts`
   - `processor/modals/` — `CompleteBatchModal`, `HullAndGradeModal`, `ParchmentWithdrawModal`, `StartProcessingModal`
 - `roaster/` — `RoasterWorkbench`, `InternalLotsTable`, `ExternalLotsTable`, `RoastLogPanel`
-- `cupper/` — HANDS-OFF (`CuppingHub`, `CuppingSessionDetail`, `CupperScoringSheet`, `CreateCuppingSessionModal`)
+- `sales/` — `CustomerManagement`
+  - `sales/modals/` — `CreateCustomerModal`
+- `traceability/` — `TraceabilityHub`, `TraceabilityPage`, `PublicTraceabilityPage`
+  - `traceability/modals/` — `QRCodeModal` (mints public trace IDs, hence not in `common/`)
+- `insights/` — `QualityInsights`
 - `competition/` — `CompetitionDashboard`
-- `modals/` — cross-domain modals grouped by area:
-  - `modals/user/` — `CreateUserModal`, `EditUserModal`, `TransferOwnershipModal`
-  - `modals/customer/` — `CreateCustomerModal`
-  - `modals/farm/` — `HarvestLotModal`
-  - `modals/qr/` — `QRCodeModal`
-  - each folder has `index.ts` barrel re-export
+- `cupper/` — HANDS-OFF (`CuppingHub`, `CuppingSessionDetail`, `CupperScoringSheet`, `CreateCuppingSessionModal`)
+
+Most folders carry an `index.ts` barrel, but nothing imports them — consumers import the component file directly. `admin/` and `processor/modals/` never had one.
 
 ### Services — `frontend/src/services/`
 Services are grouped by domain. Each domain folder has a barrel `index.ts`. `api.ts` is the base fetch client and stays at the services root.
@@ -169,7 +180,7 @@ Services are grouped by domain. Each domain folder has a barrel `index.ts`. `api
 - `api.ts` — base fetch client (cookie auth, error normalization)
 - `utils/transformers.ts` (+ test) — payload normalizers
 - `auth/` — `authService`, `userService`
-- `farm/` — `farmService`, `farmCollaboratorService`, `soilAnalysisService`, `gapLogService`, `weatherService`, `weatherApiService`, `weatherAutoFetchService`
+- `farm/` — `farmService`, `farmCollaboratorService`, `soilAnalysisService`, `gapLogService`, `weatherService`, `weatherApiService`
 - `lots/` — `harvestLotService`, `parchmentLotService`, `greenBeanLotService`
 - `processing/` — `processingBatchService`, `processTypeService`
 - `roaster/` — `roasterService`
@@ -226,11 +237,12 @@ Vitest. Co-located as `*.test.ts` in `src/utils/` and `src/services/utils/`. Set
 | Change auth / permissions logic | `backend/src/lib/middleware.ts` |
 | Add a Zod validation schema | `backend/src/lib/validations/<domain>.ts` |
 | Edit Prisma schema | `backend/prisma/schema.prisma` |
-| Add a new modal | `frontend/src/components/modals/` or domain folder |
+| Add a new modal | `frontend/src/components/<domain>/modals/` |
 | Call a backend endpoint from React | `frontend/src/services/<domain>/<X>Service.ts` (or `from '../services/<domain>'` via the barrel) |
 | Add a domain-specific type | `frontend/src/types/<domain>.ts` |
 | Add a route to the SPA | `frontend/src/App.tsx` |
-| Add a domain-specific type | `frontend/src/types/<domain>.ts` (or `types.ts`) |
+| Run a read-only DB probe | `backend/scripts/diagnostics/` — `node` for `.js`, `npx tsx` for `.ts` |
+| Run a DB tool that writes rows | `backend/scripts/maintenance/` — same invocation |
 | Adjust password / JWT | `backend/src/lib/auth.ts` |
 | Adjust ownership chain | `backend/src/lib/middleware.ts` + the API route |
 | Add a Prisma migration | `cd backend && npx prisma migrate dev --name <slug>` |
