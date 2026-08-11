@@ -1,5 +1,5 @@
 # PowerShell script for deployment with db push
-# Usage: .\deploy-push.ps1
+# Usage (run from backend/): .\scripts\win\deploy-push.ps1
 
 Write-Host "Starting deployment with db push..." -ForegroundColor Cyan
 

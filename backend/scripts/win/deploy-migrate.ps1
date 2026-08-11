@@ -1,5 +1,5 @@
 # PowerShell script for deployment with migration
-# Usage: .\deploy-migrate.ps1
+# Usage (run from backend/): .\scripts\win\deploy-migrate.ps1
 
 Write-Host "Starting deployment with migration..." -ForegroundColor Cyan
 
@@ -10,7 +10,8 @@ Get-Process next -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorActio
 
 # Clean Prisma generated client to avoid EPERM rename issues
 Write-Host "Cleaning Prisma generated client cache..." -ForegroundColor Yellow
-$prismaClientPath = Join-Path $PSScriptRoot "node_modules\.prisma\client"
+$backendRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)  # scripts\win -> backend
+$prismaClientPath = Join-Path $backendRoot "node_modules\.prisma\client"
 if (Test-Path $prismaClientPath) {
     Remove-Item $prismaClientPath -Recurse -Force -ErrorAction SilentlyContinue
 }

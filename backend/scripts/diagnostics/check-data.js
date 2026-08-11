@@ -3,8 +3,8 @@
 // holds the app's data.
 //
 // Usage (from backend/):
-//   node scripts/check-data.js railway
-//   node scripts/check-data.js supabase
+//   node scripts/diagnostics/check-data.js railway
+//   node scripts/diagnostics/check-data.js supabase
 //
 // Picks the matching DATABASE_URL line out of .env by host substring, so
 // passwords never go through the command line.
@@ -14,7 +14,7 @@ const path = require('path')
 const which = (process.argv[2] || '').toLowerCase()
 const hostNeedle = which === 'supabase' ? 'supabase.com' : 'rlwy.net'
 
-const envText = fs.readFileSync(path.join(__dirname, '..', '.env'), 'utf8')
+const envText = fs.readFileSync(path.join(__dirname, '..', '..', '.env'), 'utf8')
 const urls = envText
   .split(/\r?\n/)
   .filter((l) => /^\s*DATABASE_URL\s*=/.test(l))

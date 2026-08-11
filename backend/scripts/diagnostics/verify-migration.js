@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const { PrismaClient } = require('@prisma/client')
 
-const env = fs.readFileSync(path.join(__dirname, '..', '.env'), 'utf8')
+const env = fs.readFileSync(path.join(__dirname, '..', '..', '.env'), 'utf8')
 const pick = (key) => {
   const l = env.split(/\r?\n/).find((x) => x.startsWith(key + '='))
   return l ? l.replace(key + '=', '').replace(/^["']|["']$/g, '').replace(/\s+$/, '') : null

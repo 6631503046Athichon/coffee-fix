@@ -3,7 +3,7 @@
 const fs = require('fs')
 const path = require('path')
 
-const envText = fs.readFileSync(path.join(__dirname, '..', '.env'), 'utf8')
+const envText = fs.readFileSync(path.join(__dirname, '..', '..', '.env'), 'utf8')
 const line = envText
   .split(/\r?\n/)
   .map((l) => l.replace(/^#\s*/, '')) // tolerate commented-out line
