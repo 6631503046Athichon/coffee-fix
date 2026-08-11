@@ -35,26 +35,26 @@ const FirstLoginSetup = lazy(() =>
 const ProcessorWorkbench = lazy(() => import('./components/processor/ProcessorWorkbench'));
 const ParchmentPage = lazy(() => import('./components/processor/ParchmentTab'));
 const CuppingHub = lazy(() => import('./components/cupper/CuppingHub'));
-const TraceabilityPage = lazy(() => import('./components/TraceabilityPage'));
-const PublicTraceabilityPage = lazy(() => import('./components/PublicTraceabilityPage'));
+const TraceabilityPage = lazy(() => import('./components/traceability/TraceabilityPage'));
+const PublicTraceabilityPage = lazy(() => import('./components/traceability/PublicTraceabilityPage'));
 const CompetitionDashboard = lazy(() => import('./components/competition/CompetitionDashboard'));
 const FarmerDashboard = lazy(() => import('./components/farmer/FarmerDashboard'));
 const HarvestLotDetail = lazy(() => import('./components/farmer/HarvestLotDetail'));
 const HarvestLotsManagement = lazy(() => import('./components/farmer/HarvestLotsManagement'));
-const QualityInsights = lazy(() => import('./components/QualityInsights'));
+const QualityInsights = lazy(() => import('./components/insights/QualityInsights'));
 const CuppingSessionDetail = lazy(() => import('./components/cupper/CuppingSessionDetail'));
 const FarmerDataHub = lazy(() => import('./components/farmer/FarmerDataHub'));
 const GAPComplianceHelper = lazy(() => import('./components/farmer/GAPComplianceHelper'));
 const CupperScoringSheet = lazy(() => import('./components/cupper/CupperScoringSheet'));
-const TraceabilityHub = lazy(() => import('./components/TraceabilityHub'));
-const UserManagement = lazy(() => import('./components/UserManagement'));
+const TraceabilityHub = lazy(() => import('./components/traceability/TraceabilityHub'));
+const UserManagement = lazy(() => import('./components/admin/UserManagement'));
 const FarmerFarmManagement = lazy(() => import('./components/farmer/FarmManagement'));
 const AddFarmPage = lazy(() => import('./components/farmer/AddFarmPage'));
 const ActivityTypeManagement = lazy(() => import('./components/admin/ActivityTypeManagement'));
 const ProcessTypeManagement = lazy(() => import('./components/admin/ProcessTypeManagement'));
 const RoasterWorkbench = lazy(() => import('./components/roaster/RoasterWorkbench'));
-const CoffeeVarietiesManager = lazy(() => import('./components/CoffeeVarietiesManager'));
-const CustomerManagement = lazy(() => import('./components/CustomerManagement'));
+const CoffeeVarietiesManager = lazy(() => import('./components/admin/CoffeeVarietiesManager'));
+const CustomerManagement = lazy(() => import('./components/sales/CustomerManagement'));
 
 const RouteLoader: React.FC = () => (
   <div className="min-h-[16rem] flex items-center justify-center">

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Customer, UserRole } from '../types';
+import { Customer, UserRole } from '@/types';
 import { Users as UsersIcon, UserPlus, Search, X, Building2, Mail, Phone, MapPin, Pencil, Trash2 } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { getAllCustomers, deleteCustomer } from '../services/sales/customerService';
-import CreateCustomerModal from './modals/customer/CreateCustomerModal';
-import { Button } from './common/Button';
-import { Input } from './common/Input';
+import { useAuth } from '@/contexts/AuthContext';
+import { getAllCustomers, deleteCustomer } from '@/services/sales/customerService';
+import CreateCustomerModal from '@/components/modals/customer/CreateCustomerModal';
+import { Button } from '@/components/common/Button';
+import { Input } from '@/components/common/Input';
 
 const CustomerManagement: React.FC = () => {
   const { currentUser } = useAuth();

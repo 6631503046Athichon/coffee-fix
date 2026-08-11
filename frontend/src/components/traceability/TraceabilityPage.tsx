@@ -2,11 +2,11 @@
 
 import React, { useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
-import { useDataContext } from '../hooks/useDataContext';
+import { useDataContext } from '@/hooks/useDataContext';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
-import { SCA_ATTRIBUTES, User, CuppingSession } from '../types';
+import { SCA_ATTRIBUTES, User, CuppingSession } from '@/types';
 import { Coffee, Thermometer, Droplets, Droplet, QrCode, Printer, Flame, Copy, Check } from 'lucide-react';
-import { formatGreenBeanId } from '../utils/formatDisplayId';
+import { formatGreenBeanId } from '@/utils/formatDisplayId';
 
 const FlavorProfileChart: React.FC<{ data: any[] }> = ({ data }) => (
     <ResponsiveContainer width="100%" height={300}>

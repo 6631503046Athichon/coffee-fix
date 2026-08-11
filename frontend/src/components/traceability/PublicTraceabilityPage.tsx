@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { Coffee, Thermometer, Droplets, Droplet, QrCode, Printer, Flame, Copy, Check, Loader, AlertCircle } from 'lucide-react';
-import { getPublicTraceData, PublicTraceData } from '../services/lots/greenBeanLotService';
-import { formatDateDisplay } from '../utils/formatters';
+import { getPublicTraceData, PublicTraceData } from '@/services/lots/greenBeanLotService';
+import { formatDateDisplay } from '@/utils/formatters';
 
 const SCA_ATTRIBUTES = [
   'Fragrance/Aroma',

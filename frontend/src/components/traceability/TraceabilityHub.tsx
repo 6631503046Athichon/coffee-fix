@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useDataContext } from '../hooks/useDataContext';
-import { useAuth } from '../contexts/AuthContext';
+import { useDataContext } from '@/hooks/useDataContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { Search, ExternalLink, CheckCircle, Archive, AlertCircle, ChevronLeft, ChevronRight, QrCode, Star } from 'lucide-react';
-import { UserRole, GreenBeanLot } from '../types';
-import { formatGreenBeanId } from '../utils/formatDisplayId';
-import { QRCodeModal } from './modals/qr/QRCodeModal';
+import { UserRole, GreenBeanLot } from '@/types';
+import { formatGreenBeanId } from '@/utils/formatDisplayId';
+import { QRCodeModal } from '@/components/modals/qr/QRCodeModal';
 
 const PAGE_SIZE = 10;
 const NEW_TAG_HOURS = 24;

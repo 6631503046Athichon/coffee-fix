@@ -1,13 +1,13 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { useDataContext } from '../hooks/useDataContext';
-import { SCA_ATTRIBUTES, CuppingSession, ComprehensiveQualityReport } from '../types';
-import { getQualityInsights, QualityInsight, generateComprehensiveReport } from '../services/external/geminiService';
+import { useDataContext } from '@/hooks/useDataContext';
+import { SCA_ATTRIBUTES, CuppingSession, ComprehensiveQualityReport } from '@/types';
+import { getQualityInsights, QualityInsight, generateComprehensiveReport } from '@/services/external/geminiService';
 import { Lightbulb, Loader2, AlertTriangle, Wand2, BarChart2, CheckSquare, Wind, Bot, TrendingUp, Trophy, FileText, User, Droplets, Flame } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import Select from './common/Select';
-import { formatGreenBeanId } from '../utils/formatDisplayId';
+import Select from '@/components/common/Select';
+import { formatGreenBeanId } from '@/utils/formatDisplayId';
 
 // Removed local CustomDropdown in favor of shared Select component
 
