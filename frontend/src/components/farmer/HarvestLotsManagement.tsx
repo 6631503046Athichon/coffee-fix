@@ -7,7 +7,7 @@ import { ChevronRight, ArrowUp, ArrowDown, Coffee, PlusCircle, ChevronLeft } fro
 import { PageHeader } from '../common/PageHeader';
 import { Button } from '../common/Button';
 import Select from '../common/Select';
-import HarvestLotModal from '../modals/farm/HarvestLotModal';
+import HarvestLotModal from './modals/HarvestLotModal';
 
 
 type SortableKeys = keyof HarvestLot;

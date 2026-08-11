@@ -3,7 +3,7 @@ import { Customer, UserRole } from '@/types';
 import { Users as UsersIcon, UserPlus, Search, X, Building2, Mail, Phone, MapPin, Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAllCustomers, deleteCustomer } from '@/services/sales/customerService';
-import CreateCustomerModal from '@/components/modals/customer/CreateCustomerModal';
+import CreateCustomerModal from '@/components/sales/modals/CreateCustomerModal';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 

@@ -4,9 +4,9 @@ import { User, UserRole } from '@/types';
 import { Users as UsersIcon, AlertCircle, UserPlus, Edit, Trash2, Shield, Search, Key, X, Filter, ChevronDown, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { getAllUsers, updateUser, deleteUser } from '@/services/auth/userService';
 import { useAuth } from '@/contexts/AuthContext';
-import CreateUserModal from '@/components/modals/user/CreateUserModal';
-import EditUserModal from '@/components/modals/user/EditUserModal';
-import TransferOwnershipModal from '@/components/modals/user/TransferOwnershipModal';
+import CreateUserModal from '@/components/admin/modals/CreateUserModal';
+import EditUserModal from '@/components/admin/modals/EditUserModal';
+import TransferOwnershipModal from '@/components/admin/modals/TransferOwnershipModal';
 
 // Custom Dropdown Component
 interface DropdownOption {

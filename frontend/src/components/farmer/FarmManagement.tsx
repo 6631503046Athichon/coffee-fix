@@ -10,7 +10,7 @@ import { deleteFarm } from '../../services/farm/farmService';
 import { formatDateDisplay } from '../../utils/formatters';
 import FarmSoilPanel from './FarmSoilPanel';
 import FarmWeatherPanel from './FarmWeatherPanel';
-import HarvestLotModal from '../modals/farm/HarvestLotModal';
+import HarvestLotModal from './modals/HarvestLotModal';
 import FarmMapView from '../common/FarmMapView';
 
 const FarmManagement: React.FC = () => {
