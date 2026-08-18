@@ -34,13 +34,16 @@ function delay(attempt: number): Promise<void> {
 const MAX_RETRIES = 2
 
 const prismaClientSingleton = () => {
+  const url = process.env.DATABASE_URL
   const client = new PrismaClient({
     log: ['error', 'warn'],
-    datasources: {
-      db: {
-        url: process.env.DATABASE_URL,
-      },
-    },
+    // Only override the datasource when a URL is actually there. Handing
+    // the constructor `url: undefined` makes it throw on the spot, which
+    // takes down `next build` — page-data collection imports every route,
+    // and every route imports this file. Leaving the override off lets
+    // Prisma fall back to env("DATABASE_URL") from schema.prisma, so a
+    // missing URL surfaces on the first query instead of at build time.
+    ...(url ? { datasources: { db: { url } } } : {}),
   })
 
   return client.$extends({
