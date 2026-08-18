@@ -46,6 +46,8 @@ model User {
   @@index([email])
   @@index([username])
   @@index([isActive])
+  @@index([updatedAt])
+  @@index([createdAt])
 }
 
 model Farm {
@@ -77,6 +79,8 @@ model Farm {
 
   @@index([ownerId])
   @@index([archived])
+  @@index([updatedAt])
+  @@index([createdAt])
 }
 
 model CropYear {
@@ -89,6 +93,7 @@ model CropYear {
   updatedAt         DateTime          @updatedAt
   harvestLots       HarvestLot[]
   processingBatches ProcessingBatch[]
+  @@index([updatedAt])
 }
 
 model HarvestLot {
@@ -115,6 +120,7 @@ model HarvestLot {
   @@index([farmId])
   @@index([status])
   @@index([harvestDate])
+  @@index([updatedAt])
 }
 
 model ProcessingBatch {
@@ -141,6 +147,8 @@ model ProcessingBatch {
 
   @@index([harvestLotId])
   @@index([status])
+  @@index([updatedAt])
+  @@index([createdAt])
 }
 
 model DryingLogEntry {
@@ -194,6 +202,8 @@ model ParchmentLot {
   @@index([processingBatchId])
   @@index([status])
   @@index([sourceType])
+  @@index([updatedAt])
+  @@index([createdAt])
 }
 
 model GreenBeanLot {
@@ -241,6 +251,8 @@ model GreenBeanLot {
   @@index([sourceType])
   @@index([availabilityStatus])
   @@index([parchmentLotId])
+  @@index([updatedAt])
+  @@index([createdAt])
 }
 
 model GreenBeanWithdrawal {
@@ -303,6 +315,8 @@ model ActivityType {
   gapLogs     GAPLogEntry[]
 
   @@index([isActive])
+  @@index([updatedAt])
+  @@index([createdAt])
 }
 
 model ProcessType {
@@ -315,6 +329,8 @@ model ProcessType {
   updatedAt   DateTime @updatedAt
 
   @@index([isActive])
+  @@index([updatedAt])
+  @@index([createdAt])
 }
 
 model CoffeeVariety {
@@ -353,6 +369,7 @@ model GAPLogEntry {
   @@index([farmId])
   @@index([date])
   @@index([activityTypeId])
+  @@index([updatedAt])
 }
 
 model SoilAnalysis {
@@ -387,6 +404,7 @@ model SoilAnalysis {
 
   @@index([farmId])
   @@index([testDate])
+  @@index([updatedAt])
 }
 
 model WeatherRecord {
@@ -421,6 +439,7 @@ model WeatherRecord {
   // (farmId + recordDate range, newest first) — keeps the date-filtered
   // history fast even at hundreds of thousands of rows.
   @@index([farmId, recordDate(sort: Desc)])
+  @@index([updatedAt])
 }
 
 model CuppingSession {
@@ -521,6 +540,8 @@ model RoasterInventoryItem {
 
   @@unique([roasterId, greenBeanLotId])
   @@index([roasterId])
+  @@index([updatedAt])
+  @@index([createdAt])
 }
 
 model RoastBatch {
@@ -544,6 +565,7 @@ model RoastBatch {
 
   @@index([roasterId])
   @@index([roastDate])
+  @@index([updatedAt])
 }
 
 model Customer {
@@ -559,6 +581,8 @@ model Customer {
   saleOrders   SaleOrder[]
 
   @@index([type])
+  @@index([updatedAt])
+  @@index([createdAt])
 }
 
 model SaleOrder {
@@ -582,6 +606,7 @@ model SaleOrder {
   @@index([customerId])
   @@index([status])
   @@index([orderDate])
+  @@index([updatedAt])
 }
 
 model SaleOrderItem {
@@ -622,6 +647,7 @@ model Invoice {
   @@index([saleOrderId])
   @@index([status])
   @@index([issueDate])
+  @@index([updatedAt])
 }
 
 model InvoiceItem {
@@ -654,6 +680,7 @@ model PricingHistory {
 
   @@index([greenBeanLotId])
   @@index([effectiveDate])
+  @@index([createdAt])
 }
 
 model PasswordResetToken {
