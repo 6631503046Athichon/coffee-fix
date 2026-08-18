@@ -87,11 +87,14 @@ Routes follow Next.js App Router file conventions. Each `route.ts` exports HTTP 
 - `bulk-load/route.ts` — dashboard initial-load aggregator (one round-trip to hydrate the app)
 - `data-version/route.ts` — cache-busting version stamp
 - `backfill-display-ids/route.ts` — admin migration tool for legacy rows
+- `cron/weather/route.ts` — weather collection for hosts with no long-lived process. Guarded by a `CRON_SECRET` bearer token and meant to be called by an external scheduler every minute; safe to over-call because each farm still writes only once per its own interval.
 
 ### Backend middleware — `backend/src/middleware.ts`
 Edge middleware (rate-limit / CORS / cookie passthrough). Not to be confused with `lib/middleware.ts` which is request-handler middleware.
 
 `backend/src/instrumentation.ts` sits next to it — Next.js startup hook, boots the server-side weather scheduler. Both filenames are fixed by Next.js and must stay at `src/`.
+
+The scheduler only arms its `setInterval` on a host that keeps a process alive. Under `process.env.VERCEL` it stands down and `api/cron/weather` drives the same `runWeatherSweep()` instead — a timer set inside a serverless invocation dies with it, and every cold start would otherwise fire a fresh sweep.
 
 ### Backend library — `backend/src/lib/`
 - `auth.ts` — JWT sign/verify, password hashing, token extraction

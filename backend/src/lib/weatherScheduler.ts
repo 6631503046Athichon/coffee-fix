@@ -143,7 +143,20 @@ async function fetchFarmIfDue(farm: {
   }
 }
 
-async function tick(): Promise<void> {
+export interface WeatherSweepResult {
+  farmsChecked: number
+  failed: number
+}
+
+/**
+ * One pass over every auto-fetch farm.
+ *
+ * Safe to call as often as you like: fetchFarmIfDue() only writes when that
+ * farm's own interval has elapsed, so an over-eager caller costs one cheap
+ * lookup per farm and nothing more. Driven by setInterval on a long-lived
+ * server, or by api/cron/weather when running somewhere without one.
+ */
+export async function runWeatherSweep(): Promise<WeatherSweepResult> {
   const farms = await prisma.farm.findMany({
     where: {
       weatherAutoFetchEnabled: true,
@@ -159,14 +172,17 @@ async function tick(): Promise<void> {
       weatherAutoFetchInterval: true,
     },
   })
+  let failed = 0
   for (const farm of farms) {
     try {
       await fetchFarmIfDue(farm)
     } catch (e) {
       // One farm failing must not stop the rest.
+      failed++
       console.error(`[WeatherScheduler] farm ${farm.id} failed:`, e)
     }
   }
+  return { farmsChecked: farms.length, failed }
 }
 
 // globalThis guard so Next dev-mode HMR / repeated register() calls never
@@ -177,6 +193,13 @@ const globalScheduler = globalThis as unknown as {
 
 export function startWeatherScheduler(): void {
   if (globalScheduler.__weatherSchedulerStarted) return
+  // Serverless has no process to keep a timer alive: the instance that set
+  // the interval is frozen or discarded between requests, and every cold
+  // start would fire a fresh sweep. Let api/cron/weather drive it there.
+  if (process.env.VERCEL) {
+    console.log('[WeatherScheduler] serverless detected — driven by api/cron/weather instead')
+    return
+  }
   if (process.env.WEATHER_SCHEDULER_DISABLED === 'true') {
     console.log('[WeatherScheduler] disabled via WEATHER_SCHEDULER_DISABLED')
     return
@@ -185,11 +208,11 @@ export function startWeatherScheduler(): void {
 
   console.log('[WeatherScheduler] started — checking farms every 60s')
   setInterval(() => {
-    tick().catch((e) => console.error('[WeatherScheduler] tick failed:', e))
+    runWeatherSweep().catch((e) => console.error('[WeatherScheduler] tick failed:', e))
   }, TICK_MS)
   // First pass shortly after boot so a fresh deploy resumes collection
   // immediately instead of waiting a full tick.
   setTimeout(() => {
-    tick().catch((e) => console.error('[WeatherScheduler] initial tick failed:', e))
+    runWeatherSweep().catch((e) => console.error('[WeatherScheduler] initial tick failed:', e))
   }, 5_000)
 }
