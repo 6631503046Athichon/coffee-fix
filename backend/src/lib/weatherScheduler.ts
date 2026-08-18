@@ -95,8 +95,8 @@ async function fetchFarmIfDue(farm: {
   latitude: number | null
   longitude: number | null
   weatherAutoFetchInterval: number
-}): Promise<void> {
-  if (farm.latitude == null || farm.longitude == null) return
+}): Promise<'saved' | 'skipped' | 'no-reading'> {
+  if (farm.latitude == null || farm.longitude == null) return 'skipped'
   const intervalMs = Math.max(1, farm.weatherAutoFetchInterval || 5) * 60_000
 
   const last = await prisma.weatherRecord.findFirst({
@@ -106,11 +106,11 @@ async function fetchFarmIfDue(farm: {
   })
   const now = Date.now()
   if (last && now - last.createdAt.getTime() < intervalMs - TOLERANCE_MS) {
-    return // not due yet
+    return 'skipped' // not due yet
   }
 
   const reading = await fetchOpenMeteo(farm.latitude, farm.longitude)
-  if (!reading) return
+  if (!reading) return 'no-reading'
 
   // Minute-truncated slot; unique (farmId, fetchSlot) turns any race into
   // a no-op insert instead of a duplicate row.
@@ -132,12 +132,13 @@ async function fetchFarmIfDue(farm: {
       },
     })
     console.log(`[WeatherScheduler] saved record for ${farm.farmName ?? farm.id}`)
+    return 'saved'
   } catch (e: unknown) {
     // P2002 = another writer already owns this minute's slot — exactly the
     // duplicate we want to suppress, so swallow it.
     if (typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002') {
       console.log(`[WeatherScheduler] slot already taken for ${farm.farmName ?? farm.id} — skipped duplicate`)
-      return
+      return 'skipped'
     }
     throw e
   }
@@ -145,6 +146,11 @@ async function fetchFarmIfDue(farm: {
 
 export interface WeatherSweepResult {
   farmsChecked: number
+  saved: number
+  /** already had a fresh enough record, or no coordinates */
+  skipped: number
+  /** Open-Meteo returned nothing usable */
+  noReading: number
   failed: number
 }
 
@@ -172,17 +178,23 @@ export async function runWeatherSweep(): Promise<WeatherSweepResult> {
       weatherAutoFetchInterval: true,
     },
   })
+  let saved = 0
+  let skipped = 0
+  let noReading = 0
   let failed = 0
   for (const farm of farms) {
     try {
-      await fetchFarmIfDue(farm)
+      const outcome = await fetchFarmIfDue(farm)
+      if (outcome === 'saved') saved++
+      else if (outcome === 'skipped') skipped++
+      else noReading++
     } catch (e) {
       // One farm failing must not stop the rest.
       failed++
       console.error(`[WeatherScheduler] farm ${farm.id} failed:`, e)
     }
   }
-  return { farmsChecked: farms.length, failed }
+  return { farmsChecked: farms.length, saved, skipped, noReading, failed }
 }
 
 // globalThis guard so Next dev-mode HMR / repeated register() calls never
