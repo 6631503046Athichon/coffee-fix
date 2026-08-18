@@ -601,7 +601,11 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             </div>
 
             {/* Tab Content */}
-            <div className="min-h-[400px]">
+            {/* Fixed height, not min-height: both tabs page at five rows and
+                the pagination footer only renders past one page, so a
+                content-sized box made the panel jump every time you switched
+                tabs. 460px clears a full page plus the footer. */}
+            <div className="h-[460px] overflow-y-auto">
               {lotsTab === 'internal' ? (
                 <InternalLotsTable
                   lots={pagedInventory}
