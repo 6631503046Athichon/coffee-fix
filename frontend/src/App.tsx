@@ -163,27 +163,47 @@ const ProtectedRoutes: React.FC = () => {
     return [...backendData, ...uniqueMockData];
   }, []);
 
-  // Load data from backend API using parallel bulk-loads then a single state update
+  // Load data from backend API in one parallel burst, then a single state update.
+  //
+  // These three groups do not feed each other, so they all go out together.
+  // Chaining them cost three sequential round-trips before any data could
+  // render, and each leg carries ~1s of fixed request overhead in production
+  // regardless of how little work the query itself does.
   const loadDataFromBackend = useCallback(async () => {
     try {
-      // Load sale orders, invoices, pricing history from backend API
-      let storedSaleOrders: any[] = [];
-      let storedInvoices: any[] = [];
-      let storedPricingHistory: any[] = [];
+      // Sales endpoints may fail without sinking the whole load, so they carry
+      // their own catch and report through a flag.
       let salesDataLoadFailed = false;
-      try {
-        [storedSaleOrders, storedInvoices, storedPricingHistory] = await Promise.all([
-          getAllSaleOrders(),
-          getAllInvoices(),
-          getAllPricingHistory(),
-        ]);
-      } catch (err) {
+      const salesRequest = Promise.all([
+        getAllSaleOrders(),
+        getAllInvoices(),
+        getAllPricingHistory(),
+      ]).catch((err) => {
         salesDataLoadFailed = true;
         console.warn('Failed to load sales data from backend:', err);
-      }
+        return null;
+      });
 
-      // Run both phases in parallel for faster load
-      const [phase1, phase2] = await Promise.all([bulkLoadPhase1(), bulkLoadPhase2()]);
+      // Version stamps are advisory — losing them only means the next
+      // auto-refresh reloads instead of short-circuiting on "nothing changed".
+      const versionsRequest = api
+        .get<Record<string, string | null>>('/data-version')
+        .catch((versionError) => {
+          console.warn('Failed to sync data versions after reload:', versionError);
+          return null;
+        });
+
+      // bulk-load stays bare: without it there is nothing to render, so let it
+      // reject straight into the outer catch.
+      const [sales, phase1, phase2, versions] = await Promise.all([
+        salesRequest,
+        bulkLoadPhase1(),
+        bulkLoadPhase2(),
+        versionsRequest,
+      ]);
+
+      const [storedSaleOrders, storedInvoices, storedPricingHistory]: [any[], any[], any[]] =
+        sales ?? [[], [], []];
 
       const storedFarms = phase1.farms.map(transformFarmFromBackend);
       const storedHarvestLots = phase1.harvestLots.map(transformHarvestLotFromBackend);
@@ -219,14 +239,13 @@ const ProtectedRoutes: React.FC = () => {
         roastBatches: storedRoastBatches,
       }));
 
+      // Same rule as before: a sales failure clears the stamps so the next
+      // cycle does a full reload, and a version-fetch failure leaves the
+      // previous stamps untouched rather than wiping them.
       if (salesDataLoadFailed) {
         lastVersionsRef.current = {};
-      } else {
-        try {
-          lastVersionsRef.current = await api.get<Record<string, string | null>>('/data-version');
-        } catch (versionError) {
-          console.warn('Failed to sync data versions after reload:', versionError);
-        }
+      } else if (versions) {
+        lastVersionsRef.current = versions;
       }
     } catch (error) {
       lastVersionsRef.current = {};
