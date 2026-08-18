@@ -10,7 +10,7 @@
  *   - Guard outgoing calls with connectionManager.shouldSuppress().
  */
 
-// Production: same-origin /api (Vercel proxies to Railway, keeps auth
+// Production: same-origin /api (Vercel proxies to the backend, keeps auth
 // cookie first-party). Dev: local backend. Mirrors services/api.ts.
 const API_BASE_URL = import.meta.env.PROD
   ? '/api'

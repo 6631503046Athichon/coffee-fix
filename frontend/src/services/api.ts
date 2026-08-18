@@ -1,9 +1,9 @@
 // Base API utility for making requests to backend
 import { connectionManager } from '../utils/connectionManager'
 // In production the SPA is served by Vercel, which proxies /api/* to the
-// Railway backend (see vercel.json). Hitting the relative /api keeps the
+// backend deployment (see vercel.json). Hitting the relative /api keeps the
 // browser same-origin so the httpOnly auth cookie stays first-party —
-// calling the Railway URL directly would make it a blocked third-party
+// calling the backend URL directly would make it a blocked third-party
 // cookie. Dev still talks to the local backend on :3001.
 export const API_BASE_URL = import.meta.env.PROD
   ? '/api'
