@@ -235,11 +235,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     setGreenBeanCurrentPage(1);
   }, []);
 
-  // Card View pagination state. Match the table-view page size of 5 so the
-  // kanban panel (Incoming Harvest) stays in lockstep
-  // with the data grid — same row count per page, same numbered pagination.
+  // Card View pagination state. Six per page rather than the data grid's
+  // five: the cards lay out two across from md and three from xl, and six is
+  // the smallest count that fills both without stranding a gap in the last
+  // row. Page 1 still holds the newest lots in either view, which is what the
+  // shared sort below is actually there to guarantee.
   const [harvestCardPage, setHarvestCardPage] = useState(1);
-  const CARD_PAGE_SIZE = 5;
+  const CARD_PAGE_SIZE = 6;
 
   // Use the currently logged-in user for QC scoring
   const processorUser = currentUser;
