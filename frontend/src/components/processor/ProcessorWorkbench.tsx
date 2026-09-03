@@ -1545,7 +1545,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               <Sprout className="h-4 w-4 text-white" />
             </div>
             <h3 className="text-base font-bold text-gray-900">
-              Incoming Harvest Lots
+              1 · Cherry Lots
             </h3>
           </div>
           <div className="relative w-full sm:w-64">
@@ -1707,7 +1707,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 <Box className="h-4 w-4 text-white" />
               </div>
               <h3 className="text-base font-bold text-gray-900">
-                Parchment Stock
+                2 · Parchment Stock
               </h3>
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -2019,7 +2019,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 <Coffee className="h-4 w-4 text-white" />
               </div>
               <h3 className="text-base font-bold text-gray-900">
-                Green Bean Stock
+                3 · Green Bean Stock
               </h3>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -2366,12 +2366,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 <Sprout className="h-4 w-4 text-white" />
               </div>
               <h3 className="text-sm font-bold text-gray-900">
-                Incoming Harvest Lots
+                1 · Cherry Lots
               </h3>
               <span className="ml-auto text-xs text-green-600 font-semibold">
                 {readyForProcessingLots.length}
               </span>
             </div>
+              <p className="text-[11px] text-gray-500 mt-1">Record a process to turn these into parchment</p>
             <div className="relative mt-2">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
               <DebouncedSearchInput
@@ -2546,7 +2547,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 Processor Workbench
               </h1>
               <p className="text-gray-500 text-xs mt-0.5">
-                Manage processing batches, parchment, and green bean inventory
+                Cherry → process → parchment → hull &amp; grade → green bean.
+                Roasting is over in the Roaster workbench.
               </p>
             </div>
           </div>
@@ -2593,9 +2595,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   <Box className="h-4 w-4 text-white" />
                 </div>
                 <h3 className="text-sm font-bold text-gray-900">
-                  Parchment Stock
+                  2 · Parchment Stock
                 </h3>
               </div>
+                <p className="text-[11px] text-gray-500 mb-2">Hull &amp; grade to turn these into green beans</p>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <DebouncedSearchInput
@@ -2724,9 +2727,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   <Coffee className="h-4 w-4 text-white" />
                 </div>
                 <h3 className="text-sm font-bold text-gray-900">
-                  Green Bean Stock
+                  3 · Green Bean Stock
                 </h3>
               </div>
+                <p className="text-[11px] text-gray-500 mb-2">Withdraw to sell, or send for roasting</p>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <DebouncedSearchInput
