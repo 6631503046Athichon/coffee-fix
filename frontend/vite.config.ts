@@ -8,6 +8,22 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 5173, // Changed from 3000 to avoid conflict with backend
         host: '0.0.0.0',
+        // Opt-in dev proxy. Set VITE_API_PROXY_TARGET (and leave VITE_API_URL
+        // as /api) and the browser only ever talks to localhost:5173, so the
+        // backend auth cookie lands first-party and login works against a
+        // deployed backend — the same move vercel.json makes in production.
+        // Left unset this key is absent entirely and dev hits the local
+        // backend on :3001 exactly as before.
+        ...(env.VITE_API_PROXY_TARGET
+          ? {
+              proxy: {
+                '/api': {
+                  target: env.VITE_API_PROXY_TARGET,
+                  changeOrigin: true,
+                },
+              },
+            }
+          : {}),
       },
       plugins: [react()],
       define: {
