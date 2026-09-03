@@ -47,6 +47,7 @@ import {
   CropYearChips,
   findCurrentCropYearId,
   GradeDropdown,
+  Pagination,
 } from './workbench'
 import {
   formatGreenBeanId,
@@ -131,6 +132,9 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   void currentUser
   const { data, refreshData } = useDataContext()
   const { addToast } = useToast()
+
+  // Cherry Lots table paging
+  const [cherryPage, setCherryPage] = useState(1)
 
   // ── Combined Process & Grade modal state ────────────────────────
   // One modal does both stages: create the parchment lot, then
@@ -218,6 +222,26 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         return bc - ac
       })
   }, [data.harvestLots])
+
+  // The table paged at ten rows. Left unpaged it grew without limit, unlike
+  // every other lot table in the app.
+  const CHERRY_PAGE_SIZE = 10
+  const cherryTotalPages = Math.max(
+    1,
+    Math.ceil(readyHarvestLots.length / CHERRY_PAGE_SIZE),
+  )
+  // Clamped rather than corrected by an effect: processing the last lot on the
+  // final page shortens the list, and an unclamped page would render empty for
+  // a frame before any effect could pull it back.
+  const cherrySafePage = Math.min(cherryPage, cherryTotalPages)
+  const pagedHarvestLots = useMemo(
+    () =>
+      readyHarvestLots.slice(
+        (cherrySafePage - 1) * CHERRY_PAGE_SIZE,
+        cherrySafePage * CHERRY_PAGE_SIZE,
+      ),
+    [readyHarvestLots, cherrySafePage],
+  )
 
   // Section 2: parchment lots awaiting hulling, grouped by process type
   const parchmentByType = useMemo(() => {
@@ -510,7 +534,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
       </div>
 
       {/* KPI strip — each card uses its stage's accent colour + icon */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <KpiCard
           label="Cherry"
           value={totals.cherry}
@@ -564,7 +588,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {readyHarvestLots.map((lot) => {
+            {pagedHarvestLots.map((lot) => {
               const remaining = lot.remainingWeightKg ?? lot.weightKg ?? 0
               return (
                 <tr key={lot.id} className="hover:bg-red-50/40 transition-colors">
@@ -590,6 +614,15 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             })}
           </tbody>
         </table>
+        {cherryTotalPages > 1 && (
+          <div className="flex justify-center border-t border-gray-200 py-3">
+            <Pagination
+              currentPage={cherrySafePage}
+              totalPages={cherryTotalPages}
+              onPageChange={setCherryPage}
+            />
+          </div>
+        )}
       </Section>
 
       {/* ─── Section 2: Green bean inventory — square cards by type+grade ───
