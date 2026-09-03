@@ -2381,9 +2381,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               />
             </div>
           </div>
-          <div className="p-3 h-[400px] overflow-y-auto">
+          <div className="p-3 min-h-[240px]">
             {filteredHarvestLots.length > 0 ? (
-              <div className="space-y-2">
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                 {paginatedHarvestCards.map((lot) => {
                   const isNewLot = isRecentItem(lot.createdAt ?? lot.harvestDate);
                   const availableWeight = getAvailableHarvestWeight(lot);
