@@ -612,6 +612,18 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                 </tr>
               )
             })}
+            {/* Pad a short last page out to a full one. Reserving a pixel
+                height instead means hard-coding a row height, which goes
+                stale the moment the cell padding changes. */}
+            {Array.from({
+              length: CHERRY_PAGE_SIZE - pagedHarvestLots.length,
+            }).map((_, i) => (
+              <tr key={`pad-${i}`} aria-hidden="true">
+                <td colSpan={5} className="px-4 py-2.5">
+                  <span className="inline-block px-3 py-1.5 text-xs">&nbsp;</span>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
         {cherryTotalPages > 1 && (
