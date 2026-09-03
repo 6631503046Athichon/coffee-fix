@@ -3666,45 +3666,51 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
               <div className="p-6 sm:p-8 overflow-y-auto">
-                {/* Modal Header */}
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="p-4 bg-amber-600 rounded-2xl shadow-lg">
-                    <Star className="h-10 w-10 text-white" />
-                  </div>
-                  <div>
-                    <h2 className="text-3xl font-bold text-gray-900">
-                      QC Score
-                    </h2>
-                    <p className="text-base text-gray-600 mt-1">
-                      Quality Control for Lot #{scoringLot.displayId || scoringLot.id.substring(0, 8).toUpperCase()}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Lot Info Card */}
-                <div className="bg-amber-50 rounded-2xl p-6 mb-6 border border-amber-200">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Header — title left, the lot's figures inline on the right,
+                    matching the Hull & Grade modal in this file. They used to
+                    sit in a separate amber card below, which cost a screen of
+                    height before the first input. */}
+                <div className="flex items-center justify-between gap-4 mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-amber-600 rounded-xl shadow-md">
+                      <Star className="h-6 w-6 text-white" />
+                    </div>
                     <div>
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                      <h2 className="text-xl font-bold text-gray-900">
+                        QC Score
+                      </h2>
+                      <p className="text-xs text-gray-500">
+                        Lot #{formatGreenBeanId(scoringLot)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                         Grade
                       </p>
-                      <p className="text-2xl font-bold text-amber-600">
+                      <p className="text-lg font-bold text-gray-900 leading-tight">
                         {scoringLot.grade}
                       </p>
                     </div>
-                    <div>
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                    <div className="w-px h-8 bg-gray-200" />
+                    <div className="text-right">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                         Weight
                       </p>
-                      <p className="text-2xl font-bold text-gray-900">
-                        {scoringLot.currentWeightKg.toFixed(2)} kg
+                      <p className="text-lg font-bold text-gray-900 leading-tight">
+                        {scoringLot.currentWeightKg.toFixed(2)}
+                        <span className="text-xs font-normal text-gray-400 ml-1">
+                          kg
+                        </span>
                       </p>
                     </div>
-                    <div>
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                    <div className="w-px h-8 bg-gray-200" />
+                    <div className="text-right">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                         Current Score
                       </p>
-                      <p className="text-2xl font-bold text-purple-600">
+                      <p className="text-lg font-bold text-amber-600 leading-tight">
                         {scoringLot.cuppingScores?.length > 0
                           ? (
                               scoringLot.cuppingScores.reduce(
@@ -3719,18 +3725,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 </div>
 
                 {/* Scoring Mode Toggle */}
-                <div className="flex bg-gray-100 p-1.5 rounded-xl mb-6 w-full sm:w-2/3 mx-auto">
+                <div className="flex bg-gray-100 p-1 rounded-lg mb-5 w-full sm:w-2/3 mx-auto">
                   <button
                     type="button"
                     onClick={() => setScoringMode("simple")}
-                    className={`w-1/2 py-3 text-sm font-bold rounded-lg transition-all ${scoringMode === "simple" ? "bg-white shadow-md text-amber-600" : "text-gray-600 hover:text-gray-900"}`}
+                    className={`w-1/2 py-2 text-sm font-semibold rounded-md transition-all ${scoringMode === "simple" ? "bg-white shadow-md text-amber-600" : "text-gray-600 hover:text-gray-900"}`}
                   >
                     Simple Score
                   </button>
                   <button
                     type="button"
                     onClick={() => setScoringMode("detailed")}
-                    className={`w-1/2 py-3 text-sm font-bold rounded-lg transition-all ${scoringMode === "detailed" ? "bg-white shadow-md text-amber-600" : "text-gray-600 hover:text-gray-900"}`}
+                    className={`w-1/2 py-2 text-sm font-semibold rounded-md transition-all ${scoringMode === "detailed" ? "bg-white shadow-md text-amber-600" : "text-gray-600 hover:text-gray-900"}`}
                   >
                     Detailed (SCA)
                   </button>
@@ -3738,9 +3744,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
                 {scoringMode === "simple" ? (
                   <div className="max-w-md mx-auto">
-                    <label className="block text-base font-bold text-gray-700 mb-3">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
                       <div className="flex items-center gap-2 justify-center">
-                        <Star className="h-5 w-5 text-amber-600" />
+                        <Star className="h-4 w-4 text-amber-600" />
                         Total Score (0-100)
                       </div>
                     </label>
@@ -3938,7 +3944,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
                 {/* Tasting Notes */}
                 <div className="mt-6">
-                  <label className="block text-base font-bold text-gray-700 mb-3">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Tasting Notes & Comments
                   </label>
                   <textarea
