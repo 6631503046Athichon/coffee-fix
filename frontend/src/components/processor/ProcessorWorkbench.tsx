@@ -3055,7 +3055,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         return (
                           <div className={`rounded-xl p-3 border ${isOver ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
                             <div className="flex items-center justify-between mb-2">
-                              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Cherry Weight Available</span>
+                              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Cherry Available (Input)</span>
                               <span className="text-sm font-bold text-gray-800">{available.toFixed(2)} kg</span>
                             </div>
                             <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mb-2">
@@ -3066,11 +3066,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             </div>
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-gray-400 uppercase tracking-wide">Used</span>
+                                <span className="text-[10px] text-gray-400 uppercase tracking-wide">This Batch</span>
                                 <span className="text-xs font-semibold text-gray-700">{parchmentVal > 0 ? parchmentVal.toFixed(2) : '0.00'} kg</span>
                               </div>
                               <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-gray-400 uppercase tracking-wide">Remaining</span>
+                                <span className="text-[10px] text-gray-400 uppercase tracking-wide">Left In Lot</span>
                                 <span className={`text-xs font-semibold ${isOver ? 'text-red-600' : 'text-green-600'}`}>
                                   {remaining.toFixed(2)} kg
                                 </span>
@@ -3100,8 +3100,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             required
                             value={parchmentWeightInput}
                             onChange={(e) => setParchmentWeightInput(e.target.value)}
-                            className="block w-full h-[46px] border border-gray-300 rounded-xl px-4 text-lg font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500 transition-all"
+                            className="block w-full h-[46px] border border-gray-300 rounded-xl px-4 text-lg font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all"
                           />
+                          <p className="mt-1.5 text-[11px] leading-snug text-gray-500">
+                            Becomes a new parchment lot marked{" "}
+                            <span className="font-semibold text-amber-700">Awaiting Hulling</span>,
+                            and the same figure is deducted from the cherry lot above.
+                          </p>
                         </div>
                         <div>
                           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
