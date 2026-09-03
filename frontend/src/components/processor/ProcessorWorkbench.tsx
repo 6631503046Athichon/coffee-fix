@@ -246,10 +246,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   }, []);
 
   // Card View pagination state. Match the table-view page size of 5 so the
-  // kanban panels (Incoming Harvest, Completed Batches) stay in lockstep
+  // kanban panel (Incoming Harvest) stays in lockstep
   // with the data grid — same row count per page, same numbered pagination.
   const [harvestCardPage, setHarvestCardPage] = useState(1);
-  const [completedCardPage, setCompletedCardPage] = useState(1);
   const CARD_PAGE_SIZE = 5;
 
   // Use the currently logged-in user for QC scoring
@@ -1310,24 +1309,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     [filteredCompletedBatches, completedBatchPage],
   );
 
-  // Card View pagination for Completed Batches
-  const completedBatchesForCard = useMemo(
-    () =>
-      data.processingBatches.filter(
-        (b) => b.status === ProcessingBatchStatus.Completed,
-      ),
-    [data.processingBatches],
-  );
-  const completedCardTotalPages = Math.ceil(
-    completedBatchesForCard.length / CARD_PAGE_SIZE,
-  );
-  const paginatedCompletedCards = useMemo(() => {
-    const startIndex = (completedCardPage - 1) * CARD_PAGE_SIZE;
-    return completedBatchesForCard.slice(
-      startIndex,
-      startIndex + CARD_PAGE_SIZE,
-    );
-  }, [completedBatchesForCard, completedCardPage]);
 
 
   const processedParchmentLots = useMemo(() => {
@@ -2627,8 +2608,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         </div>
       </div>
 
-      {/* Main Grid: Incoming Lots + Completed Batches */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      {/* Incoming Lots */}
+      <div className="grid grid-cols-1 gap-6 mb-6">
         {/* Incoming Harvest Lots */}
         <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200 flex flex-col">
           <div className="p-3 bg-green-50 border-b border-green-200">
@@ -2775,99 +2756,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     )
                   }
                   disabled={harvestCardPage === harvestCardTotalPages}
-                  className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Completed Batches */}
-        <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200 flex flex-col">
-          <div className="p-3 bg-sky-50 border-b border-sky-200">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-sky-600 rounded-md">
-                <PackageCheck className="h-4 w-4 text-white" />
-              </div>
-              <h3 className="text-sm font-bold text-gray-900">
-                Completed Batches
-              </h3>
-              <span className="ml-auto text-xs text-sky-600 font-semibold">
-                {completedBatchesForCard.length}
-              </span>
-            </div>
-          </div>
-          <div className="p-3 h-[400px] overflow-y-auto">
-            {completedBatchesForCard.length > 0 ? (
-              <div className="space-y-2">
-                {paginatedCompletedCards.map((batch) => (
-                  <KanbanCard key={batch.id} batch={batch} />
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-6 text-gray-400">
-                <PackageCheck className="h-8 w-8 opacity-30 mb-2" />
-                <p className="text-sm font-medium text-gray-500">
-                  No completed batches yet
-                </p>
-              </div>
-            )}
-          </div>
-          {/* Pagination */}
-          {completedCardTotalPages > 1 && (
-            <div className="mt-auto flex justify-center items-center py-3 border-t border-gray-200">
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() =>
-                    setCompletedCardPage((p) => Math.max(1, p - 1))
-                  }
-                  disabled={completedCardPage === 1}
-                  className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                {(() => {
-                  const TOTAL_SLOTS = 7;
-                  const tp = completedCardTotalPages;
-                  const cp = completedCardPage;
-                  let slots: (number | "ellipsis")[] = [];
-                  if (tp <= TOTAL_SLOTS) {
-                    slots = Array.from({ length: tp }, (_, i) => i + 1);
-                  } else if (cp <= 4) {
-                    slots = [1, 2, 3, 4, 5, "ellipsis", tp];
-                  } else if (cp >= tp - 3) {
-                    slots = [1, "ellipsis", tp - 4, tp - 3, tp - 2, tp - 1, tp];
-                  } else {
-                    slots = [1, "ellipsis", cp - 1, cp, cp + 1, "ellipsis", tp];
-                  }
-                  return slots.map((slot, idx) =>
-                    slot === "ellipsis" ? (
-                      <span
-                        key={`e-${idx}`}
-                        className="w-7 h-7 flex items-center justify-center text-gray-400 text-xs"
-                      >
-                        ...
-                      </span>
-                    ) : (
-                      <button
-                        key={slot}
-                        onClick={() => setCompletedCardPage(slot)}
-                        className={`w-7 h-7 text-xs font-medium rounded-md transition-colors flex items-center justify-center ${cp === slot ? "bg-blue-600 text-white" : "text-gray-700 hover:bg-gray-100"}`}
-                      >
-                        {slot}
-                      </button>
-                    ),
-                  );
-                })()}
-                <button
-                  onClick={() =>
-                    setCompletedCardPage((p) =>
-                      Math.min(completedCardTotalPages, p + 1),
-                    )
-                  }
-                  disabled={completedCardPage === completedCardTotalPages}
                   className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
                 >
                   <ChevronRight className="h-4 w-4" />
