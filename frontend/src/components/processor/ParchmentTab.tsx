@@ -48,6 +48,11 @@ import {
   findCurrentCropYearId,
   GradeDropdown,
 } from './workbench'
+import {
+  formatGreenBeanId,
+  formatHarvestLotId,
+  formatParchmentId,
+} from '../../utils/formatDisplayId'
 
 // ─────────────────────────────────────────────────────────────────────
 // Types & constants
@@ -564,7 +569,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
               return (
                 <tr key={lot.id} className="hover:bg-red-50/40 transition-colors">
                   <Td className="font-semibold text-gray-900">
-                    {lot.displayId || lot.id.slice(0, 8)}
+                      {formatHarvestLotId(lot)}
                   </Td>
                   <Td>{lot.farmerName}</Td>
                   <Td className="text-gray-600">{lot.cherryVariety}</Td>
@@ -712,7 +717,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         return (
           <Modal
             title="Process & Grade"
-            subtitle={`Lot ${processLot.displayId || processLot.id.slice(0, 8)}`}
+            subtitle={`Lot ${formatHarvestLotId(processLot)}`}
             onClose={() => setProcessLot(null)}
             accent="red"
             icon={Play}
@@ -1224,7 +1229,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-gray-900 truncate">
-                          {gbl.displayId || gbl.id.slice(0, 8)}
+                          {formatGreenBeanId(gbl)}
                         </p>
                         <p className="text-[10px] text-gray-400 leading-tight">
                           Green Bean · {fmtDate(gbl.createdAt)}
@@ -1248,8 +1253,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                           <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
                             <div className="min-w-0">
                               <p className="text-xs font-semibold text-gray-700 truncate">
-                                {parchment.displayId ||
-                                  parchment.id.slice(0, 8)}
+                                  {formatParchmentId(parchment)}
                               </p>
                               <p className="text-[10px] text-gray-400 leading-tight">
                                 Parchment · {parchment.processType} ·{' '}
@@ -1274,8 +1278,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                               </div>
                               <div className="min-w-0 flex-1">
                                 <p className="text-xs font-semibold text-gray-700 truncate">
-                                  {harvest.displayId ||
-                                    harvest.id.slice(0, 8)}
+                                    {formatHarvestLotId(harvest)}
                                 </p>
                                 <p className="text-[10px] text-gray-400 leading-tight">
                                   Cherry · {harvest.cherryVariety}
