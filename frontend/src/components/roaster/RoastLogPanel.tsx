@@ -1,29 +1,37 @@
-import React from 'react';
-import { BookText, Flame, ChevronLeft, ChevronRight, Calendar, Scale, TrendingDown } from 'lucide-react';
-import { RoastBatch } from '../../types';
-import { toFixed2 } from '../../utils/formatters';
-import { formatGreenBeanId } from '../../utils/formatDisplayId';
+import React from 'react'
+import {
+  BookText,
+  Flame,
+  ChevronLeft,
+  ChevronRight,
+  Calendar,
+  Scale,
+  TrendingDown,
+} from 'lucide-react'
+import { RoastBatch } from '../../types'
+import { toFixed2 } from '../../utils/formatters'
+import { formatGreenBeanId } from '../../utils/formatDisplayId'
 
 const RoastLogPanel: React.FC<{
-  roasts: RoastBatch[];
-  page: number;
-  totalPages: number;
-  onPrev: () => void;
-  onNext: () => void;
-  onPageChange?: (page: number) => void;
+  roasts: RoastBatch[]
+  page: number
+  totalPages: number
+  onPrev: () => void
+  onNext: () => void
+  onPageChange?: (page: number) => void
 }> = ({ roasts, page, totalPages, onPrev, onNext, onPageChange }) => {
   if (roasts.length === 0) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="overflow-hidden rounded-2xl border border-[#e2e8e1] bg-white shadow-sm">
         {/* Header */}
-        <div className="px-6 py-5 border-b border-gray-100 bg-gray-50">
+        <div className="border-b border-[#e6ebe5] bg-gradient-to-r from-[#fff8ed] to-white px-6 py-5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#d87832] shadow-sm shadow-orange-200">
               <BookText className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Roast Log</h3>
-              <p className="text-sm text-gray-500">Your roasting history</p>
+              <h3 className="text-lg font-bold text-[#20352b]">Roast Log</h3>
+              <p className="text-sm text-[#7b8a80]">Your roasting history</p>
             </div>
           </div>
         </div>
@@ -41,7 +49,8 @@ const RoastLogPanel: React.FC<{
           </div>
           <h4 className="text-lg font-semibold text-gray-800 mb-2">Ready to Roast?</h4>
           <p className="text-sm text-gray-500 max-w-xs mx-auto leading-relaxed">
-            Your roasting journey starts here. Complete a roast batch to see your history and track your progress.
+            Your roasting journey starts here. Complete a roast batch to see your history and track
+            your progress.
           </p>
           <div className="mt-5 flex items-center justify-center gap-4 text-xs text-gray-400">
             <div className="flex items-center gap-1.5">
@@ -59,43 +68,47 @@ const RoastLogPanel: React.FC<{
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div className="overflow-hidden rounded-2xl border border-[#e2e8e1] bg-white shadow-sm">
       {/* Header */}
-      <div className="px-6 py-5 border-b border-gray-100 bg-gray-50">
+      <div className="border-b border-[#e6ebe5] bg-gradient-to-r from-[#fff8ed] to-white px-6 py-5">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#d87832] shadow-sm shadow-orange-200">
             <BookText className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">Roast Log</h3>
-            <p className="text-sm text-gray-500">Your roasting history</p>
+            <h3 className="text-lg font-bold text-[#20352b]">Roast Log</h3>
+            <p className="text-sm text-[#7b8a80]">Your roasting history</p>
           </div>
         </div>
       </div>
 
       {/* Roast Cards */}
-      <div className="p-4 space-y-3 max-h-[65vh] overflow-y-auto">
+      <div className="max-h-[65vh] space-y-3 overflow-y-auto bg-[#fcfdfb] p-4">
         {roasts.map((roast) => (
           <div
             key={roast.id}
-            className="bg-white rounded-lg border border-gray-200 p-4 hover:border-gray-300 hover:shadow-sm transition-all"
+            className="rounded-xl border border-[#e6ebe5] border-l-4 border-l-[#d87832] bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md"
           >
             {/* Top Row */}
-            <div className="flex items-start justify-between mb-3">
+            <div className="mb-4 flex items-start justify-between gap-4">
               <div className="flex-1">
                 {/* Date and Lot */}
-                <div className="flex items-center gap-2 flex-wrap mb-2">
-                  <div className="flex items-center gap-1.5 text-sm text-gray-600">
+                <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-[#7b8a80]">
                     <Calendar className="h-3.5 w-3.5" />
                     <span className="font-medium">{roast.roastDate}</span>
                   </div>
-                  <span className="text-gray-300">|</span>
-                  <span className="text-sm font-mono font-semibold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">
-                    {(roast as any).formattedLotId ?? formatGreenBeanId({ id: roast.greenBeanLotId, displayId: (roast as any).greenBeanDisplayId })}
+                  <span className="text-[#d5ddd6]">/</span>
+                  <span className="rounded-md bg-[#eef2ee] px-2 py-0.5 text-sm font-mono font-bold text-[#294936]">
+                    {(roast as any).formattedLotId ??
+                      formatGreenBeanId({
+                        id: roast.greenBeanLotId,
+                        displayId: (roast as any).greenBeanDisplayId,
+                      })}
                   </span>
                   {roast.roastLevel && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700">
@@ -105,14 +118,16 @@ const RoastLogPanel: React.FC<{
                 </div>
 
                 {/* Stats */}
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <div className="flex items-center gap-1.5 rounded-lg bg-[#f7faf7] px-2.5 py-1.5">
                     <Scale className="h-4 w-4 text-gray-400" />
-                    <span className="font-semibold text-gray-900">{toFixed2(roast.batchSizeKg)} kg</span>
+                    <span className="font-bold text-[#294936]">
+                      {toFixed2(roast.batchSizeKg)} kg
+                    </span>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 rounded-lg bg-[#fff8ed] px-2.5 py-1.5">
                     <TrendingDown className="h-4 w-4 text-orange-500" />
-                    <span className="font-semibold text-orange-600">
+                    <span className="font-bold text-[#d87832]">
                       {typeof roast.yieldPercentage === 'number'
                         ? `${roast.yieldPercentage.toFixed(1)}%`
                         : `${roast.yieldPercentage}%`}
@@ -121,15 +136,15 @@ const RoastLogPanel: React.FC<{
                   </div>
                 </div>
               </div>
-              <div className="w-9 h-9 bg-orange-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-orange-50">
                 <Flame className="h-5 w-5 text-orange-500" />
               </div>
             </div>
 
             {/* Notes */}
             {roast.roastProfileNotes && (
-              <div className="mb-3 bg-gray-50 rounded-md p-3 border-l-2 border-gray-300">
-                <p className="text-sm text-gray-600 leading-relaxed">{roast.roastProfileNotes}</p>
+              <div className="mb-3 rounded-lg border border-[#f0e5d6] bg-[#fffaf3] p-3">
+                <p className="text-sm leading-relaxed text-[#6d756e]">{roast.roastProfileNotes}</p>
               </div>
             )}
 
@@ -156,7 +171,7 @@ const RoastLogPanel: React.FC<{
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
+        <div className="border-t border-[#e6ebe5] bg-[#f8fbf8] px-4 py-3">
           <div className="flex justify-center items-center gap-1">
             <button
               onClick={onPrev}
@@ -166,26 +181,39 @@ const RoastLogPanel: React.FC<{
               <ChevronLeft className="h-4 w-4" />
             </button>
             {(() => {
-              const TOTAL_SLOTS = 7;
-              const tp = totalPages;
-              const cp = page;
-              let slots: (number | 'ellipsis')[] = [];
+              const TOTAL_SLOTS = 7
+              const tp = totalPages
+              const cp = page
+              let slots: (number | 'ellipsis')[] = []
               if (tp <= TOTAL_SLOTS) {
-                slots = Array.from({ length: tp }, (_, i) => i + 1);
+                slots = Array.from({ length: tp }, (_, i) => i + 1)
               } else if (cp <= 4) {
-                slots = [1, 2, 3, 4, 5, 'ellipsis', tp];
+                slots = [1, 2, 3, 4, 5, 'ellipsis', tp]
               } else if (cp >= tp - 3) {
-                slots = [1, 'ellipsis', tp - 4, tp - 3, tp - 2, tp - 1, tp];
+                slots = [1, 'ellipsis', tp - 4, tp - 3, tp - 2, tp - 1, tp]
               } else {
-                slots = [1, 'ellipsis', cp - 1, cp, cp + 1, 'ellipsis', tp];
+                slots = [1, 'ellipsis', cp - 1, cp, cp + 1, 'ellipsis', tp]
               }
-              return slots.map((slot, idx) => (
+              return slots.map((slot, idx) =>
                 slot === 'ellipsis' ? (
-                  <span key={`e-${idx}`} className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">...</span>
+                  <span
+                    key={`e-${idx}`}
+                    className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm"
+                  >
+                    ...
+                  </span>
                 ) : (
-                  <button key={slot} onClick={() => onPageChange ? onPageChange(slot) : (slot < page ? onPrev() : onNext())} className={`w-8 h-8 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${cp === slot ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-white'}`}>{slot}</button>
-                )
-              ));
+                  <button
+                    key={slot}
+                    onClick={() =>
+                      onPageChange ? onPageChange(slot) : slot < page ? onPrev() : onNext()
+                    }
+                    className={`w-8 h-8 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${cp === slot ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-white'}`}
+                  >
+                    {slot}
+                  </button>
+                ),
+              )
             })()}
             <button
               onClick={onNext}
@@ -198,7 +226,7 @@ const RoastLogPanel: React.FC<{
         </div>
       )}
     </div>
-  );
-};
+  )
+}
 
-export default RoastLogPanel;
+export default RoastLogPanel
