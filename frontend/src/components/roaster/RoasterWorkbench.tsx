@@ -904,57 +904,92 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             const lotId = selectedInventoryItem?.greenBeanLotId ?? selectedExternalLot!.id
             const availableKg =
               selectedInventoryItem?.remainingWeightKg ?? selectedExternalLot!.currentWeightKg
+            const batchValue = parseFloat(roastForm.batchSize || '0')
+            const roastedValue = parseFloat(roastForm.roastedWeight || '0')
+            const yieldPercentage =
+              batchValue > 0 && roastedValue > 0 ? (roastedValue / batchValue) * 100 : 0
+            const lossPercentage = yieldPercentage > 0 ? 100 - yieldPercentage : 0
+            const remainingAfterRoast = Math.max(0, availableKg - (batchValue || 0))
             return (
-              <form onSubmit={handleLogRoastSubmit}>
-                <div className="mb-6 flex items-center justify-between gap-4 border-b border-[#e8ece8] pb-5">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#fff0df]">
-                      <Flame className="h-6 w-6 text-[#d87832]" />
+              <form onSubmit={handleLogRoastSubmit} className="text-[#263b31]">
+                <div className="-mx-8 -mt-8 mb-7 bg-[#263b31] px-8 py-7 text-white">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#d87832] shadow-lg shadow-black/20">
+                        <Flame className="h-6 w-6 text-white" />
+                      </div>
+                      <div>
+                        <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.16em] text-[#b8cabe]">
+                          Roasting station
+                        </p>
+                        <h2 className="text-2xl font-bold tracking-tight">Log a new roast</h2>
+                        <p className="mt-1 text-sm text-[#c5d2c8]">
+                          Lot{' '}
+                          <span className="font-mono font-bold text-[#f5c66d]">
+                            {toRoaId(lotId)}
+                          </span>
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-2xl font-bold tracking-tight text-[#20352b]">
-                        Log Roast
-                      </h2>
-                      <p className="mt-0.5 text-sm text-[#7b8a80]">
-                        Recording a new roast batch from lot{' '}
-                        <span className="font-mono font-bold text-[#294936]">{toRoaId(lotId)}</span>
-                      </p>
-                    </div>
+                    <span className="hidden rounded-full border border-[#66816e] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[#d6e4d9] sm:inline-flex">
+                      Draft batch
+                    </span>
                   </div>
-                  <span className="hidden rounded-full bg-[#fff0df] px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-[#b45f22] sm:inline-flex">
-                    New batch
-                  </span>
                 </div>
 
-                <div className="mb-7 flex items-center justify-between gap-4 rounded-2xl border border-[#f1d9be] bg-[#fff8ed] px-5 py-4">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#a85c1e]">
-                      Available to roast
+                <div className="mb-7 grid grid-cols-3 overflow-hidden rounded-2xl border border-[#e2e8e1] bg-[#f7faf7]">
+                  <div className="border-r border-[#e2e8e1] px-4 py-4">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#829188]">
+                      Available
                     </p>
-                    <p className="mt-1 text-3xl font-bold tracking-tight text-[#c26725]">
-                      {toFixed2(availableKg)} <span className="text-base font-semibold">kg</span>
+                    <p className="mt-1 text-xl font-bold text-[#294936]">
+                      {toFixed2(availableKg)}{' '}
+                      <span className="text-xs font-semibold text-[#829188]">kg</span>
                     </p>
                   </div>
-                  <div className="hidden text-right sm:block">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#b77a4a]">
-                      Source lot
+                  <div className="border-r border-[#e2e8e1] px-4 py-4">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#829188]">
+                      After roast
                     </p>
-                    <p className="mt-1 font-mono text-sm font-bold text-[#8d4d20]">
-                      {toRoaId(lotId)}
+                    <p className="mt-1 text-xl font-bold text-[#d87832]">
+                      {toFixed2(remainingAfterRoast)}{' '}
+                      <span className="text-xs font-semibold text-[#829188]">kg</span>
+                    </p>
+                  </div>
+                  <div className="px-4 py-4">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#829188]">
+                      Yield
+                    </p>
+                    <p className="mt-1 text-xl font-bold text-[#294936]">
+                      {yieldPercentage ? `${yieldPercentage.toFixed(1)}%` : '—'}
                     </p>
                   </div>
                 </div>
                 <div className="space-y-7">
                   <section>
-                    <div className="mb-3 flex items-center gap-2">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#e9f2ec] text-xs font-bold text-[#2e6848]">
-                        1
-                      </span>
-                      <h3 className="text-sm font-bold uppercase tracking-[0.1em] text-[#294936]">
-                        Batch details
-                      </h3>
+                    <div className="mb-4 flex items-end justify-between gap-3">
+                      <div>
+                        <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[#91a095]">
+                          Step 01
+                        </p>
+                        <h3 className="text-lg font-bold tracking-tight text-[#294936]">
+                          Set your batch
+                        </h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRoastForm({
+                            ...roastForm,
+                            batchSize: toFixed2(availableKg).toString(),
+                          })
+                        }
+                        className="text-xs font-bold text-[#d87832] transition-colors hover:text-[#a9511b]"
+                      >
+                        Use all available
+                      </button>
                     </div>
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div>
                         <label className="mb-2 block text-sm font-semibold text-[#46564b]">
                           Batch Size (kg)
@@ -1010,61 +1045,61 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                           placeholder="0.00"
                         />
                       </div>
-
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-[#f7faf7] p-3 text-sm">
                       <div>
-                        <label className="mb-2 block text-sm font-semibold text-[#46564b]">
-                          Weight Loss / Yield
-                        </label>
-                        <div className="flex min-h-[50px] items-center rounded-xl border border-[#e2e8e1] bg-[#f3f7f3] px-3 py-3 text-sm font-bold text-[#557262]">
-                          {(() => {
-                            const b = parseFloat(roastForm.batchSize || '0')
-                            const r = parseFloat(roastForm.roastedWeight || '0')
-                            if (!b || !r) return '—'
-                            const yieldPct = (r / b) * 100
-                            const lossPct = 100 - yieldPct
-                            return `${lossPct.toFixed(1)}% loss • ${yieldPct.toFixed(1)}% yield`
-                          })()}
-                        </div>
+                        <span className="text-[#829188]">Weight loss</span>
+                        <strong className="ml-2 text-[#d87832]">
+                          {lossPercentage ? `${lossPercentage.toFixed(1)}%` : '—'}
+                        </strong>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[#829188]">Expected yield</span>
+                        <strong className="ml-2 text-[#2e6848]">
+                          {yieldPercentage ? `${yieldPercentage.toFixed(1)}%` : '—'}
+                        </strong>
                       </div>
                     </div>
                   </section>
 
                   <section>
-                    <div className="mb-3 flex items-center gap-2">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#e9f2ec] text-xs font-bold text-[#2e6848]">
-                        2
-                      </span>
-                      <h3 className="text-sm font-bold uppercase tracking-[0.1em] text-[#294936]">
-                        Roast profile
+                    <div className="mb-4">
+                      <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[#91a095]">
+                        Step 02
+                      </p>
+                      <h3 className="text-lg font-bold tracking-tight text-[#294936]">
+                        Choose the roast profile
                       </h3>
                     </div>
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-[#46564b]">
-                          Roast Level
-                        </label>
-                        <Select
-                          value={roastLevel}
-                          onChange={(v) => setRoastLevel((v as RoastLevel) || RoastLevel.Medium)}
-                          options={[RoastLevel.Light, RoastLevel.Medium, RoastLevel.Dark]}
-                          placeholder="Select level..."
-                        />
-                      </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[RoastLevel.Light, RoastLevel.Medium, RoastLevel.Dark].map((level) => (
+                        <button
+                          key={level}
+                          type="button"
+                          onClick={() => setRoastLevel(level)}
+                          className={`rounded-xl border px-3 py-3 text-sm font-bold transition-all ${roastLevel === level ? 'border-[#d87832] bg-[#fff1df] text-[#b45f22] shadow-sm' : 'border-[#e2e8e1] bg-white text-[#718077] hover:border-[#b8cabe]'}`}
+                        >
+                          <span
+                            className={`mx-auto mb-2 block h-2 w-2 rounded-full ${level === RoastLevel.Light ? 'bg-[#d5a455]' : level === RoastLevel.Medium ? 'bg-[#9b633b]' : 'bg-[#3d302b]'}`}
+                          />
+                          {level}
+                        </button>
+                      ))}
                     </div>
                   </section>
 
                   <section>
-                    <div className="mb-3 flex items-center gap-2">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#e9f2ec] text-xs font-bold text-[#2e6848]">
-                        3
-                      </span>
-                      <h3 className="text-sm font-bold uppercase tracking-[0.1em] text-[#294936]">
-                        Notes & flavor
+                    <div className="mb-4">
+                      <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[#91a095]">
+                        Step 03
+                      </p>
+                      <h3 className="text-lg font-bold tracking-tight text-[#294936]">
+                        Capture the cup
                       </h3>
                     </div>
                     <div>
                       <label className="mb-2 block text-sm font-semibold text-[#46564b]">
-                        Roast Profile Notes
+                        Roast notes <span className="font-normal text-[#9aa69e]">(optional)</span>
                       </label>
                       <textarea
                         rows={3}
@@ -1081,7 +1116,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                     </div>
                     <div>
                       <label className="mb-3 block text-sm font-semibold text-[#46564b]">
-                        Flavor Notes
+                        Flavor notes <span className="font-normal text-[#9aa69e]">(optional)</span>
                       </label>
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
