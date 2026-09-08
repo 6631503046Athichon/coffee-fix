@@ -6,6 +6,7 @@ import React, {
   useRef,
 } from "react";
 import { useDataContext } from "../../hooks/useDataContext";
+import { useGradeNames } from "../../hooks/useGradeOptions";
 import {
   ProcessingBatch,
   ProcessingBatchStatus,
@@ -215,6 +216,17 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     useState<string>("InStock");
   const [greenBeanGradeFilter, setGreenBeanGradeFilter] =
     useState<string>("all");
+
+  // A filter over lots that already exist, so retired grades stay listed —
+  // otherwise a lot filed under one would become unreachable.
+  const gradeFilterNames = useGradeNames({ includeInactive: true });
+  const greenBeanGradeFilterOptions = useMemo(
+    () => [
+      { value: "all", label: "All Grades" },
+      ...gradeFilterNames.map((name) => ({ value: name, label: name })),
+    ],
+    [gradeFilterNames],
+  );
 
   const [harvestLotSearch, setHarvestLotSearch] = useState("");
   const [harvestLotPage, setHarvestLotPage] = useState(1);
@@ -2048,17 +2060,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 className="w-[130px]"
               />
               <Select
-                options={[
-                  { value: "all", label: "All Grades" },
-                  { value: "Grade A", label: "Grade A" },
-                  { value: "Grade B", label: "Grade B" },
-                  { value: "Grade C", label: "Grade C" },
-                  { value: "Peaberry", label: "Peaberry" },
-                  { value: "Screen 18", label: "Screen 18" },
-                  { value: "Screen 17", label: "Screen 17" },
-                  { value: "Screen 16", label: "Screen 16" },
-                  { value: "Screen 15", label: "Screen 15" },
-                ]}
+                options={greenBeanGradeFilterOptions}
                 value={greenBeanGradeFilter}
                 onChange={(v) => {
                   setGreenBeanGradeFilter(v as string);

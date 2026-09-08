@@ -6,6 +6,7 @@ import { Button } from '../common/Button'
 import { PageHeader } from '../common/PageHeader'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useDataContext } from '../../hooks/useDataContext'
+import { useGradeNames } from '../../hooks/useGradeOptions'
 import {
   User,
   GreenBeanLot,
@@ -61,6 +62,7 @@ const COFFEE_VARIETIES = [
 
 const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
   const { data, setData } = useDataContext()
+  const gradeNames = useGradeNames()
   const location = useLocation()
   const navigate = useNavigate()
   const { addToast } = useToast()
@@ -1219,16 +1221,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
               <Select
                 value={newLotForm.grade}
                 onChange={(v) => setNewLotForm({ ...newLotForm, grade: (v as string) || '' })}
-                options={[
-                  'Grade A',
-                  'Grade B',
-                  'Grade C',
-                  'Peaberry',
-                  'Screen 18',
-                  'Screen 17',
-                  'Screen 16',
-                  'Screen 15',
-                ]}
+                options={gradeNames}
                 placeholder="Select grade..."
               />
             </div>

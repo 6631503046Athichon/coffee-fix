@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
-import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package, Box } from 'lucide-react';
+import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package, Box, Bean } from 'lucide-react';
 
 import { UserRole, CuppingSessionType, Customer } from './types';
 import { INITIAL_APP_DATA } from './constants';
@@ -54,6 +54,7 @@ const ActivityTypeManagement = lazy(() => import('./components/admin/ActivityTyp
 const ProcessTypeManagement = lazy(() => import('./components/admin/ProcessTypeManagement'));
 const RoasterWorkbench = lazy(() => import('./components/roaster/RoasterWorkbench'));
 const CoffeeVarietiesManager = lazy(() => import('./components/admin/CoffeeVarietiesManager'));
+const CoffeeGradeManagement = lazy(() => import('./components/admin/CoffeeGradeManagement'));
 const CustomerManagement = lazy(() => import('./components/sales/CustomerManagement'));
 
 const RouteLoader: React.FC = () => (
@@ -224,6 +225,7 @@ const ProtectedRoutes: React.FC = () => {
         cropYears: phase1.cropYears,
         processTypes: phase1.processTypes,
         activityTypes: phase1.activityTypes,
+        coffeeGrades: phase1.coffeeGrades ?? prev.coffeeGrades,
         customers: mergeArrays(storedCustomers, INITIAL_APP_DATA.customers),
         users: phase1.users,
         saleOrders: salesDataLoadFailed ? prev.saleOrders : storedSaleOrders,
@@ -413,6 +415,7 @@ const ProtectedRoutes: React.FC = () => {
       { name: 'Activity Types', href: '/activity-types', icon: Tag, roles: [UserRole.Admin], section: 'admin' },
       { name: 'Process Types', href: '/process-types', icon: Coffee, roles: [UserRole.Admin], section: 'admin' },
       { name: 'Coffee Varieties', href: '/coffee-varieties', icon: Coffee, roles: [UserRole.Admin], section: 'admin' },
+      { name: 'Coffee Grades', href: '/coffee-grades', icon: Bean, roles: [UserRole.Admin], section: 'admin' },
     ];
   }, [currentUser, data.cuppingSessions]);
 
@@ -558,6 +561,14 @@ const ProtectedRoutes: React.FC = () => {
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Admin]}>
                     {withRouteLoader(<CoffeeVarietiesManager />)}
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/coffee-grades"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Admin]}>
+                    {withRouteLoader(<CoffeeGradeManagement />)}
                   </ProtectedRoute>
                 }
               />

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { ParchmentLot, User, UserRole } from "../../../types";
+import { useGradeNames, useGradeOptions } from "../../../hooks/useGradeOptions";
 import {
   Package,
   DollarSign,
@@ -17,17 +18,6 @@ import {
   X,
 } from "lucide-react";
 
-const GRADE_OPTIONS = [
-  { value: "Grade A", label: "Grade A" },
-  { value: "Grade B", label: "Grade B" },
-  { value: "Grade C", label: "Grade C" },
-  { value: "Peaberry", label: "Peaberry" },
-  { value: "Screen 18", label: "Screen 18" },
-  { value: "Screen 17", label: "Screen 17" },
-  { value: "Screen 16", label: "Screen 16" },
-  { value: "Screen 15", label: "Screen 15" },
-];
-
 // ---------------------------------------------------------------------------
 // GradeDropdown (inlined from HullAndGradeModal pattern)
 // ---------------------------------------------------------------------------
@@ -39,7 +29,11 @@ const GradeDropdown: React.FC<{
   const [isOpen, setIsOpen] = React.useState(false);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
 
-  const options = GRADE_OPTIONS.filter(
+  // Grades come from the admin-managed CoffeeGrade list; `alwaysInclude`
+  // keeps this row's existing value visible even if that grade was retired.
+  const gradeOptions = useGradeOptions({ alwaysInclude: value || undefined });
+
+  const options = gradeOptions.filter(
     (option) => !usedGrades.includes(option.value) || option.value === value,
   );
 
@@ -56,7 +50,7 @@ const GradeDropdown: React.FC<{
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const selectedOption = GRADE_OPTIONS.find((opt) => opt.value === value);
+  const selectedOption = gradeOptions.find((opt) => opt.value === value);
 
   return (
     <div ref={dropdownRef} className="relative">
@@ -241,10 +235,12 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
     return Array.from(duplicates);
   }, [selectedGrades]);
   const hasDuplicateGrades = duplicateGrades.length > 0;
+  // One row per grade, so the list of grades caps how many rows there can be.
+  const gradeNames = useGradeNames();
   const allHullGradesValid = gradedLots.every(
     (lot) => lot.grade && parseFloat(lot.weight) > 0,
   );
-  const canAddMoreGrades = gradedLots.length < GRADE_OPTIONS.length;
+  const canAddMoreGrades = gradedLots.length < gradeNames.length;
 
   const lotId =
     parchmentLot.displayId || parchmentLot.id.substring(0, 8).toUpperCase();

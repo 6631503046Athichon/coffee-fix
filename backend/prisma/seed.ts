@@ -313,6 +313,39 @@ async function main() {
   }
 
   // ============================================================
+  // Create Coffee Grades
+  // ============================================================
+  // sortOrder keeps the dropdown in the order processors expect
+  // (Grade A/B/C, then Peaberry, then screen sizes largest first),
+  // which plain alphabetical sorting would scramble.
+  console.log("\nCreating coffee grades...");
+
+  const coffeeGrades = [
+    { name: "Grade A", description: "เกรดพรีเมียม คัดคุณภาพสูงสุด", sortOrder: 10 },
+    { name: "Grade B", description: "เกรดมาตรฐาน", sortOrder: 20 },
+    { name: "Grade C", description: "เกรดรอง", sortOrder: 30 },
+    { name: "Peaberry", description: "เมล็ดกลมเดี่ยว ไม่แยกเป็นสองซีกตามปกติ", sortOrder: 40 },
+    { name: "Screen 18", description: "ขนาดตะแกรง 18 (เมล็ดใหญ่ที่สุด)", sortOrder: 50 },
+    { name: "Screen 17", description: "ขนาดตะแกรง 17", sortOrder: 60 },
+    { name: "Screen 16", description: "ขนาดตะแกรง 16", sortOrder: 70 },
+    { name: "Screen 15", description: "ขนาดตะแกรง 15", sortOrder: 80 },
+  ];
+
+  for (const cg of coffeeGrades) {
+    const coffeeGrade = await prisma.coffeeGrade.upsert({
+      where: { name: cg.name },
+      update: {},
+      create: {
+        name: cg.name,
+        description: cg.description,
+        sortOrder: cg.sortOrder,
+        isActive: true,
+      },
+    });
+    console.log("Created coffee grade:", coffeeGrade.name);
+  }
+
+  // ============================================================
   // Create Soil Analysis for Farm สมชาย (เชียงราย)
   // ============================================================
   console.log("\nCreating soil analysis...");

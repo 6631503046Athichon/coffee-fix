@@ -35,6 +35,7 @@ import {
   User,
 } from '../../types'
 import { useDataContext } from '../../hooks/useDataContext'
+import { useGradeNames } from '../../hooks/useGradeOptions'
 import { useToast } from '../../contexts/ToastContext'
 import { addProcessingBatch } from '../../services/processing/processingBatchService'
 import {
@@ -64,17 +65,6 @@ interface ParchmentTabProps {
 }
 
 const PROCESS_TYPES = ['Honey', 'Natural', 'Washed'] as const
-
-const GRADE_OPTIONS = [
-  'Grade A',
-  'Grade B',
-  'Grade C',
-  'Peaberry',
-  'Screen 18',
-  'Screen 17',
-  'Screen 16',
-  'Screen 15',
-] as const
 
 type WithdrawalType = 'Sale' | 'Sample' | 'Export' | 'Roasting Stock' | 'Other'
 
@@ -131,6 +121,8 @@ const WITHDRAWAL_TYPE_CONFIG: {
 const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   void currentUser
   const { data, refreshData } = useDataContext()
+  // One row per grade, so the admin-managed grade list caps the rows.
+  const gradeNames = useGradeNames()
   const { addToast } = useToast()
 
   // Cherry Lots table paging
@@ -1016,7 +1008,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
               onClick={() =>
                 setGradeRows([...gradeRows, { rowKey: newRowId(), grade: '', weight: '' }])
               }
-              disabled={gradeRows.length >= GRADE_OPTIONS.length}
+              disabled={gradeRows.length >= gradeNames.length}
               className="w-full py-2.5 border border-dashed border-amber-300 rounded-xl text-sm font-bold text-amber-700 hover:bg-amber-50 hover:border-amber-400 disabled:opacity-30 inline-flex items-center justify-center gap-1.5 transition-all"
             >
               <Plus className="h-3.5 w-3.5" /> Add grade

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
+import { useGradeOptions } from '../../../hooks/useGradeOptions'
 
 type DropdownAccent = 'gray' | 'amber' | 'red' | 'emerald' | 'blue'
 
@@ -17,17 +18,6 @@ interface GradeDropdownProps {
   accent?: DropdownAccent
   size?: 'sm' | 'md'
 }
-
-const ALL_GRADE_OPTIONS = [
-  { value: 'Grade A', label: 'Grade A' },
-  { value: 'Grade B', label: 'Grade B' },
-  { value: 'Grade C', label: 'Grade C' },
-  { value: 'Peaberry', label: 'Peaberry' },
-  { value: 'Screen 18', label: 'Screen 18' },
-  { value: 'Screen 17', label: 'Screen 17' },
-  { value: 'Screen 16', label: 'Screen 16' },
-  { value: 'Screen 15', label: 'Screen 15' },
-]
 
 const ACCENT_CLASSES: Record<
   DropdownAccent,
@@ -91,7 +81,11 @@ export const GradeDropdown: React.FC<GradeDropdownProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null)
   const a = ACCENT_CLASSES[accent]
 
-  const options = ALL_GRADE_OPTIONS.filter(
+  // Grades come from the admin-managed CoffeeGrade list; `alwaysInclude`
+  // keeps a row's existing value visible even if that grade was retired.
+  const allGradeOptions = useGradeOptions({ alwaysInclude: value || undefined })
+
+  const options = allGradeOptions.filter(
     (opt) => !usedGrades.includes(opt.value) || opt.value === value,
   )
 
@@ -105,7 +99,7 @@ export const GradeDropdown: React.FC<GradeDropdownProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const selectedOption = ALL_GRADE_OPTIONS.find((opt) => opt.value === value)
+  const selectedOption = allGradeOptions.find((opt) => opt.value === value)
   const triggerHeight = size === 'md' ? 'h-[46px]' : 'py-2'
   const triggerPad = size === 'md' ? 'px-4' : 'px-3'
   const triggerText = size === 'md' ? 'text-sm' : 'text-sm'
