@@ -270,6 +270,12 @@ const ProtectedRoutes: React.FC = () => {
 
   // Debounced refresh to prevent burst reloads from rapid events
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Mobile nav state lives here because the Header owns the toggle button
+  // and the Sidebar owns the drawer it opens.
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const toggleMobileNav = useCallback(() => setIsMobileNavOpen((open) => !open), []);
+  const closeMobileNav = useCallback(() => setIsMobileNavOpen(false), []);
   const debouncedRefresh = useCallback(() => {
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
@@ -438,10 +444,18 @@ const ProtectedRoutes: React.FC = () => {
   return (
     <DataContext.Provider value={contextValue}>
       <div className="flex h-screen bg-gray-50 text-gray-800">
-        <Sidebar navItems={navItems} currentUserRoles={currentUser?.roles || [UserRole.Farmer]} />
+        <Sidebar
+          navItems={navItems}
+          currentUserRoles={currentUser?.roles || [UserRole.Farmer]}
+          isMobileOpen={isMobileNavOpen}
+          onMobileClose={closeMobileNav}
+        />
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden w-full lg:w-auto">
-          <Header currentUserRoles={currentUser?.roles || [UserRole.Farmer]} />
-          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-3 sm:p-4 md:p-6 lg:p-8 pt-16 lg:pt-4">
+          <Header
+            currentUserRoles={currentUser?.roles || [UserRole.Farmer]}
+            onToggleMobileNav={toggleMobileNav}
+          />
+          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-3 sm:p-4 md:p-6 lg:p-8 lg:pt-4">
             <Routes>
               <Route path="/farmer" element={<Navigate to="/farmer-dashboard" replace />} />
               <Route path="/dashboard" element={<Navigate to="/farmer-dashboard" replace />} />
