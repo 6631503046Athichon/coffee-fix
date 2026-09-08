@@ -6,6 +6,7 @@ import React, {
   useRef,
 } from "react";
 import { useDataContext } from "../../hooks/useDataContext";
+import { formatDate } from "../../utils/formatters";
 import { useGradeNames } from "../../hooks/useGradeOptions";
 import {
   ProcessingBatch,
@@ -28,6 +29,8 @@ import {
   Wind,
   PackageCheck,
   Sprout,
+  Leaf,
+  User as UserIcon,
   ChevronsRight,
   CheckCircle,
   Archive,
@@ -247,13 +250,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     setGreenBeanCurrentPage(1);
   }, []);
 
-  // Card View pagination state. Six per page rather than the data grid's
-  // five: the cards lay out two across from md and three from xl, and six is
-  // the smallest count that fills both without stranding a gap in the last
-  // row. Page 1 still holds the newest lots in either view, which is what the
-  // shared sort below is actually there to guarantee.
+  // Cherry cards page at the same size as the other two columns, so the
+  // three stacks stay in step as you flip through them.
   const [harvestCardPage, setHarvestCardPage] = useState(1);
-  const CARD_PAGE_SIZE = 6;
 
   // Use the currently logged-in user for QC scoring
   const processorUser = currentUser;
@@ -1256,7 +1255,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
   // Card View pagination for Incoming Harvest Lots
   const harvestCardTotalPages = Math.ceil(
-    filteredHarvestLots.length / CARD_PAGE_SIZE,
+    filteredHarvestLots.length / ITEMS_PER_PAGE,
   );
   const paginatedHarvestCards = useMemo(() => {
     // Same sort as paginatedHarvestLots — keep card view + table view in
@@ -1271,10 +1270,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         new Date(a.harvestDate || 0).getTime()
       );
     });
-    const startIndex = (harvestCardPage - 1) * CARD_PAGE_SIZE;
+    const startIndex = (harvestCardPage - 1) * ITEMS_PER_PAGE;
     return sorted.slice(
       startIndex,
-      startIndex + CARD_PAGE_SIZE,
+      startIndex + ITEMS_PER_PAGE,
     );
   }, [filteredHarvestLots, harvestCardPage]);
 
@@ -1482,92 +1481,27 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
   const tableView = (
     <div className="space-y-4">
-      {/* Processing Summary - Compact */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-sky-600 uppercase">
-                Completed
-              </p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {
-                  data.processingBatches.filter(
-                    (b) => b.status === ProcessingBatchStatus.Completed,
-                  ).length
-                }
-              </p>
-            </div>
-            <div className="p-2 bg-sky-50 rounded-lg">
-              <CheckCircle className="h-5 w-5 text-sky-500" />
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-amber-600 uppercase">
-                Parchment
-              </p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {data.parchmentLots.length}
-              </p>
-            </div>
-            <div className="p-2 bg-amber-50 rounded-lg">
-              <Box className="h-5 w-5 text-amber-500" />
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-teal-600 uppercase">
-                Green Bean
-              </p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {data.greenBeanLots.length}
-              </p>
-            </div>
-            <div className="p-2 bg-teal-50 rounded-lg">
-              <Coffee className="h-5 w-5 text-teal-500" />
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-green-600 uppercase">
-                Ready
-              </p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {readyForProcessingLots.length}
-              </p>
-            </div>
-            <div className="p-2 bg-green-50 rounded-lg">
-              <Sprout className="h-5 w-5 text-green-500" />
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Incoming Harvest Lots Table */}
       <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
         {/* Header with search */}
-        <div className="px-4 py-3 bg-green-50 border-b border-green-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="p-3 bg-green-50 border-b border-green-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-green-600 rounded-lg">
+            <div className="p-1.5 bg-green-600 rounded-md">
               <Sprout className="h-4 w-4 text-white" />
             </div>
-            <h3 className="text-base font-bold text-gray-900">
-              1 · Cherry Lots
-            </h3>
+            <h3 className="text-sm font-bold text-gray-900">1 · Cherry Lots</h3>
+            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-white text-green-700 border border-green-200">
+              {filteredHarvestLots.length}
+            </span>
           </div>
-          <div className="relative w-full sm:w-64">
+          {/* min-h matches the filter selects in the other two headers, so
+              all three header bands come out the same height */}
+          <div className="relative w-full sm:w-56 sm:min-h-[46px] flex items-center">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <DebouncedSearchInput
               placeholder="Search lots..."
               onSearch={onHarvestLotSearch}
-              className="pl-9 w-full border border-green-200 bg-white rounded-lg py-1.5 px-3 text-sm focus:ring-1 focus:ring-green-300 focus:border-green-300 outline-none"
+              className="pl-9 w-full border border-green-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-green-300 focus:border-green-300 outline-none"
             />
           </div>
         </div>
@@ -1630,17 +1564,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       {lot.farmerName}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                         Ready
                       </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <button
                         onClick={() => openModal("startProcessing", lot)}
-                        className="p-2 rounded-lg text-white bg-sky-600 hover:bg-sky-700 shadow-md hover:shadow-lg transition-all"
-                        title="Record Process"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 shadow-sm transition-all"
                       >
-                        <PlayCircle size={18} />
+                        <PlayCircle size={14} />
+                        Record Process
                       </button>
                     </td>
                     </tr>
@@ -1651,86 +1586,34 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           </table>
         </div>
 
-        {/* Pagination */}
-        {filteredHarvestLots.length > HARVEST_LOT_PAGE_SIZE && (
-          <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-center">
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setHarvestLotPage((p) => Math.max(1, p - 1))}
-                disabled={harvestLotPage === 1}
-                className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              {(() => {
-                const TOTAL_SLOTS = 7;
-                const tp = harvestLotTotalPages;
-                const cp = harvestLotPage;
-                let slots: (number | "ellipsis")[] = [];
-                if (tp <= TOTAL_SLOTS) {
-                  slots = Array.from({ length: tp }, (_, i) => i + 1);
-                } else if (cp <= 4) {
-                  slots = [1, 2, 3, 4, 5, "ellipsis", tp];
-                } else if (cp >= tp - 3) {
-                  slots = [1, "ellipsis", tp - 4, tp - 3, tp - 2, tp - 1, tp];
-                } else {
-                  slots = [1, "ellipsis", cp - 1, cp, cp + 1, "ellipsis", tp];
-                }
-                return slots.map((slot, idx) =>
-                  slot === "ellipsis" ? (
-                    <span
-                      key={`e-${idx}`}
-                      className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm"
-                    >
-                      ...
-                    </span>
-                  ) : (
-                    <button
-                      key={slot}
-                      onClick={() => setHarvestLotPage(slot)}
-                      className={`w-8 h-8 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${cp === slot ? "bg-blue-600 text-white" : "text-gray-700 hover:bg-gray-100"}`}
-                    >
-                      {slot}
-                    </button>
-                  ),
-                );
-              })()}
-              <button
-                onClick={() =>
-                  setHarvestLotPage((p) =>
-                    Math.min(harvestLotTotalPages, p + 1),
-                  )
-                }
-                disabled={harvestLotPage === harvestLotTotalPages}
-                className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          currentPage={harvestLotPage}
+          totalPages={harvestLotTotalPages}
+          onPageChange={setHarvestLotPage}
+        />
       </div>
 
       {/* Parchment Stock Table */}
       <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
         {/* Header with search and filters */}
-        <div className="px-4 py-3 bg-amber-50 border-b border-amber-100">
+        <div className="p-3 bg-amber-50 border-b border-amber-100">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-amber-500 rounded-lg">
+              <div className="p-1.5 bg-amber-500 rounded-md">
                 <Box className="h-4 w-4 text-white" />
               </div>
-              <h3 className="text-base font-bold text-gray-900">
-                2 · Parchment Stock
-              </h3>
+              <h3 className="text-sm font-bold text-gray-900">2 · Parchment Stock</h3>
+              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-white text-amber-700 border border-amber-200">
+                {processedParchmentLots.length}
+              </span>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative flex-1 min-w-[180px] max-w-[260px]">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative w-full sm:w-56">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <DebouncedSearchInput
-                  placeholder="Search..."
+                  placeholder="Search lots..."
                   onSearch={onParchmentSearch}
-                  className="pl-9 w-full border border-gray-200 bg-white rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-amber-200 focus:border-amber-300 outline-none transition-all"
+                  className="pl-9 w-full border border-amber-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-amber-300 focus:border-amber-300 outline-none"
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -1746,7 +1629,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     setParchmentCurrentPage(1);
                   }}
                   placeholder="Status"
-                  className="w-[175px]"
+                  className="w-[160px]"
                 />
                 <Select
                   options={[
@@ -1761,7 +1644,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     setParchmentCurrentPage(1);
                   }}
                   placeholder="Process"
-                  className="w-[135px]"
+                  className="w-[160px]"
                 />
               </div>
             </div>
@@ -1893,10 +1776,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           disabled={
                             p.status === "Hulled" || p.currentWeightKg <= 0
                           }
-                          className="p-2 rounded-lg text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all"
-                          title="Hull & Grade"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm transition-all"
+                          title="Hull & Grade — split this parchment into green bean lots"
                         >
-                          <PlayCircle size={18} />
+                          <PlayCircle size={14} />
+                          Hull &amp; Grade
                         </button>
                       </div>
                     </td>
@@ -1919,12 +1803,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       {/* Green Bean Grade Summary — aggregate by grade with source trace */}
       {greenBeanGradeSummary.length > 0 && (
         <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
-          <div className="px-4 py-3 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2">
-            <div className="p-1.5 bg-emerald-600 rounded-lg">
+          <div className="p-3 bg-teal-50 border-b border-teal-100 flex items-center gap-2">
+            <div className="p-1.5 bg-teal-500 rounded-md">
               <Coffee className="h-4 w-4 text-white" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-gray-900">
+              <h3 className="text-sm font-bold text-gray-900">
                 Green Bean Stock — Grade Summary
               </h3>
               <p className="text-[11px] text-gray-500">
@@ -2026,23 +1910,24 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200"
       >
         {/* Header with search and filters */}
-        <div className="px-4 py-3 bg-teal-50 border-b border-teal-100">
+        <div className="p-3 bg-teal-50 border-b border-teal-100">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-teal-600 rounded-lg">
+              <div className="p-1.5 bg-teal-500 rounded-md">
                 <Coffee className="h-4 w-4 text-white" />
               </div>
-              <h3 className="text-base font-bold text-gray-900">
-                3 · Green Bean Stock
-              </h3>
+              <h3 className="text-sm font-bold text-gray-900">3 · Green Bean Stock</h3>
+              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-white text-teal-700 border border-teal-200">
+                {processedGreenBeanLots.length}
+              </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative w-full sm:w-48">
+              <div className="relative w-full sm:w-56">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <DebouncedSearchInput
-                  placeholder="Search..."
+                  placeholder="Search lots..."
                   onSearch={onGreenBeanSearch}
-                  className="pl-9 w-full border border-teal-200 bg-white rounded-lg py-1.5 px-3 text-sm focus:ring-1 focus:ring-teal-300 focus:border-teal-300 outline-none"
+                  className="pl-9 w-full border border-teal-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-teal-300 focus:border-teal-300 outline-none"
                 />
               </div>
               <Select
@@ -2057,7 +1942,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   setGreenBeanCurrentPage(1);
                 }}
                 placeholder="Status"
-                className="w-[130px]"
+                className="w-[160px]"
               />
               <Select
                 options={greenBeanGradeFilterOptions}
@@ -2067,7 +1952,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   setGreenBeanCurrentPage(1);
                 }}
                 placeholder="Grade"
-                className="w-[130px]"
+                className="w-[160px]"
               />
             </div>
           </div>
@@ -2254,18 +2139,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           </button>
                           <button
                             onClick={() => setScoringLot(g)}
-                            className="p-2 rounded-lg text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 transition-colors"
-                            title="QC Score"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 transition-colors"
                           >
-                            <ClipboardCheck size={16} />
+                            <Star size={14} />
+                            QC Score
                           </button>
                           <button
                             onClick={() => openModal("withdrawStock", g)}
                             disabled={g.availabilityStatus === "Withdrawn"}
-                            className="p-2 rounded-lg text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
-                            title="Withdraw"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm transition-all"
                           >
-                            <Download size={16} />
+                            <PlayCircle size={14} />
+                            Withdraw
                           </button>
                               </>
                             );
@@ -2290,251 +2175,459 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     </div>
   );
 
+  // Three equal columns read left-to-right as the pipeline the header
+  // describes: cherry -> parchment -> green bean. Every column shares one
+  // shell (header, hint, search, card stack, pager) so nothing on the page
+  // is laid out by a different rule than its neighbour. The grid stretches
+  // all three to the tallest, and each card stack is flex-1, so the three
+  // pagers line up along one bottom edge instead of each column ending
+  // wherever its last card happens to.
   const kanbanView = (
-    <>
-      {/* Processing Summary Bar - Compact */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-sky-600 uppercase">
-                Completed
-              </p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {
-                  data.processingBatches.filter(
-                    (b) => b.status === ProcessingBatchStatus.Completed,
-                  ).length
-                }
-              </p>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* 1 · Cherry Lots */}
+      <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200 flex flex-col">
+        <div className="p-3 bg-green-50 border-b border-green-100">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-green-600 rounded-md">
+              <Sprout className="h-4 w-4 text-white" />
             </div>
-            <div className="p-2 bg-sky-50 rounded-lg">
-              <CheckCircle className="h-5 w-5 text-sky-500" />
-            </div>
+            <h3 className="text-sm font-bold text-gray-900">1 · Cherry Lots</h3>
+            <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-semibold bg-white text-green-700 border border-green-200">
+              {readyForProcessingLots.length}
+            </span>
+          </div>
+          <p className="text-[11px] text-gray-500 mt-1">
+            Record a process to turn these into parchment
+          </p>
+          <div className="relative mt-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <DebouncedSearchInput
+              placeholder="Search lots..."
+              onSearch={onHarvestLotSearch}
+              className="pl-9 w-full border border-green-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-green-300 focus:border-green-300 outline-none"
+            />
           </div>
         </div>
-        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-amber-600 uppercase">
-                Parchment
-              </p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {data.parchmentLots.length}
-              </p>
+        <div className="p-3 space-y-2 flex-1">
+          {paginatedHarvestCards.length === 0 ? (
+            <div className="text-center py-8 text-gray-400">
+              <Sprout className="h-10 w-10 mx-auto mb-2 opacity-30" />
+              <p className="text-sm font-medium">No cherry lots waiting</p>
             </div>
-            <div className="p-2 bg-amber-50 rounded-lg">
-              <Box className="h-5 w-5 text-amber-500" />
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-teal-600 uppercase">
-                Green Bean
-              </p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {data.greenBeanLots.length}
-              </p>
-            </div>
-            <div className="p-2 bg-teal-50 rounded-lg">
-              <Coffee className="h-5 w-5 text-teal-500" />
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold text-green-600 uppercase">
-                Ready
-              </p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {readyForProcessingLots.length}
-              </p>
-            </div>
-            <div className="p-2 bg-green-50 rounded-lg">
-              <Sprout className="h-5 w-5 text-green-500" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Incoming Lots */}
-      <div className="grid grid-cols-1 gap-6 mb-6">
-        {/* Incoming Harvest Lots */}
-        <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200 flex flex-col">
-          <div className="p-3 bg-green-50 border-b border-green-200">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-green-600 rounded-md">
-                <Sprout className="h-4 w-4 text-white" />
-              </div>
-              <h3 className="text-sm font-bold text-gray-900">
-                1 · Cherry Lots
-              </h3>
-              <span className="ml-auto text-xs text-green-600 font-semibold">
-                {readyForProcessingLots.length}
-              </span>
-            </div>
-              <p className="text-[11px] text-gray-500 mt-1">Record a process to turn these into parchment</p>
-            <div className="relative mt-2">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-              <DebouncedSearchInput
-                placeholder="Search lots..."
-                onSearch={onHarvestLotSearch}
-                className="pl-8 w-full border border-green-200 bg-white rounded-lg py-1.5 px-3 text-xs focus:ring-1 focus:ring-green-300 focus:border-green-300 outline-none"
-              />
-            </div>
-          </div>
-          <div className="p-3 min-h-[240px]">
-            {filteredHarvestLots.length > 0 ? (
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                {paginatedHarvestCards.map((lot) => {
-                  const isNewLot = isRecentItem(lot.createdAt ?? lot.harvestDate);
-                  const availableWeight = getAvailableHarvestWeight(lot);
-                  const isPartial =
-                    typeof lot.weightKg === "number" && availableWeight < lot.weightKg;
-                  return (
-                    <div
-                      key={lot.id}
-                      className="bg-white border-l-4 border-l-green-500 rounded-lg p-3 border border-gray-200 hover:shadow-md transition-all"
-                    >
-                      {/* Card Header */}
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-gray-900">
-                            {formatHarvestLotId(lot)}
-                          </p>
-                          {isNewLot && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
-                              NEW
-                            </span>
-                          )}
-                        </div>
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">
-                          <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                          Ready
-                        </span>
-                      </div>
-
-                    {/* Card Body - Compact */}
-                    <div className="text-xs space-y-1.5 text-gray-500 mb-3">
-                      <div className="flex justify-between">
-                        <span>Variety</span>
-                        <span className="font-medium text-gray-900">
-                          {lot.cherryVariety}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Weight</span>
-                        <span className="font-medium text-green-600">
-                          {typeof lot.weightKg === "number"
-                            ? isPartial
-                              ? `${availableWeight.toFixed(2)} kg (of ${lot.weightKg} kg)`
-                              : `${availableWeight.toFixed(2)} kg`
-                            : "-"}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Action Button */}
-                    <button
-                      onClick={() => openModal("startProcessing", lot)}
-                      className="w-full py-2 text-xs font-medium rounded-md text-white bg-sky-600 hover:bg-sky-700 shadow-md hover:shadow-lg transition-all inline-flex items-center justify-center gap-1.5"
-                    >
-                      <PlayCircle size={14} />
-                      Record Process
-                    </button>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-gray-400">
-                <Coffee className="h-10 w-10 opacity-30 mb-2" />
-                <p className="text-sm font-medium text-gray-500">
-                  No harvest lots available
-                </p>
-              </div>
-            )}
-          </div>
-          {/* Pagination */}
-          {harvestCardTotalPages > 1 && (
-            <div className="mt-auto flex justify-center items-center py-3 border-t border-gray-200">
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setHarvestCardPage((p) => Math.max(1, p - 1))}
-                  disabled={harvestCardPage === 1}
-                  className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+          ) : (
+            paginatedHarvestCards.map((lot) => {
+              const isNewLot = isRecentItem(lot.createdAt ?? lot.harvestDate);
+              const availableWeight = getAvailableHarvestWeight(lot);
+              const isPartial =
+                typeof lot.weightKg === "number" && availableWeight < lot.weightKg;
+              return (
+                <div
+                  key={lot.id}
+                  className="bg-white border-l-4 border-l-green-500 rounded-lg p-3 border border-gray-200 hover:shadow-md transition-all"
                 >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                {(() => {
-                  const TOTAL_SLOTS = 7;
-                  const tp = harvestCardTotalPages;
-                  const cp = harvestCardPage;
-                  let slots: (number | "ellipsis")[] = [];
-                  if (tp <= TOTAL_SLOTS) {
-                    slots = Array.from({ length: tp }, (_, i) => i + 1);
-                  } else if (cp <= 4) {
-                    slots = [1, 2, 3, 4, 5, "ellipsis", tp];
-                  } else if (cp >= tp - 3) {
-                    slots = [1, "ellipsis", tp - 4, tp - 3, tp - 2, tp - 1, tp];
-                  } else {
-                    slots = [1, "ellipsis", cp - 1, cp, cp + 1, "ellipsis", tp];
-                  }
-                  return slots.map((slot, idx) =>
-                    slot === "ellipsis" ? (
-                      <span
-                        key={`e-${idx}`}
-                        className="w-7 h-7 flex items-center justify-center text-gray-400 text-xs"
-                      >
-                        ...
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate" title={formatHarvestLotId(lot)}>
+                        {formatHarvestLotId(lot)}
+                      </p>
+                      {isNewLot && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+                          NEW
+                        </span>
+                      )}
+                    </div>
+                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap flex-shrink-0 bg-green-50 text-green-700">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                      Ready
+                    </span>
+                  </div>
+
+                  <div className="text-xs space-y-1.5 text-gray-500 mb-3">
+                    <div className="flex justify-between items-center">
+                      <span className="flex items-center gap-1.5">
+                        <Leaf className="h-3 w-3" />
+                        Variety
                       </span>
-                    ) : (
-                      <button
-                        key={slot}
-                        onClick={() => setHarvestCardPage(slot)}
-                        className={`w-7 h-7 text-xs font-medium rounded-md transition-colors flex items-center justify-center ${cp === slot ? "bg-blue-600 text-white" : "text-gray-700 hover:bg-gray-100"}`}
-                      >
-                        {slot}
-                      </button>
-                    ),
-                  );
-                })()}
-                <button
-                  onClick={() =>
-                    setHarvestCardPage((p) =>
-                      Math.min(harvestCardTotalPages, p + 1),
-                    )
-                  }
-                  disabled={harvestCardPage === harvestCardTotalPages}
-                  className="w-7 h-7 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
+                      <span className="font-medium text-gray-900">
+                        {lot.cherryVariety}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="flex items-center gap-1.5">
+                        <Scale className="h-3 w-3" />
+                        Weight
+                      </span>
+                      <span className="font-medium text-green-600">
+                        {typeof lot.weightKg === "number"
+                          ? isPartial
+                            ? `${availableWeight.toFixed(2)} kg (of ${lot.weightKg} kg)`
+                            : `${availableWeight.toFixed(2)} kg`
+                          : "-"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="flex items-center gap-1.5">
+                        <UserIcon className="h-3 w-3" />
+                        Farmer
+                      </span>
+                      <span className="font-medium text-gray-900 truncate min-w-0 ml-3" title={lot.farmerName}>
+                        {lot.farmerName}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="flex items-center gap-1.5">
+                        <Calendar className="h-3 w-3" />
+                        Harvested
+                      </span>
+                      <span className="font-medium text-gray-900">
+                        {lot.harvestDate ? formatDate(lot.harvestDate, "short") : "-"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => openModal("startProcessing", lot)}
+                    className="w-full py-2 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 shadow-sm transition-all inline-flex items-center justify-center gap-1.5"
+                  >
+                    <PlayCircle size={14} />
+                    Record Process
+                  </button>
+                </div>
+              );
+            })
           )}
         </div>
+        <Pagination
+          currentPage={harvestCardPage}
+          totalPages={harvestCardTotalPages}
+          onPageChange={setHarvestCardPage}
+        />
       </div>
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: #f3f4f6;
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #d97706;
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #b45309;
-        }
-      `}</style>
-    </>
+
+      {/* 2 · Parchment Stock */}
+      <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200 flex flex-col">
+        <div className="p-3 bg-amber-50 border-b border-amber-100">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-amber-500 rounded-md">
+              <Box className="h-4 w-4 text-white" />
+            </div>
+            <h3 className="text-sm font-bold text-gray-900">2 · Parchment Stock</h3>
+            <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-semibold bg-white text-amber-700 border border-amber-200">
+              {kanbanParchmentLots.length}
+            </span>
+          </div>
+          <p className="text-[11px] text-gray-500 mt-1">
+            Hull &amp; grade to turn these into green beans
+          </p>
+          <div className="relative mt-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <DebouncedSearchInput
+              placeholder="Search lots..."
+              onSearch={onParchmentSearch}
+              className="pl-9 w-full border border-amber-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-amber-300 focus:border-amber-300 outline-none"
+            />
+          </div>
+        </div>
+        <div className="p-3 space-y-2 flex-1">
+          {paginatedKanbanParchmentLots.length === 0 ? (
+            <div className="text-center py-8 text-gray-400">
+              <Box className="h-10 w-10 mx-auto mb-2 opacity-30" />
+              <p className="text-sm font-medium">No parchment in stock</p>
+            </div>
+          ) : (
+            paginatedKanbanParchmentLots.map((p) => {
+              const isNewParchment = isRecentItem(p.createdAt);
+              const sourceLot = p.harvestLotId
+                ? data.harvestLots.find((h) => h.id === p.harvestLotId)
+                : undefined;
+              return (
+                <div
+                  key={p.id}
+                  className={`bg-white border-l-4 ${p.status === "Hulled" ? "border-l-gray-300" : "border-l-amber-500"} rounded-lg p-3 border border-gray-200 hover:shadow-md transition-all`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate" title={formatParchmentId(p)}>
+                        {formatParchmentId(p)}
+                      </p>
+                      {isNewParchment && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+                          NEW
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedParchmentForHistory(p)}
+                        className="p-1 rounded-md border border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+                        title="View history"
+                      >
+                        <History className="h-3.5 w-3.5" />
+                      </button>
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${p.status === "Hulled" ? "bg-gray-100 text-gray-600" : "bg-emerald-50 text-emerald-700"}`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${p.status === "Hulled" ? "bg-gray-400" : "bg-emerald-500"}`}
+                        ></span>
+                        {p.status === "Hulled" ? "Hulled" : "In stock"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-xs space-y-1.5 text-gray-500 mb-3">
+                    <div className="flex justify-between items-center">
+                      <span className="flex items-center gap-1.5">
+                        <Coffee className="h-3 w-3" />
+                        Process
+                      </span>
+                      <span className="font-medium text-gray-900">
+                        {p.processType}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="flex items-center gap-1.5">
+                        <Scale className="h-3 w-3" />
+                        Weight
+                      </span>
+                      <span className="font-medium text-gray-900">
+                        {(p.status === "Hulled"
+                          ? (p.initialWeightKg ?? 0)
+                          : (p.currentWeightKg ?? 0)
+                        ).toFixed(2)}{" "}
+                        kg
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="flex items-center gap-1.5">
+                        <Droplet className="h-3 w-3" />
+                        Moisture
+                      </span>
+                      <span className="font-medium text-gray-900">
+                        {p.moistureContent}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="flex items-center gap-1.5">
+                        <Sprout className="h-3 w-3" />
+                        Source
+                      </span>
+                      <span className="font-medium text-gray-900 truncate min-w-0 ml-3">
+                        {sourceLot
+                          ? formatHarvestLotId(sourceLot)
+                          : p.externalSource
+                            ? "External"
+                            : "-"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => openModal("hullAndGrade", p)}
+                    disabled={p.status === "Hulled" || p.currentWeightKg <= 0}
+                    className="w-full py-2 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm transition-all inline-flex items-center justify-center gap-1.5"
+                    title="Hull & Grade — split this parchment into green bean lots"
+                  >
+                    <PlayCircle size={14} />
+                    Hull &amp; Grade
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+        <Pagination
+          currentPage={parchmentCurrentPage}
+          totalPages={kanbanParchmentPageCount}
+          onPageChange={setParchmentCurrentPage}
+        />
+      </div>
+
+      {/* 3 · Green Bean Stock */}
+      <div
+        ref={greenBeanStockRef}
+        className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200 flex flex-col"
+      >
+        <div className="p-3 bg-teal-50 border-b border-teal-100">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-teal-500 rounded-md">
+              <Coffee className="h-4 w-4 text-white" />
+            </div>
+            <h3 className="text-sm font-bold text-gray-900">3 · Green Bean Stock</h3>
+            <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-semibold bg-white text-teal-700 border border-teal-200">
+              {processedGreenBeanLots.length}
+            </span>
+          </div>
+          <p className="text-[11px] text-gray-500 mt-1">
+            Withdraw to sell, or send for roasting
+          </p>
+          <div className="relative mt-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <DebouncedSearchInput
+              placeholder="Search lots..."
+              onSearch={onGreenBeanSearch}
+              className="pl-9 w-full border border-teal-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-teal-300 focus:border-teal-300 outline-none"
+            />
+          </div>
+        </div>
+        <div className="p-3 space-y-2 flex-1">
+          {paginatedGreenBeanLots.length === 0 ? (
+            <div className="text-center py-8 text-gray-400">
+              <Coffee className="h-10 w-10 mx-auto mb-2 opacity-30" />
+              <p className="text-sm font-medium">No green bean lots</p>
+            </div>
+          ) : (
+            paginatedGreenBeanLots.map((g) => {
+              const isNewGreenBean = isRecentItem(g.createdAt);
+              // Prioritize processor score over cupping scores
+              const displayScore = g.processorScore
+                ? g.processorScore.toFixed(1)
+                : g.cuppingScores?.length > 0
+                  ? (
+                      g.cuppingScores.reduce((sum, c) => sum + c.score, 0) /
+                      g.cuppingScores.length
+                    ).toFixed(1)
+                  : null;
+              const scoreValue = g.processorScore
+                ? g.processorScore
+                : g.cuppingScores?.length > 0
+                  ? g.cuppingScores.reduce((sum, c) => sum + c.score, 0) /
+                    g.cuppingScores.length
+                  : 0;
+              const hasWithdrawalHistory =
+                g.withdrawalHistory && g.withdrawalHistory.length > 0;
+
+              return (
+                <div
+                  key={g.id}
+                  className={`bg-white border-l-4 ${g.availabilityStatus === "Withdrawn" ? "border-l-gray-300" : "border-l-teal-500"} rounded-lg p-3 border border-gray-200 hover:shadow-md transition-all`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate" title={formatGreenBeanId(g)}>
+                        {formatGreenBeanId(g)}
+                      </p>
+                      {isNewGreenBean && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+                          NEW
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedGreenBeanForSource(g)}
+                        className="p-1 rounded-md border border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+                        title="Source"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedGreenBeanForHistory(g)}
+                        className={`p-1 rounded-md border transition-colors ${
+                          hasWithdrawalHistory
+                            ? "border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50"
+                            : "border-gray-100 text-gray-300"
+                        }`}
+                        title={hasWithdrawalHistory ? "History" : "No history yet"}
+                      >
+                        <History className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleToggleAvailability(g.id)}
+                        disabled={g.currentWeightKg <= 0}
+                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${g.availabilityStatus === "Available" ? "bg-teal-50 text-teal-700 hover:bg-teal-100" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${g.availabilityStatus === "Available" ? "bg-teal-500" : "bg-gray-400"}`}
+                        ></span>
+                        {g.availabilityStatus}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="text-xs space-y-1.5 text-gray-500 mb-3">
+                    <div className="flex justify-between items-center">
+                      <span className="flex items-center gap-1.5">
+                        <Star className="h-3 w-3" />
+                        Grade
+                      </span>
+                      <span className="font-medium text-gray-900">{g.grade}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="flex items-center gap-1.5">
+                        <Scale className="h-3 w-3" />
+                        Weight
+                      </span>
+                      <span className="font-medium text-gray-900">
+                        {(g.currentWeightKg ?? 0).toFixed(2)} kg
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="flex items-center gap-1.5">
+                        <DollarSign className="h-3 w-3" />
+                        Price
+                      </span>
+                      {g.pricePerKg ? (
+                        <span className="font-medium text-teal-600">
+                          {g.pricePerKg.toFixed(2)} {g.currency || "THB"}/kg
+                          <span className="font-normal text-gray-400">
+                            {" "}· {(g.pricePerKg * (g.currentWeightKg ?? 0)).toFixed(2)} total
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">Not set</span>
+                      )}
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="flex items-center gap-1.5">
+                        <Activity className="h-3 w-3" />
+                        QC Score
+                      </span>
+                      {displayScore ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium text-gray-900">{displayScore}</span>
+                          {scoreValue >= 80 && (
+                            <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">N/A</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setScoringLot(g)}
+                      className="flex-1 py-2 text-xs font-medium rounded-md text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 transition-colors inline-flex items-center justify-center gap-1.5"
+                    >
+                      <Star size={14} />
+                      QC Score
+                    </button>
+                    <button
+                      onClick={() => openModal("withdrawStock", g)}
+                      disabled={g.availabilityStatus === "Withdrawn"}
+                      className="flex-1 py-2 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm transition-all inline-flex items-center justify-center gap-1.5"
+                    >
+                      <PlayCircle size={14} />
+                      Withdraw
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+        <Pagination
+          currentPage={greenBeanCurrentPage}
+          totalPages={greenBeanPageCount}
+          onPageChange={setGreenBeanCurrentPage}
+        />
+      </div>
+    </div>
   );
 
   return (
@@ -2585,360 +2678,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         </div>
       </div>
 
-      {/* Statistics Dashboard removed per spec; KPIs now live on main Dashboard */}
-
       {viewMode === "kanban" ? kanbanView : tableView}
-
-      {viewMode === "kanban" && (
-        <div className="mt-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
-          {/* Parchment Inventory */}
-          <div className="bg-white shadow-sm rounded-lg overflow-hidden flex flex-col border border-gray-200">
-            <div className="p-3 bg-amber-50 border-b border-amber-100">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="p-1.5 bg-amber-500 rounded-md">
-                  <Box className="h-4 w-4 text-white" />
-                </div>
-                <h3 className="text-sm font-bold text-gray-900">
-                  2 · Parchment Stock
-                </h3>
-              </div>
-                <p className="text-[11px] text-gray-500 mb-2">Hull &amp; grade to turn these into green beans</p>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <DebouncedSearchInput
-                  placeholder="Search..."
-                  onSearch={onParchmentSearch}
-                  className="pl-9 w-full border border-amber-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-amber-300 focus:border-amber-300 outline-none"
-                />
-              </div>
-            </div>
-            <div className="p-3 space-y-2 h-[400px] overflow-y-auto">
-              {paginatedKanbanParchmentLots.length === 0 ? (
-                <div className="text-center py-8 text-gray-400">
-                  <Box className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm font-medium">
-                    No matching parchment lots found
-                  </p>
-                </div>
-              ) : (
-                paginatedKanbanParchmentLots.map((p) => {
-                  const isNewParchment = isRecentItem(p.createdAt);
-                  return (
-                    <div
-                      key={p.id}
-                      className={`bg-white border-l-4 ${p.status === "Hulled" ? "border-l-gray-300" : "border-l-amber-500"} rounded-lg p-3 border border-gray-200 hover:shadow-md transition-all`}
-                    >
-                      {/* Card Header */}
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-gray-900">
-                            {formatParchmentId(p)}
-                          </p>
-                          {isNewParchment && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
-                              NEW
-                            </span>
-                          )}
-                        </div>
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${p.status === "Hulled" ? "bg-gray-100 text-gray-600" : "bg-emerald-50 text-emerald-700"}`}
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${p.status === "Hulled" ? "bg-gray-400" : "bg-emerald-500"}`}
-                        ></span>
-                        {formatParchmentStatus(p.status)}
-                      </span>
-                    </div>
-
-                    {/* Card Body - Compact */}
-                    <div className="text-xs space-y-1.5 text-gray-500 mb-3">
-                      <div className="flex justify-between items-center">
-                        <span className="flex items-center gap-1.5">
-                          <Coffee className="h-3 w-3" />
-                          Process
-                        </span>
-                        <span className="font-medium text-gray-900">
-                          {p.processType}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="flex items-center gap-1.5">
-                          <Scale className="h-3 w-3" />
-                          Weight
-                        </span>
-                        <span className="font-medium text-gray-900">
-                          {(p.status === "Hulled"
-                            ? (p.initialWeightKg ?? 0)
-                            : (p.currentWeightKg ?? 0)
-                          ).toFixed(2)}{" "}
-                          kg
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="flex items-center gap-1.5">
-                          <Droplet className="h-3 w-3" />
-                          Moisture
-                        </span>
-                        <span className="font-medium text-gray-900">
-                          {p.moistureContent}%
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => setSelectedParchmentForHistory(p)}
-                        className="py-2 px-2.5 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 transition-all inline-flex items-center justify-center gap-1.5"
-                        title="View history"
-                      >
-                        <History size={14} />
-                      </button>
-                      <button
-                        onClick={() => openModal("hullAndGrade", p)}
-                        disabled={
-                          p.status === "Hulled" || p.currentWeightKg <= 0
-                        }
-                        className="flex-1 py-2 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm transition-all inline-flex items-center justify-center gap-1.5"
-                        title="Hull & Grade — split this parchment into green bean lots"
-                      >
-                        <PlayCircle size={14} />
-                        Hull &amp; Grade
-                      </button>
-                    </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-            <div className="mt-auto">
-              <Pagination
-                currentPage={parchmentCurrentPage}
-                totalPages={kanbanParchmentPageCount}
-                onPageChange={setParchmentCurrentPage}
-              />
-            </div>
-          </div>
-
-          {/* Green Bean Inventory */}
-          <div
-            ref={greenBeanStockRef}
-            className="bg-white shadow-sm rounded-lg overflow-hidden flex flex-col border border-gray-200"
-          >
-            <div className="p-3 bg-teal-50 border-b border-teal-100">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="p-1.5 bg-teal-500 rounded-md">
-                  <Coffee className="h-4 w-4 text-white" />
-                </div>
-                <h3 className="text-sm font-bold text-gray-900">
-                  3 · Green Bean Stock
-                </h3>
-              </div>
-                <p className="text-[11px] text-gray-500 mb-2">Withdraw to sell, or send for roasting</p>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <DebouncedSearchInput
-                  placeholder="Search lots..."
-                  onSearch={onGreenBeanSearch}
-                  className="pl-9 w-full border border-teal-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-teal-300 focus:border-teal-300 outline-none"
-                />
-              </div>
-            </div>
-            <div className="p-3 space-y-2 h-[400px] overflow-y-auto">
-              {paginatedGreenBeanLots.length === 0 ? (
-                <div className="text-center py-8 text-gray-400">
-                  <Coffee className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm font-medium">
-                    No matching green bean lots found
-                  </p>
-                </div>
-              ) : (
-                paginatedGreenBeanLots.map((g) => {
-                  const isNewGreenBean = isRecentItem(g.createdAt);
-                  // Prioritize processor score over cupping scores
-                  const displayScore = g.processorScore
-                    ? g.processorScore.toFixed(1)
-                    : g.cuppingScores?.length > 0
-                      ? (
-                          g.cuppingScores.reduce((sum, c) => sum + c.score, 0) /
-                          g.cuppingScores.length
-                        ).toFixed(1)
-                      : null;
-                  const scoreValue = g.processorScore
-                    ? g.processorScore
-                    : g.cuppingScores?.length > 0
-                      ? g.cuppingScores.reduce((sum, c) => sum + c.score, 0) /
-                        g.cuppingScores.length
-                      : 0;
-
-                  return (
-                    <div
-                      key={g.id}
-                      className={`bg-white border-l-4 ${g.availabilityStatus === "Withdrawn" ? "border-l-gray-300" : "border-l-teal-500"} rounded-lg p-3 border border-gray-200 hover:shadow-md transition-all`}
-                    >
-                      {/* Card Header */}
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="p-1.5 bg-teal-500 rounded-md">
-                            <Coffee className="h-4 w-4 text-white" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-semibold text-gray-900">
-                                {formatGreenBeanId(g)}
-                              </p>
-                              {isNewGreenBean && (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
-                                  NEW
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-xs text-teal-600">
-                              Green Bean Lot
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => handleToggleAvailability(g.id)}
-                          disabled={g.currentWeightKg <= 0}
-                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${g.availabilityStatus === "Available" ? "bg-teal-50 text-teal-700 hover:bg-teal-100" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${g.availabilityStatus === "Available" ? "bg-teal-500" : "bg-gray-400"}`}
-                          ></span>
-                          {g.availabilityStatus}
-                        </button>
-                      </div>
-
-                      {/* Card Body */}
-                      <div className="text-xs space-y-1.5 text-gray-500 mb-3">
-                        <div className="flex justify-between items-center">
-                          <span className="flex items-center gap-1.5">
-                            <Star className="h-3 w-3" />
-                            Grade
-                          </span>
-                          <span className="font-medium text-gray-900">
-                            {g.grade}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="flex items-center gap-1.5">
-                            <Scale className="h-3 w-3" />
-                            Weight
-                          </span>
-                          <span className="font-medium text-gray-900">
-                            {(g.currentWeightKg ?? 0).toFixed(2)} kg
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="flex items-center gap-1.5">
-                            <DollarSign className="h-3 w-3" />
-                            Price/kg
-                          </span>
-                          {g.pricePerKg ? (
-                            <span className="font-medium text-teal-600">
-                              {g.pricePerKg.toFixed(2)} {g.currency || "THB"}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400">Not set</span>
-                          )}
-                        </div>
-                        {g.pricePerKg && (
-                          <div className="flex justify-between items-center">
-                            <span className="flex items-center gap-1.5">
-                              <DollarSign className="h-3 w-3" />
-                              Total Amount
-                            </span>
-                            <span className="font-bold text-teal-700">
-                              {(g.pricePerKg * (g.currentWeightKg ?? 0)).toFixed(2)}{" "}
-                              {g.currency || "THB"}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex justify-between items-center">
-                          <span className="flex items-center gap-1.5">
-                            <Activity className="h-3 w-3" />
-                            QC Score
-                          </span>
-                          {displayScore ? (
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-medium text-gray-900">
-                                {displayScore}
-                              </span>
-                              {scoreValue >= 80 && (
-                                <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-gray-400">N/A</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex gap-2">
-                        {(() => {
-                          const hasWithdrawalHistory =
-                            g.withdrawalHistory &&
-                            g.withdrawalHistory.length > 0;
-                          return (
-                            <>
-                              <button
-                                onClick={() => setSelectedGreenBeanForSource(g)}
-                                className="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
-                                title="Source"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => setSelectedGreenBeanForHistory(g)}
-                                className={`inline-flex items-center justify-center w-8 h-8 rounded-md border border-gray-200 transition-colors ${
-                                  hasWithdrawalHistory
-                                    ? "text-gray-500 hover:bg-gray-50"
-                                    : "text-gray-300"
-                                }`}
-                                title={
-                                  hasWithdrawalHistory
-                                    ? "History"
-                                    : "No history yet"
-                                }
-                              >
-                                <History className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => setScoringLot(g)}
-                                className="flex-1 py-2 text-xs font-medium rounded-md text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 transition-colors inline-flex items-center justify-center gap-1.5"
-                              >
-                                <Star className="h-3 w-3" />
-                                QC Score
-                              </button>
-                              <button
-                                onClick={() => openModal("withdrawStock", g)}
-                                disabled={g.availabilityStatus === "Withdrawn"}
-                                className="flex-1 py-2 text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all inline-flex items-center justify-center gap-1.5"
-                              >
-                                <PlayCircle className="h-3 w-3" />
-                                Withdraw
-                              </button>
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-            <div className="mt-auto">
-              <Pagination
-                currentPage={greenBeanCurrentPage}
-                totalPages={greenBeanPageCount}
-                onPageChange={setGreenBeanCurrentPage}
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       {modal && (
         <ModalPortal>
@@ -3989,16 +3729,16 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
               <div className="p-6 sm:p-8">
-                {/* Modal Header */}
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="p-4 bg-teal-600 rounded-2xl shadow-lg">
-                    <Eye className="h-10 w-10 text-white" />
+                {/* Header — same compact shape as the QC Score modal */}
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="p-2.5 bg-teal-500 rounded-xl shadow-md">
+                    <Eye className="h-6 w-6 text-white" />
                   </div>
                   <div>
-                    <h2 className="text-3xl font-bold text-gray-900">
+                    <h2 className="text-xl font-bold text-gray-900">
                       Green Bean Source
                     </h2>
-                    <p className="text-base text-gray-600 mt-1">
+                    <p className="text-xs text-gray-500">
                       Lot {formatGreenBeanId(selectedGreenBeanForSource)}
                     </p>
                   </div>
@@ -4022,13 +3762,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   return (
                     <>
                       {externalSource ? (
-                        <div className="bg-blue-50 rounded-2xl p-6 mb-6 border border-blue-200">
-                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+                        <div className="bg-blue-50 rounded-xl p-4 mb-5 border border-blue-100">
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
                             External Source
                           </p>
                           <div className="grid grid-cols-2 gap-4 text-sm text-gray-700">
                             <div>
-                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                 Origin
                               </p>
                               <p className="font-semibold text-gray-900">
@@ -4036,7 +3776,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               </p>
                             </div>
                             <div>
-                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                 Process
                               </p>
                               <p className="font-semibold text-gray-900">
@@ -4044,7 +3784,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               </p>
                             </div>
                             <div>
-                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                 Variety
                               </p>
                               <p className="font-semibold text-gray-900">
@@ -4052,7 +3792,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               </p>
                             </div>
                             <div>
-                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                 Purchase Date
                               </p>
                               <p className="font-semibold text-gray-900">
@@ -4060,7 +3800,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               </p>
                             </div>
                             <div>
-                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                 Price
                               </p>
                               <p className="font-semibold text-gray-900">
@@ -4069,7 +3809,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             </div>
                             {externalSource.producerName && (
                               <div>
-                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                   Producer
                                 </p>
                                 <p className="font-semibold text-gray-900">
@@ -4081,13 +3821,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </div>
                       ) : sourceParchment ? (
                         <>
-                          <div className="bg-amber-50 rounded-2xl p-6 mb-6 border border-amber-200">
+                          <div className="bg-amber-50 rounded-xl p-4 mb-5 border border-amber-100">
                             <div className="grid grid-cols-2 gap-4">
                               <div>
-                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                   Parchment Lot
                                 </p>
-                                <p className="text-2xl font-bold text-amber-700">
+                                <p className="text-xl font-bold text-amber-700">
                                   {formatParchmentId(sourceParchment)}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-1">
@@ -4095,10 +3835,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                 </p>
                               </div>
                               <div>
-                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                   Process
                                 </p>
-                                <p className="text-2xl font-bold text-amber-700">
+                                <p className="text-xl font-bold text-amber-700">
                                   {sourceParchment.processType}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-1">
@@ -4110,7 +3850,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
                           <div className="grid grid-cols-2 gap-4 text-sm text-gray-700">
                             <div>
-                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                 Weight (kg)
                               </p>
                               <p className="font-semibold text-gray-900">
@@ -4121,7 +3861,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               </p>
                             </div>
                             <div>
-                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                 Moisture
                               </p>
                               <p className="font-semibold text-gray-900">
@@ -4129,7 +3869,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               </p>
                             </div>
                             <div>
-                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                 Harvest Lot
                               </p>
                               <p className="font-semibold text-gray-900">
@@ -4137,7 +3877,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               </p>
                             </div>
                             <div>
-                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                 Farmer
                               </p>
                               <p className="font-semibold text-gray-900">
@@ -4173,11 +3913,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 })()}
 
                 {/* Close Button */}
-                <div className="mt-6 flex justify-end">
+                <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
                   <button
                     type="button"
                     onClick={() => setSelectedGreenBeanForSource(null)}
-                    className="px-6 py-2.5 border border-gray-300 rounded-xl shadow-sm text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
+                    className="px-5 py-2 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     Close
                   </button>
@@ -4193,21 +3933,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
               <div className="p-6 sm:p-8">
-                {/* Modal Header */}
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="p-4 bg-amber-500 rounded-2xl shadow-lg">
-                    <History className="h-10 w-10 text-white" />
-                  </div>
-                  <div>
-                    <h2 className="text-3xl font-bold text-gray-900">
-                      Green Bean Split History
-                    </h2>
-                    <p className="text-base text-gray-600 mt-1">
-                      Lot {formatParchmentId(selectedParchmentForHistory)}
-                    </p>
-                  </div>
-                </div>
-
                 {(() => {
                   const relatedGreenBeans = data.greenBeanLots.filter(
                     (g) => g.parchmentLotId === selectedParchmentForHistory.id,
@@ -4219,29 +3944,39 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
                   return (
                     <>
-                      {/* Summary Card */}
-                      <div className="bg-amber-50 rounded-2xl p-6 mb-6 border border-amber-200">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
-                              Total Lots
-                            </p>
-                            <p className="text-3xl font-bold text-amber-700">
-                              {relatedGreenBeans.length}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">
-                              lots created
-                            </p>
+                      {/* Header — title left, this lot's split totals
+                          inline on the right, like the QC Score modal. */}
+                      <div className="flex items-center justify-between gap-4 mb-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 bg-amber-500 rounded-xl shadow-md">
+                            <History className="h-6 w-6 text-white" />
                           </div>
                           <div>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
-                              Total Weight
+                            <h2 className="text-xl font-bold text-gray-900">
+                              Green Bean Split History
+                            </h2>
+                            <p className="text-xs text-gray-500">
+                              Lot {formatParchmentId(selectedParchmentForHistory)}
                             </p>
-                            <p className="text-3xl font-bold text-amber-700">
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                              Lots created
+                            </p>
+                            <p className="text-lg font-bold text-gray-900 leading-tight">
+                              {relatedGreenBeans.length}
+                            </p>
+                          </div>
+                          <div className="w-px h-8 bg-gray-200" />
+                          <div className="text-right">
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                              Total weight
+                            </p>
+                            <p className="text-lg font-bold text-gray-900 leading-tight">
                               {totalCurrentWeight.toFixed(2)}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">
-                              kilograms
+                              <span className="text-xs font-normal text-gray-400 ml-1">kg</span>
                             </p>
                           </div>
                         </div>
@@ -4281,17 +4016,17 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               return (
                                 <div
                                   key={g.id}
-                                  className="bg-emerald-50 rounded-xl p-4 border border-emerald-200 hover:border-emerald-300 transition-all"
+                                  className="bg-white rounded-xl p-4 border border-gray-200 hover:border-teal-300 transition-colors"
                                 >
                                   <div className="flex items-start justify-between mb-3">
                                     <div className="flex items-center gap-3">
-                                      <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                      <div className="w-8 h-8 bg-teal-500 rounded-lg flex items-center justify-center flex-shrink-0">
                                         <span className="text-white font-bold text-sm">
                                           #{index + 1}
                                         </span>
                                       </div>
                                       <div>
-                                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                                           Lot ID
                                         </p>
                                         <p className="text-sm font-bold text-gray-900">
@@ -4300,10 +4035,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                       </div>
                                     </div>
                                     <div className="text-right">
-                                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                                         Weight
                                       </p>
-                                      <p className="text-2xl font-bold text-emerald-700">
+                                      <p className="text-lg font-bold text-teal-700">
                                         {g.currentWeightKg.toFixed(2)} kg
                                       </p>
                                     </div>
@@ -4311,7 +4046,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
                                   <div className="grid grid-cols-2 gap-3 text-sm text-gray-700">
                                     <div>
-                                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                         Grade
                                       </p>
                                       <p className="font-semibold text-gray-900">
@@ -4319,7 +4054,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                       </p>
                                     </div>
                                     <div>
-                                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                         Availability
                                       </p>
                                       <span className="inline-flex items-center gap-1.5 text-xs text-gray-600">
@@ -4330,7 +4065,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                       </span>
                                     </div>
                                     <div>
-                                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                         QC Score
                                       </p>
                                       {displayScore ? (
@@ -4347,7 +4082,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                       )}
                                     </div>
                                     <div>
-                                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                         Price
                                       </p>
                                       {g.pricePerKg ? (
@@ -4360,7 +4095,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                     </div>
                                   </div>
 
-                                  <div className="mt-3 pt-3 border-t border-gray-200 flex flex-wrap gap-2">
+                                  <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
                                     {g.withdrawalHistory &&
                                       g.withdrawalHistory.length > 0 && (
                                         <button
@@ -4395,7 +4130,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                         openModal("withdrawStock", g);
                                       }}
                                       disabled={g.availabilityStatus === "Withdrawn"}
-                                      className="inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-all"
+                                      className="inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-all"
                                       title="Withdraw"
                                     >
                                       <Download className="h-3.5 w-3.5" />
@@ -4413,11 +4148,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 })()}
 
                 {/* Close Button */}
-                <div className="sticky bottom-4 mt-6 bg-white pt-4 border-t border-gray-100 flex justify-end">
+                <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
                   <button
                     type="button"
                     onClick={() => setSelectedParchmentForHistory(null)}
-                    className="px-6 py-2.5 border border-gray-300 rounded-xl shadow-sm text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
+                    className="px-5 py-2 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     Close
                   </button>
@@ -4433,53 +4168,51 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
               <div className="p-6 sm:p-8">
-                {/* Modal Header */}
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="p-4 bg-gray-600 rounded-2xl shadow-lg">
-                    <History className="h-10 w-10 text-white" />
-                  </div>
-                  <div>
-                    <h2 className="text-3xl font-bold text-gray-900">
-                      Withdrawal History
-                    </h2>
-                    <p className="text-base text-gray-600 mt-1">
-                      Lot #{selectedGreenBeanForHistory.id}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Summary Card */}
-                <div className="bg-blue-50 rounded-2xl p-6 mb-6 border border-blue-200">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
-                        Total Withdrawals
-                      </p>
-                      <p className="text-3xl font-bold text-blue-600">
-                        {selectedGreenBeanForHistory.withdrawalHistory
-                          ?.length || 0}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">transactions</p>
+                {/* Header — title left, totals inline on the right, like
+                    the QC Score modal. */}
+                <div className="flex items-center justify-between gap-4 mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-teal-500 rounded-xl shadow-md">
+                      <History className="h-6 w-6 text-white" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
-                        Total Amount
+                      <h2 className="text-xl font-bold text-gray-900">
+                        Withdrawal History
+                      </h2>
+                      <p className="text-xs text-gray-500">
+                        Lot {formatGreenBeanId(selectedGreenBeanForHistory)}
                       </p>
-                      <p className="text-3xl font-bold text-blue-600">
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                        Withdrawals
+                      </p>
+                      <p className="text-lg font-bold text-gray-900 leading-tight">
+                        {selectedGreenBeanForHistory.withdrawalHistory?.length || 0}
+                      </p>
+                    </div>
+                    <div className="w-px h-8 bg-gray-200" />
+                    <div className="text-right">
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                        Total
+                      </p>
+                      <p className="text-lg font-bold text-gray-900 leading-tight">
                         {(
                           selectedGreenBeanForHistory.withdrawalHistory?.reduce(
                             (sum, entry) => sum + entry.amountKg,
                             0,
                           ) || 0
                         ).toFixed(2)}
+                        <span className="text-xs font-normal text-gray-400 ml-1">kg</span>
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">kilograms</p>
                     </div>
                   </div>
                 </div>
 
                 {/* History List */}
-                <div className="overflow-y-auto max-h-78 sm:max-h-80">
+                <div className="overflow-y-auto max-h-80">
                   {!selectedGreenBeanForHistory.withdrawalHistory ||
                   selectedGreenBeanForHistory.withdrawalHistory.length === 0 ? (
                     <div className="text-center py-10 text-gray-400">
@@ -4511,17 +4244,17 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               // Withdrawal records have no backend id;
                               // compose a content-stable key.
                               key={`${selectedGreenBeanForHistory.id}-${entry.date}-${entry.withdrawalType}-${entry.amountKg}-${index}`}
-                              className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-blue-300 transition-all"
+                              className="bg-white rounded-xl p-4 border border-gray-200 hover:border-teal-300 transition-colors"
                             >
                             <div className="flex items-start justify-between mb-3">
                               <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <div className="w-8 h-8 bg-teal-500 rounded-lg flex items-center justify-center flex-shrink-0">
                                   <span className="text-white font-bold text-sm">
                                     #{index + 1}
                                   </span>
                                 </div>
                                 <div>
-                                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                                     Date
                                   </p>
                                   <p className="text-sm font-bold text-gray-900">
@@ -4530,10 +4263,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                 </div>
                               </div>
                               <div className="text-right">
-                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                                   Amount
                                 </p>
-                                <p className="text-2xl font-bold text-blue-600">
+                                <p className="text-lg font-bold text-teal-700">
                                   {entry.amountKg.toFixed(2)} kg
                                 </p>
                               </div>
@@ -4554,7 +4287,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                 entry.customerName ||
                                 entry.invoiceNumber) && (
                                 <div className="mb-3 p-3 bg-green-50 rounded-lg border border-green-200">
-                                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+                                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
                                     Sale Details
                                   </p>
                                   <div className="space-y-1">
@@ -4607,7 +4340,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             {/* Purpose/Notes */}
                             {(entry.purpose || entry.notes) && (
                               <div className="mb-3">
-                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                   {entry.notes ? "Notes" : "Purpose"}
                                 </p>
                                 <p className="text-sm text-gray-900">
@@ -4628,10 +4361,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               </div>
                             )}
 
-                            {/* Admin Actions */}
-                            {/* Actions */}
-                            <div className="mt-3 pt-3 border-t border-gray-300 flex gap-2">
-                              {entry.withdrawalType === "Sale" && (
+                            {/* Sale withdrawals link to their invoice */}
+                            {entry.withdrawalType === "Sale" && (
+                              <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2">
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -4646,8 +4378,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                   <FileText className="h-3.5 w-3.5" />
                                   Invoice
                                 </button>
-                              )}
-                            </div>
+                              </div>
+                            )}
                           </div>
                           );
                         },
@@ -4657,11 +4389,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 </div>
 
                 {/* Close Button */}
-                <div className="sticky bottom-0 mt-6 bg-white pt-4 flex justify-end">
+                <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
                   <button
                     type="button"
                     onClick={() => setSelectedGreenBeanForHistory(null)}
-                    className="mb-4 px-6 py-2.5 border border-gray-300 rounded-xl shadow-sm text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
+                    className="px-5 py-2 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     Close
                   </button>
