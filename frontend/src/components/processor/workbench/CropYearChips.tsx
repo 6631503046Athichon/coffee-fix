@@ -2,7 +2,7 @@ import React, { useMemo } from 'react'
 import type { CropYear } from '../../../types'
 import { findCurrentCropYearId } from './constants'
 
-type ChipAccent = 'blue' | 'red' | 'amber' | 'emerald'
+type ChipAccent = 'blue' | 'green' | 'red' | 'amber' | 'teal' | 'emerald'
 
 interface CropYearChipsProps {
   years: CropYear[]
@@ -11,7 +11,7 @@ interface CropYearChipsProps {
   /**
    * Colour theme for the chips. Defaults to `blue` to match the existing
    * Workbench look. Pass a different accent when the surrounding modal /
-   * section uses its own stage colour (e.g. `red` for the cherry-stage
+   * section uses its own stage colour (e.g. `green` for the cherry-stage
    * Process & Grade modal in ParchmentTab).
    */
   accent?: ChipAccent
@@ -37,6 +37,24 @@ const ACCENT_CLASSES: Record<
     unselectedHoverBg: 'hover:bg-blue-50',
     badgeBg: 'bg-blue-500',
     badgeText: 'text-blue-600',
+  },
+  green: {
+    ring: 'focus:ring-green-500',
+    selectedBg: 'bg-green-600',
+    selectedBorder: 'border-green-600',
+    unselectedHoverBorder: 'hover:border-green-400',
+    unselectedHoverBg: 'hover:bg-green-50',
+    badgeBg: 'bg-green-500',
+    badgeText: 'text-green-600',
+  },
+  teal: {
+    ring: 'focus:ring-teal-500',
+    selectedBg: 'bg-teal-600',
+    selectedBorder: 'border-teal-600',
+    unselectedHoverBorder: 'hover:border-teal-400',
+    unselectedHoverBg: 'hover:bg-teal-50',
+    badgeBg: 'bg-teal-500',
+    badgeText: 'text-teal-600',
   },
   red: {
     ring: 'focus:ring-red-500',
