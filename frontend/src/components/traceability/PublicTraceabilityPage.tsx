@@ -87,6 +87,12 @@ const PublicTraceabilityPage: React.FC = () => {
   const farm = processingBatch?.harvestLot?.farm;
   const roastBatches = lot?.roastBatches || [];
   const cuppingScore = lot?.cuppingScores?.[0]?.score;
+  const farmName = farm?.farmName || farm?.name || harvestLot?.farmPlotLocation || 'Farm Location';
+  const farmMapEmbedUrl = farm?.latitude != null && farm?.longitude != null
+    ? `https://www.google.com/maps?q=${encodeURIComponent(`${farmName}, ${farm.latitude}, ${farm.longitude}`)}&z=17&output=embed`
+    : farm?.location
+      ? `https://www.google.com/maps?q=${encodeURIComponent(`${farmName}, ${farm.location}`)}&z=17&output=embed`
+      : undefined;
 
   // Flavor notes from roast batches (useMemo must be called before early returns)
   const flavorNotes = useMemo(() => {
@@ -298,27 +304,6 @@ const PublicTraceabilityPage: React.FC = () => {
               </div>
             )}
 
-            {/* Story Section */}
-            <div className="bg-indigo-50 rounded-2xl p-6 border-l-4 border-indigo-500">
-              <h2 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                <Coffee className="h-5 w-5 text-indigo-600" />
-                Origin Story
-              </h2>
-              <p className="text-gray-700 leading-relaxed text-sm">
-                {lot.sourceType === 'External' ? (
-                  <>
-                    This exceptional lot comes from <span className="font-bold text-indigo-700">{lot.externalSource?.originName || 'a trusted supplier'}</span>.
-                    {lot.externalSource?.variety && ` The ${lot.externalSource.variety} beans were`}
-                    {lot.externalSource?.processType && ` processed using the ${lot.externalSource.processType} method,`}
-                    {' '}resulting in a truly remarkable flavor experience.
-                  </>
-                ) : (
-                  <>
-                    This exceptional lot comes from <span className="font-bold text-indigo-700">{harvestLot?.farmerName || 'a dedicated producer'}</span>, a dedicated producer whose commitment to quality shines through in every cup. Grown in the rich soils of <span className="font-semibold">{harvestLot?.farmPlotLocation || farm?.location || 'our partner farm'}</span>, these {harvestLot?.cherryVariety || ''} beans were carefully hand-picked and processed with meticulous attention to detail, resulting in a truly remarkable flavor experience.
-                  </>
-                )}
-              </p>
-            </div>
           </div>
         </div>
 
@@ -466,6 +451,39 @@ const PublicTraceabilityPage: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {farmMapEmbedUrl && (
+            <div className="max-w-4xl mx-auto mt-8 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 shadow-md">
+              <div className="flex items-center justify-between gap-4 px-5 py-4">
+                <div>
+                  <h3 className="font-bold text-gray-900">{farmName}</h3>
+                </div>
+                {farm.googleMapsUrl && (
+                  <a
+                    href={farm.googleMapsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                  >
+                    Open Google Maps
+                  </a>
+                )}
+              </div>
+              {farmMapEmbedUrl ? (
+                <iframe
+                  title="Farm location map"
+                  src={farmMapEmbedUrl}
+                  className="h-96 w-full border-0 md:h-[32rem]"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              ) : (
+                <div className="px-5 pb-5 text-sm text-gray-600">
+                  Open the Google Maps link above to view this farm location.
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Section 4: Quality in the Cup */}

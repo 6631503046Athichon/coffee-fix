@@ -17,7 +17,6 @@ export async function GET(
     // they are never read out of the DB.
     //   - currentWeightKg / availabilityStatus: business inventory data
     //   - farmerName / farm.ownerNames: PII
-    //   - latitude / longitude / googleMapsUrl: precise GPS coordinates
     const greenBeanLot = await prisma.greenBeanLot.findFirst({
       where: { publicTraceId: publicId },
       select: {
@@ -61,6 +60,9 @@ export async function GET(
                         location: true,
                         altitude: true,
                         varieties: true,
+                        googleMapsUrl: true,
+                        latitude: true,
+                        longitude: true,
                       },
                     },
                   },
@@ -108,8 +110,8 @@ export async function GET(
       )
     }
 
-    // Return sanitized public data (no sensitive info like prices, owner PII,
-    // GPS coordinates, or inventory state).
+    // Return sanitized public data. Location Details are intentionally included
+    // so the public traceability page can show the farm map.
     const publicData = {
       lot: {
         id: greenBeanLot.id,
