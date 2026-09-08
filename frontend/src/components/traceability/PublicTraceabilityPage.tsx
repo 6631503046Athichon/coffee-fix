@@ -497,7 +497,9 @@ const PublicTraceabilityPage: React.FC = () => {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-600">Available Stock</span>
-                  <span className="text-sm font-bold text-gray-900">{lot.currentWeightKg.toFixed(2)} kg</span>
+                  <span className="text-sm font-bold text-gray-900">
+                    {typeof lot.currentWeightKg === 'number' ? `${lot.currentWeightKg.toFixed(2)} kg` : 'N/A'}
+                  </span>
                 </div>
               </div>
             </div>
