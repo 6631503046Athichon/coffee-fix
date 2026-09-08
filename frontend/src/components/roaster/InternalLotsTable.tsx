@@ -59,6 +59,7 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
   }, [openPopover])
 
   const activeLot = lots.find((l) => l.id === openPopover)
+  const visibleWeight = lots.reduce((total, lot) => total + lot.remainingWeightKg, 0)
 
   return (
     <>
@@ -82,122 +83,104 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
           </div>
         )}
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] table-fixed font-sans">
-            <colgroup>
-              <col className="w-[16%]" />
-              <col className="w-[10%]" />
-              <col className="w-[18%]" />
-              <col className="w-[14%]" />
-              <col className="w-[18%]" />
-              <col className="w-[24%]" />
-            </colgroup>
-            <thead>
-              <tr className="border-b border-[#dfe9df] bg-[#f3f8f3] text-left">
-                <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#6d7e72]">
-                  ID
-                </th>
-                <th className="px-5 py-3 text-center text-[11px] font-bold uppercase tracking-[0.12em] text-[#6d7e72]">
-                  Details
-                </th>
-                <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#6d7e72]">
-                  Grade
-                </th>
-                <th className="px-5 py-3 text-center text-[11px] font-bold uppercase tracking-[0.12em] text-[#6d7e72]">
-                  Score
-                </th>
-                <th className="px-5 py-3 text-right text-[11px] font-bold uppercase tracking-[0.12em] text-[#6d7e72]">
-                  Available
-                </th>
-                <th className="px-5 py-3 text-right text-[11px] font-bold uppercase tracking-[0.12em] text-[#6d7e72]">
-                  Action
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {lots.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center">
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
-                        <Package className="h-6 w-6 text-gray-400" />
-                      </div>
-                      <p className="text-sm text-gray-500 font-medium">
-                        No withdrawal lots available
+        {hideHeader && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e6ebe5] bg-[#f7fbf7] px-5 py-4">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7f9184]">
+                Ready to roast
+              </p>
+              <p className="mt-1 text-sm font-bold text-[#294936]">Your internal inventory</p>
+            </div>
+            <div className="flex items-center gap-4 text-right">
+              <div>
+                <p className="text-lg font-bold text-[#2e6848]">{lots.length}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-[#8b9a90]">
+                  lots shown
+                </p>
+              </div>
+              <div className="border-l border-[#dfe9df] pl-4">
+                <p className="text-lg font-bold text-[#2e6848]">{toFixed2(visibleWeight)} kg</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-[#8b9a90]">
+                  available
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="bg-[#f7fbf7] p-4 sm:p-5">
+          {lots.length === 0 ? (
+            <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
+              <Package className="mb-3 h-9 w-9 text-[#a8b8ac]" />
+              <p className="text-sm font-bold text-[#55635a]">No internal stock ready</p>
+              <p className="mt-1 text-xs text-[#8b9a90]">Withdraw green beans to start roasting.</p>
+            </div>
+          ) : (
+            <div className="grid gap-3 xl:grid-cols-2">
+              {lots.map((lot) => (
+                <article
+                  key={lot.id}
+                  className="rounded-2xl border border-[#dfe9df] bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#9cb8a6] hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-mono text-sm font-bold text-[#294936]">
+                        {toRoaId(lot.id)}
                       </p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Withdraw green bean stock to start roasting
+                      <p className="mt-1 text-xs font-medium text-[#8b9a90]">
+                        Internal roasting stock
                       </p>
                     </div>
-                  </td>
-                </tr>
-              ) : (
-                lots.map((lot) => (
-                  <tr
-                    key={lot.id}
-                    className="border-b border-[#edf1ed] bg-white transition-colors last:border-0 hover:bg-[#f4faf4]"
-                  >
-                    {/* ID */}
-                    <td className="px-5 py-4 text-left align-middle">
-                      <span className="block whitespace-nowrap text-sm font-semibold text-[#294936]">
-                        {toRoaId(lot.id)}
-                      </span>
-                    </td>
-                    {/* Details (icon only, centered) */}
-                    <td className="px-5 py-4 text-center align-middle">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          openWithPos(lot.id, e.currentTarget)
-                        }}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#dfe9df] text-[#557262] transition-colors hover:border-[#9cb8a6] hover:bg-[#e6f0e8]"
-                        title="View Details"
-                      >
-                        <ClipboardList className="h-4 w-4" aria-hidden="true" />
-                      </button>
-                    </td>
-                    {/* Grade */}
-                    <td className="px-5 py-4 text-left align-middle">
-                      <span className="whitespace-nowrap text-sm font-medium text-[#55635a]">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openWithPos(lot.id, e.currentTarget)
+                      }}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#dfe9df] text-[#557262] transition-colors hover:bg-[#e6f0e8]"
+                      title="View Details"
+                    >
+                      <ClipboardList className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                  <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-[#f7fbf7] p-3">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-[#8b9a90]">
+                        Grade
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-[#55635a]">
                         {lot.grade || '—'}
-                      </span>
-                    </td>
-                    {/* Score */}
-                    <td className="px-5 py-4 text-center align-middle">
-                      <div className="inline-flex items-center justify-center align-middle">
-                        <span className="text-sm font-bold text-[#456d55]">
-                          {lot.processorScore != null ? lot.processorScore.toFixed(2) : '—'}
-                        </span>
-                      </div>
-                    </td>
-                    {/* Available (normal cell, no bg) */}
-                    <td className="px-5 py-4 text-right align-middle">
-                      <div className="ml-auto flex items-center justify-end gap-1">
-                        <span className="text-sm font-bold text-[#294936]">
-                          {toFixed2(lot.remainingWeightKg)}
-                        </span>
-                        <span className="text-xs text-[#87928a]">kg</span>
-                      </div>
-                    </td>
-                    {/* Action */}
-                    <td className="px-5 py-4 text-right align-middle">
-                      <div className="flex justify-end">
-                        <Button
-                          variant="success"
-                          size="sm"
-                          className="min-w-[100px] justify-center bg-[#d87832] hover:bg-[#bd5d1e]"
-                          onClick={() => onLogRoast(lot)}
-                        >
-                          Roast
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-[#8b9a90]">
+                        Score
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-[#456d55]">
+                        {lot.processorScore != null ? lot.processorScore.toFixed(2) : '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-[#8b9a90]">
+                        Available
+                      </p>
+                      <p className="mt-1 text-sm font-bold text-[#294936]">
+                        {toFixed2(lot.remainingWeightKg)} kg
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="success"
+                    size="sm"
+                    fullWidth
+                    className="mt-3 bg-[#d87832] hover:bg-[#bd5d1e]"
+                    onClick={() => onLogRoast(lot)}
+                  >
+                    Start roast
+                  </Button>
+                </article>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Pagination */}
