@@ -76,150 +76,118 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
         </div>
       )}
 
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[680px] table-fixed font-sans">
-          <colgroup>
-            <col className="w-[18%]" />
-            <col className="w-[18%]" />
-            <col className="w-[20%]" />
-            <col className="w-[22%]" />
-            <col className="w-[22%]" />
-          </colgroup>
-          <thead>
-            <tr className="bg-[#263b31] text-left">
-              <th className="bg-[#263b31] px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#c6d5ca]">
-                ID
-              </th>
-              <th className="bg-[#263b31] px-4 py-3 text-center text-[11px] font-bold uppercase tracking-[0.12em] text-[#c6d5ca]">
-                Details
-              </th>
-              <th className="bg-[#263b31] px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#c6d5ca]">
-                Grade
-              </th>
-              <th className="bg-[#263b31] px-4 py-3 text-right text-[11px] font-bold uppercase tracking-[0.12em] text-[#c6d5ca]">
-                Available
-              </th>
-              <th className="bg-[#263b31] px-4 py-3 text-right text-[11px] font-bold uppercase tracking-[0.12em] text-[#c6d5ca]">
+      {hideHeader && (
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#f0dfca] bg-[#fff8ed] px-5 py-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#b87948]">
+              Sourcing shelf
+            </p>
+            <p className="mt-1 text-sm font-bold text-[#7f4b24]">Purchased coffee lots</p>
+          </div>
+          <Button
+            variant="success"
+            size="sm"
+            icon={<PlusCircle className="h-3.5 w-3.5" />}
+            onClick={onAddExternal}
+            className="shrink-0 bg-[#d87832] hover:bg-[#bd5d1e]"
+          >
+            Add lot
+          </Button>
+        </div>
+      )}
+
+      <div className="bg-[#fffaf4] p-4 sm:p-5">
+        {lots.length === 0 ? (
+          <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
+            <Package className="mb-3 h-9 w-9 text-[#d7b99b]" />
+            <p className="text-sm font-bold text-[#80664d]">No purchased lots yet</p>
+            <p className="mt-1 text-xs text-[#a98c73]">
+              Add an external lot when new coffee arrives.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-3 xl:grid-cols-2">
+            {lots.map((lot) => (
+              <article
+                key={lot.id}
+                className="rounded-2xl border border-[#f0dfca] bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#e2a36e] hover:shadow-md"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-mono text-sm font-bold text-[#7f4b24]">{toRoaId(lot.id)}</p>
+                    <p className="mt-1 text-xs font-medium text-[#a98c73]">Purchased source lot</p>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openWithPos(lot.id, e.currentTarget)
+                    }}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#f0dfca] text-[#a87950] transition-colors hover:bg-[#fff1df]"
+                    title="View Details"
+                  >
+                    <Package className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-[#fff1df] px-2.5 py-1 text-xs font-bold text-[#9b5d2d]">
+                    {lot.grade || 'Unclassified'}
+                  </span>
+                  <span className="rounded-full bg-[#f7f1eb] px-2.5 py-1 text-xs font-medium text-[#80664d]">
+                    {lot.process || 'Process not set'}
+                  </span>
+                  <span className="ml-auto text-lg font-bold text-[#7f4b24]">
+                    {toFixed2(lot.currentWeightKg)}{' '}
+                    <span className="text-xs font-semibold text-[#a98c73]">kg</span>
+                  </span>
+                </div>
                 <Button
                   variant="success"
                   size="sm"
-                  icon={<PlusCircle className="h-3.5 w-3.5" />}
-                  onClick={onAddExternal}
-                  className="ml-auto bg-[#62a477] px-3 py-2 text-xs hover:bg-[#4f8b62]"
+                  fullWidth
+                  disabled={loadingLotId === lot.id}
+                  onClick={() => onRoast(lot)}
+                  className="mt-3 bg-[#d87832] hover:bg-[#bd5d1e]"
                 >
-                  Add lot
+                  {loadingLotId === lot.id ? 'Loading…' : 'Start roast'}
                 </Button>
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {lots.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-5 py-12 text-center">
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
-                      <Package className="h-6 w-6 text-gray-400" />
-                    </div>
-                    <p className="text-sm text-gray-500 font-medium">No external lots available</p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      Add new external green bean lots to start
-                    </p>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              lots.map((lot) => (
-                <tr
-                  key={lot.id}
-                  className="transition-colors odd:bg-white even:bg-[#fafcf9] hover:bg-[#f1f8f2]"
-                >
-                  <td className="px-5 py-4 text-left font-mono text-sm font-semibold text-[#294936] whitespace-nowrap">
-                    {toRoaId(lot.id)}
-                  </td>
-                  <td className="px-5 py-4 text-center align-middle">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        openWithPos(lot.id, e.currentTarget)
-                      }}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#557262] transition-colors hover:bg-[#e6f0e8]"
-                      title="View Details"
-                    >
-                      <Package className="h-5 w-5 text-gray-400" />
-                    </button>
-                    {/* Popover for details */}
-                    {openPopover && activeLot && (
-                      <div
-                        className="fixed z-[9999] w-56 bg-white border border-gray-200 rounded-xl shadow-2xl"
-                        style={{ top: popoverPos.top, left: popoverPos.left }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 gap-4">
-                          <div className="flex items-center gap-4">
-                            <Package className="h-4 w-4 text-emerald-500" />
-                            <span className="text-xs font-normal text-gray-700 uppercase tracking-wide">
-                              Lot Details
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => setOpenPopover(null)}
-                            className="text-gray-400 hover:text-gray-600 transition-colors"
-                          >
-                            <span className="text-lg">×</span>
-                          </button>
-                        </div>
-                        <div className="px-4 py-3 space-y-4">
-                          <div className="flex justify-between items-center gap-4">
-                            <span className="text-xs text-gray-500">Variety</span>
-                            <span className="text-xs font-normal text-gray-800">
-                              {activeLot.variety || '—'}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center gap-4">
-                            <span className="text-xs text-gray-500">Process</span>
-                            <span className="text-xs font-normal text-gray-800">
-                              {activeLot.process || '—'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-5 py-4 text-left align-middle">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-amber-50 text-sm font-normal text-amber-700 border border-amber-200 whitespace-nowrap">
-                      {lot.grade || '—'}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4 text-right align-middle text-black font-bold">
-                    <div className="ml-auto flex max-w-[112px] items-center gap-2">
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#e4ebe5]">
-                        <div className="h-full w-full rounded-full bg-[#62a477]" />
-                      </div>
-                      <span className="text-sm font-bold text-[#294936]">
-                        {toFixed2(lot.currentWeightKg)}
-                      </span>
-                      <span className="text-xs text-[#87928a]">kg</span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 text-right align-middle">
-                    <div className="w-[104px] ml-auto">
-                      <Button
-                        variant="success"
-                        size="sm"
-                        className="w-full justify-center"
-                        disabled={loadingLotId === lot.id}
-                        onClick={() => onRoast(lot)}
-                      >
-                        {loadingLotId === lot.id ? 'Loading…' : 'Roast'}
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              </article>
+            ))}
+          </div>
+        )}
+        {openPopover && activeLot && (
+          <div
+            className="fixed z-[9999] w-56 rounded-xl border border-[#f0dfca] bg-white shadow-2xl"
+            style={{ top: popoverPos.top, left: popoverPos.left }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-4 border-b border-[#f4eee7] px-4 py-2.5">
+              <span className="text-xs font-bold uppercase tracking-wide text-[#80664d]">
+                Lot details
+              </span>
+              <button
+                onClick={() => setOpenPopover(null)}
+                className="text-gray-400 transition-colors hover:text-gray-700"
+                aria-label="Close details"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-3 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-[#a98c73]">Variety</span>
+                <span className="text-xs font-semibold text-[#49382c]">
+                  {activeLot.variety || '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-[#a98c73]">Process</span>
+                <span className="text-xs font-semibold text-[#49382c]">
+                  {activeLot.process || '—'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
