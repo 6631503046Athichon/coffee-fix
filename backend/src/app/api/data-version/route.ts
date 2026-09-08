@@ -10,6 +10,7 @@ const TABLE_QUERIES = [
   { key: 'cropYears', query: () => prisma.cropYear.findFirst({ select: { updatedAt: true }, orderBy: { updatedAt: 'desc' } }) },
   { key: 'processTypes', query: () => prisma.processType.findFirst({ select: { updatedAt: true }, orderBy: { updatedAt: 'desc' } }) },
   { key: 'activityTypes', query: () => prisma.activityType.findFirst({ select: { updatedAt: true }, orderBy: { updatedAt: 'desc' } }) },
+  { key: 'coffeeGrades', query: () => prisma.coffeeGrade.findFirst({ select: { updatedAt: true }, orderBy: { updatedAt: 'desc' } }) },
   { key: 'customers', query: () => prisma.customer.findFirst({ select: { updatedAt: true }, orderBy: { updatedAt: 'desc' } }) },
   { key: 'users', query: () => prisma.user.findFirst({ select: { updatedAt: true }, orderBy: { updatedAt: 'desc' } }) },
   { key: 'soilAnalyses', query: () => prisma.soilAnalysis.findFirst({ select: { updatedAt: true }, orderBy: { updatedAt: 'desc' } }) },

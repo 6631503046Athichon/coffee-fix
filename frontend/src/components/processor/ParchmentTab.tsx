@@ -35,6 +35,7 @@ import {
   User,
 } from '../../types'
 import { useDataContext } from '../../hooks/useDataContext'
+import { useGradeNames } from '../../hooks/useGradeOptions'
 import { useToast } from '../../contexts/ToastContext'
 import { addProcessingBatch } from '../../services/processing/processingBatchService'
 import {
@@ -64,17 +65,6 @@ interface ParchmentTabProps {
 }
 
 const PROCESS_TYPES = ['Honey', 'Natural', 'Washed'] as const
-
-const GRADE_OPTIONS = [
-  'Grade A',
-  'Grade B',
-  'Grade C',
-  'Peaberry',
-  'Screen 18',
-  'Screen 17',
-  'Screen 16',
-  'Screen 15',
-] as const
 
 type WithdrawalType = 'Sale' | 'Sample' | 'Export' | 'Roasting Stock' | 'Other'
 
@@ -131,6 +121,8 @@ const WITHDRAWAL_TYPE_CONFIG: {
 const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   void currentUser
   const { data, refreshData } = useDataContext()
+  // One row per grade, so the admin-managed grade list caps the rows.
+  const gradeNames = useGradeNames()
   const { addToast } = useToast()
 
   // Cherry Lots table paging
@@ -539,8 +531,8 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
           label="Cherry"
           value={totals.cherry}
           unit="kg"
-          accent="red"
-          icon={Leaf}
+          accent="green"
+          icon={Sprout}
           sub={`${readyHarvestLots.length} lot${readyHarvestLots.length !== 1 ? 's' : ''} ready`}
         />
         <KpiCard
@@ -555,7 +547,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
           label="Green Bean"
           value={totals.greenBean}
           unit="kg"
-          accent="emerald"
+          accent="teal"
           icon={Coffee}
           sub={`${greenBeanBuckets.length} grade${greenBeanBuckets.length !== 1 ? 's' : ''}`}
         />
@@ -574,7 +566,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         countLabel="lot"
         empty={readyHarvestLots.length === 0}
         emptyText="No cherries waiting. Add a harvest lot first."
-        accent="red"
+        accent="green"
         icon={Sprout}
       >
         <table className="w-full text-sm">
@@ -591,7 +583,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             {pagedHarvestLots.map((lot) => {
               const remaining = lot.remainingWeightKg ?? lot.weightKg ?? 0
               return (
-                <tr key={lot.id} className="hover:bg-red-50/40 transition-colors">
+                <tr key={lot.id} className="hover:bg-green-50/40 transition-colors">
                   <Td className="font-semibold text-gray-900">
                       {formatHarvestLotId(lot)}
                   </Td>
@@ -603,7 +595,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                   <Td align="right">
                     <ActionButton
                       onClick={() => openProcess(lot)}
-                      accent="red"
+                      accent="green"
                     >
                       <Play className="h-3.5 w-3.5" />
                       Process &amp; Grade
@@ -626,15 +618,14 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             ))}
           </tbody>
         </table>
-        {cherryTotalPages > 1 && (
-          <div className="flex justify-center border-t border-gray-200 py-3">
-            <Pagination
-              currentPage={cherrySafePage}
-              totalPages={cherryTotalPages}
-              onPageChange={setCherryPage}
-            />
-          </div>
-        )}
+        {/* Pagination draws its own full-width strip (and renders nothing
+            for a single page), so it goes in bare — wrapping it in another
+            centred, bordered row left the strip floating as a grey box. */}
+        <Pagination
+          currentPage={cherrySafePage}
+          totalPages={cherryTotalPages}
+          onPageChange={setCherryPage}
+        />
       </Section>
 
       {/* ─── Section 2: Green bean inventory — square cards by type+grade ───
@@ -647,7 +638,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         countLabel="grade"
         empty={greenBeanByType.length === 0}
         emptyText="No green-bean stock yet. Hull a parchment lot to fill this section."
-        accent="emerald"
+        accent="teal"
         icon={Coffee}
       >
         <div className="divide-y divide-gray-100">
@@ -682,7 +673,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                     {buckets.map((b) => (
                       <div
                         key={b.grade}
-                        className="group bg-white border border-gray-200 border-l-4 border-l-emerald-500 rounded-xl p-4 hover:shadow-md hover:border-l-emerald-600 hover:-translate-y-0.5 transition-all flex flex-col"
+                        className="group bg-white border border-gray-200 border-l-4 border-l-teal-500 rounded-xl p-4 hover:shadow-md hover:border-l-teal-600 hover:-translate-y-0.5 transition-all flex flex-col"
                       >
                         {/* Header — Grade label + Process pill */}
                         <div className="flex items-center justify-between mb-3 gap-2">
@@ -714,7 +705,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                             onClick={() => setHistoryBucket(b)}
                             title="View source history"
                             aria-label="View source history"
-                            className="p-1.5 rounded-md border border-gray-200 text-gray-500 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 transition-colors flex-shrink-0"
+                            className="p-1.5 rounded-md border border-gray-200 text-gray-500 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 transition-colors flex-shrink-0"
                           >
                             <History className="h-3.5 w-3.5" />
                           </button>
@@ -724,7 +715,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                         <button
                           type="button"
                           onClick={() => openWithdraw(b)}
-                          className="mt-auto w-full inline-flex items-center justify-center gap-1.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
+                          className="mt-auto w-full inline-flex items-center justify-center gap-1.5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
                         >
                           <Package className="h-3.5 w-3.5" />
                           Withdraw
@@ -764,7 +755,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             title="Process & Grade"
             subtitle={`Lot ${formatHarvestLotId(processLot)}`}
             onClose={() => setProcessLot(null)}
-            accent="red"
+            accent="green"
             icon={Play}
             context={[
               { label: 'Variety', value: processLot.cherryVariety || '—' },
@@ -781,10 +772,10 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
               <PipelineNode
                 label="Cherry"
                 icon={Sprout}
-                tone="red"
+                tone="green"
                 state="active"
               />
-              <PipelineConnector active tone="red" />
+              <PipelineConnector active tone="green" />
               <PipelineNode
                 label="Parchment"
                 icon={Box}
@@ -798,7 +789,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
               <PipelineNode
                 label="Green Bean"
                 icon={Coffee}
-                tone="emerald"
+                tone="teal"
                 state={
                   totalGreen > 0 && !overflow ? 'active' : 'pending'
                 }
@@ -810,7 +801,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
               step={1}
               label="Process"
               subtitle="How was this cherry processed?"
-              tone="red"
+              tone="green"
             />
 
             <Field label="Process Type">
@@ -824,8 +815,8 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                     }
                     className={`px-3 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
                       processForm.processType === t
-                        ? 'bg-red-600 text-white border-red-600 shadow-lg'
-                        : 'bg-white text-gray-700 border-gray-200 hover:border-red-400 hover:bg-red-50'
+                        ? 'bg-green-600 text-white border-green-600 shadow-lg'
+                        : 'bg-white text-gray-700 border-gray-200 hover:border-green-400 hover:bg-green-50'
                     }`}
                   >
                     {t}
@@ -842,7 +833,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                   onChange={(v) =>
                     setProcessForm((f) => ({ ...f, cropYearId: v }))
                   }
-                  accent="red"
+                  accent="green"
                 />
               </Field>
             )}
@@ -1016,7 +1007,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
               onClick={() =>
                 setGradeRows([...gradeRows, { rowKey: newRowId(), grade: '', weight: '' }])
               }
-              disabled={gradeRows.length >= GRADE_OPTIONS.length}
+              disabled={gradeRows.length >= gradeNames.length}
               className="w-full py-2.5 border border-dashed border-amber-300 rounded-xl text-sm font-bold text-amber-700 hover:bg-amber-50 hover:border-amber-400 disabled:opacity-30 inline-flex items-center justify-center gap-1.5 transition-all"
             >
               <Plus className="h-3.5 w-3.5" /> Add grade
@@ -1068,7 +1059,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                 processSubmitting ? 'Processing...' : 'Save & Grade'
               }
               submitDisabled={processSubmitting || overflow}
-              accent="red"
+              accent="green"
             />
           </Modal>
         )
@@ -1234,7 +1225,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
           title="Source History"
           subtitle={`${historyBucket.processType} · ${historyBucket.grade}`}
           onClose={() => setHistoryBucket(null)}
-          accent="emerald"
+          accent="teal"
           icon={History}
           context={[
             {
@@ -1318,7 +1309,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                           <div className="flex items-center gap-2 -ml-[22px]">
                             <ArrowDown className="h-3 w-3 text-gray-300" />
                             <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <div className="w-6 h-6 rounded-md bg-red-100 text-red-700 flex items-center justify-center flex-shrink-0">
+                              <div className="w-6 h-6 rounded-md bg-green-100 text-green-700 flex items-center justify-center flex-shrink-0">
                                 <Sprout className="h-3 w-3" />
                               </div>
                               <div className="min-w-0 flex-1">
@@ -1394,18 +1385,16 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
 // self-contained: one page = one file, no scattered helpers.
 // ─────────────────────────────────────────────────────────────────────
 
-type Accent = 'red' | 'amber' | 'emerald' | 'gray' | 'indigoSolid'
+type Accent = 'green' | 'amber' | 'teal' | 'gray' | 'indigoSolid'
 
 // Solid Tailwind classes per accent. Inlined as full strings so Tailwind's
 // JIT picks them up (no template-literal class names that the scanner can't
 // see).
-// Per-stage palette — Cherry/Parchment/Green-Bean each get their own colour
-// so the operator visually distinguishes which stage of the pipeline a
-// section/button/modal belongs to. The Workbench Record-Process modal
-// uses a blue→indigo gradient on its icon block, but for this page each
-// stage's modal mirrors the colour of the button that opened it (Process
-// → red, Hull → amber, Withdraw → emerald) which makes the open→edit
-// flow feel continuous.
+// Per-stage palette, the same one the Processor Workbench uses so the two
+// pages read as one system: Cherry = green, Parchment = amber, Green Bean
+// = teal. Stage colour goes on borders, headers and icon blocks; the
+// primary action buttons are all sky, as on the Workbench cards, so "the
+// next step" looks the same wherever it appears.
 const ACCENT: Record<
   Accent,
   {
@@ -1420,16 +1409,16 @@ const ACCENT: Record<
     iconRing: string
   }
 > = {
-  red: {
-    leftBorder: 'border-l-red-500',
-    headerBg: 'bg-red-50',
-    headerText: 'text-red-900',
-    headerLabel: 'text-red-700',
-    valueText: 'text-red-700',
-    button: 'bg-red-600',
-    buttonHover: 'hover:bg-red-700',
-    iconBlock: 'bg-gradient-to-br from-red-500 to-red-700',
-    iconRing: 'focus:ring-red-500',
+  green: {
+    leftBorder: 'border-l-green-500',
+    headerBg: 'bg-green-50',
+    headerText: 'text-green-900',
+    headerLabel: 'text-green-700',
+    valueText: 'text-green-700',
+    button: 'bg-sky-600',
+    buttonHover: 'hover:bg-sky-700',
+    iconBlock: 'bg-green-600',
+    iconRing: 'focus:ring-green-500',
   },
   amber: {
     leftBorder: 'border-l-amber-500',
@@ -1437,21 +1426,21 @@ const ACCENT: Record<
     headerText: 'text-amber-900',
     headerLabel: 'text-amber-700',
     valueText: 'text-amber-700',
-    button: 'bg-amber-600',
-    buttonHover: 'hover:bg-amber-700',
-    iconBlock: 'bg-gradient-to-br from-amber-500 to-orange-600',
+    button: 'bg-sky-600',
+    buttonHover: 'hover:bg-sky-700',
+    iconBlock: 'bg-amber-500',
     iconRing: 'focus:ring-amber-500',
   },
-  emerald: {
-    leftBorder: 'border-l-emerald-500',
-    headerBg: 'bg-emerald-50',
-    headerText: 'text-emerald-900',
-    headerLabel: 'text-emerald-700',
-    valueText: 'text-emerald-700',
-    button: 'bg-emerald-600',
-    buttonHover: 'hover:bg-emerald-700',
-    iconBlock: 'bg-gradient-to-br from-emerald-500 to-teal-600',
-    iconRing: 'focus:ring-emerald-500',
+  teal: {
+    leftBorder: 'border-l-teal-500',
+    headerBg: 'bg-teal-50',
+    headerText: 'text-teal-900',
+    headerLabel: 'text-teal-700',
+    valueText: 'text-teal-700',
+    button: 'bg-sky-600',
+    buttonHover: 'hover:bg-sky-700',
+    iconBlock: 'bg-teal-500',
+    iconRing: 'focus:ring-teal-500',
   },
   gray: {
     leftBorder: 'border-l-gray-400',
@@ -1597,30 +1586,30 @@ const ProcessTypePill: React.FC<{ type: string }> = ({ type }) => (
 // pending = outlined-grey. Keeps the indicator readable without competing
 // with the form's primary colours.
 const PIPELINE_TONE: Record<
-  'red' | 'amber' | 'emerald',
+  'green' | 'amber' | 'teal',
   { bg: string; ring: string; text: string }
 > = {
-  red: {
-    bg: 'bg-red-500',
-    ring: 'ring-red-200',
-    text: 'text-red-700',
+  green: {
+    bg: 'bg-green-500',
+    ring: 'ring-green-200',
+    text: 'text-green-700',
   },
   amber: {
     bg: 'bg-amber-500',
     ring: 'ring-amber-200',
     text: 'text-amber-700',
   },
-  emerald: {
-    bg: 'bg-emerald-500',
-    ring: 'ring-emerald-200',
-    text: 'text-emerald-700',
+  teal: {
+    bg: 'bg-teal-500',
+    ring: 'ring-teal-200',
+    text: 'text-teal-700',
   },
 }
 
 const PipelineNode: React.FC<{
   label: string
   icon: IconType
-  tone: 'red' | 'amber' | 'emerald'
+  tone: 'green' | 'amber' | 'teal'
   state: 'active' | 'pending'
 }> = ({ label, icon: Icon, tone, state }) => {
   const t = PIPELINE_TONE[tone]
@@ -1648,18 +1637,18 @@ const PipelineNode: React.FC<{
 }
 
 // Connector colour follows the upstream node's tone when active, so the
-// pipeline visually blends red → amber → emerald instead of jumping from
-// red straight to emerald (which clashed with the cherry-stage theme).
+// pipeline visually blends green → amber → teal instead of jumping from
+// green straight to teal.
 const PipelineConnector: React.FC<{
   active?: boolean
-  tone?: 'red' | 'amber' | 'emerald'
-}> = ({ active, tone = 'emerald' }) => {
+  tone?: 'green' | 'amber' | 'teal'
+}> = ({ active, tone = 'teal' }) => {
   const activeBg =
-    tone === 'red'
-      ? 'bg-red-400'
+    tone === 'green'
+      ? 'bg-green-400'
       : tone === 'amber'
         ? 'bg-amber-400'
-        : 'bg-emerald-400'
+        : 'bg-teal-400'
   return (
     <div
       className={`flex-1 max-w-16 h-0.5 rounded-full transition-colors ${
@@ -1672,14 +1661,14 @@ const PipelineConnector: React.FC<{
 // Tinted stage header — divides the modal into "Step 1" and "Step 2"
 // blocks so a long combined form remains scannable.
 const STAGE_TONE: Record<
-  'red' | 'amber',
+  'green' | 'amber',
   { bg: string; border: string; text: string; badge: string }
 > = {
-  red: {
-    bg: 'bg-red-50',
-    border: 'border-red-200',
-    text: 'text-red-900',
-    badge: 'bg-red-600 text-white',
+  green: {
+    bg: 'bg-green-50',
+    border: 'border-green-200',
+    text: 'text-green-900',
+    badge: 'bg-green-600 text-white',
   },
   amber: {
     bg: 'bg-amber-50',
@@ -1693,7 +1682,7 @@ const StageHeader: React.FC<{
   step: number
   label: string
   subtitle?: string
-  tone: 'red' | 'amber'
+  tone: 'green' | 'amber'
 }> = ({ step, label, subtitle, tone }) => {
   const t = STAGE_TONE[tone]
   return (

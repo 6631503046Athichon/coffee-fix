@@ -1,104 +1,130 @@
-
-import React, { useState, useEffect } from 'react';
-import { NavLink } from 'react-router-dom';
-import { LucideIcon, Coffee, X, Menu, Sprout, Factory, FlaskConical, Flame, Shield } from 'lucide-react';
-import { UserRole } from '../../types';
+import React, { useEffect } from 'react'
+import { NavLink } from 'react-router-dom'
+import {
+  LucideIcon,
+  Coffee,
+  X,
+  Sprout,
+  Factory,
+  FlaskConical,
+  Flame,
+  Shield,
+} from 'lucide-react'
+import { UserRole } from '../../types'
 
 interface NavItem {
-  name: string;
-  href: string;
-  icon: LucideIcon;
-  roles: UserRole[];
-  badge?: number;
-  section?: string;
+  name: string
+  href: string
+  icon: LucideIcon
+  roles: UserRole[]
+  badge?: number
+  section?: string
 }
 
 interface NavSection {
-  id: string;
-  label: string;
-  icon: LucideIcon;
-  roles: UserRole[];
+  id: string
+  label: string
+  icon: LucideIcon
+  roles: UserRole[]
 }
 
 interface SidebarProps {
-  navItems: NavItem[];
-  currentUserRoles: UserRole[];
+  navItems: NavItem[]
+  currentUserRoles: UserRole[]
+  /** Mobile drawer state. The toggle lives in the Header so it sits in the
+   *  header row instead of floating over it. */
+  isMobileOpen: boolean
+  onMobileClose: () => void
 }
 
 // Define section order and metadata
 const SECTIONS: NavSection[] = [
   { id: 'farmer', label: 'Farmer', icon: Sprout, roles: [UserRole.Farmer, UserRole.Admin] },
-  { id: 'processor', label: 'Processor', icon: Factory, roles: [UserRole.Processor, UserRole.Admin] },
-  { id: 'cupping', label: 'Quality & Cupping', icon: FlaskConical, roles: [UserRole.HeadJudge, UserRole.Cupper, UserRole.Admin] },
+  {
+    id: 'processor',
+    label: 'Processor',
+    icon: Factory,
+    roles: [UserRole.Processor, UserRole.Admin],
+  },
+  {
+    id: 'cupping',
+    label: 'Quality & Cupping',
+    icon: FlaskConical,
+    roles: [UserRole.HeadJudge, UserRole.Cupper, UserRole.Admin],
+  },
   { id: 'roaster', label: 'Roaster', icon: Flame, roles: [UserRole.Roaster, UserRole.Admin] },
   { id: 'admin', label: 'Administration', icon: Shield, roles: [UserRole.Admin] },
-];
+]
 
-const Sidebar: React.FC<SidebarProps> = ({ navItems, currentUserRoles }) => {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+const Sidebar: React.FC<SidebarProps> = ({
+  navItems,
+  currentUserRoles,
+  isMobileOpen,
+  onMobileClose,
+}) => {
+  const normalizedRoles = currentUserRoles.map((role) => String(role).trim().toLowerCase())
+  const isRoasterOnly =
+    normalizedRoles.includes(UserRole.Roaster.toLowerCase()) &&
+    !normalizedRoles.includes(UserRole.Admin.toLowerCase())
 
-  // Filter nav items: show if user has ANY of the required roles
-  const filteredNavItems = navItems.filter(item =>
-    item.roles.some(role => currentUserRoles.includes(role))
-  );
+  // Keep the roaster workspace focused for non-admin roaster accounts.
+  const visibleNavItems = isRoasterOnly
+    ? navItems.filter((item) => item.name === 'Roaster Workbench')
+    : navItems
+
+  // Filter nav items: show if user has ANY of the required roles.
+  const filteredNavItems = visibleNavItems.filter((item) =>
+    item.roles.some((role) => normalizedRoles.includes(String(role).toLowerCase())),
+  )
 
   // Group items by section
-  const groupedItems = SECTIONS.map(section => {
-    const items = filteredNavItems.filter(item => item.section === section.id);
-    const hasAccess = section.roles.some(role => currentUserRoles.includes(role));
-    return { section, items, hasAccess };
-  }).filter(group => group.items.length > 0 && group.hasAccess);
+  const groupedItems = SECTIONS.map((section) => {
+    const items = filteredNavItems.filter((item) => item.section === section.id)
+    const hasAccess = section.roles.some((role) =>
+      normalizedRoles.includes(String(role).toLowerCase()),
+    )
+    return { section, items, hasAccess }
+  }).filter((group) => group.items.length > 0 && group.hasAccess)
 
   // Close mobile menu when screen size changes
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 1024) {
-        setIsMobileMenuOpen(false);
+        onMobileClose()
       }
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [onMobileClose])
 
   // Prevent body scroll when mobile menu is open
   useEffect(() => {
-    if (isMobileMenuOpen) {
-      document.body.style.overflow = 'hidden';
+    if (isMobileOpen) {
+      document.body.style.overflow = 'hidden'
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = 'unset'
     }
-  }, [isMobileMenuOpen]);
+  }, [isMobileOpen])
 
   return (
     <>
-      {/* Mobile menu button */}
-      <button
-        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-blue-600 rounded-lg shadow-sm hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-        aria-label="Toggle menu"
-      >
-        {isMobileMenuOpen ? (
-          <X className="h-6 w-6 text-white" />
-        ) : (
-          <Menu className="h-6 w-6 text-white" />
-        )}
-      </button>
-
       {/* Backdrop overlay for mobile */}
-      {isMobileMenuOpen && (
+      {isMobileOpen && (
         <div
           className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
-          onClick={() => setIsMobileMenuOpen(false)}
+          onClick={onMobileClose}
         />
       )}
 
       {/* Sidebar */}
-      <aside className={`
+      <aside
+        className={`
         w-64 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col
         fixed lg:relative inset-y-0 left-0 z-40
         transform transition-transform duration-300 ease-in-out
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
+        ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}
+      >
         <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200">
           <div className="flex items-center flex-1">
             <Coffee className="h-8 w-8 text-blue-600" />
@@ -106,7 +132,7 @@ const Sidebar: React.FC<SidebarProps> = ({ navItems, currentUserRoles }) => {
           </div>
           {/* Close button for mobile - only inside sidebar */}
           <button
-            onClick={() => setIsMobileMenuOpen(false)}
+            onClick={onMobileClose}
             className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors group focus:outline-none focus:ring-2 focus:ring-gray-400"
             aria-label="Close menu"
           >
@@ -131,7 +157,7 @@ const Sidebar: React.FC<SidebarProps> = ({ navItems, currentUserRoles }) => {
                   <NavLink
                     key={item.name}
                     to={item.href}
-                    onClick={() => setIsMobileMenuOpen(false)}
+                    onClick={onMobileClose}
                     className={({ isActive }) =>
                       `flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                         isActive
@@ -158,7 +184,7 @@ const Sidebar: React.FC<SidebarProps> = ({ navItems, currentUserRoles }) => {
         </nav>
       </aside>
     </>
-  );
-};
+  )
+}
 
-export default Sidebar;
+export default Sidebar

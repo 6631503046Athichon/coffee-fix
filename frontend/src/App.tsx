@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
-import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package, Box } from 'lucide-react';
+import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package, Box, Bean } from 'lucide-react';
 
 import { UserRole, CuppingSessionType, Customer } from './types';
 import { INITIAL_APP_DATA } from './constants';
@@ -54,6 +54,7 @@ const ActivityTypeManagement = lazy(() => import('./components/admin/ActivityTyp
 const ProcessTypeManagement = lazy(() => import('./components/admin/ProcessTypeManagement'));
 const RoasterWorkbench = lazy(() => import('./components/roaster/RoasterWorkbench'));
 const CoffeeVarietiesManager = lazy(() => import('./components/admin/CoffeeVarietiesManager'));
+const CoffeeGradeManagement = lazy(() => import('./components/admin/CoffeeGradeManagement'));
 const CustomerManagement = lazy(() => import('./components/sales/CustomerManagement'));
 
 const RouteLoader: React.FC = () => (
@@ -224,6 +225,7 @@ const ProtectedRoutes: React.FC = () => {
         cropYears: phase1.cropYears,
         processTypes: phase1.processTypes,
         activityTypes: phase1.activityTypes,
+        coffeeGrades: phase1.coffeeGrades ?? prev.coffeeGrades,
         customers: mergeArrays(storedCustomers, INITIAL_APP_DATA.customers),
         users: phase1.users,
         saleOrders: salesDataLoadFailed ? prev.saleOrders : storedSaleOrders,
@@ -268,6 +270,12 @@ const ProtectedRoutes: React.FC = () => {
 
   // Debounced refresh to prevent burst reloads from rapid events
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Mobile nav state lives here because the Header owns the toggle button
+  // and the Sidebar owns the drawer it opens.
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const toggleMobileNav = useCallback(() => setIsMobileNavOpen((open) => !open), []);
+  const closeMobileNav = useCallback(() => setIsMobileNavOpen(false), []);
   const debouncedRefresh = useCallback(() => {
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
@@ -413,6 +421,7 @@ const ProtectedRoutes: React.FC = () => {
       { name: 'Activity Types', href: '/activity-types', icon: Tag, roles: [UserRole.Admin], section: 'admin' },
       { name: 'Process Types', href: '/process-types', icon: Coffee, roles: [UserRole.Admin], section: 'admin' },
       { name: 'Coffee Varieties', href: '/coffee-varieties', icon: Coffee, roles: [UserRole.Admin], section: 'admin' },
+      { name: 'Coffee Grades', href: '/coffee-grades', icon: Bean, roles: [UserRole.Admin], section: 'admin' },
     ];
   }, [currentUser, data.cuppingSessions]);
 
@@ -435,10 +444,18 @@ const ProtectedRoutes: React.FC = () => {
   return (
     <DataContext.Provider value={contextValue}>
       <div className="flex h-screen bg-gray-50 text-gray-800">
-        <Sidebar navItems={navItems} currentUserRoles={currentUser?.roles || [UserRole.Farmer]} />
+        <Sidebar
+          navItems={navItems}
+          currentUserRoles={currentUser?.roles || [UserRole.Farmer]}
+          isMobileOpen={isMobileNavOpen}
+          onMobileClose={closeMobileNav}
+        />
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden w-full lg:w-auto">
-          <Header currentUserRoles={currentUser?.roles || [UserRole.Farmer]} />
-          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-3 sm:p-4 md:p-6 lg:p-8 pt-16 lg:pt-4">
+          <Header
+            currentUserRoles={currentUser?.roles || [UserRole.Farmer]}
+            onToggleMobileNav={toggleMobileNav}
+          />
+          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-3 sm:p-4 md:p-6 lg:p-8 lg:pt-4">
             <Routes>
               <Route path="/farmer" element={<Navigate to="/farmer-dashboard" replace />} />
               <Route path="/dashboard" element={<Navigate to="/farmer-dashboard" replace />} />
@@ -558,6 +575,14 @@ const ProtectedRoutes: React.FC = () => {
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Admin]}>
                     {withRouteLoader(<CoffeeVarietiesManager />)}
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/coffee-grades"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Admin]}>
+                    {withRouteLoader(<CoffeeGradeManagement />)}
                   </ProtectedRoute>
                 }
               />

@@ -1,19 +1,19 @@
-import React from 'react';
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
-import { UserRole } from '../../types';
-import { getDashboardPathByRole } from '../../utils/routing';
+import React from 'react'
+import { Navigate } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
+import { UserRole } from '../../types'
+import { getDashboardPathByRole } from '../../utils/routing'
 
 interface ProtectedRouteProps {
-  children: React.ReactNode;
-  allowedRoles: UserRole[];
+  children: React.ReactNode
+  allowedRoles: UserRole[]
 }
 
 // Return ReactNode (not ReactElement) so we can render `children`
 // directly without the extra `<></>` wrapper. React 19 + react-router 7
 // accept any ReactNode here.
 const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps): React.ReactNode => {
-  const { currentUser, isAuthenticated, isAuthLoading } = useAuth();
+  const { currentUser, isAuthenticated, isAuthLoading } = useAuth()
 
   if (isAuthLoading) {
     return (
@@ -23,23 +23,26 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps): React.
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>
-    );
+    )
   }
 
   if (!isAuthenticated || !currentUser) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace />
   }
 
   // Check if user has at least one of the required roles
-  const hasRequiredRole = currentUser.roles.some(role => allowedRoles.includes(role));
+  const normalizedUserRoles = currentUser.roles.map((role) => String(role).trim().toLowerCase())
+  const hasRequiredRole = allowedRoles.some((role) =>
+    normalizedUserRoles.includes(String(role).toLowerCase()),
+  )
 
   if (!hasRequiredRole) {
     // Immediately redirect instead of showing error page
-    return <Navigate to={getDashboardPathByRole(currentUser.roles)} replace />;
+    return <Navigate to={getDashboardPathByRole(currentUser.roles)} replace />
   }
 
-  return children;
-};
+  return children
+}
 
-export { ProtectedRoute };
-export default ProtectedRoute;
+export { ProtectedRoute }
+export default ProtectedRoute

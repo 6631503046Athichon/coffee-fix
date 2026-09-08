@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 /**
  * GET /api/bulk-load?phase=1|2
  * Combines multiple resource queries into a single request to reduce HTTP round-trips.
- * Phase 1: Essential data (farms, harvestLots, cropYears, processTypes, activityTypes, customers, users)
+ * Phase 1: Essential data (farms, harvestLots, cropYears, processTypes, activityTypes, coffeeGrades, customers, users)
  * Phase 2: Secondary data (soilAnalyses, weatherRecords, gapLogs, processingBatches, parchmentLots, greenBeanLots, roasterInventory, roastBatches)
  */
 export async function GET(request: NextRequest) {
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
         ]
       }
 
-      const [farms, harvestLots, cropYears, processTypes, activityTypes, customers, users] = await Promise.all([
+      const [farms, harvestLots, cropYears, processTypes, activityTypes, coffeeGrades, customers, users] = await Promise.all([
         // Farms
         prisma.farm.findMany({
           where: farmsWhere,
@@ -85,6 +85,22 @@ export async function GET(request: NextRequest) {
           orderBy: { createdAt: 'desc' },
         }),
 
+        // Coffee Grades (sortOrder keeps the grade dropdowns in the order
+        // processors expect, not alphabetical order).
+        //
+        // Degrades to an empty list instead of rejecting: deploys run
+        // `prisma generate`, not `db push`, so this code can reach
+        // production a few minutes before the table does. Phase 1 is the
+        // app's essential data — one missing reference table must not take
+        // the whole dashboard down. The frontend falls back to its built-in
+        // grade list when this comes back empty.
+        prisma.coffeeGrade
+          .findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] })
+          .catch(error => {
+            console.warn('bulk-load: coffee grades unavailable:', error?.message)
+            return []
+          }),
+
         // Customers
         prisma.customer.findMany({
           include: {
@@ -124,6 +140,7 @@ export async function GET(request: NextRequest) {
         cropYears,
         processTypes: parsedProcessTypes,
         activityTypes,
+        coffeeGrades,
         customers,
         users,
       })

@@ -15,6 +15,7 @@ export const INITIAL_APP_DATA: AppData = {
   gapLogs: [],
   activityTypes: [],
   processTypes: [],
+  coffeeGrades: [],
   soilAnalyses: [],
   roasterInventory: [],
   roastBatches: [],

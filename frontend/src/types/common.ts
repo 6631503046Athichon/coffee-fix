@@ -6,7 +6,7 @@ import type { ParchmentLot } from './parchment';
 import type { GreenBeanLot, PricingHistory } from './greenBean';
 import type { CuppingSession } from './cupping';
 import type { GAPLogEntry, ActivityType } from './gap';
-import type { ProcessType, CropYear } from './reference';
+import type { ProcessType, CropYear, CoffeeGrade } from './reference';
 import type { SoilAnalysis } from './soil';
 import type { RoasterInventoryItem, RoastBatch } from './roaster';
 import type { WeatherRecord } from './weather';
@@ -58,6 +58,7 @@ export interface AppData {
   gapLogs: GAPLogEntry[];
   activityTypes: ActivityType[];
   processTypes: ProcessType[];
+  coffeeGrades: CoffeeGrade[];
   soilAnalyses: SoilAnalysis[];
   roasterInventory: RoasterInventoryItem[];
   roastBatches: RoastBatch[];

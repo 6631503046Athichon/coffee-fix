@@ -1,14 +1,16 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, LogOut } from 'lucide-react';
+import { User, LogOut, Menu } from 'lucide-react';
 import { UserRole } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface HeaderProps {
   currentUserRoles: UserRole[];
+  /** Opens/closes the Sidebar drawer on small screens. */
+  onToggleMobileNav: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ currentUserRoles }) => {
+const Header: React.FC<HeaderProps> = ({ currentUserRoles, onToggleMobileNav }) => {
   const navigate = useNavigate();
   const { logout, currentUser } = useAuth();
 
@@ -54,9 +56,17 @@ const Header: React.FC<HeaderProps> = ({ currentUserRoles }) => {
   const avatarBgColor = getAvatarStyle(currentUserRoles);
 
   return (
-    <header className="h-16 bg-white border-b border-gray-200 shadow-sm flex items-center justify-between px-4 pl-16 lg:pl-6 lg:px-8 flex-shrink-0">
-      {/* Left Section - User Info */}
+    <header className="h-16 bg-white border-b border-gray-200 shadow-sm flex items-center justify-between px-4 lg:px-8 flex-shrink-0">
+      {/* Left Section - Menu (mobile) + User Info */}
       <div className="flex items-center space-x-4">
+        <button
+          type="button"
+          onClick={onToggleMobileNav}
+          className="lg:hidden p-2 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label="Open menu"
+        >
+          <Menu className="h-6 w-6" />
+        </button>
         <div className="relative">
           <div className={`flex items-center justify-center ${avatarBgColor} w-12 h-12 rounded-lg`}>
             <User className="h-6 w-6 text-white" />

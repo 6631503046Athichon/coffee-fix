@@ -19,3 +19,14 @@ export interface CropYear {
   endDate: string; // ISO date
   description?: string;
 }
+
+export interface CoffeeGrade {
+  id: string;
+  name: string; // e.g., "Grade A", "Peaberry", "Screen 18"
+  description?: string | null;
+  /** Lower numbers come first in the grade dropdowns. */
+  sortOrder: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}

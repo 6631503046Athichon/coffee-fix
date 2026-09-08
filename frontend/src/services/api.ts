@@ -142,6 +142,7 @@ export interface BulkPhase1Response {
   cropYears: any[]
   processTypes: any[]
   activityTypes: any[]
+  coffeeGrades: any[]
   customers: any[]
   users: any[]
 }

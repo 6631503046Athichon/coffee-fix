@@ -349,6 +349,20 @@ model CoffeeVariety {
   @@index([isActive])
 }
 
+model CoffeeGrade {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([sortOrder])
+  @@index([updatedAt])
+}
+
 model GAPLogEntry {
   id               String       @id @default(uuid())
   farmId           String?
