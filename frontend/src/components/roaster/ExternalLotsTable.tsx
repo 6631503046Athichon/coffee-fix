@@ -56,17 +56,21 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
   const activeLot = lots.find((l) => l.id === openPopover)
 
   return (
-    <div className={hideHeader ? '' : 'bg-white rounded-xl border border-gray-200 overflow-hidden'}>
+    <div
+      className={
+        hideHeader ? '' : 'overflow-hidden rounded-2xl border border-[#e2e8e1] bg-white shadow-sm'
+      }
+    >
       {/* Header */}
       {!hideHeader && (
-        <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+        <div className="flex items-center justify-between border-b border-[#e6ebe5] bg-[#f8fbf8] px-6 py-5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
-              <Package className="h-5 w-5 text-white" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#dcebe1]">
+              <Package className="h-5 w-5 text-[#2e6848]" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Purchased Lots</h3>
-              <p className="text-sm text-gray-500">External green bean inventory</p>
+              <h3 className="text-lg font-bold text-[#20352b]">Purchased Lots</h3>
+              <p className="text-sm text-[#7b8a80]">External green bean inventory</p>
             </div>
           </div>
         </div>
@@ -74,7 +78,7 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full table-fixed">
+        <table className="w-full min-w-[680px] table-fixed font-sans">
           <colgroup>
             <col className="w-[18%]" />
             <col className="w-[10%]" />
@@ -83,31 +87,29 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
             <col className="w-[28%]" />
           </colgroup>
           <thead>
-            <tr className="bg-black-800 text-left">
-              <th className="px-6 py-4 text-left text-xs font-normal text-white tracking-wide bg-black">
+            <tr className="bg-[#263b31] text-left">
+              <th className="bg-[#263b31] px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#c6d5ca]">
                 ID
               </th>
-              <th className="px-6 py-4 text-center text-xs font-normal text-white tracking-wide bg-black">
+              <th className="bg-[#263b31] px-4 py-3 text-center text-[11px] font-bold uppercase tracking-[0.12em] text-[#c6d5ca]">
                 Details
               </th>
-              <th className="px-6 py-4 text-left text-xs font-normal text-white tracking-wide bg-black">
+              <th className="bg-[#263b31] px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#c6d5ca]">
                 Grade
               </th>
-              <th className="px-6 py-4 text-right text-xs font-normal text-white tracking-wide bg-black">
+              <th className="bg-[#263b31] px-4 py-3 text-right text-[11px] font-bold uppercase tracking-[0.12em] text-[#c6d5ca]">
                 Available
               </th>
-              <th className="px-6 py-4 text-right text-xs font-normal text-white tracking-wide bg-black">
-                <div className="flex justify-end">
-                  <Button
-                    variant="success"
-                    size="sm"
-                    icon={<PlusCircle className="h-3.5 w-3.5" />}
-                    className="min-w-[100px] justify-center"
-                    onClick={onAddExternal}
-                  >
-                    Add Lot
-                  </Button>
-                </div>
+              <th className="bg-[#263b31] px-4 py-3 text-right text-[11px] font-bold uppercase tracking-[0.12em] text-[#c6d5ca]">
+                <Button
+                  variant="success"
+                  size="sm"
+                  icon={<PlusCircle className="h-3.5 w-3.5" />}
+                  onClick={onAddExternal}
+                  className="ml-auto min-w-[100px] justify-center bg-[#62a477] px-3 py-2 text-xs hover:bg-[#4f8b62]"
+                >
+                  Add lot
+                </Button>
               </th>
             </tr>
           </thead>
@@ -128,17 +130,20 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
               </tr>
             ) : (
               lots.map((lot) => (
-                <tr key={lot.id}>
-                  <td className="px-6 py-4 text-left font-mono text-sm text-black whitespace-nowrap">
+                <tr
+                  key={lot.id}
+                  className="transition-colors odd:bg-white even:bg-[#fafcf9] hover:bg-[#f1f8f2]"
+                >
+                  <td className="px-5 py-4 text-left font-mono text-sm font-semibold text-[#294936] whitespace-nowrap">
                     {toRoaId(lot.id)}
                   </td>
-                  <td className="px-6 py-4 text-center align-middle">
+                  <td className="px-5 py-4 text-center align-middle">
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
                         openWithPos(lot.id, e.currentTarget)
                       }}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 transition-colors"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#557262] transition-colors hover:bg-[#e6f0e8]"
                       title="View Details"
                     >
                       <Package className="h-5 w-5 text-gray-400" />
@@ -181,16 +186,23 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
                       </div>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-left align-middle">
+                  <td className="px-5 py-4 text-left align-middle">
                     <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-amber-50 text-sm font-normal text-amber-700 border border-amber-200 whitespace-nowrap">
                       {lot.grade || '—'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-right align-middle text-black font-bold">
-                    {toFixed2(lot.currentWeightKg)}
-                    <span className="text-sm text-gray-400 ml-1">kg</span>
+                  <td className="px-5 py-4 text-right align-middle text-black font-bold">
+                    <div className="ml-auto flex max-w-[112px] items-center gap-2">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#e4ebe5]">
+                        <div className="h-full w-full rounded-full bg-[#62a477]" />
+                      </div>
+                      <span className="text-sm font-bold text-[#294936]">
+                        {toFixed2(lot.currentWeightKg)}
+                      </span>
+                      <span className="text-xs text-[#87928a]">kg</span>
+                    </div>
                   </td>
-                  <td className="px-6 py-4 text-right align-middle">
+                  <td className="px-5 py-4 text-right align-middle">
                     <div className="flex justify-end">
                       <Button
                         variant="success"

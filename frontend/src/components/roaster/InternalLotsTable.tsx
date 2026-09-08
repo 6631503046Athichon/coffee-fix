@@ -1,13 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import {
-  Package,
-  Star,
-  ChevronLeft,
-  ChevronRight,
-  PlusCircle,
-  ClipboardList,
-  X,
-} from 'lucide-react'
+import { Package, ChevronLeft, ChevronRight, ClipboardList, X } from 'lucide-react'
 import { Button } from '../common/Button'
 import { RoasterInventoryItem } from '../../types'
 import { toFixed2, toRoaId } from '../../utils/formatters'
@@ -71,18 +63,20 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
   return (
     <>
       <div
-        className={hideHeader ? '' : 'bg-white rounded-xl border border-gray-200 overflow-hidden'}
+        className={
+          hideHeader ? '' : 'overflow-hidden rounded-2xl border border-[#e2e8e1] bg-white shadow-sm'
+        }
       >
         {/* Header */}
         {!hideHeader && (
-          <div className="px-6 py-5 border-b border-gray-100 bg-gray-50">
+          <div className="border-b border-[#e6ebe5] bg-[#f8fbf8] px-6 py-5">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Package className="h-5 w-5 text-white" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#dcebe1]">
+                <Package className="h-5 w-5 text-[#2e6848]" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Internal Lots</h3>
-                <p className="text-sm text-gray-500">Withdrawn green beans ready to roast</p>
+                <h3 className="text-lg font-bold text-[#20352b]">Internal Lots</h3>
+                <p className="text-sm text-[#7b8a80]">Withdrawn green beans ready to roast</p>
               </div>
             </div>
           </div>
@@ -90,7 +84,7 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full table-fixed">
+          <table className="w-full min-w-[760px] table-fixed font-sans">
             <colgroup>
               <col className="w-[16%]" />
               <col className="w-[10%]" />
@@ -100,24 +94,24 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
               <col className="w-[24%]" />
             </colgroup>
             <thead>
-              <tr className="bg-black-800 text-left">
-                <th className="px-6 py-4 text-left text-xs font-normal text-white tracking-wide bg-black">
+              <tr className="border-b border-[#dfe9df] bg-[#f3f8f3] text-left">
+                <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#6d7e72]">
                   ID
                 </th>
-                <th className="px-6 py-4 text-center text-xs font-normal text-white tracking-wide bg-black">
+                <th className="px-5 py-3 text-center text-[11px] font-bold uppercase tracking-[0.12em] text-[#6d7e72]">
                   Details
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-normal text-white tracking-wide bg-black">
+                <th className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#6d7e72]">
                   Grade
                 </th>
-                <th className="px-6 py-4 text-right text-xs font-normal text-white tracking-wide bg-black">
+                <th className="px-5 py-3 text-center text-[11px] font-bold uppercase tracking-[0.12em] text-[#6d7e72]">
                   Score
                 </th>
-                <th className="px-6 py-4 text-right text-xs font-normal text-white tracking-wide bg-black">
+                <th className="px-5 py-3 text-right text-[11px] font-bold uppercase tracking-[0.12em] text-[#6d7e72]">
                   Available
                 </th>
-                <th className="px-6 py-4 text-right text-xs font-normal text-white tracking-wide bg-black">
-                  {/* Column header intentionally blank; Roast button in each row speaks for itself */}
+                <th className="px-5 py-3 text-right text-[11px] font-bold uppercase tracking-[0.12em] text-[#6d7e72]">
+                  Action
                 </th>
               </tr>
             </thead>
@@ -139,58 +133,60 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
                   </td>
                 </tr>
               ) : (
-                lots.map((lot, index) => (
+                lots.map((lot) => (
                   <tr
                     key={lot.id}
-                    className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                    className="border-b border-[#edf1ed] bg-white transition-colors last:border-0 hover:bg-[#f4faf4]"
                   >
                     {/* ID */}
-                    <td className="px-6 py-4 text-left align-middle">
-                      <span className="text-sm font-normal text-black whitespace-nowrap block">
+                    <td className="px-5 py-4 text-left align-middle">
+                      <span className="block whitespace-nowrap text-sm font-semibold text-[#294936]">
                         {toRoaId(lot.id)}
                       </span>
                     </td>
                     {/* Details (icon only, centered) */}
-                    <td className="px-6 py-4 text-center align-middle">
+                    <td className="px-5 py-4 text-center align-middle">
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
                           openWithPos(lot.id, e.currentTarget)
                         }}
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-gray-200 transition-colors"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#dfe9df] text-[#557262] transition-colors hover:border-[#9cb8a6] hover:bg-[#e6f0e8]"
                         title="View Details"
                       >
-                        <ClipboardList className="h-4 w-4 text-black" />
+                        <ClipboardList className="h-4 w-4" aria-hidden="true" />
                       </button>
                     </td>
                     {/* Grade */}
-                    <td className="px-6 py-4 text-left align-middle">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-amber-50 text-sm font-normal text-amber-700 border border-amber-200 whitespace-nowrap">
+                    <td className="px-5 py-4 text-left align-middle">
+                      <span className="whitespace-nowrap text-sm font-medium text-[#55635a]">
                         {lot.grade || '—'}
                       </span>
                     </td>
                     {/* Score */}
-                    <td className="px-6 py-4 text-right align-middle">
-                      <div className="inline-flex items-center justify-end gap-1 align-middle">
-                        <Star className="h-3.5 w-3.5 text-blue-400 shrink-0 align-middle" />
-                        <span className="text-sm font-normal text-blue-600 align-middle">
+                    <td className="px-5 py-4 text-center align-middle">
+                      <div className="inline-flex items-center justify-center align-middle">
+                        <span className="text-sm font-bold text-[#456d55]">
                           {lot.processorScore != null ? lot.processorScore.toFixed(2) : '—'}
                         </span>
                       </div>
                     </td>
                     {/* Available (normal cell, no bg) */}
-                    <td className="px-6 py-4 text-right align-middle">
-                      <span className="text-sm text-black">{toFixed2(lot.remainingWeightKg)}</span>
-                      <span className="text-sm text-gray-400 ml-1">kg</span>
+                    <td className="px-5 py-4 text-right align-middle">
+                      <div className="ml-auto flex items-center justify-end gap-1">
+                        <span className="text-sm font-bold text-[#294936]">
+                          {toFixed2(lot.remainingWeightKg)}
+                        </span>
+                        <span className="text-xs text-[#87928a]">kg</span>
+                      </div>
                     </td>
                     {/* Action */}
-                    <td className="px-6 py-4 text-right align-middle">
+                    <td className="px-5 py-4 text-right align-middle">
                       <div className="flex justify-end">
                         <Button
                           variant="success"
                           size="sm"
-                          className="min-w-[100px] justify-center"
-                          icon={<PlusCircle className="h-3.5 w-3.5" />}
+                          className="min-w-[100px] justify-center bg-[#d87832] hover:bg-[#bd5d1e]"
                           onClick={() => onLogRoast(lot)}
                         >
                           Roast
@@ -206,7 +202,7 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
 
         {/* Pagination */}
         {lots.length > 0 && totalPages > 1 && onPageChange && (
-          <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+          <div className="border-t border-[#e6ebe5] bg-[#f8fbf8] px-4 py-3">
             <div className="flex justify-center items-center gap-1">
               <button
                 onClick={() => onPageChange(currentPage - 1)}

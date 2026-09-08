@@ -1,76 +1,110 @@
-
-import React, { useEffect } from 'react';
-import { NavLink } from 'react-router-dom';
-import { LucideIcon, Coffee, X, Sprout, Factory, FlaskConical, Flame, Shield } from 'lucide-react';
-import { UserRole } from '../../types';
+import React, { useEffect } from 'react'
+import { NavLink } from 'react-router-dom'
+import {
+  LucideIcon,
+  Coffee,
+  X,
+  Sprout,
+  Factory,
+  FlaskConical,
+  Flame,
+  Shield,
+} from 'lucide-react'
+import { UserRole } from '../../types'
 
 interface NavItem {
-  name: string;
-  href: string;
-  icon: LucideIcon;
-  roles: UserRole[];
-  badge?: number;
-  section?: string;
+  name: string
+  href: string
+  icon: LucideIcon
+  roles: UserRole[]
+  badge?: number
+  section?: string
 }
 
 interface NavSection {
-  id: string;
-  label: string;
-  icon: LucideIcon;
-  roles: UserRole[];
+  id: string
+  label: string
+  icon: LucideIcon
+  roles: UserRole[]
 }
 
 interface SidebarProps {
-  navItems: NavItem[];
-  currentUserRoles: UserRole[];
+  navItems: NavItem[]
+  currentUserRoles: UserRole[]
   /** Mobile drawer state. The toggle lives in the Header so it sits in the
    *  header row instead of floating over it. */
-  isMobileOpen: boolean;
-  onMobileClose: () => void;
+  isMobileOpen: boolean
+  onMobileClose: () => void
 }
 
 // Define section order and metadata
 const SECTIONS: NavSection[] = [
   { id: 'farmer', label: 'Farmer', icon: Sprout, roles: [UserRole.Farmer, UserRole.Admin] },
-  { id: 'processor', label: 'Processor', icon: Factory, roles: [UserRole.Processor, UserRole.Admin] },
-  { id: 'cupping', label: 'Quality & Cupping', icon: FlaskConical, roles: [UserRole.HeadJudge, UserRole.Cupper, UserRole.Admin] },
+  {
+    id: 'processor',
+    label: 'Processor',
+    icon: Factory,
+    roles: [UserRole.Processor, UserRole.Admin],
+  },
+  {
+    id: 'cupping',
+    label: 'Quality & Cupping',
+    icon: FlaskConical,
+    roles: [UserRole.HeadJudge, UserRole.Cupper, UserRole.Admin],
+  },
   { id: 'roaster', label: 'Roaster', icon: Flame, roles: [UserRole.Roaster, UserRole.Admin] },
   { id: 'admin', label: 'Administration', icon: Shield, roles: [UserRole.Admin] },
-];
+]
 
-const Sidebar: React.FC<SidebarProps> = ({ navItems, currentUserRoles, isMobileOpen, onMobileClose }) => {
+const Sidebar: React.FC<SidebarProps> = ({
+  navItems,
+  currentUserRoles,
+  isMobileOpen,
+  onMobileClose,
+}) => {
+  const normalizedRoles = currentUserRoles.map((role) => String(role).trim().toLowerCase())
+  const isRoasterOnly =
+    normalizedRoles.includes(UserRole.Roaster.toLowerCase()) &&
+    !normalizedRoles.includes(UserRole.Admin.toLowerCase())
 
-  // Filter nav items: show if user has ANY of the required roles
-  const filteredNavItems = navItems.filter(item =>
-    item.roles.some(role => currentUserRoles.includes(role))
-  );
+  // Keep the roaster workspace focused for non-admin roaster accounts.
+  const visibleNavItems = isRoasterOnly
+    ? navItems.filter((item) => item.name === 'Roaster Workbench')
+    : navItems
+
+  // Filter nav items: show if user has ANY of the required roles.
+  const filteredNavItems = visibleNavItems.filter((item) =>
+    item.roles.some((role) => normalizedRoles.includes(String(role).toLowerCase())),
+  )
 
   // Group items by section
-  const groupedItems = SECTIONS.map(section => {
-    const items = filteredNavItems.filter(item => item.section === section.id);
-    const hasAccess = section.roles.some(role => currentUserRoles.includes(role));
-    return { section, items, hasAccess };
-  }).filter(group => group.items.length > 0 && group.hasAccess);
+  const groupedItems = SECTIONS.map((section) => {
+    const items = filteredNavItems.filter((item) => item.section === section.id)
+    const hasAccess = section.roles.some((role) =>
+      normalizedRoles.includes(String(role).toLowerCase()),
+    )
+    return { section, items, hasAccess }
+  }).filter((group) => group.items.length > 0 && group.hasAccess)
 
   // Close mobile menu when screen size changes
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 1024) {
-        onMobileClose();
+        onMobileClose()
       }
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [onMobileClose]);
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [onMobileClose])
 
   // Prevent body scroll when mobile menu is open
   useEffect(() => {
     if (isMobileOpen) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden'
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = 'unset'
     }
-  }, [isMobileOpen]);
+  }, [isMobileOpen])
 
   return (
     <>
@@ -83,12 +117,14 @@ const Sidebar: React.FC<SidebarProps> = ({ navItems, currentUserRoles, isMobileO
       )}
 
       {/* Sidebar */}
-      <aside className={`
+      <aside
+        className={`
         w-64 flex-shrink-0 bg-white border-r border-gray-200 flex flex-col
         fixed lg:relative inset-y-0 left-0 z-40
         transform transition-transform duration-300 ease-in-out
         ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
+      `}
+      >
         <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200">
           <div className="flex items-center flex-1">
             <Coffee className="h-8 w-8 text-blue-600" />
@@ -148,7 +184,7 @@ const Sidebar: React.FC<SidebarProps> = ({ navItems, currentUserRoles, isMobileO
         </nav>
       </aside>
     </>
-  );
-};
+  )
+}
 
-export default Sidebar;
+export default Sidebar
