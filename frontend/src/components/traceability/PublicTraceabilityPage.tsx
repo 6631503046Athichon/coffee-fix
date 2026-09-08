@@ -144,10 +144,10 @@ const PublicTraceabilityPage: React.FC = () => {
   // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="text-center bg-white rounded-2xl shadow-md border border-gray-200 px-10 py-12">
           <Loader className="h-12 w-12 mx-auto text-indigo-600 animate-spin mb-4" />
-          <p className="text-gray-600">Loading traceability data...</p>
+          <p className="text-gray-600 font-medium">Loading traceability data...</p>
         </div>
       </div>
     );
@@ -156,8 +156,8 @@ const PublicTraceabilityPage: React.FC = () => {
   // Error state
   if (error || !data || !lot) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto p-8">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="text-center max-w-md mx-auto bg-white rounded-2xl shadow-md border border-gray-200 p-8">
           <AlertCircle className="h-16 w-16 mx-auto text-red-400 mb-4" />
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Lot Not Found</h1>
           <p className="text-gray-600">
@@ -192,6 +192,25 @@ const PublicTraceabilityPage: React.FC = () => {
   if (avgCoffeeMoisture === 'N/A' && parchmentLot?.moistureContent != null) {
     avgCoffeeMoisture = `${parchmentLot.moistureContent}%`;
   }
+
+  const quickFacts = [
+    {
+      label: 'Origin',
+      value: farm?.farmName || farm?.name || harvestLot?.farmPlotLocation || lot.externalSource?.originName,
+    },
+    {
+      label: 'Variety',
+      value: harvestLot?.cherryVariety || lot.externalSource?.variety,
+    },
+    {
+      label: 'Process',
+      value: parchmentLot?.processType || lot.externalSource?.processType,
+    },
+    {
+      label: 'Grade',
+      value: lot.grade,
+    },
+  ].filter((fact): fact is { label: string; value: string } => Boolean(fact.value));
 
   const escapeHtml = (str: string): string => {
     return str
@@ -252,6 +271,37 @@ const PublicTraceabilityPage: React.FC = () => {
   const formatDate = (date?: string | Date | null) =>
     formatDateDisplay(date, undefined, 'N/A', 'en-US');
 
+  const timelineItems = [
+    {
+      label: 'Harvested',
+      date: harvestLot?.harvestDate,
+      detail: harvestLot?.cherryVariety || 'Coffee cherries selected at origin',
+      icon: Coffee,
+      color: 'bg-green-600',
+    },
+    {
+      label: 'Processed',
+      date: parchmentLot?.createdAt,
+      detail: parchmentLot?.processType || processingBatch?.processType || 'Processing completed',
+      icon: Droplets,
+      color: 'bg-blue-600',
+    },
+    {
+      label: 'Dried',
+      date: processingBatch?.dryingEndDate,
+      detail: dryingDuration !== 'N/A' ? dryingDuration : 'Drying completed at origin',
+      icon: Droplet,
+      color: 'bg-teal-600',
+    },
+    {
+      label: 'Roasted',
+      date: roastBatches[0]?.roastDate,
+      detail: roastBatches[0]?.roastLevel || 'Roast profile recorded',
+      icon: Flame,
+      color: 'bg-orange-600',
+    },
+  ].filter(item => item.date);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-5xl mx-auto bg-white shadow-xl rounded-3xl overflow-hidden my-8">
@@ -265,12 +315,18 @@ const PublicTraceabilityPage: React.FC = () => {
               loading="lazy"
               decoding="async"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-black/10"></div>
+
+            {/* Verified Badge */}
+            <div className="absolute top-6 left-6 inline-flex items-center gap-1.5 bg-white/15 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/20">
+              <div className="h-1.5 w-1.5 rounded-full bg-emerald-400"></div>
+              <p className="text-[11px] font-bold text-white uppercase tracking-widest">Verified Traceability</p>
+            </div>
 
             {/* Grade Badge */}
-            <div className="absolute top-8 right-8 bg-white/95 backdrop-blur-sm px-5 py-2.5 rounded-full shadow-lg">
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Grade</p>
-              <p className="text-xl font-extrabold text-indigo-600">{lot.grade}</p>
+            <div className="absolute top-6 right-6 bg-white/95 backdrop-blur-sm px-5 py-2.5 rounded-2xl shadow-lg text-center">
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Grade</p>
+              <p className="text-xl font-extrabold text-indigo-600 leading-tight">{lot.grade}</p>
             </div>
 
             {/* Title Overlay */}
@@ -287,9 +343,24 @@ const PublicTraceabilityPage: React.FC = () => {
 
           {/* Content Section */}
           <div className="px-8 md:px-12 py-8">
+            {/* Quick Facts strip */}
+            {quickFacts.length > 0 && (
+              <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {quickFacts.map((fact) => (
+                  <div
+                    key={fact.label}
+                    className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-center sm:text-left"
+                  >
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{fact.label}</p>
+                    <p className="mt-0.5 truncate text-sm font-bold text-gray-900">{fact.value}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Flavor Notes Tags */}
             {flavorNotes.length > 0 && (
-              <div className="mb-8">
+              <div>
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Tasting Notes</p>
                 <div className="flex flex-wrap gap-2">
                   {flavorNotes.map(note => (
@@ -308,49 +379,57 @@ const PublicTraceabilityPage: React.FC = () => {
         </div>
 
         {/* Section 2: QR Code Share */}
-        <div className="bg-gray-50 px-8 md:px-12 py-10 border-t border-gray-200">
+        <div className="bg-white px-8 md:px-12 py-10">
           <div className="text-center mb-6">
             <div className="inline-flex items-center gap-2 mb-2">
               <QrCode className="h-6 w-6 text-gray-700" />
               <h2 className="text-2xl font-bold text-gray-900">Share This Coffee's Story</h2>
             </div>
           </div>
-          <div className="flex flex-col md:flex-row items-center justify-center gap-10 max-w-4xl mx-auto">
-            <div id="qr-code-container" className="flex-shrink-0">
-              <img
-                src={qrCodeUrl}
-                alt="QR Code"
-                className="rounded-xl shadow-lg border-4 border-white w-48 h-48"
-              />
-            </div>
-            <div className="flex-1">
-              <p className="text-gray-600 text-sm leading-relaxed mb-5">
-                Roasters, add this QR code to your packaging to connect your customers directly to the farm-to-cup journey of this coffee. A simple scan with a smartphone camera will open this traceability page.
-              </p>
-              <div className="flex flex-col sm:flex-row items-stretch gap-3">
-                <button
-                  onClick={handlePrint}
-                  className="flex-1 inline-flex items-center justify-center rounded-lg border border-transparent bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors"
-                >
-                  <Printer className="h-4 w-4 mr-2" />
-                  Print QR Code
-                </button>
-                <button
-                  onClick={handleCopyLink}
-                  className="flex-1 inline-flex items-center justify-center rounded-lg border-2 border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
-                >
-                  {isLinkCopied ? (
-                    <>
-                      <Check className="h-4 w-4 mr-2 text-green-500" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-4 w-4 mr-2" />
-                      Copy Link
-                    </>
-                  )}
-                </button>
+          <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-md border border-gray-200 p-6 md:p-8">
+            <div className="flex flex-col md:flex-row items-center gap-10">
+              <div id="qr-code-container" className="flex-shrink-0">
+                <img
+                  src={qrCodeUrl}
+                  alt="QR Code"
+                  className="rounded-xl shadow-lg border-4 border-white ring-1 ring-gray-200 w-44 h-44"
+                />
+              </div>
+              <div className="flex-1 text-center md:text-left">
+                <p className="text-gray-600 text-sm leading-relaxed mb-5">
+                  Roasters, add this QR code to your packaging to connect your customers directly to the farm-to-cup journey of this coffee. A simple scan with a smartphone camera will open this traceability page.
+                </p>
+                <div className="flex flex-col sm:flex-row items-stretch gap-3">
+                  <button
+                    onClick={handlePrint}
+                    className="flex-1 inline-flex items-center justify-center rounded-lg border border-transparent bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors"
+                  >
+                    <Printer className="h-4 w-4 mr-2" />
+                    Print QR Code
+                  </button>
+                  <button
+                    onClick={handleCopyLink}
+                    className="flex-1 inline-flex items-center justify-center rounded-lg border-2 border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+                  >
+                    {isLinkCopied ? (
+                      <>
+                        <Check className="h-4 w-4 mr-2 text-green-500" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copy Link
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div className="mt-5 flex items-center justify-center md:justify-start gap-2 text-xs text-gray-500">
+                  <span className="font-semibold uppercase tracking-wider">Trace ID</span>
+                  <span className="rounded-full bg-gray-50 px-3 py-1 font-mono text-gray-700 border border-gray-200">
+                    {data.traceId}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -358,7 +437,10 @@ const PublicTraceabilityPage: React.FC = () => {
 
         {/* Section 3: Journey from Farm */}
         <div className="bg-white px-8 md:px-12 py-10">
-          <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">The Journey from the Farm</h2>
+          <div className="text-center mb-8">
+            <p className="text-xs font-bold uppercase tracking-widest text-green-600">Origin to Table</p>
+            <h2 className="mt-1 text-2xl font-bold text-gray-900">The Journey from the Farm</h2>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
             {/* Origin Details Card */}
             <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden border border-gray-200">
@@ -453,17 +535,18 @@ const PublicTraceabilityPage: React.FC = () => {
           </div>
 
           {farmMapEmbedUrl && (
-            <div className="max-w-4xl mx-auto mt-8 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 shadow-md">
-              <div className="flex items-center justify-between gap-4 px-5 py-4">
-                <div>
-                  <h3 className="font-bold text-gray-900">{farmName}</h3>
-                </div>
+            <div className="max-w-4xl mx-auto mt-8 overflow-hidden rounded-xl border border-gray-200 shadow-md">
+              <div className="flex items-center justify-between gap-4 bg-green-600 px-5 py-3">
+                <h3 className="font-bold text-white text-base flex items-center gap-2">
+                  <Coffee className="h-4 w-4" />
+                  {farmName}
+                </h3>
                 {farm.googleMapsUrl && (
                   <a
                     href={farm.googleMapsUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                    className="text-sm font-semibold text-white/90 hover:text-white hover:underline"
                   >
                     Open Google Maps
                   </a>
@@ -484,19 +567,77 @@ const PublicTraceabilityPage: React.FC = () => {
               )}
             </div>
           )}
+
+          {timelineItems.length > 0 && (
+            <div className="max-w-4xl mx-auto mt-10">
+              <div className="mb-6">
+                <p className="text-xs font-bold uppercase tracking-wider text-teal-600">Traceability</p>
+                <h3 className="mt-1 text-xl font-bold text-gray-900">From Farm to Cup</h3>
+              </div>
+
+              {/* Desktop: horizontal stepper */}
+              <div className="relative hidden md:flex md:items-start md:justify-between">
+                <div className="absolute left-0 right-0 top-6 h-0.5 bg-gray-200" />
+                {timelineItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <div key={item.label} className="relative z-10 flex flex-1 flex-col items-center px-2 text-center">
+                      <div className={`flex h-12 w-12 items-center justify-center rounded-full ${item.color} text-white shadow-md ring-4 ring-white`}>
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <h4 className="mt-3 font-bold text-gray-900 text-sm">{item.label}</h4>
+                      <p className="mt-0.5 max-w-[10rem] text-xs text-gray-500">{item.detail}</p>
+                      <time className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                        {formatDate(item.date)}
+                      </time>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Mobile: stacked cards */}
+              <div className="space-y-3 md:hidden">
+                {timelineItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <div
+                      key={item.label}
+                      className="flex items-center gap-4 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3"
+                    >
+                      <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full ${item.color} text-white`}>
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-bold text-gray-900">{item.label}</h4>
+                        <p className="truncate text-sm text-gray-600">{item.detail}</p>
+                      </div>
+                      <time className="flex-shrink-0 whitespace-nowrap rounded-full bg-white px-3 py-1 text-xs font-semibold text-gray-600 border border-gray-200">
+                        {formatDate(item.date)}
+                      </time>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Section 4: Quality in the Cup */}
-        <div className="bg-gray-50 px-8 md:px-12 py-10 border-t border-gray-200">
-          <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">Quality in the Cup</h2>
+        <div className="bg-white px-8 md:px-12 py-10">
+          <div className="text-center mb-8">
+            <p className="text-xs font-bold uppercase tracking-widest text-indigo-600">Cupped & Certified</p>
+            <h2 className="mt-1 text-2xl font-bold text-gray-900">Quality in the Cup</h2>
+          </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-5xl mx-auto">
             {/* Processing Info */}
-            <div className="bg-white rounded-xl p-6 shadow-md border border-gray-200">
-              <h3 className="font-bold text-gray-900 text-base mb-4 flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-indigo-600"></div>
-                Lot Information
-              </h3>
-              <div className="space-y-3">
+            <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
+              <div className="bg-indigo-600 px-5 py-3">
+                <h3 className="font-bold text-white text-base flex items-center gap-2">
+                  <Coffee className="h-4 w-4" />
+                  Lot Information
+                </h3>
+              </div>
+              <div className="p-5 space-y-3">
                 <div className="flex justify-between items-center pb-2 border-b border-gray-100">
                   <span className="text-sm text-gray-600">Process Type</span>
                   <span className="text-sm font-bold text-gray-900">
@@ -537,31 +678,39 @@ const PublicTraceabilityPage: React.FC = () => {
                 </div>
               )}
 
-              <div className="bg-white rounded-xl p-5 shadow-md border border-gray-200">
-                <h3 className="font-bold text-gray-900 text-base mb-3 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-teal-600"></div>
-                  QC Flavor Profile
-                </h3>
-                {hasDetailedScores ? (
-                  <FlavorProfileChart
-                    data={radarData}
-                    totalScore={qcTotalScore}
-                  />
-                ) : (
-                  <p className="text-sm text-gray-600">
-                    Detailed QC scores are not available for this lot yet.
-                  </p>
-                )}
+              <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
+                <div className="bg-teal-600 px-5 py-3">
+                  <h3 className="font-bold text-white text-base flex items-center gap-2">
+                    <Droplet className="h-4 w-4" />
+                    QC Flavor Profile
+                  </h3>
+                </div>
+                <div className="p-5">
+                  {hasDetailedScores ? (
+                    <FlavorProfileChart
+                      data={radarData}
+                      totalScore={qcTotalScore}
+                    />
+                  ) : (
+                    <p className="text-sm text-gray-600">
+                      Detailed QC scores are not available for this lot yet.
+                    </p>
+                  )}
+                </div>
               </div>
 
               {lot.externalSource?.tasteNote && (
-                <div className="bg-white rounded-xl p-5 shadow-md border border-gray-200">
-                  <h3 className="font-bold text-gray-900 text-base mb-3 flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-purple-600"></div>
-                    Tasting Notes
-                  </h3>
-                  <div className="bg-purple-50 p-4 rounded-lg border-l-4 border-purple-500">
-                    <p className="text-gray-700 italic leading-relaxed text-sm">"{lot.externalSource.tasteNote}"</p>
+                <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
+                  <div className="bg-purple-600 px-5 py-3">
+                    <h3 className="font-bold text-white text-base flex items-center gap-2">
+                      <Coffee className="h-4 w-4" />
+                      Tasting Notes
+                    </h3>
+                  </div>
+                  <div className="p-5">
+                    <div className="bg-purple-50 p-4 rounded-lg border-l-4 border-purple-500">
+                      <p className="text-gray-700 italic leading-relaxed text-sm">"{lot.externalSource.tasteNote}"</p>
+                    </div>
                   </div>
                 </div>
               )}
@@ -571,35 +720,32 @@ const PublicTraceabilityPage: React.FC = () => {
 
         {/* Section 5: Roaster Details */}
         {roastBatches.length > 0 && (
-          <div className="bg-white px-8 md:px-12 py-10 border-t border-gray-200">
+          <div className="bg-white px-8 md:px-12 py-10">
             <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center gap-2 bg-orange-600 text-white px-6 py-2.5 rounded-full shadow-md mb-3">
-                <Flame className="h-5 w-5" />
-                <h2 className="text-lg font-bold">Roasted By</h2>
-              </div>
-              <p className="text-3xl font-black text-orange-600">
+              <p className="text-xs font-bold uppercase tracking-widest text-orange-600">Roasted By</p>
+              <h2 className="mt-1 text-2xl font-bold text-gray-900">
                 {roastBatches[0].roaster?.name || 'Our Expert Roasters'}
-              </p>
+              </h2>
             </div>
 
             <div className="max-w-4xl mx-auto space-y-5">
               {roastBatches.slice(0, 3).map(roast => (
-                <div key={roast.id} className="bg-gray-50 rounded-xl shadow-md overflow-hidden border border-gray-200">
-                  <div className="bg-orange-100 px-5 py-3 border-b border-orange-200">
+                <div key={roast.id} className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
+                  <div className="bg-orange-600 px-5 py-3">
                     <div className="flex justify-between items-center">
-                      <h3 className="font-bold text-gray-900 text-base flex items-center gap-2">
-                        <Flame className="h-4 w-4 text-orange-600" />
+                      <h3 className="font-bold text-white text-base flex items-center gap-2">
+                        <Flame className="h-4 w-4" />
                         Roast Profile
                       </h3>
-                      <div className="bg-white px-3 py-1 rounded-full shadow-sm">
-                        <p className="text-xs font-semibold text-gray-700">{formatDate(roast.roastDate)}</p>
+                      <div className="bg-white/20 px-3 py-1 rounded-full">
+                        <p className="text-xs font-semibold text-white">{formatDate(roast.roastDate)}</p>
                       </div>
                     </div>
                   </div>
 
                   <div className="p-5 space-y-4">
                     {roast.roastProfileNotes && (
-                      <div className="bg-amber-50 p-4 rounded-lg border-l-4 border-orange-500">
+                      <div className="bg-orange-50 p-4 rounded-lg border-l-4 border-orange-500">
                         <p className="text-gray-800 italic leading-relaxed text-sm">
                           {roast.roastProfileNotes}
                         </p>
@@ -608,10 +754,10 @@ const PublicTraceabilityPage: React.FC = () => {
 
                     {roast.flavorNotes && (
                       <div className="space-y-2">
-                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Flavor Notes</p>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Flavor Notes</p>
                         <div className="flex flex-wrap gap-2">
                           {roast.flavorNotes.split(',').map((note: string) => note.trim()).filter(Boolean).map((note: string, index: number) => (
-                            <span key={index} className="px-3 py-1.5 bg-yellow-100 text-amber-800 text-xs font-semibold rounded-full border border-amber-200">
+                            <span key={index} className="px-4 py-2 bg-amber-100 text-amber-800 text-sm font-semibold rounded-full border border-amber-200">
                               {note}
                             </span>
                           ))}
@@ -619,14 +765,16 @@ const PublicTraceabilityPage: React.FC = () => {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-3 pt-2">
-                      <div className="bg-white rounded-lg p-3 text-center border border-orange-200">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Batch Size</p>
-                        <p className="text-xl font-black text-orange-600">{roast.batchSizeKg} <span className="text-sm">kg</span></p>
+                    <div className="flex items-center gap-4 flex-wrap pt-2">
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-50 rounded-lg border border-orange-100">
+                        <Flame className="h-4 w-4 text-orange-600" />
+                        <span className="text-[11px] font-semibold text-gray-600">Batch Size</span>
+                        <span className="font-bold text-gray-900 text-sm">{roast.batchSizeKg} kg</span>
                       </div>
-                      <div className="bg-white rounded-lg p-3 text-center border border-amber-200">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Yield</p>
-                        <p className="text-xl font-black text-amber-600">{roast.yieldPercentage}<span className="text-sm">%</span></p>
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 rounded-lg border border-amber-100">
+                        <Coffee className="h-4 w-4 text-amber-600" />
+                        <span className="text-[11px] font-semibold text-gray-600">Yield</span>
+                        <span className="font-bold text-gray-900 text-sm">{roast.yieldPercentage}%</span>
                       </div>
                     </div>
                   </div>
@@ -635,6 +783,13 @@ const PublicTraceabilityPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Footer */}
+        <div className="bg-gray-900 px-8 md:px-12 py-6 text-center">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+            Coffee Lab Platform · Farm-to-Cup Traceability
+          </p>
+        </div>
       </div>
     </div>
   );
