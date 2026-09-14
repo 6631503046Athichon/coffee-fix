@@ -633,6 +633,18 @@ ProcessorWorkbench และ ParchmentTab ใช้ helper เดียวกั
 
 **ข้อจำกัดเดิมที่ยังอยู่**: PUT batch ยังไม่ sync น้ำหนัก ParchmentLot; auto-bind farm ส่ง payload เต็มและอาจแก้น้ำหนักดิบ; direct parchment POST ข้าม processing batch ได้; ไม่แก้ cupping หรือสต็อก roaster ในงานนี้
 
+### 6.24 ✅ Grade Summary dropdown ทำให้หน้าจอกระโดด (commit <hash>)
+
+**ปัญหา**: ในหน้า Data Grid ส่วน "Green Bean Stock — Grade Summary" กดแถวเพื่อขยาย Sources แล้วหน้าจอเคลื่อน ตรวจทั้ง path แล้วไม่มีคำสั่ง scroll/focus/remount ใด ๆ — สาเหตุคือกล่อง Sources **ไม่จำกัดความสูง**: แถวละ ~38px × N sources (Grade A 26 lots ≈ 1000px) ถูกแทรกครั้งเดียวใน scroll container `<main overflow-y-auto>` (`App.tsx`, สูง 100vh) ทำให้ (1) พับกลับ → `scrollHeight` ลด ~1000px, `scrollTop` ถูก clamp → จอเด้งขึ้นเต็มจอ (2) ขยาย → Chrome scroll anchoring เลื่อน `main` ตามความสูงที่แทรก แถวที่กดหลุดจากจอ (3) scrollbar โผล่/หาย → กว้างเปลี่ยน ~15px → ตาราง `min-w-full` ด้านล่าง reflow แนวนอน (precedent ในรีโป: `fdd42b7` "hold the cherry table height", `9ca5312` "stop the lots panel resizing")
+
+**แก้** ([`ProcessorWorkbench.tsx`](frontend/src/components/processor/ProcessorWorkbench.tsx), [`styles.css`](frontend/src/styles.css)):
+- จำกัดความสูง + เลื่อนในกล่อง: `max-h-72 sm:max-h-80 overflow-y-auto` บน list Sources (idiom เดียวกับ Split History / Withdrawal History ในไฟล์เดียวกัน) → แทรกสูงสุด ~320px แทน ~1000px
+- ล็อกตำแหน่งแถวที่กดข้าม toggle (กันทั้งขยาย/พับ ทุก browser): `toggleGradeSummary(grade, el)` เก็บ `el.getBoundingClientRect().top` ลง `gradeAnchorRef` ก่อน setState; `useLayoutEffect([expandedGradeSummaries])` หา `el.closest('main')` แล้ว `scroller.scrollTop += delta` (delta = top ใหม่ − top เดิม) ก่อน paint
+- `aria-expanded={isExpanded}` บนปุ่ม (ตาม `farmer/HarvestLotDetail.tsx`)
+- `main { scrollbar-gutter: stable }` ใน `styles.css` กันตารางขยับแนวนอนตอน scrollbar โผล่/หาย
+
+ไม่ทำในรอบนี้: single-open accordion; `greenBeanGradeSummary` ยัง derive จาก list ที่ถูก filter/search ของตาราง Green Bean ด้านล่าง (พิมพ์ search แล้วความสูงกล่องด้านบนเปลี่ยน) — ถ้าอยากให้ไม่ขึ้นกับ search ให้ derive จาก `enrichedGreenBeanLots` แทน
+
 ---
 
 ## 7. Security Checklist

@@ -2,6 +2,7 @@ import React, {
   useState,
   useMemo,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useRef,
 } from "react";
@@ -1420,7 +1421,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const [expandedGradeSummaries, setExpandedGradeSummaries] = useState<
     Set<string>
   >(new Set());
-  const toggleGradeSummary = useCallback((grade: string) => {
+  // Expanding a grade inserts its source rows below the clicked header. The
+  // page scroller (<main>) can react by clamping or anchoring scrollTop, which
+  // reads as the screen jumping. Remember where the clicked row was and put it
+  // back in the same place once the DOM has changed.
+  const gradeAnchorRef = useRef<{ el: HTMLElement; top: number } | null>(null);
+  const toggleGradeSummary = useCallback((grade: string, el: HTMLElement) => {
+    gradeAnchorRef.current = { el, top: el.getBoundingClientRect().top };
     setExpandedGradeSummaries((prev) => {
       const next = new Set(prev);
       if (next.has(grade)) next.delete(grade);
@@ -1428,6 +1435,15 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       return next;
     });
   }, []);
+  useLayoutEffect(() => {
+    const anchor = gradeAnchorRef.current;
+    if (!anchor) return;
+    gradeAnchorRef.current = null;
+    const scroller = anchor.el.closest("main");
+    if (!scroller) return;
+    const delta = anchor.el.getBoundingClientRect().top - anchor.top;
+    if (delta !== 0) scroller.scrollTop += delta;
+  }, [expandedGradeSummaries]);
 
   const greenBeanPageCount = Math.ceil(
     processedGreenBeanLots.length / ITEMS_PER_PAGE,
@@ -1775,7 +1791,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 <div key={row.grade}>
                   <button
                     type="button"
-                    onClick={() => toggleGradeSummary(row.grade)}
+                    aria-expanded={isExpanded}
+                    onClick={(e) => toggleGradeSummary(row.grade, e.currentTarget)}
                     className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left"
                   >
                     <div className="flex items-center gap-3">
@@ -1814,7 +1831,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 pl-6">
                         Sources
                       </div>
-                      <div className="space-y-1 pl-6">
+                      {/* Bounded so a grade with many sources cannot push the
+                          rest of the page a full screen down. */}
+                      <div className="space-y-1 pl-6 max-h-72 sm:max-h-80 overflow-y-auto">
                         {row.sources.map((s, idx) => (
                           <div
                             key={`${row.grade}-${idx}`}

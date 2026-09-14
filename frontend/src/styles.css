@@ -6,6 +6,12 @@ body {
   font-family: 'Inter', 'Noto Sans Thai', sans-serif;
 }
 
+/* The app's page scroller. Reserve the scrollbar gutter so content does not
+   reflow sideways when a section expands and the scrollbar appears. */
+main {
+  scrollbar-gutter: stable;
+}
+
 .btn-edit {
   background-color: #4CAF50;
   color: white;
