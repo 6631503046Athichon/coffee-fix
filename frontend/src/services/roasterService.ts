@@ -29,6 +29,7 @@ export function transformInventoryItem(item: any): RoasterInventoryItem {
 export function transformRoastBatch(batch: any): RoastBatch {
   return {
     id: batch.id,
+    displayId: batch.displayId ?? undefined,
     roasterId: batch.roasterId,
     roasterInventoryId: batch.roasterInventoryId,
     greenBeanLotId: batch.greenBeanLotId,

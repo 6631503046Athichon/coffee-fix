@@ -10,6 +10,7 @@ import {
   Lightbulb,
   Database,
   ClipboardCheck,
+  ClipboardList,
   Edit,
   Flame,
   MapPin,
@@ -72,6 +73,7 @@ import AddFarmPage from './components/farmer/AddFarmPage'
 import ActivityTypeManagement from './components/admin/ActivityTypeManagement'
 import ProcessTypeManagement from './components/admin/ProcessTypeManagement'
 import RoasterWorkbench from './components/roaster/RoasterWorkbench'
+import RoastLogbook from './components/roaster/RoastLogbook'
 import CoffeeVarietiesManager from './components/CoffeeVarietiesManager'
 import CustomerManagement from './components/CustomerManagement'
 
@@ -502,6 +504,13 @@ const ProtectedRoutes: React.FC = () => {
         section: 'roaster',
       },
       {
+        name: 'Roast Logbook',
+        href: '/roast-logbook',
+        icon: ClipboardList,
+        roles: [UserRole.Roaster, UserRole.Admin],
+        section: 'roaster',
+      },
+      {
         name: 'Customer Management',
         href: '/customers',
         icon: Users,
@@ -594,6 +603,14 @@ const ProtectedRoutes: React.FC = () => {
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Roaster, UserRole.Admin]}>
                     <RoasterWorkbench currentUser={currentUser!} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/roast-logbook"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Roaster, UserRole.Admin]}>
+                    <RoastLogbook currentUser={currentUser!} />
                   </ProtectedRoute>
                 }
               />

@@ -49,31 +49,31 @@ model User {
 }
 
 model Farm {
-  id             String          @id @default(uuid())
-  farmName       String
-  ownerNames     String[]        @default([])
-  location       String
-  latitude       Float?
-  longitude      Float?
-  altitude       String?
-  googleMapsUrl  String?
-  ownerId        String
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  archived       Boolean         @default(false)
-  archivedAt     DateTime?
-  caretakerNames String[]        @default([])
-  caretakerName  String?
-  sizeHectares   Float?
+  id                       String             @id @default(uuid())
+  farmName                 String
+  ownerNames               String[]           @default([])
+  location                 String
+  latitude                 Float?
+  longitude                Float?
+  altitude                 String?
+  googleMapsUrl            String?
+  ownerId                  String
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+  archived                 Boolean            @default(false)
+  archivedAt               DateTime?
+  caretakerNames           String[]           @default([])
+  caretakerName            String?
+  sizeHectares             Float?
   varieties                String[]
-  weatherAutoFetchEnabled  Boolean         @default(false)
-  weatherAutoFetchInterval Int             @default(5)
-  owner                    User            @relation("FarmOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  collaborators  FarmCollaborator[]
-  gapLogs        GAPLogEntry[]
-  harvestLots    HarvestLot[]
-  soilAnalyses   SoilAnalysis[]
-  weatherRecords WeatherRecord[]
+  weatherAutoFetchEnabled  Boolean            @default(false)
+  weatherAutoFetchInterval Int                @default(5)
+  owner                    User               @relation("FarmOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  collaborators            FarmCollaborator[]
+  gapLogs                  GAPLogEntry[]
+  harvestLots              HarvestLot[]
+  soilAnalyses             SoilAnalysis[]
+  weatherRecords           WeatherRecord[]
 
   @@index([ownerId])
   @@index([archived])
@@ -172,22 +172,22 @@ model PhysicalTestResults {
 }
 
 model ParchmentLot {
-  id                  String               @id @default(uuid())
-  displayId           String?              @unique
+  id                  String                @id @default(uuid())
+  displayId           String?               @unique
   processingBatchId   String?
   harvestLotId        String?
-  sourceType          ParchmentSourceType  @default(Internal)
+  sourceType          ParchmentSourceType   @default(Internal)
   externalSource      Json?
   initialWeightKg     Float
   currentWeightKg     Float
   moistureContent     Float
   processType         String
-  status              ParchmentLotStatus   @default(AwaitingHulling)
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  status              ParchmentLotStatus    @default(AwaitingHulling)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
   greenBeanLots       GreenBeanLot[]
-  harvestLot          HarvestLot?          @relation(fields: [harvestLotId], references: [id], onDelete: Cascade)
-  processingBatch     ProcessingBatch?     @relation(fields: [processingBatchId], references: [id], onDelete: Cascade)
+  harvestLot          HarvestLot?           @relation(fields: [harvestLotId], references: [id], onDelete: Cascade)
+  processingBatch     ProcessingBatch?      @relation(fields: [processingBatchId], references: [id], onDelete: Cascade)
   physicalTestResults PhysicalTestResults?
   withdrawalHistory   ParchmentWithdrawal[]
 
@@ -268,13 +268,13 @@ model GreenBeanWithdrawal {
 }
 
 model ParchmentWithdrawal {
-  id                String                   @id @default(uuid())
+  id                String                  @id @default(uuid())
   parchmentLotId    String
   amountKg          Float
   withdrawalType    ParchmentWithdrawalType
   purpose           String
   notes             String?
-  date              DateTime                 @default(now())
+  date              DateTime                @default(now())
   withdrawnBy       String?
   withdrawnByName   String?
   salePrice         Float?
@@ -285,9 +285,9 @@ model ParchmentWithdrawal {
   targetRoasterId   String?
   roastProfileNotes String?
   cuppingScore      Float?
-  createdAt         DateTime                 @default(now())
-  parchmentLot      ParchmentLot             @relation(fields: [parchmentLotId], references: [id], onDelete: Cascade)
-  withdrawnByUser   User?                    @relation("ParchmentWithdrawalUser", fields: [withdrawnBy], references: [id])
+  createdAt         DateTime                @default(now())
+  parchmentLot      ParchmentLot            @relation(fields: [parchmentLotId], references: [id], onDelete: Cascade)
+  withdrawnByUser   User?                   @relation("ParchmentWithdrawalUser", fields: [withdrawnBy], references: [id])
 
   @@index([parchmentLotId])
   @@index([date])

@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const user = await requireAuth(request)
 
     const where: Prisma.RoastBatchWhereInput = {}
-    
+
     // Filter by roasterId if provided
     const roasterId = request.nextUrl.searchParams.get('roasterId')
     if (roasterId) {
@@ -65,13 +65,32 @@ export async function POST(request: NextRequest) {
     requireRole(user, ['Roaster', 'Admin'])
 
     const body = await request.json()
-    const { roasterInventoryId, greenBeanLotId, batchSizeKg, yieldPercentage, roastedWeightKg, weightLossPct, roastLevel, roastProfileNotes, flavorNotes } = body
+    const {
+      roasterInventoryId,
+      greenBeanLotId,
+      batchSizeKg,
+      yieldPercentage,
+      roastedWeightKg,
+      weightLossPct,
+      roastLevel,
+      roastProfileNotes,
+      flavorNotes,
+    } = body
 
     // Validation
-    if (!roasterInventoryId || !greenBeanLotId || !batchSizeKg || !yieldPercentage || !roastProfileNotes) {
+    if (
+      !roasterInventoryId ||
+      !greenBeanLotId ||
+      !batchSizeKg ||
+      !yieldPercentage ||
+      !roastProfileNotes
+    ) {
       return NextResponse.json(
-        { error: 'Roaster inventory ID, green bean lot ID, batch size, yield percentage, and roast profile notes are required' },
-        { status: 400 }
+        {
+          error:
+            'Roaster inventory ID, green bean lot ID, batch size, yield percentage, and roast profile notes are required',
+        },
+        { status: 400 },
       )
     }
 
@@ -81,24 +100,15 @@ export async function POST(request: NextRequest) {
     })
 
     if (!inventory) {
-      return NextResponse.json(
-        { error: 'Roaster inventory not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Roaster inventory not found' }, { status: 404 })
     }
 
     if (inventory.roasterId !== user.id && !user.roles.includes('Admin')) {
-      return NextResponse.json(
-        { error: 'Forbidden' },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     if (parseFloat(batchSizeKg) > inventory.remainingWeightKg) {
-      return NextResponse.json(
-        { error: 'Insufficient weight in inventory' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Insufficient weight in inventory' }, { status: 400 })
     }
 
     const roastBatch = await prisma.$transaction(async (tx) => {
@@ -157,10 +167,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       { roastBatch: fullBatch, message: 'Roast batch created successfully' },
-      { status: 201 }
+      { status: 201 },
     )
   } catch (error) {
     return handleApiError(error)
   }
 }
-

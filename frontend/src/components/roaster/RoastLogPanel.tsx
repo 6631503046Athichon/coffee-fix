@@ -5,21 +5,32 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar,
+  Eye,
   Scale,
   TrendingDown,
+  X,
 } from 'lucide-react'
 import { RoastBatch } from '../../types'
-import { toFixed2 } from '../../utils/formatters'
-import { formatGreenBeanId } from '../../utils/formatDisplayId'
+import { toFixed2, toRoaId, toRoastBatchId } from '../../utils/formatters'
+
+type RoastLogEntry = RoastBatch & {
+  formattedLotId?: string
+  greenBeanDisplayId?: string
+  sourceVariety?: string
+  sourceProcess?: string
+  sourceGrade?: string
+}
 
 const RoastLogPanel: React.FC<{
-  roasts: RoastBatch[]
+  roasts: RoastLogEntry[]
   page: number
   totalPages: number
   onPrev: () => void
   onNext: () => void
   onPageChange?: (page: number) => void
 }> = ({ roasts, page, totalPages, onPrev, onNext, onPageChange }) => {
+  const [selectedRoast, setSelectedRoast] = React.useState<RoastLogEntry | null>(null)
+
   if (roasts.length === 0) {
     return (
       <div className="overflow-hidden rounded-2xl border border-[#e2e8e1] bg-white shadow-sm">
@@ -98,18 +109,13 @@ const RoastLogPanel: React.FC<{
               <div className="flex-1">
                 {/* Date and Lot */}
                 <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-2">
+                  <span className="rounded-md bg-[#fff1df] px-2 py-0.5 text-sm font-mono font-bold text-[#a85c1e]">
+                    {roast.displayId || toRoastBatchId(roast.id)}
+                  </span>
                   <div className="flex items-center gap-1.5 text-xs font-medium text-[#7b8a80]">
                     <Calendar className="h-3.5 w-3.5" />
                     <span className="font-medium">{roast.roastDate}</span>
                   </div>
-                  <span className="text-[#d5ddd6]">/</span>
-                  <span className="rounded-md bg-[#eef2ee] px-2 py-0.5 text-sm font-mono font-bold text-[#294936]">
-                    {(roast as any).formattedLotId ??
-                      formatGreenBeanId({
-                        id: roast.greenBeanLotId,
-                        displayId: (roast as any).greenBeanDisplayId,
-                      })}
-                  </span>
                   {roast.roastLevel && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700">
                       {roast.roastLevel}
@@ -135,9 +141,34 @@ const RoastLogPanel: React.FC<{
                     </span>
                   </div>
                 </div>
+                <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#7b8a80]">
+                  <span className="text-[#829188]">Source:</span>
+                  <span className="font-mono font-semibold text-[#294936]">
+                    {roast.formattedLotId ?? toRoaId(roast.greenBeanLotId)}
+                  </span>
+                  <span className="text-[#d5ddd6]">/</span>
+                  <span className="font-semibold text-[#294936]">
+                    {roast.sourceVariety || 'Variety not set'}
+                  </span>
+                  <span className="text-[#d5ddd6]">/</span>
+                  <span>{roast.sourceProcess || 'Process not set'}</span>
+                  <span className="text-[#d5ddd6]">/</span>
+                  <span>{roast.sourceGrade || 'Grade not set'}</span>
+                </div>
               </div>
-              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-orange-50">
-                <Flame className="h-5 w-5 text-orange-500" />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedRoast(roast)}
+                  aria-label="View roast details"
+                  title="View roast details"
+                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#eef4ee] text-[#2e6848] transition-colors hover:bg-[#dcebdd]"
+                >
+                  <Eye className="h-5 w-5" />
+                </button>
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-orange-50">
+                  <Flame className="h-5 w-5 text-orange-500" />
+                </div>
               </div>
             </div>
 
@@ -222,6 +253,81 @@ const RoastLogPanel: React.FC<{
             >
               <ChevronRight className="h-4 w-4" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {selectedRoast && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#20352b]/45 p-4"
+          role="presentation"
+          onClick={() => setSelectedRoast(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="roast-details-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#d87832]">
+                  Roast details
+                </p>
+                <h4 id="roast-details-title" className="mt-1 text-xl font-bold text-[#20352b]">
+                  {selectedRoast.displayId || toRoastBatchId(selectedRoast.id)}
+                </h4>
+                <p className="mt-1 text-xs font-mono text-[#829188]">
+                  Record ID: {selectedRoast.id}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedRoast(null)}
+                aria-label="Close roast details"
+                title="Close"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[#718077] hover:bg-[#f1f5f1] hover:text-[#294936]"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {[
+                [
+                  'Source ID',
+                  selectedRoast.formattedLotId ?? toRoaId(selectedRoast.greenBeanLotId),
+                ],
+                ['Variety', selectedRoast.sourceVariety || 'Not set'],
+                ['Process type', selectedRoast.sourceProcess || 'Not set'],
+                ['Grade', selectedRoast.sourceGrade || 'Not set'],
+                ['Roast date', selectedRoast.roastDate],
+                ['Roast level', selectedRoast.roastLevel || 'Not set'],
+                ['Batch size', `${toFixed2(selectedRoast.batchSizeKg)} kg`],
+                [
+                  'Roasted output',
+                  selectedRoast.roastedWeightKg != null
+                    ? `${toFixed2(selectedRoast.roastedWeightKg)} kg`
+                    : 'Not set',
+                ],
+                ['Yield', `${selectedRoast.yieldPercentage.toFixed(1)}%`],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-xl bg-[#f7faf7] p-3">
+                  <p className="text-xs font-semibold text-[#829188]">{label}</p>
+                  <p className="mt-1 break-words font-semibold text-[#294936]">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            {selectedRoast.roastProfileNotes && (
+              <div className="mt-4 rounded-xl border border-[#f0e5d6] bg-[#fffaf3] p-3">
+                <p className="text-xs font-semibold text-[#a85c1e]">Roast notes</p>
+                <p className="mt-1 text-sm leading-relaxed text-[#6d756e]">
+                  {selectedRoast.roastProfileNotes}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
