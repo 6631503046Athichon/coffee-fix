@@ -26,8 +26,8 @@ studio` to inspect data.
 ### Lots — the traceability spine
 | Model | Purpose |
 |---|---|
-| `HarvestLot` | raw cherry harvested from a farm. `createdById`, `farmId` |
-| `ProcessingBatch` | wet-mill / processing batch consuming harvest lots. `createdById` |
+| `HarvestLot` | raw cherry harvested from a farm. `createdById`, `farmId`. `weightKg` preserves the original input; old `remainingWeightKg` partial balances are ignored |
+| `ProcessingBatch` | wet-mill / processing batch. Consumes **one whole** `HarvestLot`: creating a batch flips the lot to `Complete`, deleting the last batch flips it back to `ReadyForProcessing`. `createdById` |
 | `DryingLogEntry` | per-batch drying log row |
 | `PhysicalTestResults` | one-to-one physical test on a processing batch |
 | `ParchmentLot` | dried parchment output from a `ProcessingBatch` |

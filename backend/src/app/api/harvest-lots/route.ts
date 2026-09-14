@@ -4,6 +4,7 @@ import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/li
 import { validateBody, createHarvestLotSchema } from '@/lib/validations'
 import { nextDisplayId, parseDateOnly, withDisplayIdRetry } from '@/lib/utils'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
+import { harvestLotStatusFilter, serializeHarvestLot } from '@/lib/harvestLot'
 
 // This route depends on auth cookies/headers, so it must be dynamic.
 export const dynamic = 'force-dynamic'
@@ -24,7 +25,10 @@ export async function GET(request: NextRequest) {
     // Filter by status if provided
     const status = request.nextUrl.searchParams.get('status')
     if (status) {
-      where.status = status
+      if (status !== 'ReadyForProcessing' && status !== 'Complete') {
+        return NextResponse.json({ error: 'Invalid harvest lot status' }, { status: 400 })
+      }
+      Object.assign(where, harvestLotStatusFilter(status))
     }
 
     // Farmers can only see their own farms' harvest lots
@@ -41,6 +45,7 @@ export async function GET(request: NextRequest) {
       prisma.harvestLot.findMany({
         where,
         include: {
+          _count: { select: { processingBatches: true } },
           farm: {
             select: {
               id: true,
@@ -62,7 +67,7 @@ export async function GET(request: NextRequest) {
       prisma.harvestLot.count({ where }),
     ])
 
-    return NextResponse.json({ harvestLots, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } })
+    return NextResponse.json({ harvestLots: harvestLots.map(serializeHarvestLot), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } })
   } catch (error) {
     return handleApiError(error)
   }

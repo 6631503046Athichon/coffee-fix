@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, handleApiError } from '@/lib/middleware'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
+import { serializeHarvestLot } from '@/lib/harvestLot'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,6 +62,7 @@ export async function GET(request: NextRequest) {
         prisma.harvestLot.findMany({
           where: isFarmer && !isAdmin ? { farm: { ownerId: user.id } } : {},
           include: {
+            _count: { select: { processingBatches: true } },
             farm: { select: { id: true, farmName: true, location: true } },
             cropYear: { select: { id: true, year: true } },
           },
@@ -136,7 +138,7 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({
         farms,
-        harvestLots,
+        harvestLots: harvestLots.map(serializeHarvestLot),
         cropYears,
         processTypes: parsedProcessTypes,
         activityTypes,

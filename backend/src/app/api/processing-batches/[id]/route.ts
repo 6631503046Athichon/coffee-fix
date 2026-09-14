@@ -68,11 +68,7 @@ export async function PUT(
     // (or Admin) can mutate it. Excel-imported batches fall back to Admin-only.
     const existingBatch = await prisma.processingBatch.findUnique({
       where: { id },
-      select: {
-        createdById: true,
-        harvestLotId: true,
-        parchmentWeightKg: true,
-      },
+      select: { createdById: true },
     })
     if (!existingBatch) {
       return NextResponse.json(
@@ -147,80 +143,34 @@ export async function PUT(
     if (dryingEndDate !== undefined) updateData.dryingEndDate = parsedDryingEndDate
     if (cropYearId !== undefined) updateData.cropYearId = cropYearId
 
-    // Compute the parchmentWeightKg delta vs the previous value. When the
-    // batch is bound to a harvestLot we have to apply the delta atomically to
-    // harvestLot.remainingWeightKg, otherwise raising parchmentWeightKg would
-    // silently allow harvest stock to be double-counted.
-    const previousParchmentWeight = existingBatch.parchmentWeightKg ?? 0
-    const parchmentDelta =
-      parsedParchmentWeight !== null
-        ? parsedParchmentWeight - previousParchmentWeight
-        : 0
-
-    let updatedBatch
-    try {
-      updatedBatch = await prisma.$transaction(async (tx) => {
-        if (
-          parsedParchmentWeight !== null &&
-          existingBatch.harvestLotId &&
-          parchmentDelta !== 0
-        ) {
-          if (parchmentDelta > 0) {
-            // Need to draw down more harvest stock. Guarded decrement so the
-            // update fails (count === 0) if stock is insufficient.
-            const dec = await tx.harvestLot.updateMany({
-              where: {
-                id: existingBatch.harvestLotId,
-                remainingWeightKg: { gte: parchmentDelta },
-              },
-              data: { remainingWeightKg: { decrement: parchmentDelta } },
-            })
-            if (dec.count === 0) {
-              throw new Error('INSUFFICIENT_HARVEST_STOCK')
-            }
-          } else {
-            // parchmentWeightKg was lowered — return stock to the harvest lot.
-            await tx.harvestLot.update({
-              where: { id: existingBatch.harvestLotId },
-              data: { remainingWeightKg: { increment: -parchmentDelta } },
-            })
-          }
-        }
-
-        return tx.processingBatch.update({
-          where: { id },
-          data: updateData,
-          include: {
-            harvestLot: {
-              select: {
-                id: true,
-                farmerName: true,
-                cherryVariety: true,
-                weightKg: true,
-              },
-            },
-            cropYear: {
-              select: {
-                id: true,
-                year: true,
-              },
-            },
-            dryingLogs: {
-              orderBy: { date: 'asc' },
-            },
-            parchmentLots: true,
+    // Whole-lot semantics: the harvest lot was consumed in full when the batch
+    // was created, so editing parchmentWeightKg no longer touches it. (The
+    // batch's ParchmentLot weights are still not synced here — pre-existing
+    // gap, unchanged.)
+    const updatedBatch = await prisma.processingBatch.update({
+      where: { id },
+      data: updateData,
+      include: {
+        harvestLot: {
+          select: {
+            id: true,
+            farmerName: true,
+            cherryVariety: true,
+            weightKg: true,
           },
-        })
-      })
-    } catch (error) {
-      if ((error as Error)?.message === 'INSUFFICIENT_HARVEST_STOCK') {
-        return NextResponse.json(
-          { error: 'INSUFFICIENT_HARVEST_STOCK' },
-          { status: 400 }
-        )
-      }
-      throw error
-    }
+        },
+        cropYear: {
+          select: {
+            id: true,
+            year: true,
+          },
+        },
+        dryingLogs: {
+          orderBy: { date: 'asc' },
+        },
+        parchmentLots: true,
+      },
+    })
 
     return NextResponse.json({ processingBatch: updatedBatch })
   } catch (error) {
@@ -266,17 +216,37 @@ export async function DELETE(
       )
     }
 
-    // Delete drying logs first
-    await prisma.dryingLogEntry.deleteMany({
-      where: { processingBatchId: id },
+    // Delete the batch and, if it was the last one bound to this cherry lot,
+    // hand the lot back. Creating a batch flipped the lot to Complete, so a
+    // mistaken batch must reverse that or the lot is stranded (hidden from
+    // Cherry Lots but never processed). Legacy lots from the old
+    // partial-deduction flow may own several batches: only release once none
+    // remain, and clear the legacy remainingWeightKg so the full weightKg
+    // shows again (a lot with zero batches has all of its cherry back).
+    let harvestLotReleased = false
+    await prisma.$transaction(async (tx) => {
+      await tx.dryingLogEntry.deleteMany({
+        where: { processingBatchId: id },
+      })
+      await tx.processingBatch.delete({
+        where: { id },
+      })
+      const remainingBatches = await tx.processingBatch.count({
+        where: { harvestLotId: batch.harvestLotId },
+      })
+      if (remainingBatches === 0) {
+        const released = await tx.harvestLot.updateMany({
+          where: { id: batch.harvestLotId, status: 'Complete' },
+          data: { status: 'ReadyForProcessing', remainingWeightKg: null },
+        })
+        harvestLotReleased = released.count > 0
+      }
     })
 
-    // Delete the batch
-    await prisma.processingBatch.delete({
-      where: { id },
+    return NextResponse.json({
+      message: 'Processing batch deleted successfully',
+      harvestLotReleased,
     })
-
-    return NextResponse.json({ message: 'Processing batch deleted successfully' })
   } catch (error) {
     return handleApiError(error)
   }

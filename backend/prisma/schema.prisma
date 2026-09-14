@@ -102,6 +102,9 @@ model HarvestLot {
   farmerName        String
   cherryVariety     String
   weightKg          Float
+  // Legacy partial balances are ignored. Processing consumes the whole lot
+  // and sets this to zero; deleting the last batch clears it to null.
+  // weightKg always preserves the original cherry input weight.
   remainingWeightKg Float?
   farmPlotLocation  String
   harvestDate       DateTime

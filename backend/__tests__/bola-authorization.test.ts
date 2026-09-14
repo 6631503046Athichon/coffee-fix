@@ -715,6 +715,8 @@ describe('BOLA Authorization Tests', () => {
       mockPrisma.harvestLot.update.mockResolvedValueOnce({
         id: 'lot-123',
         weightKg: 200,
+        status: 'ReadyForProcessing',
+        _count: { processingBatches: 0 },
         farm: {},
         cropYear: {},
       })
@@ -749,6 +751,8 @@ describe('BOLA Authorization Tests', () => {
       mockPrisma.harvestLot.update.mockResolvedValueOnce({
         id: 'lot-123',
         weightKg: 200,
+        status: 'ReadyForProcessing',
+        _count: { processingBatches: 0 },
         farm: {},
         cropYear: {},
       })
@@ -867,6 +871,9 @@ describe('BOLA Authorization Tests', () => {
 
       mockPrisma.harvestLot.update.mockResolvedValueOnce({
         id: 'lot-123',
+        weightKg: 200,
+        status: 'ReadyForProcessing',
+        _count: { processingBatches: 0 },
         farm: {},
         cropYear: {},
       })

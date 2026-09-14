@@ -47,6 +47,8 @@ import DatePicker from '../common/DatePicker'
 import {
   CropYearChips,
   findCurrentCropYearId,
+  getHarvestLotCherryWeight,
+  getReadyHarvestLots,
   GradeDropdown,
   Pagination,
 } from './workbench'
@@ -120,7 +122,7 @@ const WITHDRAWAL_TYPE_CONFIG: {
 
 const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   void currentUser
-  const { data, refreshData } = useDataContext()
+  const { data, setData, refreshData } = useDataContext()
   // One row per grade, so the admin-managed grade list caps the rows.
   const gradeNames = useGradeNames()
   const { addToast } = useToast()
@@ -194,26 +196,16 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   // ── Derived data ────────────────────────────────────────────────
 
   // Section 1: harvest lots ready for processing
+  // Whole-lot semantics: a cherry lot is either Ready (listed here) or
+  // Complete (consumed by a processing batch and gone from this list).
   const readyHarvestLots = useMemo(() => {
-    return data.harvestLots
-      .filter((lot) => {
-        const remaining =
-          typeof lot.remainingWeightKg === 'number'
-            ? lot.remainingWeightKg
-            : lot.weightKg ?? 0
-        if (lot.status === 'Ready for Processing') return remaining > 0
-        if (lot.status === 'Complete')
-          return typeof lot.remainingWeightKg === 'number'
-            ? lot.remainingWeightKg > 0
-            : false
-        return false
-      })
+    return getReadyHarvestLots(data.harvestLots, data.processingBatches)
       .sort((a, b) => {
         const ac = a.createdAt ? new Date(a.createdAt).getTime() : 0
         const bc = b.createdAt ? new Date(b.createdAt).getTime() : 0
         return bc - ac
       })
-  }, [data.harvestLots])
+  }, [data.harvestLots, data.processingBatches])
 
   // The table paged at ten rows. Left unpaged it grew without limit, unlike
   // every other lot table in the app.
@@ -310,7 +302,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   // ── KPI totals ──────────────────────────────────────────────────
   const totals = useMemo(() => {
     const cherry = readyHarvestLots.reduce(
-      (s, l) => s + (l.remainingWeightKg ?? l.weightKg ?? 0),
+      (s, l) => s + getHarvestLotCherryWeight(l),
       0,
     )
     const parchment = data.parchmentLots
@@ -352,13 +344,23 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   //   4. Refresh the UI so the new green-bean buckets appear in the
   //      Inventory section below.
   const submitProcess = async () => {
-    if (!processLot) return
+    if (!processLot || processSubmitting) return
 
     // ── Stage 1 validation: process info ──────────────────────────
     const weight = parseFloat(processForm.parchmentWeightKg)
     const moisture = parseFloat(processForm.moistureContent)
     if (isNaN(weight) || weight <= 0) {
       setProcessError('Parchment weight must be greater than 0.')
+      return
+    }
+    // Sanity check only: the whole cherry lot is consumed regardless of this
+    // figure, but parchment can never weigh more than the cherry it came
+    // from. Same sentence as the server-side check.
+    const cherryWeightKg = getHarvestLotCherryWeight(processLot)
+    if (weight > cherryWeightKg) {
+      setProcessError(
+        `Parchment weight (${weight.toFixed(2)} kg) cannot exceed the cherry lot weight (${cherryWeightKg.toFixed(2)} kg).`,
+      )
       return
     }
     if (isNaN(moisture) || moisture < 0 || moisture > 100) {
@@ -406,6 +408,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     }
 
     setProcessSubmitting(true)
+    let batchCreated = false
     try {
       // Stage 1: create batch + parchment lot
       const batch = await addProcessingBatch({
@@ -419,6 +422,15 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         dryingStartDate: processForm.dryingStartDate || undefined,
         dryingEndDate: processForm.dryingEndDate || undefined,
       })
+
+      batchCreated = true
+      setData((prev) => ({
+        ...prev,
+        harvestLots: prev.harvestLots.map((lot) => lot.id === batch.harvestLotId
+          ? { ...lot, status: 'Complete', remainingWeightKg: 0 }
+          : lot),
+        processingBatches: [...prev.processingBatches.filter((item) => item.id !== batch.id), batch],
+      }))
 
       // Find the parchment lot just created by this batch
       const newParchmentLots = await getAllParchmentLots(batch.id)
@@ -448,7 +460,17 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
       await refreshData()
       setProcessLot(null)
     } catch (e: any) {
-      setProcessError(e?.message || 'Failed to process and grade.')
+      if (batchCreated) {
+        // The cherry lot is consumed even when the later grading step fails.
+        setProcessLot(null)
+        addToast({
+          type: 'error',
+          message: 'Parchment was recorded for the whole lot. Grading failed; continue from Parchment Stock.',
+        })
+        await refreshData()
+      } else {
+        setProcessError(e?.message || 'Failed to process and grade.')
+      }
     } finally {
       setProcessSubmitting(false)
     }
@@ -581,7 +603,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {pagedHarvestLots.map((lot) => {
-              const remaining = lot.remainingWeightKg ?? lot.weightKg ?? 0
+              const cherryWeight = getHarvestLotCherryWeight(lot)
               return (
                 <tr key={lot.id} className="hover:bg-green-50/40 transition-colors">
                   <Td className="font-semibold text-gray-900">
@@ -590,7 +612,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                   <Td>{lot.farmerName}</Td>
                   <Td className="text-gray-600">{lot.cherryVariety}</Td>
                   <Td align="right" className="font-semibold">
-                    {fmt(remaining)} kg
+                    {fmt(cherryWeight)} kg
                   </Td>
                   <Td align="right">
                     <ActionButton
@@ -736,12 +758,8 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
           fires both API calls back-to-back and the resulting green-bean
           buckets appear in the Inventory grid below. */}
       {processLot && (() => {
-        const cherryAvail =
-          processLot.remainingWeightKg ?? processLot.weightKg ?? 0
+        const cherryWeight = getHarvestLotCherryWeight(processLot)
         const parchKg = parseFloat(processForm.parchmentWeightKg) || 0
-        const remainKg = Math.max(0, cherryAvail - parchKg)
-        const usedPct =
-          cherryAvail > 0 ? Math.min(100, (parchKg / cherryAvail) * 100) : 0
 
         const totalGreen = gradeRows.reduce(
           (s, r) => s + (parseFloat(r.weight) || 0),
@@ -759,6 +777,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             icon={Play}
             context={[
               { label: 'Variety', value: processLot.cherryVariety || '—' },
+              { label: 'Whole Lot Weight', value: `${fmt(cherryWeight)} kg` },
               { label: 'Farmer', value: processLot.farmerName || '—' },
             ]}
           >
@@ -838,45 +857,8 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
               </Field>
             )}
 
-            {/* Cherry weight bar — green progress shows how much cherry is
-                being consumed by this process. */}
-            <div className="rounded-xl p-3 border bg-gray-50 border-gray-200">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                  Cherry Weight Available
-                </span>
-                <span className="text-sm font-bold text-gray-800">
-                  {fmt(cherryAvail)} kg
-                </span>
-              </div>
-              <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mb-2">
-                <div
-                  className="h-full rounded-full transition-all duration-300 bg-green-500"
-                  style={{ width: `${100 - usedPct}%` }}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-gray-400 uppercase tracking-wide">
-                    Used
-                  </span>
-                  <span className="text-xs font-semibold text-gray-700">
-                    {fmt(parchKg)} kg
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-gray-400 uppercase tracking-wide">
-                    Remaining
-                  </span>
-                  <span className="text-xs font-semibold text-green-600">
-                    {fmt(remainKg)} kg
-                  </span>
-                </div>
-              </div>
-            </div>
-
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Parchment Weight (kg)" icon={Scale}>
+              <Field label="Parchment Output (kg)" icon={Scale}>
                 <input
                   type="number"
                   step="0.1"
@@ -890,6 +872,9 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                   placeholder="e.g. 85.0"
                   className="block w-full h-[46px] border border-gray-300 rounded-xl px-4 text-lg font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500 transition-all"
                 />
+                <p className="mt-1.5 text-[11px] leading-snug text-gray-500">
+                  The whole cherry lot ({cherryWeight.toFixed(2)} kg) is used up and leaves the Cherry Lots list.
+                </p>
               </Field>
               <Field label="Moisture (%)" icon={Droplet}>
                 <input

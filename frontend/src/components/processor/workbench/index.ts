@@ -8,6 +8,8 @@ export {
   isRecentItem,
   formatParchmentStatus,
   findCurrentCropYearId,
+  getHarvestLotCherryWeight,
+  getReadyHarvestLots,
 } from './constants'
 export type {
   ViewMode,

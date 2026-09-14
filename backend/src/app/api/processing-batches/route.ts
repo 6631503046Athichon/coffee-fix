@@ -5,6 +5,10 @@ import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
 import { nextDisplayId, parseDateOnly, safeParseFloat, withDisplayIdRetry } from "@/lib/utils";
 import { rateLimit, RATE_LIMITS } from "@/lib/rateLimit";
 
+// Thrown inside the create transaction when the status-conditional claim on
+// the harvest lot updates zero rows (lot already Complete). Mapped to 409.
+const HARVEST_LOT_ALREADY_PROCESSED = "HARVEST_LOT_ALREADY_PROCESSED";
+
 // GET /api/processing-batches - List all processing batches
 export async function GET(request: NextRequest) {
   try {
@@ -106,7 +110,8 @@ export async function POST(request: NextRequest) {
       select: {
         id: true,
         weightKg: true,
-        remainingWeightKg: true,
+        status: true,
+        _count: { select: { processingBatches: true } },
       },
     });
 
@@ -114,6 +119,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Harvest lot not found" },
         { status: 404 },
+      );
+    }
+
+    // Whole-lot semantics: a harvest lot feeds exactly one processing batch,
+    // so a lot that is already Complete cannot be processed again. This
+    // pre-check gives a clean 409 on the common path; the authoritative,
+    // race-safe guard is the status-conditional updateMany in the transaction.
+    if (harvestLot.status !== "ReadyForProcessing" || harvestLot._count.processingBatches > 0) {
+      return NextResponse.json(
+        { error: "Harvest lot has already been processed" },
+        { status: 409 },
       );
     }
 
@@ -180,12 +196,12 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const availableWeight =
-        harvestLot.remainingWeightKg ?? harvestLot.weightKg;
-      if (parsedParchmentWeight > availableWeight) {
+      // Parchment is the measured output of the entire cherry lot.
+      const cherryWeight = harvestLot.weightKg;
+      if (parsedParchmentWeight > cherryWeight) {
         return NextResponse.json(
           {
-            error: `Parchment weight (${parsedParchmentWeight} kg) exceeds available harvest lot weight (${availableWeight.toFixed(2)} kg)`,
+            error: `Parchment weight (${parsedParchmentWeight.toFixed(2)} kg) cannot exceed the cherry lot weight (${cherryWeight.toFixed(2)} kg).`,
           },
           { status: 400 },
         );
@@ -195,122 +211,105 @@ export async function POST(request: NextRequest) {
     // Wrap displayId allocation + the whole transaction in a retry helper.
     // If a concurrent caller wins the race on either PB or PCH ids, the entire
     // transaction rolls back and we re-read max for both prefixes.
-    const processingBatch = await withDisplayIdRetry(async () => {
-      const batchDisplayId = await nextDisplayId(prisma.processingBatch, "PB");
-      const parchmentDisplayId =
-        isCompletedBatch
-          ? await nextDisplayId(prisma.parchmentLot, "PCH")
-          : null;
+    let processingBatch;
+    try {
+      processingBatch = await withDisplayIdRetry(async () => {
+        const batchDisplayId = await nextDisplayId(prisma.processingBatch, "PB");
+        const parchmentDisplayId =
+          isCompletedBatch
+            ? await nextDisplayId(prisma.parchmentLot, "PCH")
+            : null;
 
-      // Use transaction to create batch and update harvest lot status atomically
-      return prisma.$transaction(async (tx) => {
-      // Create processing batch
-      const batch = await tx.processingBatch.create({
-        data: {
-          displayId: batchDisplayId,
-          harvestLotId,
-          status: status || "ToProcess",
-          processType,
-          processNotes: processNotes || null,
-          cropYearId: cropYearId || null,
-          createdById: user.id,
-          parchmentWeightKg: parsedParchmentWeight,
-          moistureContent: parsedMoistureContent,
-          dryingStartDate: parseDateOnly(dryingStartDate),
-          dryingEndDate: parseDateOnly(dryingEndDate),
-          baggingDate: parseDateOnly(baggingDate),
-        },
-        include: {
-          harvestLot: {
-            select: {
-              id: true,
-              farmerName: true,
-              cherryVariety: true,
-              weightKg: true,
+        // Use transaction to claim the harvest lot and create the batch atomically
+        return prisma.$transaction(async (tx) => {
+          // Claim the source once, including legacy lots whose status is stale.
+          // Competing requests serialize on this row; only one can claim it.
+          const claimed = await tx.harvestLot.updateMany({
+            where: {
+              id: harvestLotId,
+              status: "ReadyForProcessing",
+              processingBatches: { none: {} },
             },
-          },
-          cropYear: {
-            select: {
-              id: true,
-              year: true,
+            data: { status: "Complete", remainingWeightKg: 0 },
+          });
+          if (claimed.count === 0) {
+            throw new Error(HARVEST_LOT_ALREADY_PROCESSED);
+          }
+
+          // Create processing batch
+          const batch = await tx.processingBatch.create({
+            data: {
+              displayId: batchDisplayId,
+              harvestLotId,
+              status: status || "ToProcess",
+              processType,
+              processNotes: processNotes || null,
+              cropYearId: cropYearId || null,
+              createdById: user.id,
+              parchmentWeightKg: parsedParchmentWeight,
+              moistureContent: parsedMoistureContent,
+              dryingStartDate: parseDateOnly(dryingStartDate),
+              dryingEndDate: parseDateOnly(dryingEndDate),
+              baggingDate: parseDateOnly(baggingDate),
             },
-          },
-          dryingLogs: {
-            orderBy: { date: "asc" },
-          },
-          parchmentLots: true,
-        },
+            include: {
+              harvestLot: {
+                select: {
+                  id: true,
+                  farmerName: true,
+                  cherryVariety: true,
+                  weightKg: true,
+                },
+              },
+              cropYear: {
+                select: {
+                  id: true,
+                  year: true,
+                },
+              },
+              dryingLogs: {
+                orderBy: { date: "asc" },
+              },
+              parchmentLots: true,
+            },
+          });
+
+          // If status is Completed and we have parchment data, create parchment lot
+          if (
+            isCompletedBatch &&
+            parsedParchmentWeight !== null &&
+            parsedMoistureContent !== null
+          ) {
+            await tx.parchmentLot.create({
+              data: {
+                displayId: parchmentDisplayId,
+                processingBatchId: batch.id,
+                harvestLotId: harvestLotId,
+                initialWeightKg: parsedParchmentWeight,
+                currentWeightKg: parsedParchmentWeight,
+                moistureContent: parsedMoistureContent,
+                processType: processType,
+                status: "AwaitingHulling",
+              },
+            });
+          }
+
+          return batch;
+        });
       });
-
-      // If status is Completed and we have parchment data, create parchment lot
-      if (
-        isCompletedBatch &&
-        parsedParchmentWeight !== null &&
-        parsedMoistureContent !== null
-      ) {
-        await tx.parchmentLot.create({
-          data: {
-            displayId: parchmentDisplayId,
-            processingBatchId: batch.id,
-            harvestLotId: harvestLotId,
-            initialWeightKg: parsedParchmentWeight,
-            currentWeightKg: parsedParchmentWeight,
-            moistureContent: parsedMoistureContent,
-            processType: processType,
-            status: "AwaitingHulling",
-          },
-        });
-
-        // Atomic decrement on the harvest lot's remainingWeightKg with a
-        // where guard. Two concurrent processing batches against the same
-        // harvest lot would otherwise both pass the up-front check and
-        // overdraw the lot. updateMany compiles to one SQL UPDATE and
-        // Postgres serialises row writes, so the loser sees count === 0.
-        //
-        // First-time path: legacy harvest lots may have remainingWeightKg
-        // null (only weightKg set on creation). Initialise it to weightKg
-        // before the decrement, conditional on still being null so we
-        // don't clobber an already-decremented value from another tx.
-        await tx.harvestLot.updateMany({
-          where: { id: harvestLotId, remainingWeightKg: null },
-          data: { remainingWeightKg: harvestLot.weightKg },
-        });
-        const guarded = await tx.harvestLot.updateMany({
-          where: {
-            id: harvestLotId,
-            remainingWeightKg: { gte: parsedParchmentWeight },
-          },
-          data: { remainingWeightKg: { decrement: parsedParchmentWeight } },
-        });
-        if (guarded.count === 0) {
-          throw new Error(
-            "Insufficient harvest lot weight (concurrent batch contention)",
-          );
-        }
-
-        // Re-read post-decrement to set status. Clamp float residue.
-        const freshHarvest = await tx.harvestLot.findUnique({
-          where: { id: harvestLotId },
-          select: { remainingWeightKg: true },
-        });
-        const rawRemaining = freshHarvest?.remainingWeightKg ?? 0;
-        const finalRemaining =
-          rawRemaining < 0 ? 0 : parseFloat(rawRemaining.toFixed(6));
-        const nextHarvestStatus =
-          finalRemaining > 0 ? "ReadyForProcessing" : "Complete";
-
-        await tx.harvestLot.update({
-          where: { id: harvestLotId },
-          data: {
-            remainingWeightKg: finalRemaining,
-            status: nextHarvestStatus,
-          },
-        });
+    } catch (error) {
+      // withDisplayIdRetry rethrows anything that is not a displayId P2002, so
+      // the claim sentinel reaches us on the first attempt. Map it here rather
+      // than via handleApiError so ordinary contention is not logged as an
+      // API error.
+      if ((error as Error)?.message === HARVEST_LOT_ALREADY_PROCESSED) {
+        return NextResponse.json(
+          { error: "Harvest lot has already been processed" },
+          { status: 409 },
+        );
       }
-
-        return batch;
-      });
-    });
+      throw error;
+    }
 
     return NextResponse.json(
       { processingBatch, message: "Processing batch created successfully" },

@@ -109,6 +109,8 @@ import {
   isRecentItem,
   formatParchmentStatus,
   findCurrentCropYearId,
+  getHarvestLotCherryWeight,
+  getReadyHarvestLots,
   validateScore,
   initialSensoryScores,
   initialCupScores,
@@ -862,19 +864,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           return;
         }
 
-        // Validate against remaining weight in harvest lot
-        const availableWeight = getAvailableHarvestWeight(selectedHarvestLot);
-
-        logger.debug("Validation check", {
-          parchmentWeightKg,
-          availableWeight,
-          remainingWeightKg: selectedHarvestLot.remainingWeightKg,
-          originalWeightKg: selectedHarvestLot.weightKg,
-        });
-
-        if (parchmentWeightKg > availableWeight) {
+        // Sanity check only: the whole cherry lot is consumed regardless of
+        // this figure, but parchment can never weigh more than the cherry it
+        // came from. Same sentence as the server-side check.
+        const cherryWeightKg = getHarvestLotCherryWeight(selectedHarvestLot);
+        if (parchmentWeightKg > cherryWeightKg) {
           setFormError(
-            `Parchment weight (${parchmentWeightKg} kg) cannot exceed available harvest lot weight (${availableWeight.toFixed(2)} kg).`,
+            `Parchment weight (${parchmentWeightKg.toFixed(2)} kg) cannot exceed the cherry lot weight (${cherryWeightKg.toFixed(2)} kg).`,
           );
           return;
         }
@@ -919,18 +915,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
           logger.debug("Creating processing batch with payload", { batchPayload });
 
-          await addProcessingBatch(batchPayload);
+          const batch = await addProcessingBatch(batchPayload);
+
+          // Hide the source lot even if the following bulk refresh fails.
+          setData((prev) => ({
+            ...prev,
+            harvestLots: prev.harvestLots.map((lot) => lot.id === batch.harvestLotId
+              ? { ...lot, status: "Complete", remainingWeightKg: 0 }
+              : lot),
+            processingBatches: [...prev.processingBatches.filter((item) => item.id !== batch.id), batch],
+          }));
 
           logger.debug("Processing batch created successfully!");
-
-          // Refresh data from backend to get the updated batch and parchment lot
-          await refreshData();
-
-          logger.debug("Data refreshed successfully!");
-
-          // Update selected harvest lot with fresh data from context
-          // Note: After refreshData(), the context will be updated automatically
-          // We just need to close the modal and the table will show updated data
 
           // Show success toast
           addToast({
@@ -945,6 +941,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           setDryingStartDate("");
           setDryingEndDate("");
           setFormError(null);
+
+          // The save has finished. Load the new parchment stock after closing
+          // the form so a slow refresh cannot look like an unfinished process.
+          await refreshData();
         } catch (error: any) {
           console.error("Failed to create processing batch:", error);
           const errorMessage =
@@ -1163,58 +1163,16 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     }
   };
 
-  const processedParchmentWeightByHarvestLot = useMemo(() => {
-    return data.processingBatches.reduce<Record<string, number>>((acc, batch) => {
-      if (
-        batch.status === ProcessingBatchStatus.Completed &&
-        typeof batch.parchmentWeightKg === "number" &&
-        batch.parchmentWeightKg > 0
-      ) {
-        acc[batch.harvestLotId] =
-          (acc[batch.harvestLotId] || 0) + batch.parchmentWeightKg;
-      }
-      return acc;
-    }, {});
-  }, [data.processingBatches]);
-
-  const getAvailableHarvestWeight = useCallback(
-    (lot: HarvestLot) => {
-      if (typeof lot.remainingWeightKg === "number") {
-        return Math.max(0, lot.remainingWeightKg);
-      }
-
-      // Backward compatibility: older records may have status=Complete without remainingWeightKg.
-      if (lot.status === "Complete") {
-        const processedWeight = processedParchmentWeightByHarvestLot[lot.id] || 0;
-        if (processedWeight > 0 && typeof lot.weightKg === "number") {
-          return Math.max(0, parseFloat((lot.weightKg - processedWeight).toFixed(6)));
-        }
-      }
-
-      return lot.weightKg || 0;
-    },
-    [processedParchmentWeightByHarvestLot],
-  );
-
-  // Show lots that can still be processed (including legacy Complete records with remaining weight).
+  // Whole-lot semantics: a cherry lot is either Ready (listed here) or
+  // Complete (consumed by a processing batch and gone from this list).
   const readyForProcessingLots = useMemo(
-    () =>
-      data.harvestLots.filter((lot) => {
-        const availableWeight = getAvailableHarvestWeight(lot);
-        if (lot.status === "Ready for Processing") {
-          return availableWeight > 0;
-        }
-        if (lot.status === "Complete") {
-          if (typeof lot.remainingWeightKg === "number") {
-            return lot.remainingWeightKg > 0;
-          }
-          const processedWeight = processedParchmentWeightByHarvestLot[lot.id] || 0;
-          return processedWeight > 0 && availableWeight > 0;
-        }
-        return false;
-      }),
-    [data.harvestLots, getAvailableHarvestWeight, processedParchmentWeightByHarvestLot],
+    () => getReadyHarvestLots(data.harvestLots, data.processingBatches),
+    [data.harvestLots, data.processingBatches],
   );
+
+  const selectedCherryWeightKg = selectedHarvestLot
+    ? getHarvestLotCherryWeight(selectedHarvestLot)
+    : 0;
 
   const filteredHarvestLots = useMemo(() => {
     const search = harvestLotSearch.toLowerCase();
@@ -1532,9 +1490,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               ) : (
                 paginatedHarvestLots.map((lot) => {
                   const isNewLot = isRecentItem(lot.createdAt ?? lot.harvestDate);
-                  const availableWeight = getAvailableHarvestWeight(lot);
-                  const isPartial =
-                    typeof lot.weightKg === "number" && availableWeight < lot.weightKg;
+                  const cherryWeight = getHarvestLotCherryWeight(lot);
                   return (
                     <tr
                       key={lot.id}
@@ -1554,11 +1510,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       {lot.cherryVariety}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-green-600">
-                      {typeof lot.weightKg === "number"
-                        ? isPartial
-                          ? `${availableWeight.toFixed(2)} kg (of ${lot.weightKg} kg)`
-                          : `${availableWeight.toFixed(2)} kg`
-                        : "-"}
+                      {cherryWeight.toFixed(2)} kg
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                       {lot.farmerName}
@@ -2217,9 +2169,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           ) : (
             paginatedHarvestCards.map((lot) => {
               const isNewLot = isRecentItem(lot.createdAt ?? lot.harvestDate);
-              const availableWeight = getAvailableHarvestWeight(lot);
-              const isPartial =
-                typeof lot.weightKg === "number" && availableWeight < lot.weightKg;
+              const cherryWeight = getHarvestLotCherryWeight(lot);
               return (
                 <div
                   key={lot.id}
@@ -2258,11 +2208,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         Weight
                       </span>
                       <span className="font-medium text-green-600">
-                        {typeof lot.weightKg === "number"
-                          ? isPartial
-                            ? `${availableWeight.toFixed(2)} kg (of ${lot.weightKg} kg)`
-                            : `${availableWeight.toFixed(2)} kg`
-                          : "-"}
+                        {cherryWeight.toFixed(2)} kg
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
@@ -2733,6 +2679,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </div>
                         <div className="w-px h-8 bg-gray-200" />
                         <div className="text-right">
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Whole Lot Weight</p>
+                          <p className="text-sm font-bold text-green-600 leading-tight">{selectedCherryWeightKg.toFixed(2)} kg</p>
+                        </div>
+                        <div className="w-px h-8 bg-gray-200" />
+                        <div className="text-right">
                           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Farmer</p>
                           <p className="text-sm font-bold text-gray-800 leading-tight">{selectedHarvestLot.farmerName}</p>
                         </div>
@@ -2793,51 +2744,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         />
                       </div>
 
-                      {/* Weight Info Bar */}
-                      {(() => {
-                        const available = getAvailableHarvestWeight(selectedHarvestLot);
-                        const parchmentVal = parseFloat(parchmentWeightInput) || 0;
-                        const remaining = available - parchmentVal;
-                        const pct = available > 0 ? Math.max(0, Math.round((remaining / available) * 100)) : 100;
-                        const isOver = parchmentVal > available;
-                        return (
-                          <div className={`rounded-xl p-3 border ${isOver ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Cherry Available (Input)</span>
-                              <span className="text-sm font-bold text-gray-800">{available.toFixed(2)} kg</span>
-                            </div>
-                            <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mb-2">
-                              <div
-                                className={`h-full rounded-full transition-all duration-300 ${isOver ? 'bg-red-500' : 'bg-green-500'}`}
-                                style={{ width: `${isOver ? 100 : pct}%` }}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-gray-400 uppercase tracking-wide">This Batch</span>
-                                <span className="text-xs font-semibold text-gray-700">{parchmentVal > 0 ? parchmentVal.toFixed(2) : '0.00'} kg</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-gray-400 uppercase tracking-wide">Left In Lot</span>
-                                <span className={`text-xs font-semibold ${isOver ? 'text-red-600' : 'text-green-600'}`}>
-                                  {remaining.toFixed(2)} kg
-                                </span>
-                              </div>
-                            </div>
-                            {isOver && (
-                              <p className="text-xs text-red-600 mt-1.5 font-medium">
-                                Parchment weight exceeds available cherry weight
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })()}
-
                       {/* Parchment Weight + Moisture Row */}
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                            Parchment Weight (kg)
+                            Parchment Output (kg)
                           </label>
                           <input
                             type="number"
@@ -2850,11 +2761,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             onChange={(e) => setParchmentWeightInput(e.target.value)}
                             className="block w-full h-[46px] border border-gray-300 rounded-xl px-4 text-lg font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all"
                           />
-                          <p className="mt-1.5 text-[11px] leading-snug text-gray-500">
-                            Becomes a new parchment lot marked{" "}
-                            <span className="font-semibold text-amber-700">Awaiting Hulling</span>,
-                            and the same figure is deducted from the cherry lot above.
-                          </p>
                         </div>
                         <div>
                           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">

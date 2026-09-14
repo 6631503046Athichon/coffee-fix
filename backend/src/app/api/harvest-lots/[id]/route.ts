@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireOwnership, handleApiError } from '@/lib/middleware'
 import { parseDateOnly, safeParseFloat } from '@/lib/utils'
+import { serializeHarvestLot } from '@/lib/harvestLot'
 
 // GET /api/harvest-lots/:id
 export async function GET(
@@ -48,7 +49,10 @@ export async function GET(
       requireOwnership(user, harvestLot.farm?.ownerId, ['Admin'])
     }
 
-    const { farm, ...restHarvestLot } = harvestLot
+    const { farm, ...restHarvestLot } = serializeHarvestLot({
+      ...harvestLot,
+      _count: { processingBatches: harvestLot.processingBatches.length },
+    })
     const safeFarm = farm
       ? { id: farm.id, farmName: farm.farmName, location: farm.location }
       : null
@@ -114,6 +118,7 @@ export async function PUT(
       where: { id },
       data: updateData,
       include: {
+        _count: { select: { processingBatches: true } },
         farm: {
           select: {
             id: true,
@@ -130,7 +135,7 @@ export async function PUT(
       },
     })
 
-    return NextResponse.json({ harvestLot: updatedHarvestLot })
+    return NextResponse.json({ harvestLot: serializeHarvestLot(updatedHarvestLot) })
   } catch (error) {
     return handleApiError(error)
   }

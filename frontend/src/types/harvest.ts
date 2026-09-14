@@ -13,6 +13,7 @@ export interface HarvestLot {
   farmerName: string;
   cherryVariety: string;
   weightKg: number;
+  /** Compatibility field only. Use weightKg for cherry input; never subtract parchment output. */
   remainingWeightKg?: number;
   farmPlotLocation: string;
   harvestDate: string;

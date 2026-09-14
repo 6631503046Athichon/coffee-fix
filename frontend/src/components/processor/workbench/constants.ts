@@ -1,7 +1,7 @@
 // Shared constants and pure helpers extracted from ProcessorWorkbench.
 // Kept framework-free so they can be unit-tested and reused without React.
 
-import type { ParchmentLot, GreenBeanLot, CropYear } from '../../../types'
+import type { ParchmentLot, GreenBeanLot, CropYear, HarvestLot, ProcessingBatch } from '../../../types'
 
 export type ViewMode = 'kanban' | 'table'
 export type SortDirection = 'asc' | 'desc'
@@ -50,4 +50,28 @@ export const findCurrentCropYearId = (years: CropYear[]): string => {
     return today >= start && today <= end
   })
   return match?.id ?? ''
+}
+
+/**
+ * Cherry weight to display for a harvest lot in the processor views, and the
+ * client-side ceiling for the parchment figure typed into Record Process.
+ *
+ * Always use the original input weight. Old partial balances are not input
+ * quantities for a second process; an existing batch consumes the whole lot.
+ */
+export const getHarvestLotCherryWeight = (
+  lot: Pick<HarvestLot, 'weightKg' | 'remainingWeightKg'>,
+): number => {
+  const w = lot.weightKg
+  return Number.isFinite(w) ? Math.max(0, w) : 0
+}
+
+export const getReadyHarvestLots = (
+  lots: HarvestLot[],
+  batches: Pick<ProcessingBatch, 'harvestLotId'>[],
+): HarvestLot[] => {
+  const processedIds = new Set(batches.map(batch => batch.harvestLotId))
+  return lots.filter(lot =>
+    lot.status === 'Ready for Processing' && !processedIds.has(lot.id),
+  )
 }

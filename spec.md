@@ -92,7 +92,7 @@ Default: ใช้ client IP จาก header ตามลำดับ
 
 ## 2. Concurrency & Data Integrity Patterns
 
-โค้ดเส้นทางสร้าง / แก้ไข lot และ batch ต้องผ่านสามแพทเทิร์นนี้เสมอ มิฉะนั้นข้อมูลจะดริฟภายใต้ concurrent load หรือ timezone shift
+โค้ดเส้นทางสร้าง / แก้ไข lot และ batch ต้องผ่านสี่แพทเทิร์นนี้เสมอ มิฉะนั้นข้อมูลจะดริฟภายใต้ concurrent load หรือ timezone shift
 
 ### 2.1 displayId allocation — `nextDisplayIds` + `withDisplayIdRetry`
 
@@ -157,18 +157,9 @@ await prisma.$transaction(async (tx) => {
 })
 ```
 
-**ใช้ใน 3 จุด**: parchment-lots withdrawals, green-bean-lots withdrawals, processing-batches POST (decrements harvest lot's `remainingWeightKg`)
+**ใช้ใน 2 จุด**: parchment-lots withdrawals, green-bean-lots withdrawals — `processing-batches POST` เคยเป็นจุดที่ 3 (หัก `remainingWeightKg` ของ harvest lot) แต่ถูกถอดออกใน §6.23 ตอนนี้ POST เคลม harvest lot ทั้งก้อนด้วย status guard แทน (ดู §2.4)
 
-**Edge case** — harvest lot ของ legacy import อาจมี `remainingWeightKg = null` ⇒ decrement บน null = null. ก่อนเรียก guarded decrement ต้อง init ก่อน:
-
-```ts
-await tx.harvestLot.updateMany({
-  where: { id, remainingWeightKg: null },
-  data: { remainingWeightKg: harvestLot.weightKg },
-})
-```
-
-`updateMany` แบบ conditional ทำให้ปลอดภัยถ้า concurrent tx ทำ init ไปแล้ว — count จะเป็น 0 และเราข้ามไป
+**หมายเหตุ**: edge case `remainingWeightKg = null` ที่เคยต้อง init ก่อน decrement (conditional `updateMany where { remainingWeightKg: null }`) ไม่มีแล้ว — คอลัมน์นี้เป็น legacy read-only (§2.4, §6.23)
 
 ### 2.3 Date-only timezone safety — `parseDateOnly`
 
@@ -191,7 +182,17 @@ export function parseDateOnly(value: unknown): Date | null {
 
 **ใช้กับทุก date-only field**: `harvestDate`, `dryingStartDate`, `dryingEndDate`, `baggingDate`, `testDate`, `startDate` / `endDate` (crop year) — ปฏิเสธค่าด้วย `Number.isNaN(parsed.getTime())` เมื่อ parse ไม่ออก
 
----
+### 2.4 Whole-lot processing
+
+เชอร์รี่หนึ่งล็อตถูกใช้ทั้งหมดเมื่อสร้าง processing batch น้ำหนัก parchment คือผลผลิตที่วัดได้หลังแปรรูป ไม่ใช่จำนวนที่หักออกจากเชอร์รี่
+
+- พร้อมใช้เมื่อสถานะเป็น `ReadyForProcessing` **และยังไม่มี processing batch**
+- POST ใช้ transaction: claim ด้วย `updateMany` ที่ตรวจทั้ง status และ `processingBatches: { none: {} }` → ตั้ง `Complete` และ `remainingWeightKg: 0` → สร้าง batch และ parchment ตามน้ำหนัก output ที่กรอก
+- ล็อตที่ใช้แล้วหรือคำขอที่แพ้การ claim ได้ 409; `withDisplayIdRetry` retry เฉพาะ display ID conflict
+- ตรวจ parchment > 0 และ ≤ `weightKg` ดิบเต็มล็อต ไม่อ่านยอดแบ่งคงเหลือเดิม
+- อ่านรายการผ่าน `serializeHarvestLot` ใน `backend/src/lib/harvestLot.ts`: ถ้ามี batch แม้ status เก่ายัง Ready ให้ตอบ Complete/remaining 0 ทั้ง bulk-load และ harvest-lots list/detail; นับ relation จากฐานข้อมูล ไม่อาศัย batch 50 รายการล่าสุด
+- `weightKg` ดิบเดิมคงอยู่เพื่อดูที่มา; ยอด `remainingWeightKg` เก่าไม่ใช้คำนวณ input อีก
+- DELETE batch ยังต้องไม่มี parchment ที่ผูกอยู่ เมื่อไม่เหลือ batch จึงคืนสถานะ Ready และเคลียร์ remaining เป็น null
 
 ## 3. Authorization (BOLA / Ownership)
 
@@ -556,15 +557,17 @@ Audit รอบ 2 พบเพิ่มอีก 5 route ที่ตรวจ�
 
 ### 6.18 ✅ Weight drift TOCTOU on lot mutations (commit 10c7e70)
 
-**สามจุดที่ลอตน้ำหนักดริฟ**ก่อนแก้: `processing-batches POST` (harvest lot remaining), `parchment-lots/[id]/withdrawals POST` (parchment current), `green-bean-lots/[id]/withdrawals POST` (green bean current) — ทุกจุดอ่านน้ำหนักจาก `findUnique` **นอก** transaction แล้วเอามา compute ค่าใหม่ใน transaction. Postgres READ COMMITTED + ไม่มี row lock → สอง request พร้อมกันคำนวณ `currentWeightKg - amount` จากค่าเดิมตัวเดียวกัน → ทั้งคู่ update ลงค่าเดียวกัน → double-spending
+**สามจุดที่ลอตน้ำหนักดริฟ**ก่อนแก้: `processing-batches POST` (harvest lot remaining — จุดนี้ถูกถอดออกภายหลังใน §6.23), `parchment-lots/[id]/withdrawals POST` (parchment current), `green-bean-lots/[id]/withdrawals POST` (green bean current) — ทุกจุดอ่านน้ำหนักจาก `findUnique` **นอก** transaction แล้วเอามา compute ค่าใหม่ใน transaction. Postgres READ COMMITTED + ไม่มี row lock → สอง request พร้อมกันคำนวณ `currentWeightKg - amount` จากค่าเดิมตัวเดียวกัน → ทั้งคู่ update ลงค่าเดียวกัน → double-spending
 
 **แก้** ทั้ง 3 ไฟล์ด้วย atomic `updateMany` + where guard — ดู §2.2 สำหรับ pattern เต็ม
 
 `updateMany` คอมไพล์เป็น `UPDATE ... SET col = col - X WHERE id = ? AND col >= X` Postgres lock แถวระหว่าง UPDATE คู่แข่งจะเห็น `count === 0` เพราะค่าใหม่ < X แล้ว → throw → transaction rollback ทั้งก้อน
 
-**Process batch** ของ harvest lot มี edge case: `remainingWeightKg` อาจเป็น `null` (เลกาซีเอกเซลอิมพอร์ต) decrement บน null = null ⇒ ทำ initial-fill ก่อน decrement (ดู §2.2)
+**Process batch** ของ harvest lot มี edge case (ประวัติ — โค้ดนี้ถูกถอดใน §6.23): `remainingWeightKg` อาจเป็น `null` (เลกาซีเอกเซลอิมพอร์ต) decrement บน null = null ⇒ ทำ initial-fill ก่อน decrement (ดู §2.2)
 
 หลัง decrement re-read fresh value, clamp residue `< 0` (parchment ใช้ `< 0.01` กัน 1e-15 dust), อัปเดต status (`Hulled`/`Withdrawn`/`Complete`)
+
+**อัปเดต (§6.23)**: จุด `processing-batches POST` เลิกใช้ guarded decrement แล้ว — เปลี่ยนเป็น whole-lot claim ด้วย status guard (§2.4) ย่อหน้า null edge case ด้านบนจึงเป็นประวัติ guarded decrement เหลือใช้ 2 จุด (parchment, green-bean withdrawals)
 
 ### 6.19 ✅ Timezone — date-only fields drift across timezones (commit 10c7e70)
 
@@ -603,6 +606,33 @@ Test setup เดิม `__resetRateLimitForTests()` ทำให้ buckets cle
 
 ผ่าน Railway dashboard / Brevo console — ไม่มีอะไรในโค้ดต้องแก้ตาม
 
+### 6.23 ✅ Cherry → Parchment ใช้ทั้งล็อต รวมล็อตเก่า
+
+รอบแรกยังเก็บ `remainingWeightKg ?? weightKg` เป็น input ของล็อตเก่า ทำให้ล็อตที่เคย process แล้วแสดงน้ำหนักส่วนที่เหลือและถูกเลือกทำซ้ำได้ การแก้ล่าสุดใช้ `weightKg` ดิบเต็มล็อต และตรวจว่ามี processing batch แล้วหรือไม่ทั้งหน้าเว็บและ API
+
+ตัวอย่าง: เชอร์รี่ 400 kg ได้ parchment 80 kg → เชอร์รี่ล็อตนั้นหายจากรายการพร้อมแปรรูปทั้งหมด และเกิด parchment 80 kg ไม่มีเชอร์รี่คงเหลือ 320 kg ให้ทำซ้ำ
+
+**พฤติกรรม**:
+
+| ข้อมูลเดิม | ผลหลังแก้ |
+|---|---|
+| Ready และไม่มี batch | แสดงน้ำหนักดิบเต็มล็อต |
+| Ready และมี batch (เคยแบ่งน้ำหนัก) | ถือว่าใช้ทั้งล็อตแล้ว ซ่อนจากรายการ และ POST ซ้ำได้ 409 |
+| Complete ไม่ว่าจะมียอด remaining เท่าไร | ซ่อน |
+| มี batch เก่าหลายรายการ | คงประวัติไว้ทั้งหมด แต่สร้าง batch ใหม่บนเชอร์รี่ล็อตเดิมไม่ได้ |
+
+**จุดที่แก้**: POST claim ตรวจทั้ง status และ relation, ตั้ง remaining 0; PUT batch ไม่หักเชอร์รี่; bulk-load/list/detail ตอบสถานะตามประวัติ batch; status filter ทำก่อน pagination และใช้เงื่อนไขเดียวกันกับ total
+
+ProcessorWorkbench และ ParchmentTab ใช้ helper เดียวกันสำหรับน้ำหนักดิบและรายการ Ready ลบ Cherry Available/Input และ progress การแบ่งน้ำหนัก ป้ายหัวฟอร์มเป็น **Whole Lot Weight** และช่องผลผลิตเป็น **Parchment Output (kg)** หลัง POST สำเร็จซ่อนทั้งล็อตใน state ทันที แม้ bulk refresh ช้าหรือไม่สำเร็จ ถ้า Process & Grade สร้าง parchment แล้วแต่ grading ล้มเหลว ให้ต่อจาก Parchment Stock แทนการสร้าง batch ซ้ำ
+
+ไม่มี schema migration หรือการเขียนแก้ข้อมูลเก่าย้อนหลัง: การอ่าน relation ทำให้ล็อตที่เคยแบ่งถูกซ่อนพร้อมเก็บประวัติและน้ำหนักดิบไว้
+
+**ทดสอบ**: backend ครอบคลุม claim, ล็อตเก่า Ready ที่มี batch, output เทียบ full weight, อ่าน bulk-load/list โดยไม่พึ่ง batch 50 รายการล่าสุด, DELETE และ ownership; frontend ทดสอบฟอร์มจริงทั้ง Workflow/Data Grid และบันทึก output 80 จาก raw 400 โดยให้ refresh ค้างเพื่อยืนยันว่าล็อตหายทันที
+
+**การนำขึ้นใช้งาน**: frontend ในเครื่องตั้ง `VITE_API_PROXY_TARGET` ไปยัง `https://coffee-fix-backend.vercel.app` ต้อง deploy backend ใหม่ด้วยจึงเปลี่ยนพฤติกรรมการบันทึกจริง การแก้ไฟล์ local ไม่เปลี่ยน backend บน Vercel
+
+**ข้อจำกัดเดิมที่ยังอยู่**: PUT batch ยังไม่ sync น้ำหนัก ParchmentLot; auto-bind farm ส่ง payload เต็มและอาจแก้น้ำหนักดิบ; direct parchment POST ข้าม processing batch ได้; ไม่แก้ cupping หรือสต็อก roaster ในงานนี้
+
 ---
 
 ## 7. Security Checklist
@@ -615,6 +645,7 @@ Test setup เดิม `__resetRateLimitForTests()` ทำให้ buckets cle
 - [ ] **Mutation route `[id]` (PATCH/PUT/DELETE) ตรวจ ownership** ผ่าน `requireOwnership(user, ownerId, ['Admin'])` — ดู ownership chain ใน §3.1
 - [ ] **GET route ที่คืน PII (email/phone/address) หรือ pricing** จำกัด role ที่ต้องใช้จริง ไม่เปิดให้ทุก authenticated user
 - [ ] Mutation ที่หักน้ำหนักต้องใช้ atomic `updateMany` + where guard (§2.2) ไม่ใช่ findUnique-แล้ว-update
+- [ ] Mutation ที่ consume lot ทั้งก้อน (harvest lot → processing batch) ใช้ status guard `updateMany where { id, status }` (§2.4) และ map sentinel → 409 ใน route เอง ไม่พึ่ง `handleApiError`
 - [ ] เส้นทางที่ create row มี displayId ครอบด้วย `withDisplayIdRetry` (§2.1)
 - [ ] Date-only field parse ผ่าน `parseDateOnly` (§2.3) ไม่ใช่ `new Date(string)` ตรง ๆ
 - [ ] Validate input ด้วย zod schema ก่อนเข้า business logic
@@ -637,23 +668,24 @@ Test setup เดิม `__resetRateLimitForTests()` ทำให้ buckets cle
 |---|---|
 | `npx tsc --noEmit` (production code only) | ✅ 0 errors |
 | `npm run lint` | ✅ 0 warnings, 0 errors |
-| `npx jest` | ✅ **197/197** pass (12 test files) |
-| `npm run build` | ✅ Build succeeded (0 errors, 0 warnings) |
+| `npx jest` | ✅ **215/215** pass (15 test files) |
+| `npm run build` | ผลจากรอบก่อน; รอบนี้ตรวจ backend ด้วย TypeScript, lint และ Jest |
 | `npm audit --production` | ⚠️ 2 remaining (next v14 ต้อง v16 breaking, xlsx ยังไม่มี upstream fix) |
 
 Test files ฝั่ง backend:
 - `bola-authorization.test.ts`, `display-id.test.ts`, `farm-creation-integration.test.ts`, `farm-creation-roles.test.ts`, `farm-validation.test.ts`, `jwt-secret-validation.test.ts`, `parse-date-only.test.ts`, `plaintext-password-removal.test.ts`, `registration-lockdown.test.ts`, `safe-parsing.test.ts`, `token-extraction.test.ts`, `url-validation.test.ts`
+- `processing-batches-whole-lot.test.ts`, `harvest-lot-state.test.ts`, `harvest-lots-whole-lot.test.ts` (§6.23)
 
 ### 8.2 Frontend
 
 | คำสั่ง | ผลลัพธ์ |
 |---|---|
 | `npx tsc --noEmit` | ✅ 0 errors (strict mode เปิดแล้ว) |
-| `npm test -- --run` | ✅ **77/77** pass (5 test files) |
-| `npm run build` | ✅ Build succeeded (CSS 72 kB, JS 1.71 MB gzip 420 kB) |
+| `npm test -- --run` | ✅ **86/86** pass (7 test files) |
+| `npm run build` | ✅ Build succeeded; ทดสอบ raw 400 → output 80 และล็อตหายโดยไม่รอ refresh |
 
 Test files ฝั่ง frontend:
-- `formatDisplayId.test.ts`, `formatters.test.ts`, `idGenerator.test.ts`, `errorHandler.test.ts`, `transformers.test.ts`
+- `formatDisplayId.test.ts`, `formatters.test.ts`, `idGenerator.test.ts`, `errorHandler.test.ts`, `transformers.test.ts`, `components/processor/workbench/constants.test.ts`, `components/processor/ProcessorWorkbench.test.tsx`
 
 ---
 
