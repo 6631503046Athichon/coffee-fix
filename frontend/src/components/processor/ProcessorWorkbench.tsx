@@ -71,6 +71,8 @@ import {
   MoreHorizontal,
   ArrowRight,
   Minus,
+  ChevronDown,
+  Layers,
 } from "lucide-react";
 import {
   addProcessingBatch,
@@ -112,6 +114,7 @@ import {
   findCurrentCropYearId,
   getHarvestLotCherryWeight,
   getReadyHarvestLots,
+  processTypeChipClass,
   validateScore,
   initialSensoryScores,
   initialCupScores,
@@ -1379,16 +1382,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     greenBeanGradeFilter,
   ]);
 
-  // Aggregate Green Bean lots by grade so the processor sees one line per
-  // grade with total weight + a breakdown of which parchment lots it came
-  // from. Only counts `currentWeightKg` (what's actually still on hand).
+  // Aggregate on-hand Green Bean lots by grade so the processor sees one line
+  // per grade with total weight + a breakdown of which parchment lots it came
+  // from. Deliberately ignores the stock table's search and filters: this
+  // panel sits above those controls, so it would otherwise change for no
+  // visible reason. Rows follow the admin grade order, like the dropdowns.
   const greenBeanGradeSummary = useMemo(() => {
     type Source = {
+      greenBeanId: string;
+      greenBeanDisplayId: string;
       parchmentDisplayId: string;
       processType: string;
-      sourceType: "Internal" | "External";
       weightKg: number;
-      greenBeanDisplayId: string;
     };
     type Row = {
       grade: string;
@@ -1397,8 +1402,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       sources: Source[];
     };
     const byGrade = new Map<string, Row>();
+    const parchmentById = new Map(data.parchmentLots.map((p) => [p.id, p]));
+    let totalWeight = 0;
 
-    for (const gbl of processedGreenBeanLots) {
+    for (const gbl of enrichedGreenBeanLots) {
+      const weightKg = gbl.currentWeightKg ?? 0;
+      if (weightKg <= 0) continue;
+
       const row =
         byGrade.get(gbl.grade) ?? {
           grade: gbl.grade,
@@ -1406,30 +1416,37 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           lotCount: 0,
           sources: [],
         };
-      row.totalWeight += gbl.currentWeightKg ?? 0;
+      row.totalWeight += weightKg;
       row.lotCount += 1;
+      totalWeight += weightKg;
 
       const parchment = gbl.parchmentLotId
-        ? data.parchmentLots.find((p) => p.id === gbl.parchmentLotId)
+        ? parchmentById.get(gbl.parchmentLotId)
         : undefined;
       row.sources.push({
-        parchmentDisplayId:
-          parchment?.displayId ??
-          (gbl.sourceType === "External" ? "External" : "—"),
+        greenBeanId: gbl.id,
+        greenBeanDisplayId: formatGreenBeanId(gbl),
+        parchmentDisplayId: parchment
+          ? formatParchmentId(parchment)
+          : gbl.sourceType === "External"
+            ? "External"
+            : "—",
         processType:
           parchment?.processType ?? gbl.externalSource?.processType ?? "—",
-        sourceType: gbl.sourceType,
-        weightKg: gbl.currentWeightKg ?? 0,
-        greenBeanDisplayId:
-          gbl.displayId ?? gbl.id.substring(0, 8).toUpperCase(),
+        weightKg,
       });
       byGrade.set(gbl.grade, row);
     }
 
-    return Array.from(byGrade.values()).sort(
-      (a, b) => b.totalWeight - a.totalWeight,
-    );
-  }, [processedGreenBeanLots, data.parchmentLots]);
+    const gradeRank = new Map(gradeFilterNames.map((name, i) => [name, i]));
+    const rows = Array.from(byGrade.values()).sort((a, b) => {
+      const ra = gradeRank.get(a.grade) ?? Number.MAX_SAFE_INTEGER;
+      const rb = gradeRank.get(b.grade) ?? Number.MAX_SAFE_INTEGER;
+      return ra !== rb ? ra - rb : b.totalWeight - a.totalWeight;
+    });
+
+    return { rows, totalWeight };
+  }, [enrichedGreenBeanLots, data.parchmentLots, gradeFilterNames]);
 
   const [expandedGradeSummaries, setExpandedGradeSummaries] = useState<
     Set<string>
@@ -1724,13 +1741,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          p.processType === "Washed"
-                            ? "bg-sky-50 text-sky-700"
-                            : p.processType === "Natural"
-                              ? "bg-amber-50 text-amber-700"
-                              : "bg-yellow-50 text-yellow-700"
-                        }`}
+                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${processTypeChipClass(p.processType)}`}
                       >
                         {p.processType}
                       </span>
@@ -1786,109 +1797,122 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         />
       </div>
 
-      {/* Green Bean Grade Summary — aggregate by grade with source trace */}
-      {greenBeanGradeSummary.length > 0 && (
+      {/* Green Bean Grade Summary — on-hand stock per grade with source
+          trace. Same shell as the numbered sections around it. */}
+      {greenBeanGradeSummary.rows.length > 0 && (
         <div className="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-200">
-          <div className="p-3 bg-teal-50 border-b border-teal-100 flex items-center gap-2">
-            <div className="p-1.5 bg-teal-500 rounded-md">
-              <Coffee className="h-4 w-4 text-white" />
+          <div className="p-3 bg-teal-50 border-b border-teal-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-teal-500 rounded-md">
+                <Layers className="h-4 w-4 text-white" />
+              </div>
+              <h3 className="text-sm font-bold text-gray-900">Green Bean Stock by Grade</h3>
+              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-white text-teal-700 border border-teal-200">
+                {greenBeanGradeSummary.rows.length}
+              </span>
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-gray-900">
-                Green Bean Stock — Grade Summary
-              </h3>
-              <p className="text-[11px] text-gray-500">
-                Total weight per grade with origin trace. Click a row to expand sources.
-              </p>
+            {/* min-h matches the filter selects in the neighbouring headers */}
+            <div className="sm:min-h-[46px] flex items-center gap-1.5 text-sm text-gray-600">
+              Total in stock
+              <span className="font-bold text-teal-700">
+                {greenBeanGradeSummary.totalWeight.toFixed(2)} kg
+              </span>
             </div>
           </div>
-          <div className="divide-y divide-gray-100">
-            {greenBeanGradeSummary.map((row) => {
-              const isExpanded = expandedGradeSummaries.has(row.grade);
-              return (
-                <div key={row.grade}>
-                  <button
-                    type="button"
-                    aria-expanded={isExpanded}
-                    onClick={(e) => toggleGradeSummary(row.grade, e.currentTarget)}
-                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left"
-                  >
-                    <div className="flex items-center gap-3">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className={`text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Grade</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Lots</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Weight (kg)</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Share</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {greenBeanGradeSummary.rows.map((row) => {
+                  const isExpanded = expandedGradeSummaries.has(row.grade);
+                  const sharePct =
+                    greenBeanGradeSummary.totalWeight > 0
+                      ? (row.totalWeight / greenBeanGradeSummary.totalWeight) * 100
+                      : 0;
+                  return (
+                    <React.Fragment key={row.grade}>
+                      {/* The whole row toggles; the button inside carries
+                          keyboard focus and aria-expanded, and its click
+                          bubbles up to this handler. */}
+                      <tr
+                        onClick={(e) => toggleGradeSummary(row.grade, e.currentTarget)}
+                        className={`cursor-pointer transition-colors ${isExpanded ? "bg-teal-50/40" : "hover:bg-gray-50"}`}
                       >
-                        <path d="m6 9 6 6 6-6" />
-                      </svg>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
-                        {row.grade}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {row.lotCount} lot{row.lotCount !== 1 ? "s" : ""}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-lg font-bold text-emerald-700">
-                        {row.totalWeight.toFixed(2)}
-                      </span>
-                      <span className="text-xs font-normal text-gray-500 ml-1">
-                        kg
-                      </span>
-                    </div>
-                  </button>
-                  {isExpanded && (
-                    <div className="px-4 pb-3 pt-1 bg-gray-50/60">
-                      <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 pl-6">
-                        Sources
-                      </div>
-                      {/* Bounded so a grade with many sources cannot push the
-                          rest of the page a full screen down. */}
-                      <div className="space-y-1 pl-6 max-h-72 sm:max-h-80 overflow-y-auto">
-                        {row.sources.map((s, idx) => (
-                          <div
-                            key={`${row.grade}-${idx}`}
-                            className="flex items-center justify-between text-xs bg-white rounded-md px-3 py-2 border border-gray-200"
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
+                          <button
+                            type="button"
+                            aria-expanded={isExpanded}
+                            className="inline-flex items-center gap-2 text-left"
                           >
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono font-semibold text-gray-800">
-                                {s.greenBeanDisplayId}
-                              </span>
-                              <span className="text-gray-400">←</span>
-                              <span className="font-mono text-gray-600">
-                                {s.parchmentDisplayId}
-                              </span>
-                              <span
-                                className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                  s.sourceType === "External"
-                                    ? "bg-blue-50 text-blue-700 border border-blue-200"
-                                    : "bg-green-50 text-green-700 border border-green-200"
-                                }`}
-                              >
-                                {s.processType}
-                              </span>
+                            <ChevronDown
+                              className={`h-4 w-4 text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                            />
+                            {row.grade}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                          {row.lotCount}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-gray-900">
+                          {row.totalWeight.toFixed(2)} kg
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
+                          {sharePct.toFixed(1)}%
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={4} className="px-4 pb-3 pt-1 bg-teal-50/40">
+                            {/* Bounded so a grade with many sources cannot
+                                push the rest of the page a full screen down. */}
+                            <div className="max-h-72 sm:max-h-80 overflow-y-auto rounded-md border border-gray-200 bg-white">
+                              <table className="min-w-full divide-y divide-gray-100">
+                                <thead className="bg-slate-50 sticky top-0">
+                                  <tr>
+                                    <th scope="col" className="px-4 py-2 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Green Bean Lot</th>
+                                    <th scope="col" className="px-4 py-2 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Source</th>
+                                    <th scope="col" className="px-4 py-2 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Process</th>
+                                    <th scope="col" className="px-4 py-2 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Weight (kg)</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                  {row.sources.map((s) => (
+                                    <tr key={s.greenBeanId}>
+                                      <td className="px-4 py-2 whitespace-nowrap text-sm font-semibold text-gray-900">
+                                        {s.greenBeanDisplayId}
+                                      </td>
+                                      <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-700">
+                                        {s.parchmentDisplayId}
+                                      </td>
+                                      <td className="px-4 py-2 whitespace-nowrap">
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${processTypeChipClass(s.processType)}`}>
+                                          {s.processType}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-2 whitespace-nowrap text-sm font-semibold text-gray-900">
+                                        {s.weightKg.toFixed(2)} kg
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
                             </div>
-                            <span className="font-semibold text-gray-700">
-                              {s.weightKg.toFixed(2)}
-                              <span className="text-gray-400 font-normal text-[10px] ml-1">
-                                kg
-                              </span>
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

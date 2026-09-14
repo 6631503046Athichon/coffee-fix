@@ -66,6 +66,14 @@ export const getHarvestLotCherryWeight = (
   return Number.isFinite(w) ? Math.max(0, w) : 0
 }
 
+/** Pill colours for a process type, shared by every processor table. */
+export const processTypeChipClass = (processType: string | undefined): string =>
+  processType === 'Washed'
+    ? 'bg-sky-50 text-sky-700'
+    : processType === 'Natural'
+      ? 'bg-amber-50 text-amber-700'
+      : 'bg-yellow-50 text-yellow-700'
+
 export const getReadyHarvestLots = (
   lots: HarvestLot[],
   batches: Pick<ProcessingBatch, 'harvestLotId'>[],

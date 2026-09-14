@@ -10,6 +10,7 @@ export {
   findCurrentCropYearId,
   getHarvestLotCherryWeight,
   getReadyHarvestLots,
+  processTypeChipClass,
 } from './constants'
 export type {
   ViewMode,
