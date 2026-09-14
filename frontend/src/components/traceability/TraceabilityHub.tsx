@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useDataContext } from '@/hooks/useDataContext';
+import { useDataContext } from '@/hooks/useDataContext'
+import { useGradeNames } from '@/hooks/useGradeOptions'
+import Select from '@/components/common/Select';
 import { useAuth } from '@/contexts/AuthContext';
 import { Search, ExternalLink, CheckCircle, Archive, AlertCircle, ChevronLeft, ChevronRight, QrCode, Star } from 'lucide-react';
 import { UserRole, GreenBeanLot } from '@/types';
@@ -16,6 +18,23 @@ const isRecentLot = (dateString?: string | null): boolean => {
   if (Number.isNaN(date.getTime())) return false
   const diffHours = (Date.now() - date.getTime()) / (1000 * 60 * 60)
   return diffHours >= 0 && diffHours <= NEW_TAG_HOURS
+}
+
+/**
+ * Filter dropdown values: 'All', then the distinct values present, in
+ * `order` when given (unknown values after, alphabetically). 'N/A' goes last
+ * so a placeholder never sits between real values.
+ */
+const filterOptions = (values: (string | undefined)[], order: string[] = []): string[] => {
+  const rank = new Map(order.map((name, i) => [name, i]))
+  const distinct = Array.from(new Set(values.filter((v): v is string => Boolean(v))))
+  distinct.sort((a, b) => {
+    if (a === 'N/A' || b === 'N/A') return a === 'N/A' ? 1 : -1
+    const ra = rank.get(a) ?? Number.MAX_SAFE_INTEGER
+    const rb = rank.get(b) ?? Number.MAX_SAFE_INTEGER
+    return ra !== rb ? ra - rb : a.localeCompare(b)
+  })
+  return ['All', ...distinct]
 }
 
 interface EnrichedLot extends GreenBeanLot {
@@ -153,29 +172,22 @@ const TraceabilityHub: React.FC = () => {
     setCurrentPage(1)
   }, [searchTerm, varietyFilter, processFilter, gradeFilter])
 
-  const varietyOptions = useMemo(() => {
-    const set = new Set<string>()
-    enrichedLots.forEach((lot) => {
-      if (lot?.variety) set.add(lot.variety)
-    })
-    return ['All', ...Array.from(set).sort()]
-  }, [enrichedLots])
+  const varietyOptions = useMemo(
+    () => filterOptions(enrichedLots.map((lot) => lot?.variety)),
+    [enrichedLots],
+  )
 
-  const processOptions = useMemo(() => {
-    const set = new Set<string>()
-    enrichedLots.forEach((lot) => {
-      if (lot?.processType) set.add(lot.processType)
-    })
-    return ['All', ...Array.from(set).sort()]
-  }, [enrichedLots])
+  const processOptions = useMemo(
+    () => filterOptions(enrichedLots.map((lot) => lot?.processType)),
+    [enrichedLots],
+  )
 
-  const gradeOptions = useMemo(() => {
-    const set = new Set<string>()
-    enrichedLots.forEach((lot) => {
-      if (lot?.grade) set.add(lot.grade)
-    })
-    return ['All', ...Array.from(set).sort()]
-  }, [enrichedLots])
+  // Grades follow the admin-managed order, like every other grade dropdown.
+  const gradeOrder = useGradeNames({ includeInactive: true })
+  const gradeOptions = useMemo(
+    () => filterOptions(enrichedLots.map((lot) => lot?.grade), gradeOrder),
+    [enrichedLots, gradeOrder],
+  )
 
   // Pagination logic
   const totalPages = Math.ceil(filteredLots.length / PAGE_SIZE)
@@ -241,49 +253,31 @@ const TraceabilityHub: React.FC = () => {
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
               Variety
             </label>
-            <select
+            <Select
+              options={varietyOptions}
               value={varietyFilter}
-              onChange={(e) => setVarietyFilter(e.target.value)}
-              className="block w-full border border-gray-300 rounded-xl bg-white py-2.5 px-3 text-sm font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-            >
-              {varietyOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setVarietyFilter(String(v ?? 'All'))}
+            />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
               Process
             </label>
-            <select
+            <Select
+              options={processOptions}
               value={processFilter}
-              onChange={(e) => setProcessFilter(e.target.value)}
-              className="block w-full border border-gray-300 rounded-xl bg-white py-2.5 px-3 text-sm font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-            >
-              {processOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setProcessFilter(String(v ?? 'All'))}
+            />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
               Grade
             </label>
-            <select
+            <Select
+              options={gradeOptions}
               value={gradeFilter}
-              onChange={(e) => setGradeFilter(e.target.value)}
-              className="block w-full border border-gray-300 rounded-xl bg-white py-2.5 px-3 text-sm font-medium text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-            >
-              {gradeOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setGradeFilter(String(v ?? 'All'))}
+            />
           </div>
         </div>
       </div>
