@@ -15,20 +15,11 @@ import {
   GreenBeanSourceType,
   UserRole,
 } from '../../types'
-import {
-  Package,
-  Flame,
-  Coffee,
-  Loader2,
-  ArrowRight,
-  ClipboardCheck,
-  Scale,
-  Warehouse,
-} from 'lucide-react'
+import { Package, Flame, Coffee, Loader2, ArrowRight } from 'lucide-react'
 import ExternalLotsTable from './ExternalLotsTable'
 import InternalLotsTable from './InternalLotsTable'
 import RoastLogPanel from './RoastLogPanel'
-import { toFixed2, clamp, toRoaId } from '../../utils/formatters'
+import { toFixed2, clamp, toRoaId, toRoastBatchId } from '../../utils/formatters'
 import { claimGreenBeanLot, createRoastBatch } from '../../services/roaster/roasterService'
 import { createGreenBeanLot } from '../../services/lots/greenBeanLotService'
 import { formatGreenBeanId } from '../../utils/formatDisplayId'
@@ -69,6 +60,11 @@ const COFFEE_VARIETIES = [
 
 const COMMON_PROCESS_TYPES = ['Washed', 'Natural', 'Honey', 'Anaerobic', 'Wet-Hulled']
 
+const parseWeightInput = (value: string): number => {
+  const normalized = value.trim().replace(',', '.')
+  return normalized === '' ? 0 : Number(normalized)
+}
+
 // Removed local CustomDropdown in favor of shared Select component
 
 const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
@@ -95,8 +91,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
   const [claimAmount, setClaimAmount] = useState('')
   const [roastForm, setRoastForm] = useState({ batchSize: '', roastedWeight: '', notes: '' })
   const [roastLevel, setRoastLevel] = useState<RoastLevel>(RoastLevel.Medium)
-  const [selectedCategory, setSelectedCategory] = useState<keyof typeof FLAVOR_GROUPS>('Sweet')
-  const [selectedNote, setSelectedNote] = useState<string>(FLAVOR_GROUPS['Sweet'][0])
+  const [selectedAromaCategories, setSelectedAromaCategories] = useState<string[]>(['Sweet'])
+  const [selectedAromaNotes, setSelectedAromaNotes] = useState<string[]>([])
   const [selectedFlavorTags, setSelectedFlavorTags] = useState<string[]>([])
   const availableLotsRef = useRef<HTMLButtonElement>(null)
   const internalLotsRef = useRef<HTMLButtonElement>(null)
@@ -246,21 +242,48 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     [data.roasterInventory, currentUser.id, isAdmin],
   )
 
-  const myRoasts = useMemo(
-    () =>
-      data.roastBatches
-        .filter((roast) => roast.roasterId === currentUser.id)
-        .map((roast) => {
-          const gbl = data.greenBeanLots.find((lot) => lot.id === roast.greenBeanLotId)
-          const isExternal = gbl?.sourceType === GreenBeanSourceType.External
-          const formattedLotId = isExternal
-            ? toRoaId(roast.greenBeanLotId)
-            : formatGreenBeanId({ id: roast.greenBeanLotId, displayId: gbl?.displayId })
-          return { ...roast, greenBeanDisplayId: gbl?.displayId, formattedLotId }
-        })
-        .sort((a, b) => new Date(b.roastDate).getTime() - new Date(a.roastDate).getTime()),
-    [data.roastBatches, data.greenBeanLots, currentUser.id],
-  )
+  const myRoasts = useMemo(() => {
+    const sortedRoasts = data.roastBatches
+      .filter((roast) => roast.roasterId === currentUser.id)
+      .sort((a, b) => new Date(b.roastDate).getTime() - new Date(a.roastDate).getTime())
+
+    return sortedRoasts
+      .map((roast) => {
+        const gbl = data.greenBeanLots.find((lot) => lot.id === roast.greenBeanLotId)
+        const inventory = data.roasterInventory.find(
+          (item) =>
+            item.id === roast.roasterInventoryId || item.greenBeanLotId === roast.greenBeanLotId,
+        )
+        const parchment = gbl?.parchmentLotId
+          ? data.parchmentLots.find((item) => item.id === gbl.parchmentLotId)
+          : undefined
+        const harvest = parchment?.harvestLotId
+          ? data.harvestLots.find((item) => item.id === parchment.harvestLotId)
+          : undefined
+        const formattedLotId = toRoaId(roast.greenBeanLotId)
+        return {
+          ...roast,
+          greenBeanDisplayId: gbl?.displayId,
+          formattedLotId,
+          sourceVariety:
+            gbl?.externalSource?.variety || inventory?.variety || harvest?.cherryVariety,
+          sourceProcess:
+            gbl?.externalSource?.processType || inventory?.process || parchment?.processType,
+          sourceGrade: gbl?.grade || inventory?.grade,
+        }
+      })
+      .map((roast, index) => ({
+        ...roast,
+        displayId: toRoastBatchId(roast.id),
+      }))
+  }, [
+    data.roastBatches,
+    data.greenBeanLots,
+    data.parchmentLots,
+    data.harvestLots,
+    data.roasterInventory,
+    currentUser.id,
+  ])
   // Pagination for Roast Log
   const [page, setPage] = useState(1)
   const pageSize = 5
@@ -305,13 +328,6 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     [availableExternalLots, externalPage],
   )
 
-  const totalInventoryKg = useMemo(
-    () => myInventory.reduce((total, item) => total + item.remainingWeightKg, 0),
-    [myInventory],
-  )
-
-  const totalAvailableLots = availableInternalLots.length + availableExternalLots.length
-
   const openClaimModal = (
     lot: GreenBeanLot & { variety: string; process: string; finalScore?: string | number },
   ) => {
@@ -337,8 +353,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
       .filter(Boolean)
 
     setSelectedFlavorTags(existing)
-    setSelectedCategory('Sweet')
-    setSelectedNote(FLAVOR_GROUPS['Sweet'][0])
+    setSelectedAromaCategories(['Sweet'])
+    setSelectedAromaNotes([])
     setIsLogRoastModalOpen(true)
   }
 
@@ -349,8 +365,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     setRoastForm({ batchSize: '', roastedWeight: '', notes: '' })
     setRoastLevel(RoastLevel.Medium)
     setSelectedFlavorTags([])
-    setSelectedCategory('Sweet')
-    setSelectedNote(FLAVOR_GROUPS['Sweet'][0])
+    setSelectedAromaCategories(['Sweet'])
+    setSelectedAromaNotes([])
     setIsLogRoastModalOpen(true)
   }
 
@@ -380,8 +396,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
   const handleLogRoastSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    const batchRaw = parseFloat(roastForm.batchSize)
-    const roastedRaw = parseFloat(roastForm.roastedWeight)
+    const batchRaw = parseWeightInput(roastForm.batchSize)
+    const roastedRaw = parseWeightInput(roastForm.roastedWeight)
 
     // ── External lot path: claim only the batch amount, then roast ──
     if (selectedExternalLot && !selectedInventoryItem) {
@@ -431,8 +447,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         setData((prev) => ({
           ...prev,
           roastBatches: [
-            ...prev.roastBatches,
             { ...roastBatch, formattedLotId: toRoaId(selectedExternalLot.id) } as any,
+            ...prev.roastBatches,
           ],
           roasterInventory: (() => {
             const finalRemaining = updatedInventory.remainingWeightKg
@@ -456,6 +472,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
               : l,
           ),
         }))
+        setPage(1)
         addToast({ type: 'success', message: `บันทึก Roast Batch ${batch} kg สำเร็จ!` })
         setIsLogRoastModalOpen(false)
         setSelectedExternalLot(null)
@@ -509,13 +526,14 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
       })
       setData((prev) => ({
         ...prev,
-        roastBatches: [...prev.roastBatches, roastBatch],
+        roastBatches: [roastBatch, ...prev.roastBatches],
         roasterInventory: prev.roasterInventory.map((item) =>
           item.id === updatedInventory.id
             ? { ...item, remainingWeightKg: updatedInventory.remainingWeightKg }
             : item,
         ),
       }))
+      setPage(1)
       addToast({ type: 'success', message: `บันทึก Roast Batch ${batch} kg สำเร็จ!` })
       setIsLogRoastModalOpen(false)
     } catch (err: unknown) {
@@ -586,82 +604,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             <Coffee className="h-7 w-7 text-[#f5b84b]" />
           </div>
         }
-        actions={
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              icon={<Package className="h-4 w-4" />}
-              onClick={handleQuickClaim}
-              className="border-[#d8e2db] bg-white hover:border-[#9cb8a6]"
-            >
-              Claim beans
-            </Button>
-            <Button
-              variant="success"
-              size="sm"
-              icon={<Flame className="h-4 w-4" />}
-              onClick={handleQuickLogRoast}
-              className="bg-[#d87832] shadow-md shadow-orange-200 hover:bg-[#bd5d1e]"
-            >
-              Log a roast
-            </Button>
-          </div>
-        }
         className="mb-5 border-[#e4e9e3] bg-gradient-to-br from-white via-white to-[#eef5ed] p-6 shadow-sm"
       />
-
-      {/* At-a-glance metrics */}
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[
-          {
-            label: 'Ready to roast',
-            value: `${totalInventoryKg.toFixed(1)} kg`,
-            detail: `${myInventory.length} inventory lots`,
-            icon: Warehouse,
-            tone: 'bg-[#e9f2ec] text-[#2e6848]',
-          },
-          {
-            label: 'Available lots',
-            value: totalAvailableLots,
-            detail: `${availableInternalLots.length} internal · ${availableExternalLots.length} purchased`,
-            icon: Package,
-            tone: 'bg-[#edf1fa] text-[#49629a]',
-          },
-          {
-            label: 'Batches logged',
-            value: myRoasts.length,
-            detail: myRoasts.length
-              ? 'Keep your roast rhythm going'
-              : 'Your first batch is waiting',
-            icon: ClipboardCheck,
-            tone: 'bg-[#fff1df] text-[#a85c1e]',
-          },
-          {
-            label: 'Workspace focus',
-            value: lotsTab === 'internal' ? 'Inventory' : 'Sourcing',
-            detail: lotsTab === 'internal' ? 'Stock in your workspace' : 'Fresh lots to explore',
-            icon: Scale,
-            tone: 'bg-[#f0ebf5] text-[#725181]',
-          },
-        ].map(({ label, value, detail, icon: Icon, tone }) => (
-          <div
-            key={label}
-            className="rounded-2xl border border-[#e4e9e3] bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
-          >
-            <div className="mb-3 flex items-start justify-between gap-2">
-              <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#78847b]">
-                {label}
-              </p>
-              <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${tone}`}>
-                <Icon className="h-4 w-4" />
-              </div>
-            </div>
-            <p className="text-2xl font-bold tracking-tight text-[#20352b]">{value}</p>
-            <p className="mt-1 truncate text-xs text-[#87928a]">{detail}</p>
-          </div>
-        ))}
-      </div>
 
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#dfe9df] bg-[#edf5ee] px-5 py-3.5">
         <div>
@@ -910,8 +854,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             const lotId = selectedInventoryItem?.greenBeanLotId ?? selectedExternalLot!.id
             const availableKg =
               selectedInventoryItem?.remainingWeightKg ?? selectedExternalLot!.currentWeightKg
-            const batchValue = parseFloat(roastForm.batchSize || '0')
-            const roastedValue = parseFloat(roastForm.roastedWeight || '0')
+            const batchValue = parseWeightInput(roastForm.batchSize)
+            const roastedValue = parseWeightInput(roastForm.roastedWeight)
             const yieldPercentage =
               batchValue > 0 && roastedValue > 0 ? (roastedValue / batchValue) * 100 : 0
             const lossPercentage = yieldPercentage > 0 ? 100 - yieldPercentage : 0
@@ -1004,7 +948,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                           <input
                             type="number"
                             min={0.01}
-                            step="0.01"
+                            step="any"
                             required
                             max={availableKg}
                             value={roastForm.batchSize}
@@ -1031,17 +975,17 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                           <input
                             type="number"
                             min={0.01}
-                            step="0.01"
+                            step="any"
                             required
-                            max={parseFloat(roastForm.batchSize) || undefined}
+                            max={parseWeightInput(roastForm.batchSize) || undefined}
                             value={roastForm.roastedWeight}
                             onChange={(e) =>
                               setRoastForm({ ...roastForm, roastedWeight: e.target.value })
                             }
                             onInvalid={(e) =>
                               (e.currentTarget as HTMLInputElement).setCustomValidity(
-                                parseFloat(roastForm.batchSize)
-                                  ? `Roasted weight cannot exceed batch size (${parseFloat(roastForm.batchSize).toFixed(2)} kg)`
+                                parseWeightInput(roastForm.batchSize)
+                                  ? `Roasted weight cannot exceed batch size (${parseWeightInput(roastForm.batchSize).toFixed(2)} kg)`
                                   : 'Please enter batch size first',
                               )
                             }
@@ -1127,53 +1071,92 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                           <span className="font-normal text-[#9aa69e]">(optional)</span>
                         </label>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          {/* Aroma Types */}
-                          <div>
-                            <span className="mb-1 block text-xs font-medium text-[#7b8a80]">
-                              Aroma Types
-                            </span>
-                            <Select
-                              value={selectedCategory}
-                              onChange={(cat) => {
-                                const category = (cat as keyof typeof FLAVOR_GROUPS) || 'Sweet'
-                                setSelectedCategory(category)
-                                setSelectedNote(FLAVOR_GROUPS[category][0])
-                              }}
-                              options={Object.keys(FLAVOR_GROUPS)}
-                              placeholder="Select type..."
-                            />
-                          </div>
-
-                          {/* Aroma */}
-                          <div>
-                            <span className="mb-1 block text-xs font-medium text-[#7b8a80]">
-                              Aroma
-                            </span>
-                            <Select
-                              value={selectedNote}
-                              onChange={(v) => setSelectedNote((v as string) || '')}
-                              options={FLAVOR_GROUPS[selectedCategory]}
-                              placeholder="Select aroma..."
-                            />
-                          </div>
-
-                          {/* Add button */}
-                          <div className="flex items-end">
-                            <button
-                              type="button"
-                              aria-label="Add aroma"
-                              onClick={() => {
-                                if (selectedNote && !selectedFlavorTags.includes(selectedNote)) {
-                                  setSelectedFlavorTags((prev) => [...prev, selectedNote])
-                                }
-                              }}
-                              className="inline-flex w-full items-center justify-center rounded-xl bg-[#d87832] px-4 py-3 font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#bd5d1e] hover:shadow-md"
-                            >
-                              Add
-                            </button>
+                        <div>
+                          <span className="mb-2 block text-xs font-medium text-[#7b8a80]">
+                            Aroma types{' '}
+                            <span className="font-normal text-[#a2ada5]">(choose multiple)</span>
+                          </span>
+                          <div className="flex flex-wrap gap-2">
+                            {Object.keys(FLAVOR_GROUPS).map((category) => {
+                              const isSelected = selectedAromaCategories.includes(category)
+                              return (
+                                <button
+                                  key={category}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedAromaCategories((prev) =>
+                                      isSelected
+                                        ? prev.filter((item) => item !== category)
+                                        : [...prev, category],
+                                    )
+                                    if (isSelected) {
+                                      setSelectedAromaNotes((prev) =>
+                                        prev.filter(
+                                          (note) => !FLAVOR_GROUPS[category].includes(note),
+                                        ),
+                                      )
+                                    }
+                                  }}
+                                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${isSelected ? 'border-[#2e6848] bg-[#e9f2ec] text-[#2e6848]' : 'border-[#dfe9df] bg-white text-[#718077] hover:border-[#9cb8a6]'}`}
+                                >
+                                  {category}
+                                </button>
+                              )
+                            })}
                           </div>
                         </div>
+
+                        <div className="mt-4">
+                          <span className="mb-2 block text-xs font-medium text-[#7b8a80]">
+                            Aroma notes{' '}
+                            <span className="font-normal text-[#a2ada5]">(choose any)</span>
+                          </span>
+                          {selectedAromaCategories.length > 0 ? (
+                            <div className="flex flex-wrap gap-2 rounded-xl border border-[#e2e8e1] bg-[#f7fbf7] p-3">
+                              {selectedAromaCategories
+                                .flatMap((category) => FLAVOR_GROUPS[category])
+                                .map((note) => {
+                                  const isSelected = selectedAromaNotes.includes(note)
+                                  return (
+                                    <button
+                                      key={note}
+                                      type="button"
+                                      onClick={() =>
+                                        setSelectedAromaNotes((prev) =>
+                                          isSelected
+                                            ? prev.filter((item) => item !== note)
+                                            : [...prev, note],
+                                        )
+                                      }
+                                      className={`rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${isSelected ? 'border-[#d87832] bg-[#fff1df] font-bold text-[#b45f22]' : 'border-transparent bg-white text-[#718077] hover:border-[#e2e8e1]'}`}
+                                    >
+                                      {note}
+                                    </button>
+                                  )
+                                })}
+                            </div>
+                          ) : (
+                            <p className="rounded-xl bg-[#f7faf7] px-3 py-3 text-xs text-[#829188]">
+                              Select at least one aroma type first.
+                            </p>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={selectedAromaNotes.length === 0}
+                          onClick={() => {
+                            setSelectedFlavorTags((prev) => [
+                              ...prev,
+                              ...selectedAromaNotes.filter((note) => !prev.includes(note)),
+                            ])
+                            setSelectedAromaNotes([])
+                          }}
+                          className="mt-3 inline-flex items-center justify-center rounded-xl bg-[#d87832] px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#bd5d1e] disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Add selected{' '}
+                          {selectedAromaNotes.length > 0 ? `(${selectedAromaNotes.length})` : ''}
+                        </button>
 
                         {/* Selected flavor tags */}
                         <div className="mt-4 flex flex-wrap gap-2">

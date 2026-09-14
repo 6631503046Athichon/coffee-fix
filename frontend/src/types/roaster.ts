@@ -21,6 +21,7 @@ export interface RoasterInventoryItem {
 
 export interface RoastBatch {
   id: string;
+  displayId?: string;
   roasterId: string;
   roasterInventoryId: string;
   greenBeanLotId: string;

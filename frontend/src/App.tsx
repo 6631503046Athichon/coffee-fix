@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
-import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, Edit, Flame, MapPin, Tag, Package, Box, Bean } from 'lucide-react';
+import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, ClipboardList, Edit, Flame, MapPin, Tag, Package, Box, Bean } from 'lucide-react';
 
 import { UserRole, CuppingSessionType, Customer } from './types';
 import { INITIAL_APP_DATA } from './constants';
@@ -53,6 +53,7 @@ const AddFarmPage = lazy(() => import('./components/farmer/AddFarmPage'));
 const ActivityTypeManagement = lazy(() => import('./components/admin/ActivityTypeManagement'));
 const ProcessTypeManagement = lazy(() => import('./components/admin/ProcessTypeManagement'));
 const RoasterWorkbench = lazy(() => import('./components/roaster/RoasterWorkbench'));
+const RoastLogbook = lazy(() => import('./components/roaster/RoastLogbook'));
 const CoffeeVarietiesManager = lazy(() => import('./components/admin/CoffeeVarietiesManager'));
 const CoffeeGradeManagement = lazy(() => import('./components/admin/CoffeeGradeManagement'));
 const CustomerManagement = lazy(() => import('./components/sales/CustomerManagement'));
@@ -413,6 +414,7 @@ const ProtectedRoutes: React.FC = () => {
 
       // Roaster Section
       { name: 'Roaster Workbench', href: '/roaster', icon: Flame, roles: [UserRole.Roaster, UserRole.Admin], section: 'roaster' },
+      { name: 'Roast Logbook', href: '/roast-logbook', icon: ClipboardList, roles: [UserRole.Roaster, UserRole.Admin], section: 'roaster' },
       { name: 'Customer Management', href: '/customers', icon: Users, roles: [UserRole.Admin, UserRole.Roaster], section: 'roaster' },
       { name: 'Quality Insights', href: '/insights', icon: Lightbulb, roles: [UserRole.Roaster], section: 'roaster' },
 
@@ -480,6 +482,14 @@ const ProtectedRoutes: React.FC = () => {
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Roaster, UserRole.Admin]}>
                     {withRouteLoader(<RoasterWorkbench currentUser={currentUser!} />)}
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/roast-logbook"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Roaster, UserRole.Admin]}>
+                    {withRouteLoader(<RoastLogbook currentUser={currentUser!} />)}
                   </ProtectedRoute>
                 }
               />

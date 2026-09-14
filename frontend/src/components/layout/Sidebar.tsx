@@ -69,7 +69,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   // Keep the roaster workspace focused for non-admin roaster accounts.
   const visibleNavItems = isRoasterOnly
-    ? navItems.filter((item) => item.name === 'Roaster Workbench')
+    ? navItems.filter((item) => ['Roaster Workbench', 'Roast Logbook'].includes(item.name))
     : navItems
 
   // Filter nav items: show if user has ANY of the required roles.

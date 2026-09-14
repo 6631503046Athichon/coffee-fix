@@ -10,6 +10,7 @@ import type { NextRequest } from 'next/server'
 const ALLOWED_ORIGINS: Set<string> = new Set(
   [
     'http://localhost:5173',
+    'http://127.0.0.1:5173',
     process.env.FRONTEND_URL,
     process.env.PRODUCTION_FRONTEND_URL,
   ].filter((o): o is string => typeof o === 'string' && o.length > 0),

@@ -6,6 +6,12 @@ export function toRoaId(uuid: string): string {
   return 'ROA-' + num.toString().padStart(4, '0');
 }
 
+/** Derives a stable four-digit roast batch display ID from a UUID. */
+export function toRoastBatchId(uuid: string): string {
+  const num = parseInt(uuid.replace(/-/g, '').substring(0, 8), 16) % 10000;
+  return 'RB-' + num.toString().padStart(4, '0');
+}
+
 export function toFixed2(value: number): number {
   return +Number(value).toFixed(2);
 }
