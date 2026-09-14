@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
+import { useToggleScrollAnchor } from '../../hooks/useToggleScrollAnchor';
 import { ArrowLeft, User, MapPin, Weight, Calendar, Tag, Info, CheckCircle, Award, ExternalLink, Package, Coffee, Star } from 'lucide-react';
 import { updateHarvestLot } from '../../services/lots/harvestLotService';
 import { formatDateDisplay } from '../../utils/formatters';
@@ -24,7 +25,7 @@ const TimelineStep: React.FC<{
     children: React.ReactNode;
     details?: React.ReactNode;
     isOpen?: boolean;
-    onToggle?: () => void;
+    onToggle?: (header: HTMLElement) => void;
     isLast?: boolean;
 }> = ({ icon: Icon, title, isComplete, children, details, isOpen = false, onToggle, isLast = false }) => (
     <div className="relative flex items-start">
@@ -35,7 +36,7 @@ const TimelineStep: React.FC<{
         <div className="ml-4">
             <button
                 type="button"
-                onClick={onToggle}
+                onClick={(e) => onToggle?.(e.currentTarget)}
                 className={`text-left font-semibold hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded ${isComplete ? 'text-gray-800' : 'text-gray-500'}`}
                 aria-expanded={isOpen}
             >
@@ -51,11 +52,20 @@ const TimelineStep: React.FC<{
     </div>
 );
 
+type TimelineStepKey = 'harvested' | 'parchment' | 'greenBean' | 'qcScore';
+
 const HarvestLotDetail: React.FC = () => {
     const { lotId } = useParams<{ lotId: string }>();
     const navigate = useNavigate();
     const { data, setData } = useDataContext();
-    const [openStep, setOpenStep] = useState<'harvested' | 'parchment' | 'greenBean' | 'qcScore' | null>(null);
+    const [openStep, setOpenStep] = useState<TimelineStepKey | null>(null);
+    // Only one step is open at a time, so opening a step can close a tall one
+    // above it (Green Bean lists every lot). Keep the clicked title in place.
+    const { remember: rememberStepTitle, spacerRef: stepSpacerRef } = useToggleScrollAnchor(openStep);
+    const toggleStep = (step: TimelineStepKey, title: HTMLElement) => {
+        rememberStepTitle(title);
+        setOpenStep(prev => prev === step ? null : step);
+    };
     const isBindingFarmRef = useRef(false);
 
     const formatDate = (date?: string | Date | null) =>
@@ -199,7 +209,7 @@ const HarvestLotDetail: React.FC = () => {
                             title="Harvested"
                             isComplete={true}
                             isOpen={openStep === 'harvested'}
-                            onToggle={() => setOpenStep(prev => prev === 'harvested' ? null : 'harvested')}
+                            onToggle={(el) => toggleStep('harvested', el)}
                             details={(
                                 <div className="space-y-1">
                                     <div><span className="font-semibold">Farm:</span> {farm?.farmName || farm?.name || 'N/A'}</div>
@@ -217,7 +227,7 @@ const HarvestLotDetail: React.FC = () => {
                             title="Parchment"
                             isComplete={relatedParchmentLots.length > 0}
                             isOpen={openStep === 'parchment'}
-                            onToggle={() => setOpenStep(prev => prev === 'parchment' ? null : 'parchment')}
+                            onToggle={(el) => toggleStep('parchment', el)}
                             details={relatedParchmentLots.length > 0 ? (
                                 <div className="space-y-2">
                                     {relatedParchmentLots.map((parchment, idx) => (
@@ -244,7 +254,7 @@ const HarvestLotDetail: React.FC = () => {
                             title="Green Bean"
                             isComplete={relatedGreenBeanLots.length > 0}
                             isOpen={openStep === 'greenBean'}
-                            onToggle={() => setOpenStep(prev => prev === 'greenBean' ? null : 'greenBean')}
+                            onToggle={(el) => toggleStep('greenBean', el)}
                             details={relatedGreenBeanLots.length > 0 ? (
                                 <div className="space-y-2">
                                     {relatedGreenBeanLots.map((greenBean, idx) => (
@@ -274,7 +284,7 @@ const HarvestLotDetail: React.FC = () => {
                                 || qcGreenBeanLot?.processorScore != null
                             }
                             isOpen={openStep === 'qcScore'}
-                            onToggle={() => setOpenStep(prev => prev === 'qcScore' ? null : 'qcScore')}
+                            onToggle={(el) => toggleStep('qcScore', el)}
                             details={(
                                 <div className="space-y-2">
                                     {cuppingResult ? (
@@ -319,6 +329,8 @@ const HarvestLotDetail: React.FC = () => {
                      </div>
                 </div>
             </div>
+            {/* Holds page height when a tall step closes near the bottom; see useToggleScrollAnchor. */}
+            <div ref={stepSpacerRef} aria-hidden="true" />
         </div>
     );
 };

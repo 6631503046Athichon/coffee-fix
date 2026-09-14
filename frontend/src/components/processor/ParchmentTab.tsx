@@ -36,6 +36,7 @@ import {
 } from '../../types'
 import { useDataContext } from '../../hooks/useDataContext'
 import { useGradeNames } from '../../hooks/useGradeOptions'
+import { useToggleScrollAnchor } from '../../hooks/useToggleScrollAnchor'
 import { useToast } from '../../contexts/ToastContext'
 import { addProcessingBatch } from '../../services/processing/processingBatchService'
 import {
@@ -184,14 +185,17 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   // process-type group's body, and the same key (e.g. "Honey") collapses
   // it across both sections at once.
   const [collapsedTypes, setCollapsedTypes] = useState<Set<string>>(new Set())
-  const toggleType = useCallback((t: string) => {
+  const { remember: rememberGroupHeader, spacerRef: groupSpacerRef } =
+    useToggleScrollAnchor(collapsedTypes)
+  const toggleType = useCallback((t: string, header: HTMLElement) => {
+    rememberGroupHeader(header)
     setCollapsedTypes((prev) => {
       const next = new Set(prev)
       if (next.has(t)) next.delete(t)
       else next.add(t)
       return next
     })
-  }, [])
+  }, [rememberGroupHeader])
 
   // ── Derived data ────────────────────────────────────────────────
 
@@ -671,7 +675,8 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
               <div key={type}>
                 <button
                   type="button"
-                  onClick={() => toggleType(`g:${type}`)}
+                  aria-expanded={!isCollapsed}
+                  onClick={(e) => toggleType(`g:${type}`, e.currentTarget)}
                   className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-50"
                 >
                   <div className="flex items-center gap-2">
@@ -1361,6 +1366,10 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
           </div>
         </Modal>
       )}
+
+      {/* Holds page height after a group collapses near the bottom; see
+          useToggleScrollAnchor. Inline margin opts out of space-y-6. */}
+      <div ref={groupSpacerRef} aria-hidden="true" style={{ marginTop: 0 }} />
     </div>
   )
 }

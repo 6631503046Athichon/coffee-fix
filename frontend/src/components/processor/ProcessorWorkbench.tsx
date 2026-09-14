@@ -2,13 +2,13 @@ import React, {
   useState,
   useMemo,
   useEffect,
-  useLayoutEffect,
   useCallback,
   useRef,
 } from "react";
 import { useDataContext } from "../../hooks/useDataContext";
 import { formatDate } from "../../utils/formatters";
 import { useGradeNames } from "../../hooks/useGradeOptions";
+import { useToggleScrollAnchor } from "../../hooks/useToggleScrollAnchor";
 import {
   ProcessingBatch,
   ProcessingBatchStatus,
@@ -1451,29 +1451,19 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const [expandedGradeSummaries, setExpandedGradeSummaries] = useState<
     Set<string>
   >(new Set());
-  // Expanding a grade inserts its source rows below the clicked header. The
-  // page scroller (<main>) can react by clamping or anchoring scrollTop, which
-  // reads as the screen jumping. Remember where the clicked row was and put it
-  // back in the same place once the DOM has changed.
-  const gradeAnchorRef = useRef<{ el: HTMLElement; top: number } | null>(null);
+  // Expanding a grade inserts its source rows below the clicked row; keep
+  // that row where it was so the page does not jump.
+  const { remember: rememberGradeRow, spacerRef: gradeSpacerRef } =
+    useToggleScrollAnchor(expandedGradeSummaries);
   const toggleGradeSummary = useCallback((grade: string, el: HTMLElement) => {
-    gradeAnchorRef.current = { el, top: el.getBoundingClientRect().top };
+    rememberGradeRow(el);
     setExpandedGradeSummaries((prev) => {
       const next = new Set(prev);
       if (next.has(grade)) next.delete(grade);
       else next.add(grade);
       return next;
     });
-  }, []);
-  useLayoutEffect(() => {
-    const anchor = gradeAnchorRef.current;
-    if (!anchor) return;
-    gradeAnchorRef.current = null;
-    const scroller = anchor.el.closest("main");
-    if (!scroller) return;
-    const delta = anchor.el.getBoundingClientRect().top - anchor.top;
-    if (delta !== 0) scroller.scrollTop += delta;
-  }, [expandedGradeSummaries]);
+  }, [rememberGradeRow]);
 
   const greenBeanPageCount = Math.ceil(
     processedGreenBeanLots.length / ITEMS_PER_PAGE,
@@ -2185,6 +2175,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           onPageChange={setGreenBeanCurrentPage}
         />
       </div>
+
+      {/* Holds page height after a grade collapses near the bottom; see
+          useToggleScrollAnchor. Inline margin opts out of space-y-4. */}
+      <div ref={gradeSpacerRef} aria-hidden="true" style={{ marginTop: 0 }} />
     </div>
   );
 
