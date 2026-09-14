@@ -1295,6 +1295,19 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     parchmentCurrentPage * ITEMS_PER_PAGE,
   );
 
+  // Parchment lots that have been split into green bean lots. The split
+  // history button only appears for these; a lot still awaiting hulling has
+  // nothing to show.
+  const parchmentIdsWithGreenBeans = useMemo(
+    () =>
+      new Set(
+        data.greenBeanLots
+          .map((g) => g.parchmentLotId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    [data.greenBeanLots],
+  );
+
   // For Kanban view — show every parchment lot that still has stock so the
   // Withdraw/Hull & Grade buttons remain reachable. Fully-depleted Hulled lots
   // (currentWeightKg = 0) are hidden because nothing further can be done with
@@ -1732,13 +1745,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setSelectedParchmentForHistory(p)}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
-                          title="View Green Bean Lots"
-                        >
-                          <History className="h-4 w-4" />
-                        </button>
+                        {parchmentIdsWithGreenBeans.has(p.id) ? (
+                          <button
+                            onClick={() => setSelectedParchmentForHistory(p)}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
+                            title="View Green Bean Lots"
+                          >
+                            <History className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          // Keeps Hull & Grade lined up with the rows above.
+                          <span className="w-8 h-8" aria-hidden="true" />
+                        )}
                         <button
                           onClick={() => openModal("hullAndGrade", p)}
                           disabled={
