@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Package, PlusCircle } from 'lucide-react'
+import { Flame, Package, PlusCircle } from 'lucide-react'
 import { Button } from '../common/Button'
 import type { ExternalDisplayLot } from '../../types/displayTypes'
 import { toFixed2, toRoaId } from '../../utils/formatters'
+import { useStablePageHeight } from '../../hooks/useStablePageHeight'
 
 interface ExternalLotsTableProps {
   lots: ExternalDisplayLot[]
@@ -25,6 +26,8 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
   hideHeader = false,
   loadingLotId,
 }) => {
+  // A short last page would shrink the panel and make the screen jump up.
+  const pageRef = useStablePageHeight<HTMLDivElement>(currentPage, totalPages, lots.length)
   const [openPopover, setOpenPopover] = useState<string | null>(null)
   const [popoverPos, setPopoverPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
 
@@ -106,7 +109,7 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
             </p>
           </div>
         ) : (
-          <div className="grid gap-3 xl:grid-cols-2">
+          <div ref={pageRef} className="grid content-start gap-3 xl:grid-cols-2">
             {lots.map((lot) => (
               <article
                 key={lot.id}
@@ -135,21 +138,25 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
                   <span className="rounded-full bg-[#f7f1eb] px-2.5 py-1 text-xs font-medium text-[#80664d]">
                     {lot.process || 'Process not set'}
                   </span>
-                  <span className="ml-auto text-lg font-bold text-[#7f4b24]">
-                    {toFixed2(lot.currentWeightKg)}{' '}
-                    <span className="text-xs font-semibold text-[#a98c73]">kg</span>
+                  {/* Weight and the action sit together on the right; the button keeps
+                      its natural width instead of stretching across the card. */}
+                  <span className="ml-auto flex flex-wrap items-center justify-end gap-4">
+                    <span className="text-lg font-bold text-[#7f4b24]">
+                      {toFixed2(lot.currentWeightKg)}{' '}
+                      <span className="text-xs font-semibold text-[#a98c73]">kg</span>
+                    </span>
+                    <Button
+                      variant="success"
+                      size="md"
+                      icon={<Flame className="h-4 w-4" />}
+                      disabled={loadingLotId === lot.id}
+                      onClick={() => onRoast(lot)}
+                      className="shrink-0"
+                    >
+                      {loadingLotId === lot.id ? 'Loading…' : 'Start roast'}
+                    </Button>
                   </span>
                 </div>
-                <Button
-                  variant="success"
-                  size="sm"
-                  fullWidth
-                  disabled={loadingLotId === lot.id}
-                  onClick={() => onRoast(lot)}
-                  className="mt-3 bg-[#d87832] hover:bg-[#bd5d1e]"
-                >
-                  {loadingLotId === lot.id ? 'Loading…' : 'Start roast'}
-                </Button>
               </article>
             ))}
           </div>

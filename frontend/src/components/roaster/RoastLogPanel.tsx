@@ -5,9 +5,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar,
-  Eye,
   Scale,
   TrendingDown,
+  X,
 } from 'lucide-react'
 import { RoastBatch } from '../../types'
 import { toFixed2, toRoaId, toRoastBatchId } from '../../utils/formatters'
@@ -85,7 +85,7 @@ const RoastLogPanel: React.FC<{
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-[#e2e8e1] bg-white shadow-sm">
+    <div className="overflow-hidden rounded-2xl border border-[#e2e8e1] bg-white shadow-sm lg:absolute lg:inset-0 lg:flex lg:flex-col">
       {/* Header */}
       <div className="border-b border-[#e6ebe5] bg-gradient-to-r from-[#fff8ed] to-white px-6 py-5">
         <div className="flex items-center gap-3">
@@ -100,11 +100,21 @@ const RoastLogPanel: React.FC<{
       </div>
 
       {/* Roast Cards */}
-      <div className="max-h-[65vh] space-y-3 overflow-y-auto bg-[#fcfdfb] p-4">
+      <div className="max-h-[65vh] space-y-3 overflow-y-auto bg-[#fcfdfb] p-4 lg:max-h-none lg:min-h-0 lg:flex-1">
         {roasts.map((roast) => (
           <div
             key={roast.id}
-            className="rounded-xl border border-[#e6ebe5] border-l-4 border-l-[#d87832] bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md"
+            role="button"
+            tabIndex={0}
+            onClick={() => setSelectedRoast(roast)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                setSelectedRoast(roast)
+              }
+            }}
+            aria-label={`View details of roast ${roast.displayId || toRoastBatchId(roast.id)}`}
+            className="cursor-pointer rounded-xl border border-[#e6ebe5] border-l-4 border-l-[#d87832] bg-white p-5 shadow-sm outline-none transition-all hover:-translate-y-0.5 hover:border-orange-200 hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#d87832]"
           >
             {/* Top Row */}
             <div className="mb-4 flex items-start justify-between gap-4">
@@ -158,19 +168,8 @@ const RoastLogPanel: React.FC<{
                   <span>{roast.sourceGrade || 'Grade not set'}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedRoast(roast)}
-                  aria-label="View roast details"
-                  title="View roast details"
-                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-[#eef4ee] text-[#2e6848] transition-colors hover:bg-[#dcebdd]"
-                >
-                  <Eye className="h-5 w-5" />
-                </button>
-                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-orange-50">
-                  <Flame className="h-5 w-5 text-orange-500" />
-                </div>
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-orange-50">
+                <Flame className="h-5 w-5 text-orange-500" />
               </div>
             </div>
 

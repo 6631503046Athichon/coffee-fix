@@ -9,6 +9,8 @@ import {
   Scale,
   TrendingDown,
 } from 'lucide-react'
+import DatePicker from '../common/DatePicker'
+import Select from '../common/Select'
 import { useDataContext } from '../../hooks/useDataContext'
 import { RoastLevel, User, UserRole } from '../../types'
 import { toFixed2, toRoastBatchId } from '../../utils/formatters'
@@ -228,36 +230,33 @@ const RoastLogbook: React.FC<RoastLogbookProps> = ({ currentUser }) => {
 
   return (
     <div className="min-h-full bg-[#f7f8f5] pb-8">
-      <header className="mb-6 overflow-hidden rounded-3xl bg-[#263b31] px-6 py-7 text-white shadow-lg shadow-[#263b31]/10 sm:px-8">
-        <div className="flex flex-wrap items-start justify-between gap-5">
+      <header className="mb-5 rounded-lg border border-[#e4e9e3] bg-gradient-to-br from-white via-white to-[#eef5ed] p-6 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#d87832]">
-              <ClipboardList className="h-6 w-6" />
+            <div className="mt-1 flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-[#d87832] shadow-sm shadow-orange-200">
+              <ClipboardList className="h-7 w-7 text-white" />
             </div>
             <div>
-              <p className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-[#b8cabe]">
-                Roaster workspace
-              </p>
-              <h1 className="text-3xl font-bold tracking-tight">Roast Logbook</h1>
-              <p className="mt-2 max-w-xl text-sm text-[#c5d2c8]">
+              <h1 className="mb-2 text-3xl font-bold text-gray-900">Roast Logbook</h1>
+              <p className="text-gray-600">
                 Every batch, output, and roast decision in one place.
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-2 rounded-xl border border-[#dfe9df] bg-[#f7faf7] px-3 py-2.5 text-sm text-[#6d7e72]">
+              Records shown
+              <span className="font-bold text-[#294936]">{records.length}</span>
+            </span>
             <button
               type="button"
               onClick={exportCsv}
               disabled={records.length === 0}
-              className="inline-flex items-center gap-2 rounded-xl border border-[#66816e] px-3 py-2.5 text-sm font-bold text-[#f4f8f4] transition hover:bg-[#395345] disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex items-center gap-2 rounded-xl border border-[#dfe9df] bg-white px-3 py-2.5 text-sm font-bold text-[#2e6848] transition hover:bg-[#edf5ee] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Download className="h-4 w-4" />
               Export CSV
             </button>
-            <div className="rounded-2xl border border-[#66816e] px-4 py-3 text-right">
-              <p className="text-xs text-[#b8cabe]">Records shown</p>
-              <p className="mt-1 text-2xl font-bold text-[#f5c66d]">{records.length}</p>
-            </div>
           </div>
         </div>
       </header>
@@ -294,8 +293,9 @@ const RoastLogbook: React.FC<RoastLogbookProps> = ({ currentUser }) => {
         </div>
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-[#e2e8e1] bg-white shadow-sm">
-        <div className="border-b border-[#e6ebe5] bg-[#fbfcfa] p-4 sm:p-5">
+      {/* No overflow-hidden here: the date picker and dropdowns open over the table below. */}
+      <section className="rounded-2xl border border-[#e2e8e1] bg-white shadow-sm">
+        <div className="rounded-t-2xl border-b border-[#e6ebe5] bg-[#fbfcfa] p-4 sm:p-5">
           <div className="mb-3 flex items-center gap-2">
             <Filter className="h-4 w-4 text-[#829188]" />
             <span className="text-xs font-bold uppercase tracking-[0.12em] text-[#6d7e72]">
@@ -303,67 +303,50 @@ const RoastLogbook: React.FC<RoastLogbookProps> = ({ currentUser }) => {
             </span>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <label className="text-xs font-semibold text-[#6d7e72]">
-              Roast date
-              <input
-                type="date"
-                value={dateFilter}
-                onChange={(event) => setDateFilter(event.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-[#dfe9df] bg-white px-3 py-2.5 text-sm font-medium text-[#55635a] outline-none focus:border-[#62a477]"
-              />
-            </label>
-            <label className="text-xs font-semibold text-[#6d7e72]">
-              Process type
-              <select
+            <div className="text-xs font-semibold text-[#6d7e72]">
+              <span className="mb-1.5 block">Roast date</span>
+              <DatePicker value={dateFilter} onChange={setDateFilter} placeholder="Any date" />
+            </div>
+            <div className="text-xs font-semibold text-[#6d7e72]">
+              <span className="mb-1.5 block">Process type</span>
+              <Select
                 value={processFilter}
-                onChange={(event) => setProcessFilter(event.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-[#dfe9df] bg-white px-3 py-2.5 text-sm font-medium text-[#55635a] outline-none focus:border-[#62a477]"
-              >
-                <option>All process types</option>
-                {filterOptions.processes.map((process) => (
-                  <option key={process}>{process}</option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs font-semibold text-[#6d7e72]">
-              Variety
-              <select
+                onChange={(value) => setProcessFilter(String(value ?? 'All process types'))}
+                options={['All process types', ...filterOptions.processes]}
+                colorTheme="emerald"
+                className="text-sm font-medium"
+              />
+            </div>
+            <div className="text-xs font-semibold text-[#6d7e72]">
+              <span className="mb-1.5 block">Variety</span>
+              <Select
                 value={varietyFilter}
-                onChange={(event) => setVarietyFilter(event.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-[#dfe9df] bg-white px-3 py-2.5 text-sm font-medium text-[#55635a] outline-none focus:border-[#62a477]"
-              >
-                <option>All varieties</option>
-                {filterOptions.varieties.map((variety) => (
-                  <option key={variety}>{variety}</option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs font-semibold text-[#6d7e72]">
-              Grade
-              <select
+                onChange={(value) => setVarietyFilter(String(value ?? 'All varieties'))}
+                options={['All varieties', ...filterOptions.varieties]}
+                colorTheme="emerald"
+                className="text-sm font-medium"
+              />
+            </div>
+            <div className="text-xs font-semibold text-[#6d7e72]">
+              <span className="mb-1.5 block">Grade</span>
+              <Select
                 value={gradeFilter}
-                onChange={(event) => setGradeFilter(event.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-[#dfe9df] bg-white px-3 py-2.5 text-sm font-medium text-[#55635a] outline-none focus:border-[#62a477]"
-              >
-                <option>All grades</option>
-                {filterOptions.grades.map((grade) => (
-                  <option key={grade}>{grade}</option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs font-semibold text-[#6d7e72]">
-              Roast level
-              <select
+                onChange={(value) => setGradeFilter(String(value ?? 'All grades'))}
+                options={['All grades', ...filterOptions.grades]}
+                colorTheme="emerald"
+                className="text-sm font-medium"
+              />
+            </div>
+            <div className="text-xs font-semibold text-[#6d7e72]">
+              <span className="mb-1.5 block">Roast level</span>
+              <Select
                 value={levelFilter}
-                onChange={(event) => setLevelFilter(event.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-[#dfe9df] bg-white px-3 py-2.5 text-sm font-medium text-[#55635a] outline-none focus:border-[#62a477]"
-              >
-                <option>All levels</option>
-                <option>{RoastLevel.Light}</option>
-                <option>{RoastLevel.Medium}</option>
-                <option>{RoastLevel.Dark}</option>
-              </select>
-            </label>
+                onChange={(value) => setLevelFilter(String(value ?? 'All levels'))}
+                options={['All levels', RoastLevel.Light, RoastLevel.Medium, RoastLevel.Dark]}
+                colorTheme="emerald"
+                className="text-sm font-medium"
+              />
+            </div>
           </div>
         </div>
 
@@ -460,7 +443,7 @@ const RoastLogbook: React.FC<RoastLogbookProps> = ({ currentUser }) => {
           </div>
         )}
         {records.length > 0 && (
-          <div className="flex items-center justify-between border-t border-[#e6ebe5] bg-[#fbfcfa] px-5 py-3">
+          <div className="flex items-center justify-between rounded-b-2xl border-t border-[#e6ebe5] bg-[#fbfcfa] px-5 py-3">
             <p className="text-xs font-semibold text-[#829188]">
               Page {page} of {totalPages}
             </p>

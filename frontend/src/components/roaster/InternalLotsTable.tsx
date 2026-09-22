@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Package, ChevronLeft, ChevronRight, ClipboardList, X } from 'lucide-react'
+import { Package, ChevronLeft, ChevronRight, ClipboardList, Flame, X } from 'lucide-react'
 import { Button } from '../common/Button'
 import { RoasterInventoryItem } from '../../types'
 import { toFixed2, toRoaId } from '../../utils/formatters'
+import { useStablePageHeight } from '../../hooks/useStablePageHeight'
 
 // WithdrawalLotItem is just RoasterInventoryItem — all enriched fields (grade, processorScore,
 // variety, process, greenBeanDisplayId) are now populated directly by transformInventoryItem.
@@ -10,6 +11,9 @@ export type WithdrawalLotItem = RoasterInventoryItem
 
 interface InternalLotsTableProps {
   lots: WithdrawalLotItem[]
+  /** Totals across every page; the summary falls back to the visible page without them. */
+  totalLots?: number
+  totalWeightKg?: number
   onLogRoast: (lot: WithdrawalLotItem) => void
   currentPage?: number
   totalPages?: number
@@ -24,12 +28,16 @@ interface PopoverPos {
 
 const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
   lots,
+  totalLots,
+  totalWeightKg,
   onLogRoast,
   currentPage = 1,
   totalPages = 1,
   onPageChange,
   hideHeader = false,
 }) => {
+  // A short last page would shrink the panel and make the screen jump up.
+  const pageRef = useStablePageHeight<HTMLDivElement>(currentPage, totalPages, lots.length)
   const [openPopover, setOpenPopover] = useState<string | null>(null)
   const [popoverPos, setPopoverPos] = useState<PopoverPos>({ top: 0, left: 0 })
 
@@ -93,13 +101,15 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
             </div>
             <div className="flex items-center gap-4 text-right">
               <div>
-                <p className="text-lg font-bold text-[#2e6848]">{lots.length}</p>
+                <p className="text-lg font-bold text-[#2e6848]">{totalLots ?? lots.length}</p>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-[#8b9a90]">
-                  lots shown
+                  {totalLots == null ? 'lots shown' : 'lots'}
                 </p>
               </div>
               <div className="border-l border-[#dfe9df] pl-4">
-                <p className="text-lg font-bold text-[#2e6848]">{toFixed2(visibleWeight)} kg</p>
+                <p className="text-lg font-bold text-[#2e6848]">
+                  {toFixed2(totalWeightKg ?? visibleWeight)} kg
+                </p>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-[#8b9a90]">
                   available
                 </p>
@@ -116,7 +126,7 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
               <p className="mt-1 text-xs text-[#8b9a90]">Withdraw green beans to start roasting.</p>
             </div>
           ) : (
-            <div className="grid gap-3 xl:grid-cols-2">
+            <div ref={pageRef} className="grid content-start gap-3 xl:grid-cols-2">
               {lots.map((lot) => (
                 <article
                   key={lot.id}
@@ -142,41 +152,45 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
                       <ClipboardList className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </div>
-                  <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl bg-[#f7fbf7] p-3">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-[#8b9a90]">
-                        Grade
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-[#55635a]">
-                        {lot.grade || '—'}
-                      </p>
+                  {/* Details and the action share a row; the button keeps its natural
+                      width and drops below, right-aligned, when the card is narrow. */}
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <div className="grid min-w-[220px] flex-1 grid-cols-3 gap-2 rounded-xl bg-[#f7fbf7] p-3">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-[#8b9a90]">
+                          Grade
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-[#55635a]">
+                          {lot.grade || '—'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-[#8b9a90]">
+                          Score
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-[#456d55]">
+                          {lot.processorScore != null ? lot.processorScore.toFixed(2) : '—'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-[#8b9a90]">
+                          Available
+                        </p>
+                        <p className="mt-1 text-sm font-bold text-[#294936]">
+                          {toFixed2(lot.remainingWeightKg)} kg
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-[#8b9a90]">
-                        Score
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-[#456d55]">
-                        {lot.processorScore != null ? lot.processorScore.toFixed(2) : '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-[#8b9a90]">
-                        Available
-                      </p>
-                      <p className="mt-1 text-sm font-bold text-[#294936]">
-                        {toFixed2(lot.remainingWeightKg)} kg
-                      </p>
-                    </div>
+                    <Button
+                      variant="success"
+                      size="md"
+                      icon={<Flame className="h-4 w-4" />}
+                      className="ml-auto shrink-0"
+                      onClick={() => onLogRoast(lot)}
+                    >
+                      Start roast
+                    </Button>
                   </div>
-                  <Button
-                    variant="success"
-                    size="sm"
-                    fullWidth
-                    className="mt-3 bg-[#d87832] hover:bg-[#bd5d1e]"
-                    onClick={() => onLogRoast(lot)}
-                  >
-                    Start roast
-                  </Button>
                 </article>
               ))}
             </div>

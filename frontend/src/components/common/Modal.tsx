@@ -46,6 +46,16 @@ export const Modal: React.FC<ModalProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
+  // Callers usually pass an inline `onClose`, which is a new function on every
+  // render. Reading it through a ref keeps it out of the effect below: with it
+  // as a dependency the effect re-ran on every keystroke or click inside the
+  // dialog, re-focused the first control (the close button) each time, stole
+  // focus from the field being typed in and scrolled the dialog back to the top.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   // Escape-to-close and focus trap on Tab/Shift+Tab.
   useEffect(() => {
     if (!isOpen) return;
@@ -73,7 +83,7 @@ export const Modal: React.FC<ModalProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -119,7 +129,7 @@ export const Modal: React.FC<ModalProps> = ({
         setTimeout(() => previouslyFocused.focus(), 0);
       }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -157,7 +167,7 @@ export const Modal: React.FC<ModalProps> = ({
     >
       <div
         ref={containerRef}
-        className={`bg-white rounded-3xl p-8 shadow-2xl ${maxWidth === 'auto' ? 'w-auto min-w-[400px]' : 'w-full'} ${maxWidthClasses[maxWidth]} max-h-[90vh] overflow-y-auto ${className}`}
+        className={`bg-white rounded-3xl p-8 shadow-2xl ${maxWidth === 'auto' ? 'w-auto min-w-[400px]' : 'w-full'} ${maxWidthClasses[maxWidth]} max-h-[90vh] overflow-y-auto overscroll-contain ${className}`}
         onClick={(e) => e.stopPropagation()}
         style={{ margin: '1rem' }}
       >

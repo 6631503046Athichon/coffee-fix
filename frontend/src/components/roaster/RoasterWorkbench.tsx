@@ -15,7 +15,7 @@ import {
   GreenBeanSourceType,
   UserRole,
 } from '../../types'
-import { Package, Flame, Coffee, Loader2, ArrowRight } from 'lucide-react'
+import { Package, Flame, Coffee, Loader2, ArrowRight, X } from 'lucide-react'
 import ExternalLotsTable from './ExternalLotsTable'
 import InternalLotsTable from './InternalLotsTable'
 import RoastLogPanel from './RoastLogPanel'
@@ -83,7 +83,6 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
   const [roastForm, setRoastForm] = useState({ batchSize: '', roastedWeight: '', notes: '' })
   const [roastLevel, setRoastLevel] = useState<RoastLevel>(RoastLevel.Medium)
   const [selectedAromaCategories, setSelectedAromaCategories] = useState<string[]>(['Sweet'])
-  const [selectedAromaNotes, setSelectedAromaNotes] = useState<string[]>([])
   const [selectedFlavorTags, setSelectedFlavorTags] = useState<string[]>([])
   const availableLotsRef = useRef<HTMLButtonElement>(null)
   const internalLotsRef = useRef<HTMLButtonElement>(null)
@@ -289,7 +288,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
 
   // Pagination for Inventory (withdrawal lots)
   const [inventoryPage, setInventoryPage] = useState(1)
-  const inventoryPageSize = 5
+  const inventoryPageSize = 6
   const inventoryTotalPages = Math.max(1, Math.ceil(myInventory.length / inventoryPageSize))
   useEffect(() => {
     if (inventoryPage > inventoryTotalPages) setInventoryPage(inventoryTotalPages)
@@ -305,7 +304,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
 
   // Pagination for External Lots
   const [externalPage, setExternalPage] = useState(1)
-  const externalPageSize = 5
+  const externalPageSize = 6
   const externalTotalPages = Math.max(1, Math.ceil(availableExternalLots.length / externalPageSize))
   useEffect(() => {
     if (externalPage > externalTotalPages) setExternalPage(externalTotalPages)
@@ -345,7 +344,6 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
 
     setSelectedFlavorTags(existing)
     setSelectedAromaCategories(['Sweet'])
-    setSelectedAromaNotes([])
     setIsLogRoastModalOpen(true)
   }
 
@@ -357,7 +355,6 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     setRoastLevel(RoastLevel.Medium)
     setSelectedFlavorTags([])
     setSelectedAromaCategories(['Sweet'])
-    setSelectedAromaNotes([])
     setIsLogRoastModalOpen(true)
   }
 
@@ -382,6 +379,12 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         message: err instanceof Error ? err.message : 'ไม่สามารถ Claim lot ได้',
       })
     }
+  }
+
+  const closeLogRoastModal = () => {
+    setIsLogRoastModalOpen(false)
+    setSelectedExternalLot(null)
+    setIsSubmittingRoast(false)
   }
 
   const handleLogRoastSubmit = async (e: React.FormEvent) => {
@@ -591,8 +594,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         title="Roaster's Workbench"
         description="Your daily view of available green beans, roasting stock, and batch history."
         icon={
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#20352b] shadow-lg shadow-emerald-900/15">
-            <Coffee className="h-7 w-7 text-[#f5b84b]" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#d87832] shadow-sm shadow-orange-200">
+            <Coffee className="h-7 w-7 text-white" />
           </div>
         }
         className="mb-5 border-[#e4e9e3] bg-gradient-to-br from-white via-white to-[#eef5ed] p-6 shadow-sm"
@@ -607,14 +610,14 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         </div>
         <button
           type="button"
-          onClick={scrollToRoastLog}
+          onClick={() => navigate('/roast-logbook')}
           className="inline-flex items-center gap-1.5 text-sm font-bold text-[#2e6848] transition-colors hover:text-[#1c4932]"
         >
           View roast history <ArrowRight className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3 lg:items-stretch">
         <div className="space-y-6 lg:col-span-2">
           {/* Green Bean Lots - Tabbed View */}
           <div className="overflow-hidden rounded-2xl border border-[#e2e8e1] bg-white shadow-sm">
@@ -623,7 +626,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
               <button
                 ref={internalLotsRef}
                 onClick={() => setLotsTab('internal')}
-                className={`min-w-[150px] flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
+                className={`min-w-[150px] flex-1 px-6 py-3 text-sm font-semibold transition-colors ${
                   lotsTab === 'internal'
                     ? 'rounded-xl bg-white text-[#2e6848] shadow-sm ring-1 ring-[#d5e2d7]'
                     : 'rounded-xl text-gray-500 hover:bg-white/70 hover:text-gray-700'
@@ -640,16 +643,16 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
               <button
                 ref={availableLotsRef}
                 onClick={() => setLotsTab('external')}
-                className={`min-w-[150px] flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
+                className={`min-w-[150px] flex-1 px-6 py-3 text-sm font-semibold transition-colors ${
                   lotsTab === 'external'
-                    ? 'rounded-xl bg-white text-emerald-700 shadow-sm ring-1 ring-gray-200'
+                    ? 'rounded-xl bg-white text-[#2e6848] shadow-sm ring-1 ring-[#d5e2d7]'
                     : 'rounded-xl text-gray-500 hover:bg-white/70 hover:text-gray-700'
                 }`}
               >
                 <div className="flex items-center justify-center gap-2">
                   <Package className="h-4 w-4" />
                   Purchased Lots
-                  <span className="ml-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
+                  <span className="ml-1 rounded-full bg-[#e9f2ec] px-2 py-0.5 text-xs text-[#2e6848]">
                     {availableExternalLots.length}
                   </span>
                 </div>
@@ -657,14 +660,15 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             </div>
 
             {/* Tab Content */}
-            {/* Fixed height, not min-height: both tabs page at five rows and
-                the pagination footer only renders past one page, so a
-                content-sized box made the panel jump every time you switched
-                tabs. 460px clears a full page plus the footer. */}
-            <div className="h-[460px] overflow-y-auto bg-white">
+            {/* Grows with its cards (six per page, two columns) so nothing is
+                cut off behind an inner scrollbar; the floor keeps a short or
+                empty tab from collapsing the panel. */}
+            <div className="min-h-[460px] bg-white">
               {lotsTab === 'internal' ? (
                 <InternalLotsTable
                   lots={pagedInventory}
+                  totalLots={myInventory.length}
+                  totalWeightKg={myInventory.reduce((sum, lot) => sum + lot.remainingWeightKg, 0)}
                   onLogRoast={(lot) => openLogRoastModal(lot as any)}
                   currentPage={inventoryPage}
                   totalPages={inventoryTotalPages}
@@ -688,7 +692,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         </div>
 
         {/* Roast Log */}
-        <div ref={roastLogRef}>
+        <div ref={roastLogRef} className="lg:relative">
           <RoastLogPanel
             roasts={pagedRoasts}
             page={page}
@@ -834,12 +838,12 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
 
       <Modal
         isOpen={isLogRoastModalOpen && (!!selectedInventoryItem || !!selectedExternalLot)}
-        onClose={() => {
-          setIsLogRoastModalOpen(false)
-          setSelectedExternalLot(null)
-          setIsSubmittingRoast(false)
-        }}
-        maxWidth="5xl"
+        onClose={closeLogRoastModal}
+        maxWidth="2xl"
+        showCloseButton={false}
+        // Fixed height: picking flavors makes the content longer, and a dialog that is
+        // centred and sized by its content would grow up and down under the cursor.
+        className="h-[min(90vh,860px)]"
       >
         {(selectedInventoryItem || selectedExternalLot) &&
           (() => {
@@ -852,92 +856,74 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
               batchValue > 0 && roastedValue > 0 ? (roastedValue / batchValue) * 100 : 0
             const lossPercentage = yieldPercentage > 0 ? 100 - yieldPercentage : 0
             const remainingAfterRoast = Math.max(0, availableKg - (batchValue || 0))
+            const weightInput =
+              'block w-full rounded-xl border border-[#d6dfd7] bg-white py-3 pl-4 pr-12 text-xl font-bold text-[#294936] outline-none transition-all duration-200 placeholder:font-semibold placeholder:text-[#b3beb6] focus:border-[#d87832] focus:ring-4 focus:ring-orange-100'
             return (
-              <form onSubmit={handleLogRoastSubmit} className="text-[#263b31]">
-                <div className="-mx-8 -mt-8 mb-7 bg-[#263b31] px-8 py-7 text-white">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#d87832] shadow-lg shadow-black/20">
-                        <Flame className="h-6 w-6 text-white" />
-                      </div>
-                      <div>
-                        <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.16em] text-[#b8cabe]">
-                          Roasting station
-                        </p>
-                        <h2 className="text-2xl font-bold tracking-tight">Log a new roast</h2>
-                        <p className="mt-1 text-sm text-[#c5d2c8]">
-                          Lot{' '}
-                          <span className="font-mono font-bold text-[#f5c66d]">
-                            {toRoaId(lotId)}
-                          </span>
-                        </p>
-                      </div>
+              <form
+                onSubmit={handleLogRoastSubmit}
+                className="flex min-h-[calc(min(90vh,860px)_-_4rem)] flex-col text-[#263b31]"
+              >
+                {/* Header: pinned, only the fields between it and the footer scroll. */}
+                <div className="sticky -top-8 z-10 -mx-8 -mt-8 mb-5 flex items-start justify-between gap-4 rounded-t-3xl bg-white px-8 pb-4 pt-8">
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-[#d87832] shadow-sm shadow-orange-200">
+                      <Flame className="h-6 w-6 text-white" />
                     </div>
-                    <span className="hidden rounded-full border border-[#66816e] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[#d6e4d9] sm:inline-flex">
-                      Draft batch
-                    </span>
+                    <div>
+                      <h2 className="text-2xl font-bold tracking-tight text-gray-900">
+                        Log a new roast
+                      </h2>
+                      <p className="mt-0.5 text-sm text-[#66756b]">
+                        Lot{' '}
+                        <span className="font-mono font-bold text-[#294936]">{toRoaId(lotId)}</span>{' '}
+                        ·{' '}
+                        <span className="font-semibold text-[#2e6848]">
+                          {toFixed2(availableKg)} kg
+                        </span>{' '}
+                        available
+                      </p>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={closeLogRoastModal}
+                    aria-label="Close"
+                    title="Close"
+                    className="-mr-2 -mt-1 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl text-[#718077] transition-colors hover:bg-[#f1f5f1] hover:text-[#294936]"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
                 </div>
 
-                <div className="mb-7 grid grid-cols-3 overflow-hidden rounded-2xl border border-[#e2e8e1] bg-[#f7faf7]">
-                  <div className="border-r border-[#e2e8e1] px-4 py-4">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#829188]">
-                      Available
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-[#294936]">
-                      {toFixed2(availableKg)}{' '}
-                      <span className="text-xs font-semibold text-[#829188]">kg</span>
-                    </p>
-                  </div>
-                  <div className="border-r border-[#e2e8e1] px-4 py-4">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#829188]">
-                      After roast
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-[#d87832]">
-                      {toFixed2(remainingAfterRoast)}{' '}
-                      <span className="text-xs font-semibold text-[#829188]">kg</span>
-                    </p>
-                  </div>
-                  <div className="px-4 py-4">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#829188]">
-                      Yield
-                    </p>
-                    <p className="mt-1 text-xl font-bold text-[#294936]">
-                      {yieldPercentage ? `${yieldPercentage.toFixed(1)}%` : '—'}
-                    </p>
-                  </div>
-                </div>
-                <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_250px]">
-                  <div className="space-y-7">
-                    <section>
-                      <div className="mb-4 flex items-end justify-between gap-3">
-                        <div>
-                          <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[#91a095]">
-                            Step 01
-                          </p>
-                          <h3 className="text-lg font-bold tracking-tight text-[#294936]">
-                            Set your batch
-                          </h3>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setRoastForm({
-                              ...roastForm,
-                              batchSize: toFixed2(availableKg).toString(),
-                            })
-                          }
-                          className="text-xs font-bold text-[#d87832] transition-colors hover:text-[#a9511b]"
+                <div className="flex-1 space-y-6">
+                  {/* 1. Weights */}
+                  <section>
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <h3 className="text-base font-bold text-[#294936]">1. Batch weights</h3>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRoastForm({
+                            ...roastForm,
+                            batchSize: toFixed2(availableKg).toString(),
+                          })
+                        }
+                        className="rounded-lg border border-[#f0d3b8] bg-[#fff8ed] px-3 py-1.5 text-xs font-bold text-[#b45f22] transition-colors hover:bg-[#fff1df]"
+                      >
+                        Use all {toFixed2(availableKg)} kg
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
+                        <label
+                          htmlFor="roast-batch-size"
+                          className="mb-2 block text-sm font-semibold text-[#46564b]"
                         >
-                          Use all available
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <div>
-                          <label className="mb-2 block text-sm font-semibold text-[#46564b]">
-                            Batch Size (kg)
-                          </label>
+                          Green beans in
+                        </label>
+                        <div className="relative">
                           <input
+                            id="roast-batch-size"
                             type="number"
                             min={0.01}
                             step="any"
@@ -955,16 +941,25 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                             onInput={(e) =>
                               (e.currentTarget as HTMLInputElement).setCustomValidity('')
                             }
-                            className="block w-full rounded-xl border border-[#d6dfd7] bg-[#fbfdfb] px-3 py-3 font-semibold text-[#294936] outline-none transition-all duration-200 focus:border-[#d87832] focus:ring-4 focus:ring-orange-100"
+                            className={weightInput}
                             placeholder="0.00"
                           />
+                          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[#829188]">
+                            kg
+                          </span>
                         </div>
+                      </div>
 
-                        <div>
-                          <label className="mb-2 block text-sm font-semibold text-[#46564b]">
-                            Roasted Weight (kg)
-                          </label>
+                      <div>
+                        <label
+                          htmlFor="roast-roasted-weight"
+                          className="mb-2 block text-sm font-semibold text-[#46564b]"
+                        >
+                          Roasted beans out
+                        </label>
+                        <div className="relative">
                           <input
+                            id="roast-roasted-weight"
                             type="number"
                             min={0.01}
                             step="any"
@@ -984,260 +979,207 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                             onInput={(e) =>
                               (e.currentTarget as HTMLInputElement).setCustomValidity('')
                             }
-                            className="block w-full rounded-xl border border-[#d6dfd7] bg-[#fbfdfb] px-3 py-3 font-semibold text-[#294936] outline-none transition-all duration-200 focus:border-[#d87832] focus:ring-4 focus:ring-orange-100"
+                            className={weightInput}
                             placeholder="0.00"
                           />
-                        </div>
-                      </div>
-                      <div className="mt-4 grid grid-cols-2 gap-3 rounded-xl bg-[#f7faf7] p-3 text-sm">
-                        <div>
-                          <span className="text-[#829188]">Weight loss</span>
-                          <strong className="ml-2 text-[#d87832]">
-                            {lossPercentage ? `${lossPercentage.toFixed(1)}%` : '—'}
-                          </strong>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-[#829188]">Expected yield</span>
-                          <strong className="ml-2 text-[#2e6848]">
-                            {yieldPercentage ? `${yieldPercentage.toFixed(1)}%` : '—'}
-                          </strong>
-                        </div>
-                      </div>
-                    </section>
-
-                    <section>
-                      <div className="mb-4">
-                        <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[#91a095]">
-                          Step 02
-                        </p>
-                        <h3 className="text-lg font-bold tracking-tight text-[#294936]">
-                          Choose the roast profile
-                        </h3>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[RoastLevel.Light, RoastLevel.Medium, RoastLevel.Dark].map((level) => (
-                          <button
-                            key={level}
-                            type="button"
-                            onClick={() => setRoastLevel(level)}
-                            className={`rounded-xl border px-3 py-3 text-sm font-bold transition-all ${roastLevel === level ? 'border-[#d87832] bg-[#fff1df] text-[#b45f22] shadow-sm' : 'border-[#e2e8e1] bg-white text-[#718077] hover:border-[#b8cabe]'}`}
-                          >
-                            <span
-                              className={`mx-auto mb-2 block h-2 w-2 rounded-full ${level === RoastLevel.Light ? 'bg-[#d5a455]' : level === RoastLevel.Medium ? 'bg-[#9b633b]' : 'bg-[#3d302b]'}`}
-                            />
-                            {level}
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-
-                    <section>
-                      <div className="mb-4">
-                        <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[#91a095]">
-                          Step 03
-                        </p>
-                        <h3 className="text-lg font-bold tracking-tight text-[#294936]">
-                          Capture the cup
-                        </h3>
-                      </div>
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold text-[#46564b]">
-                          Roast notes <span className="font-normal text-[#9aa69e]">(optional)</span>
-                        </label>
-                        <textarea
-                          rows={3}
-                          value={roastForm.notes}
-                          onChange={(e) => setRoastForm({ ...roastForm, notes: e.target.value })}
-                          onInput={(e) => {
-                            const el = e.currentTarget
-                            el.style.height = 'auto'
-                            el.style.height = el.scrollHeight + 'px'
-                          }}
-                          className="block w-full resize-none overflow-y-auto rounded-xl border border-[#d6dfd7] bg-[#fbfdfb] px-4 py-3 text-sm text-[#294936] outline-none transition-all duration-200 focus:border-[#d87832] focus:ring-4 focus:ring-orange-100 max-h-40"
-                          placeholder="e.g., Medium roast profile. First crack at 9:30. Dropped at 11:15."
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-3 block text-sm font-semibold text-[#46564b]">
-                          Flavor notes{' '}
-                          <span className="font-normal text-[#9aa69e]">(optional)</span>
-                        </label>
-
-                        <div>
-                          <span className="mb-2 block text-xs font-medium text-[#7b8a80]">
-                            Aroma types{' '}
-                            <span className="font-normal text-[#a2ada5]">(choose multiple)</span>
+                          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[#829188]">
+                            kg
                           </span>
-                          <div className="flex flex-wrap gap-2">
-                            {Object.keys(FLAVOR_GROUPS).map((category) => {
-                              const isSelected = selectedAromaCategories.includes(category)
-                              return (
-                                <button
-                                  key={category}
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedAromaCategories((prev) =>
-                                      isSelected
-                                        ? prev.filter((item) => item !== category)
-                                        : [...prev, category],
-                                    )
-                                    if (isSelected) {
-                                      setSelectedAromaNotes((prev) =>
-                                        prev.filter(
-                                          (note) => !FLAVOR_GROUPS[category].includes(note),
-                                        ),
-                                      )
-                                    }
-                                  }}
-                                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${isSelected ? 'border-[#2e6848] bg-[#e9f2ec] text-[#2e6848]' : 'border-[#dfe9df] bg-white text-[#718077] hover:border-[#9cb8a6]'}`}
-                                >
-                                  {category}
-                                </button>
-                              )
-                            })}
-                          </div>
                         </div>
+                      </div>
+                    </div>
 
-                        <div className="mt-4">
-                          <span className="mb-2 block text-xs font-medium text-[#7b8a80]">
-                            Aroma notes{' '}
-                            <span className="font-normal text-[#a2ada5]">(choose any)</span>
-                          </span>
-                          {selectedAromaCategories.length > 0 ? (
-                            <div className="flex flex-wrap gap-2 rounded-xl border border-[#e2e8e1] bg-[#f7fbf7] p-3">
-                              {selectedAromaCategories
-                                .flatMap((category) => FLAVOR_GROUPS[category])
-                                .map((note) => {
-                                  const isSelected = selectedAromaNotes.includes(note)
-                                  return (
-                                    <button
-                                      key={note}
-                                      type="button"
-                                      onClick={() =>
-                                        setSelectedAromaNotes((prev) =>
-                                          isSelected
-                                            ? prev.filter((item) => item !== note)
-                                            : [...prev, note],
-                                        )
-                                      }
-                                      className={`rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${isSelected ? 'border-[#d87832] bg-[#fff1df] font-bold text-[#b45f22]' : 'border-transparent bg-white text-[#718077] hover:border-[#e2e8e1]'}`}
-                                    >
-                                      {note}
-                                    </button>
-                                  )
-                                })}
-                            </div>
-                          ) : (
-                            <p className="rounded-xl bg-[#f7faf7] px-3 py-3 text-xs text-[#829188]">
-                              Select at least one aroma type first.
-                            </p>
-                          )}
-                        </div>
+                    {/* One live summary instead of three separate readouts */}
+                    <div className="mt-4 grid grid-cols-3 overflow-hidden rounded-xl border border-[#e2e8e1] bg-[#f7faf7]">
+                      <div className="border-r border-[#e2e8e1] px-4 py-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#829188]">
+                          Yield
+                        </p>
+                        <p className="mt-0.5 text-lg font-bold text-[#2e6848]">
+                          {yieldPercentage ? `${yieldPercentage.toFixed(1)}%` : '—'}
+                        </p>
+                      </div>
+                      <div className="border-r border-[#e2e8e1] px-4 py-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#829188]">
+                          Weight loss
+                        </p>
+                        <p className="mt-0.5 text-lg font-bold text-[#d87832]">
+                          {lossPercentage ? `${lossPercentage.toFixed(1)}%` : '—'}
+                        </p>
+                      </div>
+                      <div className="px-4 py-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#829188]">
+                          Left in stock
+                        </p>
+                        <p className="mt-0.5 text-lg font-bold text-[#294936]">
+                          {toFixed2(remainingAfterRoast)}{' '}
+                          <span className="text-xs font-semibold text-[#829188]">kg</span>
+                        </p>
+                      </div>
+                    </div>
+                  </section>
 
+                  {/* 2. Level */}
+                  <section>
+                    <h3 className="mb-3 text-base font-bold text-[#294936]">2. Roast level</h3>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[RoastLevel.Light, RoastLevel.Medium, RoastLevel.Dark].map((level) => (
                         <button
+                          key={level}
                           type="button"
-                          disabled={selectedAromaNotes.length === 0}
-                          onClick={() => {
-                            setSelectedFlavorTags((prev) => [
-                              ...prev,
-                              ...selectedAromaNotes.filter((note) => !prev.includes(note)),
-                            ])
-                            setSelectedAromaNotes([])
-                          }}
-                          className="mt-3 inline-flex items-center justify-center rounded-xl bg-[#d87832] px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[#bd5d1e] disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-pressed={roastLevel === level}
+                          onClick={() => setRoastLevel(level)}
+                          className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold transition-all ${roastLevel === level ? 'border-[#d87832] bg-[#fff1df] text-[#b45f22] shadow-sm' : 'border-[#e2e8e1] bg-white text-[#718077] hover:border-[#b8cabe]'}`}
                         >
-                          Add selected{' '}
-                          {selectedAromaNotes.length > 0 ? `(${selectedAromaNotes.length})` : ''}
+                          <span
+                            className={`h-2.5 w-2.5 rounded-full ${level === RoastLevel.Light ? 'bg-[#d5a455]' : level === RoastLevel.Medium ? 'bg-[#9b633b]' : 'bg-[#3d302b]'}`}
+                          />
+                          {level}
                         </button>
+                      ))}
+                    </div>
+                  </section>
 
-                        {/* Selected flavor tags */}
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {selectedFlavorTags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="inline-flex items-center gap-2 rounded-full bg-yellow-100 text-yellow-800 text-sm font-semibold px-4 py-1.5 border border-yellow-200"
-                            >
-                              {tag}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setSelectedFlavorTags((prev) => prev.filter((t) => t !== tag))
-                                }
-                                className="ml-1 text-yellow-700 hover:text-yellow-900 font-bold"
-                                aria-label={`Remove ${tag}`}
-                              >
-                                ✕
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </section>
-                  </div>
-                  <aside className="h-fit rounded-2xl border border-[#dfe9df] bg-[#f7fbf7] p-5 lg:sticky lg:top-4">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#91a095]">
-                      Batch preview
+                  {/* 3. Notes */}
+                  <section>
+                    <h3 className="mb-3 text-base font-bold text-[#294936]">
+                      3. Notes and flavors{' '}
+                      <span className="text-sm font-normal text-[#9aa69e]">(optional)</span>
+                    </h3>
+                    <label
+                      htmlFor="roast-notes"
+                      className="mb-2 block text-sm font-semibold text-[#46564b]"
+                    >
+                      Roast notes
+                    </label>
+                    <textarea
+                      id="roast-notes"
+                      rows={2}
+                      value={roastForm.notes}
+                      onChange={(e) => setRoastForm({ ...roastForm, notes: e.target.value })}
+                      onInput={(e) => {
+                        const el = e.currentTarget
+                        el.style.height = 'auto'
+                        el.style.height = el.scrollHeight + 'px'
+                      }}
+                      className="block max-h-40 w-full resize-none overflow-y-auto rounded-xl border border-[#d6dfd7] bg-white px-4 py-3 text-sm text-[#294936] outline-none transition-all duration-200 focus:border-[#d87832] focus:ring-4 focus:ring-orange-100"
+                      placeholder="e.g., First crack at 9:30. Dropped at 11:15."
+                    />
+
+                    <p className="mb-2 mt-5 text-sm font-semibold text-[#46564b]">
+                      Flavor notes{' '}
+                      <span className="font-normal text-[#9aa69e]">— tap to add or remove</span>
                     </p>
-                    <h3 className="mt-1 text-lg font-bold text-[#294936]">Ready to record</h3>
-                    <div className="mt-5 space-y-4">
-                      <div className="border-b border-[#dfe9df] pb-3">
-                        <p className="text-xs text-[#829188]">Roast level</p>
-                        <p className="mt-1 text-sm font-bold text-[#d87832]">{roastLevel}</p>
-                      </div>
-                      <div className="border-b border-[#dfe9df] pb-3">
-                        <p className="text-xs text-[#829188]">Green batch</p>
-                        <p className="mt-1 text-2xl font-bold text-[#294936]">
-                          {batchValue ? `${toFixed2(batchValue)} kg` : '—'}
-                        </p>
-                      </div>
-                      <div className="border-b border-[#dfe9df] pb-3">
-                        <p className="text-xs text-[#829188]">Roasted output</p>
-                        <p className="mt-1 text-2xl font-bold text-[#d87832]">
-                          {roastedValue ? `${toFixed2(roastedValue)} kg` : '—'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-[#829188]">Flavor tags</p>
-                        <p className="mt-1 text-sm font-bold text-[#294936]">
-                          {selectedFlavorTags.length
-                            ? `${selectedFlavorTags.length} selected`
-                            : 'None selected'}
-                        </p>
-                      </div>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.keys(FLAVOR_GROUPS).map((category) => {
+                        const isSelected = selectedAromaCategories.includes(category)
+                        return (
+                          <button
+                            key={category}
+                            type="button"
+                            aria-pressed={isSelected}
+                            onClick={() =>
+                              setSelectedAromaCategories((prev) =>
+                                isSelected
+                                  ? prev.filter((item) => item !== category)
+                                  : [...prev, category],
+                              )
+                            }
+                            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${isSelected ? 'border-[#2e6848] bg-[#e9f2ec] text-[#2e6848]' : 'border-[#dfe9df] bg-white text-[#718077] hover:border-[#9cb8a6]'}`}
+                          >
+                            {category}
+                          </button>
+                        )
+                      })}
                     </div>
-                    <div className="mt-6 rounded-xl bg-white p-3 text-xs leading-relaxed text-[#718077]">
-                      Check the output weight and yield before saving this batch to your roast log.
+
+                    {selectedAromaCategories.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-2 rounded-xl border border-[#e2e8e1] bg-[#f7fbf7] p-3">
+                        {selectedAromaCategories
+                          .flatMap((category) => FLAVOR_GROUPS[category])
+                          .map((note) => {
+                            const isSelected = selectedFlavorTags.includes(note)
+                            return (
+                              <button
+                                key={note}
+                                type="button"
+                                aria-pressed={isSelected}
+                                onClick={() =>
+                                  setSelectedFlavorTags((prev) =>
+                                    isSelected
+                                      ? prev.filter((item) => item !== note)
+                                      : [...prev, note],
+                                  )
+                                }
+                                className={`rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${isSelected ? 'border-[#d87832] bg-[#fff1df] font-bold text-[#b45f22]' : 'border-transparent bg-white text-[#718077] hover:border-[#e2e8e1]'}`}
+                              >
+                                {note}
+                              </button>
+                            )
+                          })}
+                      </div>
+                    ) : (
+                      <p className="mt-3 rounded-xl bg-[#f7faf7] px-3 py-3 text-xs text-[#829188]">
+                        Choose a flavor group above to see its notes.
+                      </p>
+                    )}
+
+                    {/* Always rendered: the first tag fills a row that is already there. */}
+                    <div className="mt-3 flex min-h-[30px] flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold text-[#829188]">Selected:</span>
+                      {selectedFlavorTags.length === 0 && (
+                        <span className="text-xs text-[#a2ada5]">none yet</span>
+                      )}
+                      {selectedFlavorTags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-100 py-1 pl-3 pr-1.5 text-xs font-semibold text-yellow-800"
+                        >
+                          {tag}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSelectedFlavorTags((prev) => prev.filter((t) => t !== tag))
+                            }
+                            className="flex h-5 w-5 items-center justify-center rounded-full text-yellow-700 hover:bg-yellow-200 hover:text-yellow-900"
+                            aria-label={`Remove ${tag}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
                     </div>
-                  </aside>
+                  </section>
                 </div>
-                <div className="mt-8 flex flex-col-reverse gap-3 border-t border-[#e8ece8] pt-5 sm:flex-row sm:justify-end">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      setIsLogRoastModalOpen(false)
-                      setSelectedExternalLot(null)
-                      setIsSubmittingRoast(false)
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="lg"
-                    disabled={isSubmittingRoast}
-                    icon={
-                      isSubmittingRoast ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Flame className="h-4 w-4" />
-                      )
-                    }
-                    className="bg-orange-600 hover:bg-orange-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
-                  >
-                    {isSubmittingRoast ? 'Saving…' : 'Log Roast'}
-                  </Button>
+
+                {/* Always in reach: the footer sticks to the bottom of the dialog while it scrolls. */}
+                <div className="sticky -bottom-8 z-10 -mx-8 -mb-8 mt-6 flex items-center justify-between gap-3 rounded-b-3xl border-t border-[#e8ece8] bg-white px-8 py-4">
+                  <p className="hidden text-sm text-[#66756b] sm:block">
+                    {batchValue && roastedValue
+                      ? `${toFixed2(batchValue)} kg in → ${toFixed2(roastedValue)} kg out · ${roastLevel}`
+                      : 'Enter both weights to log this roast.'}
+                  </p>
+                  <div className="flex flex-1 gap-3 sm:flex-none">
+                    <Button type="button" variant="secondary" onClick={closeLogRoastModal}>
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      size="lg"
+                      disabled={isSubmittingRoast}
+                      icon={
+                        isSubmittingRoast ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Flame className="h-4 w-4" />
+                        )
+                      }
+                      className="flex-1 !bg-[#d87832] hover:!bg-[#bd5d1e] disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
+                    >
+                      {isSubmittingRoast ? 'Saving…' : 'Log Roast'}
+                    </Button>
+                  </div>
                 </div>
               </form>
             )
