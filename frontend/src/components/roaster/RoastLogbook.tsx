@@ -12,6 +12,7 @@ import {
 import { useDataContext } from '../../hooks/useDataContext'
 import { RoastLevel, User, UserRole } from '../../types'
 import { toFixed2, toRoastBatchId } from '../../utils/formatters'
+import RoastDetailsModal from './RoastDetailsModal'
 
 interface RoastLogbookProps {
   currentUser: User
@@ -26,6 +27,7 @@ const RoastLogbook: React.FC<RoastLogbookProps> = ({ currentUser }) => {
   const [levelFilter, setLevelFilter] = useState('All levels')
   const [page, setPage] = useState(1)
   const pageSize = 10
+  const [selectedRoastId, setSelectedRoastId] = useState<string | null>(null)
 
   const isAdmin = currentUser.roles?.includes(UserRole.Admin)
 
@@ -154,6 +156,19 @@ const RoastLogbook: React.FC<RoastLogbookProps> = ({ currentUser }) => {
     : 0
   const totalPages = Math.max(1, Math.ceil(records.length / pageSize))
   const paginatedRecords = records.slice((page - 1) * pageSize, page * pageSize)
+
+  // The open roast, with the source labels the details dialog expects.
+  const selectedRecord = selectedRoastId
+    ? records.find((roast) => roast.id === selectedRoastId)
+    : undefined
+  const selectedRoast = selectedRecord
+    ? {
+        ...selectedRecord,
+        sourceVariety: selectedRecord.variety,
+        sourceProcess: selectedRecord.process,
+        sourceGrade: selectedRecord.grade,
+      }
+    : null
 
   useEffect(() => {
     setPage(1)
@@ -379,7 +394,20 @@ const RoastLogbook: React.FC<RoastLogbookProps> = ({ currentUser }) => {
               </thead>
               <tbody className="divide-y divide-[#edf1ed]">
                 {paginatedRecords.map((roast) => (
-                  <tr key={roast.id} className="bg-white transition-colors hover:bg-[#f7fbf7]">
+                  <tr
+                    key={roast.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`View details of roast ${roast.displayId || toRoastBatchId(roast.id)}`}
+                    onClick={() => setSelectedRoastId(roast.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        setSelectedRoastId(roast.id)
+                      }
+                    }}
+                    className="cursor-pointer bg-white outline-none transition-colors hover:bg-[#f7fbf7] focus-visible:bg-[#edf5ee]"
+                  >
                     <td className="whitespace-nowrap px-5 py-4 align-top">
                       <div className="flex items-center gap-2 text-sm font-semibold text-[#294936]">
                         <CalendarDays className="h-4 w-4 text-[#829188]" />
@@ -457,6 +485,12 @@ const RoastLogbook: React.FC<RoastLogbookProps> = ({ currentUser }) => {
           </div>
         )}
       </section>
+
+      <RoastDetailsModal
+        roast={selectedRoast}
+        canManage={!!selectedRoast && (!!isAdmin || selectedRoast.roasterId === currentUser.id)}
+        onClose={() => setSelectedRoastId(null)}
+      />
     </div>
   )
 }

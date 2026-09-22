@@ -19,6 +19,7 @@ import { Package, Flame, Coffee, Loader2, ArrowRight } from 'lucide-react'
 import ExternalLotsTable from './ExternalLotsTable'
 import InternalLotsTable from './InternalLotsTable'
 import RoastLogPanel from './RoastLogPanel'
+import { FLAVOR_GROUPS } from './flavorGroups'
 import { toFixed2, clamp, toRoaId, toRoastBatchId } from '../../utils/formatters'
 import { claimGreenBeanLot, createRoastBatch } from '../../services/roaster/roasterService'
 import { createGreenBeanLot } from '../../services/lots/greenBeanLotService'
@@ -27,16 +28,6 @@ import { useToast } from '../../contexts/ToastContext'
 
 interface RoasterWorkbenchProps {
   currentUser: User
-}
-
-const FLAVOR_GROUPS: Record<string, string[]> = {
-  Sweet: ['Brown Sugar', 'Honey', 'Caramel', 'Vanilla'],
-  Fruity: ['Citrus', 'Orange Peel', 'Berry', 'Apple', 'Tropical'],
-  Floral: ['Jasmine', 'Rose', 'Lavender'],
-  'Nutty/Chocolatey': ['Almond', 'Hazelnut', 'Chocolate', 'Cocoa'],
-  Spicy: ['Cinnamon', 'Clove', 'Black Pepper'],
-  Roasted: ['Toasted', 'Smoky'],
-  Other: ['Earthy', 'Woody', 'Herbal'],
 }
 
 // Common coffee varieties for selection (mirrors Farmer form)
@@ -705,6 +696,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             onPrev={() => setPage((p) => Math.max(1, p - 1))}
             onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
             onPageChange={(newPage) => setPage(newPage)}
+            canManageRoast={(roast) => !!isAdmin || roast.roasterId === currentUser.id}
           />
         </div>
       </div>

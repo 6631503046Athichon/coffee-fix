@@ -44,6 +44,21 @@ const DatePicker: React.FC<DatePickerProps> = ({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    // While the calendar is open, Escape closes just the calendar. Capture phase
+    // runs before a dialog's own Escape-to-close listener, and stopPropagation
+    // keeps the key from reaching it and closing the whole dialog.
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key !== 'Escape') return;
+            event.stopPropagation();
+            setIsOpen(false);
+            setView('day');
+        };
+        document.addEventListener('keydown', handleEscape, true);
+        return () => document.removeEventListener('keydown', handleEscape, true);
+    }, [isOpen]);
+
     // Reset to day view whenever the popover is reopened.
     useEffect(() => {
         if (isOpen) setView('day');

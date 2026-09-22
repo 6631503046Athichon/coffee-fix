@@ -33,4 +33,6 @@ export interface RoastBatch {
   roastLevel?: RoastLevel; // Optional for backward compatibility
   roastProfileNotes: string;
   flavorNotes?: string;
+  /** ISO timestamp of the last change; sent back when editing so a stale form is refused. */
+  updatedAt?: string;
 }

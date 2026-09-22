@@ -43,6 +43,7 @@ export function transformRoastBatch(batch: any): RoastBatch {
     roastLevel: batch.roastLevel as RoastLevel | undefined,
     roastProfileNotes: batch.roastProfileNotes,
     flavorNotes: batch.flavorNotes ?? undefined,
+    updatedAt: batch.updatedAt ?? undefined,
   }
 }
 
@@ -153,4 +154,55 @@ export const createRoastBatch = async (
       remainingWeightKg: response.roastBatch.roasterInventory?.remainingWeightKg ?? 0,
     },
   }
+}
+
+export interface UpdateRoastBatchInput {
+  /** YYYY-MM-DD; only send it when the date itself is being corrected. */
+  roastDate?: string
+  batchSizeKg?: number
+  roastedWeightKg?: number
+  roastLevel?: string | null
+  roastProfileNotes?: string
+  flavorNotes?: string | null
+  /** updatedAt the form was opened from; the server answers 409 if the roast changed since. */
+  expectedUpdatedAt?: string
+}
+
+/**
+ * Correct a roast batch. When the batch size changes the backend moves the
+ * difference in or out of the inventory row, and the new remaining weight
+ * comes back with the roast.
+ */
+export const updateRoastBatch = async (
+  id: string,
+  input: UpdateRoastBatchInput,
+): Promise<{
+  roastBatch: RoastBatch
+  updatedInventory?: { id: string; remainingWeightKg: number }
+}> => {
+  const response = await api.put<{ roastBatch: any; message: string }>(
+    `/roast-batches/${id}`,
+    input,
+  )
+  const inventory = response.roastBatch.roasterInventory
+  return {
+    roastBatch: transformRoastBatch(response.roastBatch),
+    updatedInventory: inventory
+      ? { id: inventory.id, remainingWeightKg: inventory.remainingWeightKg }
+      : undefined,
+  }
+}
+
+/**
+ * Delete a roast batch logged by mistake. The green beans it used go back to
+ * the inventory row, whose new remaining weight is returned.
+ */
+export const deleteRoastBatch = async (
+  id: string,
+): Promise<{ updatedInventory?: { id: string; remainingWeightKg: number } }> => {
+  const response = await api.delete<{
+    updatedInventory?: { id: string; remainingWeightKg: number }
+    message: string
+  }>(`/roast-batches/${id}`)
+  return { updatedInventory: response.updatedInventory }
 }

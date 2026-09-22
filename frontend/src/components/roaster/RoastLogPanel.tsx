@@ -8,10 +8,10 @@ import {
   Eye,
   Scale,
   TrendingDown,
-  X,
 } from 'lucide-react'
 import { RoastBatch } from '../../types'
 import { toFixed2, toRoaId, toRoastBatchId } from '../../utils/formatters'
+import RoastDetailsModal from './RoastDetailsModal'
 
 type RoastLogEntry = RoastBatch & {
   formattedLotId?: string
@@ -28,7 +28,9 @@ const RoastLogPanel: React.FC<{
   onPrev: () => void
   onNext: () => void
   onPageChange?: (page: number) => void
-}> = ({ roasts, page, totalPages, onPrev, onNext, onPageChange }) => {
+  /** Who may correct or delete a roast from its details (its roaster, or an admin). */
+  canManageRoast?: (roast: RoastLogEntry) => boolean
+}> = ({ roasts, page, totalPages, onPrev, onNext, onPageChange, canManageRoast }) => {
   const [selectedRoast, setSelectedRoast] = React.useState<RoastLogEntry | null>(null)
 
   if (roasts.length === 0) {
@@ -257,80 +259,11 @@ const RoastLogPanel: React.FC<{
         </div>
       )}
 
-      {selectedRoast && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#20352b]/45 p-4"
-          role="presentation"
-          onClick={() => setSelectedRoast(null)}
-        >
-          <div
-            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="roast-details-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#d87832]">
-                  Roast details
-                </p>
-                <h4 id="roast-details-title" className="mt-1 text-xl font-bold text-[#20352b]">
-                  {selectedRoast.displayId || toRoastBatchId(selectedRoast.id)}
-                </h4>
-                <p className="mt-1 text-xs font-mono text-[#829188]">
-                  Record ID: {selectedRoast.id}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedRoast(null)}
-                aria-label="Close roast details"
-                title="Close"
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-[#718077] hover:bg-[#f1f5f1] hover:text-[#294936]"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              {[
-                [
-                  'Source ID',
-                  selectedRoast.formattedLotId ?? toRoaId(selectedRoast.greenBeanLotId),
-                ],
-                ['Variety', selectedRoast.sourceVariety || 'Not set'],
-                ['Process type', selectedRoast.sourceProcess || 'Not set'],
-                ['Grade', selectedRoast.sourceGrade || 'Not set'],
-                ['Roast date', selectedRoast.roastDate],
-                ['Roast level', selectedRoast.roastLevel || 'Not set'],
-                ['Batch size', `${toFixed2(selectedRoast.batchSizeKg)} kg`],
-                [
-                  'Roasted output',
-                  selectedRoast.roastedWeightKg != null
-                    ? `${toFixed2(selectedRoast.roastedWeightKg)} kg`
-                    : 'Not set',
-                ],
-                ['Yield', `${selectedRoast.yieldPercentage.toFixed(1)}%`],
-              ].map(([label, value]) => (
-                <div key={label} className="rounded-xl bg-[#f7faf7] p-3">
-                  <p className="text-xs font-semibold text-[#829188]">{label}</p>
-                  <p className="mt-1 break-words font-semibold text-[#294936]">{value}</p>
-                </div>
-              ))}
-            </div>
-
-            {selectedRoast.roastProfileNotes && (
-              <div className="mt-4 rounded-xl border border-[#f0e5d6] bg-[#fffaf3] p-3">
-                <p className="text-xs font-semibold text-[#a85c1e]">Roast notes</p>
-                <p className="mt-1 text-sm leading-relaxed text-[#6d756e]">
-                  {selectedRoast.roastProfileNotes}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <RoastDetailsModal
+        roast={selectedRoast}
+        canManage={!!selectedRoast && !!canManageRoast?.(selectedRoast)}
+        onClose={() => setSelectedRoast(null)}
+      />
     </div>
   )
 }

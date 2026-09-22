@@ -46,6 +46,8 @@ export const updateRoastBatchSchema = z.object({
   roastLevel: roastLevelSchema.optional().nullable(),
   roastProfileNotes: z.string().max(2000).optional(),
   flavorNotes: z.string().max(1000).optional().nullable(),
+  // updatedAt the client's form was opened from; a stale form is refused.
+  expectedUpdatedAt: z.string().datetime().optional(),
 });
 
 // ============================================
