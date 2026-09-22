@@ -1,5 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, Flame, Loader2, Pencil, Trash2, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowRight,
+  CalendarDays,
+  Flame,
+  Loader2,
+  Pencil,
+  Trash2,
+  X,
+} from 'lucide-react'
 import DatePicker from '../common/DatePicker'
 import { Modal } from '../common/Modal'
 import { useDataContext } from '../../hooks/useDataContext'
@@ -31,6 +40,19 @@ const splitTags = (value?: string) =>
     .split(',')
     .map((tag) => tag.trim())
     .filter(Boolean)
+
+// Yield window the roasting desk treats as typical. Outside it the record only
+// asks the roaster to double-check the weights; it says nothing about cup quality.
+const TYPICAL_YIELD_MIN = 78
+const TYPICAL_YIELD_MAX = 92
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** "2026-09-16" → "16 Sep 2026"; anything else is shown as is. */
+const formatRoastDate = (iso: string) => {
+  const [y, m, d] = iso.split('-').map(Number)
+  return y && m >= 1 && m <= 12 && d ? `${d} ${MONTHS[m - 1]} ${y}` : iso
+}
 
 const parseWeight = (value: string) => {
   const normalized = value.trim().replace(',', '.')
@@ -457,49 +479,116 @@ const RoastDetailsBody: React.FC<{
       <div className="text-[#263b31]">
         {header}
 
-        <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-2xl bg-[#f7faf7] p-4">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+            <div>
+              <p className="text-xs font-semibold text-[#829188]">Green beans in</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-[#294936]">
+                {toFixed2(roast.batchSizeKg)}{' '}
+                <span className="text-sm font-semibold text-[#829188]">kg</span>
+              </p>
+            </div>
+            <ArrowRight aria-hidden="true" className="h-5 w-5 text-[#b3beb6]" />
+            <div>
+              <p className="text-xs font-semibold text-[#829188]">Roasted beans out</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-[#294936]">
+                {roast.roastedWeightKg != null ? (
+                  <>
+                    {toFixed2(roast.roastedWeightKg)}{' '}
+                    <span className="text-sm font-semibold text-[#829188]">kg</span>
+                  </>
+                ) : (
+                  <span className="text-base font-semibold text-[#718077]">Not recorded</span>
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-[#e2e8e1] pt-3 text-sm">
+            <p>
+              <span className="text-[#829188]">Yield</span>{' '}
+              <span className="font-bold tabular-nums text-[#294936]">
+                {roast.yieldPercentage.toFixed(1)}%
+              </span>
+            </p>
+            <p>
+              <span className="text-[#829188]">Weight loss</span>{' '}
+              <span className="font-bold tabular-nums text-[#294936]">
+                {(100 - roast.yieldPercentage).toFixed(1)}%
+              </span>
+            </p>
+            <p className="ml-auto flex items-center gap-2 text-[#6d756e]">
+              <CalendarDays aria-hidden="true" className="h-4 w-4 text-[#829188]" />
+              <span>{formatRoastDate(roast.roastDate)}</span>
+              <span className="sr-only">Roast level</span>
+              {roast.roastLevel ? (
+                <span className="rounded-full bg-[#fff1df] px-2.5 py-0.5 text-xs font-bold text-[#b45f22]">
+                  {roast.roastLevel}
+                </span>
+              ) : (
+                <span className="rounded-full bg-[#eef1ee] px-2.5 py-0.5 text-xs font-semibold text-[#718077]">
+                  Level not set
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+
+        {(roast.yieldPercentage < TYPICAL_YIELD_MIN ||
+          roast.yieldPercentage > TYPICAL_YIELD_MAX) && (
+          <p
+            role="status"
+            className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+          >
+            <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 flex-shrink-0" />
+            <span>
+              Yield is outside the usual {TYPICAL_YIELD_MIN}–{TYPICAL_YIELD_MAX}% range. Check the
+              weights in and out{canManage ? ' and use Edit roast to correct them' : ''}.
+            </span>
+          </p>
+        )}
+
+        <dl className="mt-4 divide-y divide-[#e8ece8] rounded-xl border border-[#e8ece8] text-sm">
           {[
             ['Source ID', roast.formattedLotId ?? toRoaId(roast.greenBeanLotId)],
             ['Variety', roast.sourceVariety || 'Not set'],
             ['Process type', roast.sourceProcess || 'Not set'],
             ['Grade', roast.sourceGrade || 'Not set'],
-            ['Roast date', roast.roastDate],
-            ['Roast level', roast.roastLevel || 'Not set'],
-            ['Batch size', `${toFixed2(roast.batchSizeKg)} kg`],
-            [
-              'Roasted output',
-              roast.roastedWeightKg != null ? `${toFixed2(roast.roastedWeightKg)} kg` : 'Not set',
-            ],
-            ['Yield', `${roast.yieldPercentage.toFixed(1)}%`],
           ].map(([label, value]) => (
-            <div key={label} className="rounded-xl bg-[#f7faf7] p-3">
-              <p className="text-xs font-semibold text-[#829188]">{label}</p>
-              <p className="mt-1 break-words font-semibold text-[#294936]">{value}</p>
+            <div key={label} className="flex items-baseline justify-between gap-4 px-3 py-2">
+              <dt className="flex-shrink-0 text-[#829188]">{label}</dt>
+              <dd className="break-words text-right font-semibold text-[#294936]">{value}</dd>
             </div>
           ))}
-        </div>
+        </dl>
 
-        {roast.roastProfileNotes && (
-          <div className="mt-4 rounded-xl border border-[#f0e5d6] bg-[#fffaf3] p-3">
-            <p className="text-xs font-semibold text-[#a85c1e]">Roast notes</p>
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-[#6d756e]">
+        <div className="mt-4">
+          <p className="text-xs font-semibold text-[#829188]">Roast notes</p>
+          {roast.roastProfileNotes && roast.roastProfileNotes !== 'No notes' ? (
+            <p className="mt-1 whitespace-pre-wrap break-words rounded-xl border border-[#f0e5d6] bg-[#fffaf3] p-3 text-sm leading-relaxed text-[#6d756e]">
               {roast.roastProfileNotes}
             </p>
-          </div>
-        )}
+          ) : (
+            <p className="mt-1 text-sm text-[#718077]">Not recorded</p>
+          )}
+        </div>
 
-        {splitTags(roast.flavorNotes).length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {splitTags(roast.flavorNotes).map((tag) => (
-              <span
-                key={tag}
-                className="rounded-full border border-yellow-200 bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-800"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        )}
+        <div className="mt-4">
+          <p className="text-xs font-semibold text-[#829188]">Flavor notes</p>
+          {splitTags(roast.flavorNotes).length > 0 ? (
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              {splitTags(roast.flavorNotes).map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full border border-yellow-200 bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-800"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-1 text-sm text-[#718077]">Not recorded</p>
+          )}
+        </div>
 
         {canManage && (
           <div className="-mx-8 -mb-8 mt-6 rounded-b-3xl border-t border-[#e8ece8] bg-white px-8 py-4">
