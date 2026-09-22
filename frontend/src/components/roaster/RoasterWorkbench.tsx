@@ -7,6 +7,7 @@ import { PageHeader } from '../common/PageHeader'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useDataContext } from '../../hooks/useDataContext'
 import { useGradeNames } from '../../hooks/useGradeOptions'
+import { useHeightFloor } from '../../hooks/useStablePageHeight'
 import {
   User,
   GreenBeanLot,
@@ -278,45 +279,59 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
   const [page, setPage] = useState(1)
   const pageSize = 5
   const totalPages = Math.max(1, Math.ceil(myRoasts.length / pageSize))
+  // Clamped here rather than only in the effect below: effects run after paint,
+  // so deleting the last roast of the last page would show one frame of the
+  // empty state before the page moved back.
+  const safePage = Math.min(page, totalPages)
   useEffect(() => {
     if (page > totalPages) setPage(totalPages)
   }, [totalPages, page])
   const pagedRoasts = useMemo(
-    () => myRoasts.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize),
-    [myRoasts, page],
+    () => myRoasts.slice((safePage - 1) * pageSize, (safePage - 1) * pageSize + pageSize),
+    [myRoasts, safePage],
   )
 
   // Pagination for Inventory (withdrawal lots)
   const [inventoryPage, setInventoryPage] = useState(1)
   const inventoryPageSize = 6
   const inventoryTotalPages = Math.max(1, Math.ceil(myInventory.length / inventoryPageSize))
+  const safeInventoryPage = Math.min(inventoryPage, inventoryTotalPages)
   useEffect(() => {
     if (inventoryPage > inventoryTotalPages) setInventoryPage(inventoryTotalPages)
   }, [inventoryTotalPages, inventoryPage])
   const pagedInventory = useMemo(
     () =>
       myInventory.slice(
-        (inventoryPage - 1) * inventoryPageSize,
-        (inventoryPage - 1) * inventoryPageSize + inventoryPageSize,
+        (safeInventoryPage - 1) * inventoryPageSize,
+        (safeInventoryPage - 1) * inventoryPageSize + inventoryPageSize,
       ),
-    [myInventory, inventoryPage],
+    [myInventory, safeInventoryPage],
   )
 
   // Pagination for External Lots
   const [externalPage, setExternalPage] = useState(1)
   const externalPageSize = 6
   const externalTotalPages = Math.max(1, Math.ceil(availableExternalLots.length / externalPageSize))
+  const safeExternalPage = Math.min(externalPage, externalTotalPages)
   useEffect(() => {
     if (externalPage > externalTotalPages) setExternalPage(externalTotalPages)
   }, [externalTotalPages, externalPage])
   const pagedExternalLots = useMemo(
     () =>
       availableExternalLots.slice(
-        (externalPage - 1) * externalPageSize,
-        (externalPage - 1) * externalPageSize + externalPageSize,
+        (safeExternalPage - 1) * externalPageSize,
+        (safeExternalPage - 1) * externalPageSize + externalPageSize,
       ),
-    [availableExternalLots, externalPage],
+    [availableExternalLots, safeExternalPage],
   )
+
+  // The two tabs hold cards of different heights, so swapping them used to make
+  // the page shorter, which clamped the scroll position and jumped the view.
+  const lotsPanelRef = useHeightFloor<HTMLDivElement>(460, [
+    lotsTab,
+    pagedInventory.length,
+    pagedExternalLots.length,
+  ])
 
   const openClaimModal = (
     lot: GreenBeanLot & { variety: string; process: string; finalScore?: string | number },
@@ -662,17 +677,19 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             {/* Tab Content */}
             {/* Grows with its cards (six per page, two columns) so nothing is
                 cut off behind an inner scrollbar; the floor keeps a short or
-                empty tab from collapsing the panel. */}
-            <div className="min-h-[460px] bg-white">
+                empty tab, or the shorter of the two tabs, from collapsing the
+                panel. */}
+            <div ref={lotsPanelRef} className="bg-white">
               {lotsTab === 'internal' ? (
                 <InternalLotsTable
                   lots={pagedInventory}
                   totalLots={myInventory.length}
                   totalWeightKg={myInventory.reduce((sum, lot) => sum + lot.remainingWeightKg, 0)}
                   onLogRoast={(lot) => openLogRoastModal(lot as any)}
-                  currentPage={inventoryPage}
+                  currentPage={safeInventoryPage}
                   totalPages={inventoryTotalPages}
                   onPageChange={setInventoryPage}
+                  pageSize={inventoryPageSize}
                   hideHeader
                 />
               ) : (
@@ -680,9 +697,10 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                   lots={pagedExternalLots as any}
                   onRoast={(lot) => handleExternalRoast(lot as any)}
                   onAddExternal={() => setIsAddLotModalOpen(true)}
-                  currentPage={externalPage}
+                  currentPage={safeExternalPage}
                   totalPages={externalTotalPages}
                   onPageChange={setExternalPage}
+                  pageSize={externalPageSize}
                   loadingLotId={isRoastingLotId}
                   hideHeader
                 />
@@ -695,10 +713,10 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         <div ref={roastLogRef} className="lg:relative">
           <RoastLogPanel
             roasts={pagedRoasts}
-            page={page}
+            page={safePage}
             totalPages={totalPages}
-            onPrev={() => setPage((p) => Math.max(1, p - 1))}
-            onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+            onPrev={() => setPage(Math.max(1, safePage - 1))}
+            onNext={() => setPage(Math.min(totalPages, safePage + 1))}
             onPageChange={(newPage) => setPage(newPage)}
             canManageRoast={(roast) => !!isAdmin || roast.roasterId === currentUser.id}
           />

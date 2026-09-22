@@ -4,6 +4,7 @@ import { Button } from '../common/Button'
 import type { ExternalDisplayLot } from '../../types/displayTypes'
 import { toFixed2, toRoaId } from '../../utils/formatters'
 import { useStablePageHeight } from '../../hooks/useStablePageHeight'
+import LotsPagination from './LotsPagination'
 
 interface ExternalLotsTableProps {
   lots: ExternalDisplayLot[]
@@ -12,6 +13,8 @@ interface ExternalLotsTableProps {
   currentPage?: number
   totalPages?: number
   onPageChange?: (page: number) => void
+  /** Items on a full page, so a short last page still reserves a full page of height. */
+  pageSize?: number
   hideHeader?: boolean
   loadingLotId?: string | null
 }
@@ -23,11 +26,17 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
   currentPage = 1,
   totalPages = 1,
   onPageChange,
+  pageSize,
   hideHeader = false,
   loadingLotId,
 }) => {
   // A short last page would shrink the panel and make the screen jump up.
-  const pageRef = useStablePageHeight<HTMLDivElement>(currentPage, totalPages, lots.length)
+  const pageRef = useStablePageHeight<HTMLDivElement>(
+    currentPage,
+    totalPages,
+    lots.length,
+    pageSize,
+  )
   const [openPopover, setOpenPopover] = useState<string | null>(null)
   const [popoverPos, setPopoverPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
 
@@ -196,6 +205,15 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
           </div>
         )}
       </div>
+
+      {lots.length > 0 && totalPages > 1 && onPageChange && (
+        <LotsPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={onPageChange}
+          tone="warm"
+        />
+      )}
     </div>
   )
 }

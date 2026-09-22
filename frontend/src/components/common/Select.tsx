@@ -60,6 +60,20 @@ const Select = <T,>({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [open]);
 
+  // While the list is open, Escape closes just the list. Capture phase runs
+  // before a dialog's own Escape-to-close listener, and stopPropagation keeps
+  // the key from reaching it and throwing away the form behind the dropdown.
+  useEffect(() => {
+    if (!open) return;
+    function onEscape(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setOpen(false);
+    }
+    document.addEventListener('keydown', onEscape, true);
+    return () => document.removeEventListener('keydown', onEscape, true);
+  }, [open]);
+
   const handleSelect = (val: string | number) => {
     onChange(val);
     setOpen(false);

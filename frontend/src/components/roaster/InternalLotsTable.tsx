@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Package, ChevronLeft, ChevronRight, ClipboardList, Flame, X } from 'lucide-react'
+import { Package, ClipboardList, Flame, X } from 'lucide-react'
 import { Button } from '../common/Button'
 import { RoasterInventoryItem } from '../../types'
 import { toFixed2, toRoaId } from '../../utils/formatters'
 import { useStablePageHeight } from '../../hooks/useStablePageHeight'
+import LotsPagination from './LotsPagination'
 
 // WithdrawalLotItem is just RoasterInventoryItem — all enriched fields (grade, processorScore,
 // variety, process, greenBeanDisplayId) are now populated directly by transformInventoryItem.
@@ -18,6 +19,8 @@ interface InternalLotsTableProps {
   currentPage?: number
   totalPages?: number
   onPageChange?: (page: number) => void
+  /** Items on a full page, so a short last page still reserves a full page of height. */
+  pageSize?: number
   hideHeader?: boolean
 }
 
@@ -34,10 +37,16 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
   currentPage = 1,
   totalPages = 1,
   onPageChange,
+  pageSize,
   hideHeader = false,
 }) => {
   // A short last page would shrink the panel and make the screen jump up.
-  const pageRef = useStablePageHeight<HTMLDivElement>(currentPage, totalPages, lots.length)
+  const pageRef = useStablePageHeight<HTMLDivElement>(
+    currentPage,
+    totalPages,
+    lots.length,
+    pageSize,
+  )
   const [openPopover, setOpenPopover] = useState<string | null>(null)
   const [popoverPos, setPopoverPos] = useState<PopoverPos>({ top: 0, left: 0 })
 
@@ -197,59 +206,12 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
           )}
         </div>
 
-        {/* Pagination */}
         {lots.length > 0 && totalPages > 1 && onPageChange && (
-          <div className="border-t border-[#e6ebe5] bg-[#f8fbf8] px-4 py-3">
-            <div className="flex justify-center items-center gap-1">
-              <button
-                onClick={() => onPageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-white rounded-md disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              {(() => {
-                const TOTAL_SLOTS = 7
-                const tp = totalPages
-                const cp = currentPage
-                let slots: (number | 'ellipsis')[] = []
-                if (tp <= TOTAL_SLOTS) {
-                  slots = Array.from({ length: tp }, (_, i) => i + 1)
-                } else if (cp <= 4) {
-                  slots = [1, 2, 3, 4, 5, 'ellipsis', tp]
-                } else if (cp >= tp - 3) {
-                  slots = [1, 'ellipsis', tp - 4, tp - 3, tp - 2, tp - 1, tp]
-                } else {
-                  slots = [1, 'ellipsis', cp - 1, cp, cp + 1, 'ellipsis', tp]
-                }
-                return slots.map((slot, idx) =>
-                  slot === 'ellipsis' ? (
-                    <span
-                      key={`e-${idx}`}
-                      className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm"
-                    >
-                      ...
-                    </span>
-                  ) : (
-                    <button
-                      key={slot}
-                      onClick={() => onPageChange(slot)}
-                      className={`w-8 h-8 text-sm font-medium rounded-md transition-colors flex items-center justify-center ${cp === slot ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-white'}`}
-                    >
-                      {slot}
-                    </button>
-                  ),
-                )
-              })()}
-              <button
-                onClick={() => onPageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 hover:bg-white rounded-md disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
+          <LotsPagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={onPageChange}
+          />
         )}
       </div>
 

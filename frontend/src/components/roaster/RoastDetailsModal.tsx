@@ -95,6 +95,18 @@ const RoastDetailsBody: React.FC<{
   const editFirstFieldRef = useRef<HTMLInputElement>(null)
   const keepRoastRef = useRef<HTMLButtonElement>(null)
 
+  // The body stays mounted across view, edit and delete, so an abandoned edit
+  // would still be in the fields the next time Edit was opened.
+  const resetForm = () => {
+    setRoastDate(roast.roastDate)
+    setBatchSize(String(roast.batchSizeKg))
+    setRoastedWeight(roast.roastedWeightKg != null ? String(roast.roastedWeightKg) : '')
+    setRoastLevel(roast.roastLevel)
+    setNotes(roast.roastProfileNotes === 'No notes' ? '' : roast.roastProfileNotes || '')
+    setFlavorTags(splitTags(roast.flavorNotes))
+    setOpenGroups([])
+  }
+
   // Pause the background reload while the dialog is open: a reload that started
   // before a save or delete would otherwise land afterwards and put the old
   // roast and stock figures back on screen.
@@ -456,6 +468,7 @@ const RoastDetailsBody: React.FC<{
                 type="button"
                 onClick={() => {
                   setError('')
+                  resetForm()
                   setMode('view')
                 }}
                 disabled={busy}
