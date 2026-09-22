@@ -111,6 +111,10 @@ const RoastDetailsBody: React.FC<{
   }, [mode])
 
   const roastLabel = roast.displayId || toRoastBatchId(roast.id)
+  // The stored yield carries two decimals, so the check has to use the same
+  // one-decimal figure the panel prints, or a 77.96 shows as 78.0% next to a
+  // notice saying it is outside the 78-92% range.
+  const shownYieldPct = Number(roast.yieldPercentage.toFixed(1))
   const inventory = data.roasterInventory.find((item) => item.id === roast.roasterInventoryId)
   // What the corrected batch may use: this roast's own beans plus what is still
   // in stock. The bulk load keeps only the newest inventory rows, so the row can
@@ -507,17 +511,18 @@ const RoastDetailsBody: React.FC<{
             <p>
               <span className="text-[#829188]">Yield</span>{' '}
               <span className="font-bold tabular-nums text-[#294936]">
-                {roast.yieldPercentage.toFixed(1)}%
+                {shownYieldPct.toFixed(1)}%
               </span>
             </p>
             <p>
               <span className="text-[#829188]">Weight loss</span>{' '}
               <span className="font-bold tabular-nums text-[#294936]">
-                {(100 - roast.yieldPercentage).toFixed(1)}%
+                {(100 - shownYieldPct).toFixed(1)}%
               </span>
             </p>
             <p className="ml-auto flex items-center gap-2 text-[#6d756e]">
               <CalendarDays aria-hidden="true" className="h-4 w-4 text-[#829188]" />
+              <span className="sr-only">Roast date</span>
               <span>{formatRoastDate(roast.roastDate)}</span>
               <span className="sr-only">Roast level</span>
               {roast.roastLevel ? (
@@ -533,8 +538,7 @@ const RoastDetailsBody: React.FC<{
           </div>
         </div>
 
-        {(roast.yieldPercentage < TYPICAL_YIELD_MIN ||
-          roast.yieldPercentage > TYPICAL_YIELD_MAX) && (
+        {(shownYieldPct < TYPICAL_YIELD_MIN || shownYieldPct > TYPICAL_YIELD_MAX) && (
           <p
             role="status"
             className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
