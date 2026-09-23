@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Cloud, Thermometer, Droplets, CloudRain, RefreshCw, X, CheckCircle, Edit3, Trash2, Loader2, ChevronLeft, ChevronRight, Calendar, ArrowRight } from 'lucide-react';
+import { Cloud, Thermometer, Droplets, CloudRain, RefreshCw, X, CheckCircle, Edit3, Trash2, Loader2, ChevronLeft, ChevronRight, Calendar, ArrowRight, Download } from 'lucide-react';
 import { Button, Input, Modal } from '../common';
 import Select from '../common/Select';
 import { useDataContext } from '../../hooks/useDataContext';
@@ -15,12 +15,33 @@ import { fetchWeatherData } from '../../services/farm/weatherApiService';
 import { updateFarmWeatherSettings } from '../../services/farm/farmService';
 import DatePicker from '../common/DatePicker';
 import { formatDateDisplay } from '../../utils/formatters';
+import { csvDate, csvDateTime, csvFilename, downloadCsv } from '../../utils/exportCSV';
 
 interface FarmWeatherPanelProps {
   farm: Farm | null;
   isOpen?: boolean;
   onClose?: () => void;
 }
+
+// Rows the history table loads for a range. A range holding more than this
+// (e.g. months of 5-minute auto-fetch) comes back cut short, oldest dropped.
+const PANEL_RECORD_LIMIT = 50000;
+// The most the backend returns in one request; the CSV export asks for this
+// when the table's load was cut short.
+const EXPORT_RECORD_LIMIT = 250000;
+
+// Newest recordDate (the date the weather is for) first. When several records
+// share one recordDate (e.g. the hourly auto-fetch all stamps today's date),
+// order by createdAt so the row the user just saved sits at the top instead
+// of landing in random insert order.
+const newestRecordFirst = (a: WeatherRecord, b: WeatherRecord) => {
+  const dateDiff =
+    new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime();
+  if (dateDiff !== 0) return dateDiff;
+  const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+  const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+  return bCreated - aCreated;
+};
 
 const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true, onClose }) => {
   const { data, setData } = useDataContext();
@@ -76,6 +97,8 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
   const [isLoadingRecords, setIsLoadingRecords] = useState(false);
   // Bumped on save/edit/delete to retrigger the fetch effect.
   const [refreshTick, setRefreshTick] = useState(0);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // Next server fetch ≈ latest API record + interval. Derived from real
   // data instead of a local timer, since the schedule lives on the
@@ -123,6 +146,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
       farmId: farm.id,
       startDate: filterStartDate || undefined,
       endDate: filterEndDate || undefined,
+      limit: PANEL_RECORD_LIMIT,
     })
       .then(records => {
         if (!cancelled) {
@@ -141,25 +165,16 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
   // Display records — sorted; backend already applied farmId + date
   // range filter so we only need to order by recency here.
   const selectedFarmRecords = useMemo(() => {
-    return [...panelRecords].sort((a, b) => {
-      // Primary: newest recordDate first (the date the weather is for).
-      const dateDiff =
-        new Date(b.recordDate).getTime() - new Date(a.recordDate).getTime();
-      if (dateDiff !== 0) return dateDiff;
-      // Tiebreak: when several records share the same recordDate (e.g. the
-      // auto-fetch that runs every hour all stamps today's date), order by
-      // createdAt so the row the user just saved sits at the top instead of
-      // landing in random insert order.
-      const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return bCreated - aCreated;
-    });
+    return [...panelRecords].sort(newestRecordFirst);
   }, [panelRecords]);
+  // The range holds more records than the table loaded.
+  const panelRecordsCapped = panelRecords.length >= PANEL_RECORD_LIMIT;
 
   // Reset to page 1 when the date filter changes so the user doesn't land
   // on an empty page.
   useEffect(() => {
     setCurrentPage(1);
+    setExportError(null);
   }, [filterStartDate, filterEndDate]);
 
   // Pagination calculations
@@ -172,7 +187,73 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
   // Reset page when farm changes
   useEffect(() => {
     setCurrentPage(1);
+    setExportError(null);
   }, [farm?.id]);
+
+  // Exports every record in the selected date range, newest first like the
+  // table, across all pages rather than only the one on screen.
+  const writeWeatherCsv = (currentFarm: Farm, records: WeatherRecord[]) => {
+    const headers = [
+      'วันที่บันทึก',
+      'เวลาที่บันทึก',
+      'อุณหภูมิต่ำสุด (°C)',
+      'อุณหภูมิสูงสุด (°C)',
+      'อุณหภูมิเฉลี่ย (°C)',
+      'ฝน (mm)',
+      'ความชื้น (%)',
+      'แหล่งข้อมูล',
+      'หมายเหตุ',
+    ];
+    const rows = records.map(record => [
+      csvDate(record.recordDate),
+      csvDateTime(record.createdAt),
+      record.temperatureMin,
+      record.temperatureMax,
+      record.temperatureAvg,
+      record.rainfall,
+      record.humidity,
+      record.source,
+      record.notes ?? '',
+    ]);
+    const filename = csvFilename('weather', [
+      currentFarm.name ?? currentFarm.location,
+      filterStartDate && `from ${filterStartDate}`,
+      filterEndDate && `to ${filterEndDate}`,
+    ]);
+    downloadCsv(filename, headers, rows);
+  };
+
+  const handleExportCsv = async () => {
+    if (!farm || selectedFarmRecords.length === 0) return;
+    setExportError(null);
+    if (!panelRecordsCapped) {
+      writeWeatherCsv(farm, selectedFarmRecords);
+      return;
+    }
+    // The table only loaded the newest part of the range; fetch all of it
+    // rather than ship a file that silently lacks the oldest records.
+    setIsExporting(true);
+    try {
+      const records = await getAllWeatherRecords({
+        farmId: farm.id,
+        startDate: filterStartDate || undefined,
+        endDate: filterEndDate || undefined,
+        limit: EXPORT_RECORD_LIMIT,
+      });
+      if (records.length >= EXPORT_RECORD_LIMIT) {
+        setExportError(
+          `ช่วงวันที่นี้มีข้อมูลเกิน ${EXPORT_RECORD_LIMIT.toLocaleString()} รายการ กรุณาเลือกช่วงวันที่ให้สั้นลงแล้วส่งออกอีกครั้ง`,
+        );
+      } else if (records.length < panelRecords.length) {
+        // getAllWeatherRecords returns [] when the request fails.
+        setExportError('ไม่สามารถโหลดข้อมูลทั้งหมดในช่วงที่เลือกได้ กรุณาลองใหม่');
+      } else {
+        writeWeatherCsv(farm, [...records].sort(newestRecordFirst));
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     resetForm();
@@ -726,23 +807,43 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
           <div className="space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h3 className="text-lg font-semibold text-gray-900">ประวัติการบันทึกข้อมูลอากาศ</h3>
-              <p className="text-sm text-gray-500 inline-flex items-center gap-2">
-                {isLoadingRecords ? (
-                  <span className="inline-flex items-center gap-1.5 text-blue-600">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    กำลังโหลด...
-                  </span>
-                ) : (
-                  <>
-                    ในช่วงที่เลือก{' '}
-                    <span className="font-semibold text-gray-700">
-                      {selectedFarmRecords.length.toLocaleString()}
-                    </span>{' '}
-                    รายการ
-                  </>
-                )}
-              </p>
+              <div className="flex items-center gap-3">
+                <p className="text-sm text-gray-500 inline-flex items-center gap-2">
+                  {isLoadingRecords ? (
+                    <span className="inline-flex items-center gap-1.5 text-blue-600">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      กำลังโหลด...
+                    </span>
+                  ) : (
+                    <>
+                      ในช่วงที่เลือก{' '}
+                      <span className="font-semibold text-gray-700">
+                        {selectedFarmRecords.length.toLocaleString()}
+                        {panelRecordsCapped && '+'}
+                      </span>{' '}
+                      รายการ
+                    </>
+                  )}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportCsv}
+                  disabled={isLoadingRecords || isExporting || selectedFarmRecords.length === 0}
+                  icon={
+                    isExporting
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <Download className="h-4 w-4" />
+                  }
+                >
+                  ส่งออก CSV
+                </Button>
+              </div>
             </div>
+            {exportError && (
+              <p className="text-sm text-red-600">{exportError}</p>
+            )}
 
             {/* Date-range filter — always visible. Default load is the
                 last 30 days so the initial fetch is cheap even when the

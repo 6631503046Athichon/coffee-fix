@@ -3,7 +3,7 @@ import * as React from 'react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Farm, GAPLogEntry, UserRole } from '../../types';
-import { PlusCircle, Filter, FileText, Printer, X, CheckCircle, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { PlusCircle, Filter, FileText, Printer, X, CheckCircle, Edit, Trash2, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
 import Select from '../common/Select';
 import { Modal } from '../common/Modal';
@@ -14,6 +14,7 @@ import { Badge } from '../common/Badge';
 import { Alert } from '../common/Alert';
 import { generateGAPLogId } from '../../utils/idGenerator';
 import { addGAPLog, deleteGAPLog, updateGAPLog } from '../../services/farm/gapLogService';
+import { csvDate, csvFilename, downloadCsv } from '../../utils/exportCSV';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -296,6 +297,60 @@ const GAPComplianceHelper: React.FC = () => {
         return filteredLogs.slice(start, start + ITEMS_PER_PAGE);
     }, [filteredLogs, currentPage]);
 
+    // Human-readable filters, for the printed report header and the CSV file name.
+    const farmFilterFarm = plotFilter === 'All' ? undefined : farmMap.get(plotFilter);
+    const farmFilterLabel =
+        plotFilter === 'All' ? null : farmFilterFarm ? buildFarmLabel(farmFilterFarm) : plotFilter;
+    const activityFilterLabel = activityFilter === 'All' ? null : activityFilter;
+
+    // Report sections for one farm: one per activity type, then 'Other' for logs whose
+    // type is no longer in the list, so every filtered log is printed exactly once.
+    const reportSections = React.useCallback(
+        (logs: GAPLogEntry[]) => {
+            const typeNames = Array.from(new Set(data.activityTypes.map(t => t.name)));
+            const known = new Set(typeNames);
+            return [
+                ...typeNames.map(name => ({
+                    key: `type-${name}`,
+                    name,
+                    isOther: false,
+                    logs: logs.filter(l => l.activityType === name),
+                })),
+                {
+                    key: 'other',
+                    name: 'Other',
+                    isOther: true,
+                    logs: logs.filter(l => !known.has(l.activityType)),
+                },
+            ].filter(section => section.logs.length > 0);
+        },
+        [data.activityTypes],
+    );
+
+    // Exports every log that matches the farm and activity filters, across all pages.
+    const handleExportCSV = () => {
+        if (filteredLogs.length === 0) return;
+
+        const headers = ['Date', 'Farm', 'Location', 'Activity Type', 'Product/Method', 'Quantity', 'Notes'];
+        const rows = filteredLogs.map(log => {
+            const logFarm = log.farmId ? farmMap.get(log.farmId) : undefined;
+            return [
+                csvDate(log.date),
+                logFarm?.name ?? log.farmPlotLocation ?? '',
+                logFarm?.name && logFarm.location ? logFarm.location : '',
+                log.activityType,
+                log.productUsed,
+                log.quantity,
+                log.notes ?? '',
+            ];
+        });
+
+        const farmFilterName = farmFilterFarm
+            ? farmFilterFarm.name ?? farmFilterFarm.location
+            : farmFilterLabel;
+        downloadCsv(csvFilename('gap-log', [farmFilterName, activityFilterLabel]), headers, rows);
+    };
+
     const reportData = React.useMemo(() => {
         // fix: Explicitly type the initial value for the reduce function to ensure
         // TypeScript correctly infers the type of `reportData`.
@@ -479,13 +534,23 @@ const GAPComplianceHelper: React.FC = () => {
                                 />
                             </div>
                         </div>
-                        <Button
-                            onClick={() => setIsReportModalOpen(true)}
-                            variant="success"
-                            icon={<FileText className="h-4 w-4" />}
-                        >
-                            Generate Report
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                onClick={handleExportCSV}
+                                disabled={filteredLogs.length === 0}
+                                variant="outline"
+                                icon={<Download className="h-4 w-4" />}
+                            >
+                                Export CSV
+                            </Button>
+                            <Button
+                                onClick={() => setIsReportModalOpen(true)}
+                                variant="success"
+                                icon={<FileText className="h-4 w-4" />}
+                            >
+                                Generate Report
+                            </Button>
+                        </div>
                     </div>
 
                     {filteredLogs.length === 0 ? (
@@ -630,6 +695,14 @@ const GAPComplianceHelper: React.FC = () => {
                         Print
                     </Button>
                     <Button
+                        onClick={handleExportCSV}
+                        disabled={filteredLogs.length === 0}
+                        variant="outline"
+                        icon={<Download className="h-4 w-4" />}
+                    >
+                        Export CSV
+                    </Button>
+                    <Button
                         onClick={() => setIsReportModalOpen(false)}
                         variant="outline"
                         icon={<X className="h-4 w-4" />}
@@ -662,6 +735,18 @@ const GAPComplianceHelper: React.FC = () => {
                                         </td>
                                     </tr>
                                     <tr>
+                                        <td className="pr-4 py-0.5 text-gray-500 font-medium">Farm</td>
+                                        <td className="py-0.5 text-gray-800 font-semibold">
+                                            {farmFilterLabel ?? 'All farms'}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td className="pr-4 py-0.5 text-gray-500 font-medium">Activity Type</td>
+                                        <td className="py-0.5 text-gray-800 font-semibold">
+                                            {activityFilterLabel ?? 'All activity types'}
+                                        </td>
+                                    </tr>
+                                    <tr>
                                         <td className="pr-4 py-0.5 text-gray-500 font-medium">Total Records</td>
                                         <td className="py-0.5 text-gray-800 font-semibold">
                                             {filteredLogs.length} {filteredLogs.length === 1 ? 'entry' : 'entries'}
@@ -689,13 +774,12 @@ const GAPComplianceHelper: React.FC = () => {
                                 </div>
 
                                 {/* Activity Type Tables */}
-                                {data.activityTypes.map(actType => {
-                                    const typeLogs = logs.filter((l: GAPLogEntry) => l.activityType === actType.name);
-                                    if (typeLogs.length === 0) return null;
+                                {reportSections(logs).map(section => {
+                                    const typeLogs = section.logs;
                                     return (
-                                        <div key={actType.id} className="mb-4 ml-2">
+                                        <div key={section.key} className="mb-4 ml-2">
                                             <div className="flex items-center gap-2 mb-2">
-                                                <h3 className="text-sm font-semibold text-gray-700">{actType.name}</h3>
+                                                <h3 className="text-sm font-semibold text-gray-700">{section.name}</h3>
                                                 <span className="text-xs text-gray-400">
                                                     ({typeLogs.length} {typeLogs.length === 1 ? 'record' : 'records'})
                                                 </span>
@@ -704,10 +788,11 @@ const GAPComplianceHelper: React.FC = () => {
                                                 <table className="min-w-full text-sm">
                                                     <thead>
                                                         <tr className="bg-gray-100">
-                                                            <th className="text-left px-4 py-2.5 font-semibold text-gray-700 w-[15%] border-b border-gray-300 text-xs uppercase tracking-wide">No.</th>
-                                                            <th className="text-left px-4 py-2.5 font-semibold text-gray-700 w-[25%] border-b border-gray-300 text-xs uppercase tracking-wide">Date</th>
-                                                            <th className="text-left px-4 py-2.5 font-semibold text-gray-700 w-[40%] border-b border-gray-300 text-xs uppercase tracking-wide">Product / Method</th>
-                                                            <th className="text-left px-4 py-2.5 font-semibold text-gray-700 w-[20%] border-b border-gray-300 text-xs uppercase tracking-wide">Quantity</th>
+                                                            <th className="text-left px-4 py-2.5 font-semibold text-gray-700 w-[8%] border-b border-gray-300 text-xs uppercase tracking-wide">No.</th>
+                                                            <th className="text-left px-4 py-2.5 font-semibold text-gray-700 w-[16%] border-b border-gray-300 text-xs uppercase tracking-wide">Date</th>
+                                                            <th className="text-left px-4 py-2.5 font-semibold text-gray-700 w-[30%] border-b border-gray-300 text-xs uppercase tracking-wide">Product / Method</th>
+                                                            <th className="text-left px-4 py-2.5 font-semibold text-gray-700 w-[16%] border-b border-gray-300 text-xs uppercase tracking-wide">Quantity</th>
+                                                            <th className="text-left px-4 py-2.5 font-semibold text-gray-700 w-[30%] border-b border-gray-300 text-xs uppercase tracking-wide">Notes</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
@@ -715,8 +800,14 @@ const GAPComplianceHelper: React.FC = () => {
                                                             <tr key={log.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                                                                 <td className="px-4 py-2 border-b border-gray-200 text-gray-500 text-xs">{idx + 1}</td>
                                                                 <td className="px-4 py-2 border-b border-gray-200 text-gray-700">{new Date(log.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
-                                                                <td className="px-4 py-2 border-b border-gray-200 text-gray-800">{log.productUsed}</td>
+                                                                <td className="px-4 py-2 border-b border-gray-200 text-gray-800">
+                                                                    {log.productUsed}
+                                                                    {section.isOther && (
+                                                                        <div className="text-xs text-gray-500">Type: {log.activityType || '-'}</div>
+                                                                    )}
+                                                                </td>
                                                                 <td className="px-4 py-2 border-b border-gray-200 text-gray-700">{log.quantity}</td>
+                                                                <td className="px-4 py-2 border-b border-gray-200 text-gray-700">{log.notes || '-'}</td>
                                                             </tr>
                                                         ))}
                                                     </tbody>

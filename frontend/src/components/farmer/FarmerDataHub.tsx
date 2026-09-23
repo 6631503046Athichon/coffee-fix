@@ -10,7 +10,7 @@ import { Button } from '../common/Button';
 import { Input } from '../common/Input';
 import { PageHeader } from '../common/PageHeader';
 import { Badge } from '../common/Badge';
-import { exportToCSV } from '../../utils/exportCSV';
+import { csvDate, csvFilename, downloadCsv } from '../../utils/exportCSV';
 import { deleteHarvestLot, updateHarvestLot } from '../../services/lots/harvestLotService';
 
 import { formatDateDisplay } from '../../utils/formatters';
@@ -29,15 +29,6 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
     const [yearFilter, setYearFilter] = useState<string>('All');
     const [plotFilter, setPlotFilter] = useState<string>('All');
     const [currentPage, setCurrentPage] = useState(1);
-
-    // Guard clause for null currentUser
-    if (!currentUser) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <p className="text-gray-500">Loading user data...</p>
-            </div>
-        );
-    }
 
     // Edit Modal State
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -66,8 +57,8 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
         return data.harvestLots
             .filter(lot => {
                 // Filter by current user (farmers see only their own data, admins see all)
-                const isAdmin = currentUser.roles?.includes(UserRole.Admin) || false;
-                const userMatch = isAdmin || lot.farmerName === currentUser.name;
+                const isAdmin = currentUser?.roles?.includes(UserRole.Admin) || false;
+                const userMatch = isAdmin || lot.farmerName === currentUser?.name;
 
                 const lotYear = new Date(lot.harvestDate).getFullYear().toString();
                 const yearMatch = yearFilter === 'All' || lotYear === yearFilter;
@@ -87,6 +78,15 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
         const start = (currentPage - 1) * ITEMS_PER_PAGE;
         return filteredLots.slice(start, start + ITEMS_PER_PAGE);
     }, [filteredLots, currentPage]);
+
+    // Guard clause for null currentUser (after every hook, so hook order never changes)
+    if (!currentUser) {
+        return (
+            <div className="flex items-center justify-center h-64">
+                <p className="text-gray-500">Loading user data...</p>
+            </div>
+        );
+    }
 
     const handleDelete = async (lotId: string, e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent row click
@@ -147,24 +147,26 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
         }
     };
 
+    // Exports every lot that matches the year and plot filters, across all pages.
     const handleExportCSV = () => {
-        if (filteredLots.length === 0) {
-            alert("No data to export.");
-            return;
-        }
+        if (filteredLots.length === 0) return;
 
         const headers = ['Lot ID', 'Farmer', 'Variety', 'Weight (kg)', 'Harvest Date', 'Location', 'Status'];
         const rows = filteredLots.map(lot => [
-            lot.id,
+            lot.displayId || lot.id,
             lot.farmerName,
             lot.cherryVariety,
-            lot.weightKg.toString(),
-            lot.harvestDate,
+            lot.weightKg,
+            csvDate(lot.harvestDate),
             lot.farmPlotLocation,
             lot.status
         ]);
 
-        exportToCSV({ filename: 'harvest_data_export.csv', headers, data: rows });
+        const filename = csvFilename('harvest-lots', [
+            yearFilter !== 'All' && yearFilter,
+            plotFilter !== 'All' && plotFilter,
+        ]);
+        downloadCsv(filename, headers, rows);
     };
 
     const isAdmin = currentUser.roles?.includes(UserRole.Admin);
@@ -205,6 +207,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                     </div>
                     <Button
                         onClick={handleExportCSV}
+                        disabled={filteredLots.length === 0}
                         variant="success"
                         icon={<Download className="h-4 w-4" />}
                     >

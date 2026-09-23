@@ -106,6 +106,12 @@ import HullAndGradeModal from "./modals/HullAndGradeModal";
 import CompleteBatchModal from "./modals/CompleteBatchModal";
 import SetPriceModal from "./modals/SetPriceModal";
 import { logger } from "../../utils/logger";
+import {
+  csvDate,
+  csvFilename,
+  csvFixed,
+  downloadCsv,
+} from "../../utils/exportCSV";
 
 import {
   ITEMS_PER_PAGE,
@@ -128,6 +134,7 @@ import {
   KanbanCard,
   KanbanColumn,
   Pagination,
+  ExportCsvButton,
 } from "./workbench";
 import type {
   ViewMode,
@@ -1270,25 +1277,15 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
 
 
-  const processedParchmentLots = useMemo(() => {
+  // Search and sort apply in both views; the status and process filters only
+  // exist in the data grid (see processedParchmentLots / kanbanParchmentLots).
+  const searchedParchmentLots = useMemo(() => {
     const search = parchmentSearch.toLowerCase();
-    let filtered = data.parchmentLots.filter(
+    const filtered = data.parchmentLots.filter(
       (p) =>
         formatParchmentId(p).toLowerCase().includes(search) ||
         p.status.toLowerCase().includes(search),
     );
-
-    // Apply status filter
-    if (parchmentStatusFilter !== "all") {
-      filtered = filtered.filter((p) => p.status === parchmentStatusFilter);
-    }
-
-    // Apply process type filter
-    if (parchmentProcessFilter !== "all") {
-      filtered = filtered.filter(
-        (p) => p.processType === parchmentProcessFilter,
-      );
-    }
 
     return filtered.sort((a, b) => {
       const key = parchmentSortConfig.key;
@@ -1310,20 +1307,39 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         return parchmentSortConfig.direction === "asc" ? 1 : -1;
       return 0;
     });
-  }, [
-    data.parchmentLots,
-    parchmentSearch,
-    parchmentSortConfig,
-    parchmentStatusFilter,
-    parchmentProcessFilter,
-  ]);
+  }, [data.parchmentLots, parchmentSearch, parchmentSortConfig]);
+
+  // Data grid: search plus the status and process filters in its header.
+  const processedParchmentLots = useMemo(() => {
+    let filtered = searchedParchmentLots;
+
+    // Apply status filter
+    if (parchmentStatusFilter !== "all") {
+      filtered = filtered.filter((p) => p.status === parchmentStatusFilter);
+    }
+
+    // Apply process type filter
+    if (parchmentProcessFilter !== "all") {
+      filtered = filtered.filter(
+        (p) => p.processType === parchmentProcessFilter,
+      );
+    }
+
+    return filtered;
+  }, [searchedParchmentLots, parchmentStatusFilter, parchmentProcessFilter]);
 
   const parchmentPageCount = Math.ceil(
     processedParchmentLots.length / ITEMS_PER_PAGE,
   );
+  // The page number is shared with the workflow column, whose list can be
+  // longer, so keep it within this list's pages.
+  const gridParchmentPage = Math.min(
+    parchmentCurrentPage,
+    Math.max(1, parchmentPageCount),
+  );
   const paginatedParchmentLots = processedParchmentLots.slice(
-    (parchmentCurrentPage - 1) * ITEMS_PER_PAGE,
-    parchmentCurrentPage * ITEMS_PER_PAGE,
+    (gridParchmentPage - 1) * ITEMS_PER_PAGE,
+    gridParchmentPage * ITEMS_PER_PAGE,
   );
 
   // Parchment lots that have been split into green bean lots. The split
@@ -1343,13 +1359,22 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   // Withdraw/Hull & Grade buttons remain reachable. Fully-depleted Hulled lots
   // (currentWeightKg = 0) are hidden because nothing further can be done with
   // them from this card; they're still visible in the main Parchment table.
-  const kanbanParchmentLots = processedParchmentLots.filter(
-    (p) => (p.currentWeightKg ?? 0) > 0,
+  // The workflow column has a search box but no status or process controls,
+  // so the data grid's filters stay out of it: otherwise they would narrow
+  // these cards (and their export) with nothing on screen saying so.
+  const kanbanParchmentLots = useMemo(
+    () => searchedParchmentLots.filter((p) => (p.currentWeightKg ?? 0) > 0),
+    [searchedParchmentLots],
   );
   const kanbanParchmentPageCount = Math.ceil(kanbanParchmentLots.length / ITEMS_PER_PAGE);
+  // The page number is shared with the data grid, whose list can be longer.
+  const kanbanParchmentPage = Math.min(
+    parchmentCurrentPage,
+    Math.max(1, kanbanParchmentPageCount),
+  );
   const paginatedKanbanParchmentLots = kanbanParchmentLots.slice(
-    (parchmentCurrentPage - 1) * ITEMS_PER_PAGE,
-    parchmentCurrentPage * ITEMS_PER_PAGE,
+    (kanbanParchmentPage - 1) * ITEMS_PER_PAGE,
+    kanbanParchmentPage * ITEMS_PER_PAGE,
   );
 
   const enrichedGreenBeanLots = useMemo(() => {
@@ -1362,25 +1387,15 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     });
   }, [data.greenBeanLots, processorUser]);
 
-  const processedGreenBeanLots = useMemo(() => {
+  // Search and sort apply in both views; the status and grade filters only
+  // exist in the data grid (see processedGreenBeanLots / kanbanGreenBeanLots).
+  const searchedGreenBeanLots = useMemo(() => {
     const search = greenBeanSearch.toLowerCase();
-    let filtered = enrichedGreenBeanLots.filter(
+    const filtered = enrichedGreenBeanLots.filter(
       (g) =>
         formatGreenBeanId(g).toLowerCase().includes(search) ||
         g.grade.toLowerCase().includes(search),
     );
-
-    // Apply status filter (InStock = weight > 0, Depleted = weight <= 0)
-    if (greenBeanStatusFilter === "InStock") {
-      filtered = filtered.filter((g) => g.currentWeightKg > 0);
-    } else if (greenBeanStatusFilter === "Depleted") {
-      filtered = filtered.filter((g) => g.currentWeightKg <= 0);
-    }
-
-    // Apply grade filter
-    if (greenBeanGradeFilter !== "all") {
-      filtered = filtered.filter((g) => g.grade === greenBeanGradeFilter);
-    }
 
     return filtered.sort((a, b) => {
       const key = greenBeanSortConfig.key as keyof typeof a;
@@ -1402,13 +1417,34 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         return greenBeanSortConfig.direction === "asc" ? 1 : -1;
       return 0;
     });
-  }, [
-    enrichedGreenBeanLots,
-    greenBeanSearch,
-    greenBeanSortConfig,
-    greenBeanStatusFilter,
-    greenBeanGradeFilter,
-  ]);
+  }, [enrichedGreenBeanLots, greenBeanSearch, greenBeanSortConfig]);
+
+  // Data grid: search plus the status and grade filters in its header.
+  const processedGreenBeanLots = useMemo(() => {
+    let filtered = searchedGreenBeanLots;
+
+    // Apply status filter (InStock = weight > 0, Depleted = weight <= 0)
+    if (greenBeanStatusFilter === "InStock") {
+      filtered = filtered.filter((g) => g.currentWeightKg > 0);
+    } else if (greenBeanStatusFilter === "Depleted") {
+      filtered = filtered.filter((g) => g.currentWeightKg <= 0);
+    }
+
+    // Apply grade filter
+    if (greenBeanGradeFilter !== "all") {
+      filtered = filtered.filter((g) => g.grade === greenBeanGradeFilter);
+    }
+
+    return filtered;
+  }, [searchedGreenBeanLots, greenBeanStatusFilter, greenBeanGradeFilter]);
+
+  // Workflow column: lots still in stock that match its search. It has no
+  // status or grade controls, so, like the parchment column, it always shows
+  // stock on hand rather than whatever the data grid was last filtered to.
+  const kanbanGreenBeanLots = useMemo(
+    () => searchedGreenBeanLots.filter((g) => g.currentWeightKg > 0),
+    [searchedGreenBeanLots],
+  );
 
   // Aggregate on-hand Green Bean lots by grade so the processor sees one line
   // per grade with total weight + a breakdown of which parchment lots it came
@@ -1496,10 +1532,176 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const greenBeanPageCount = Math.ceil(
     processedGreenBeanLots.length / ITEMS_PER_PAGE,
   );
-  const paginatedGreenBeanLots = processedGreenBeanLots.slice(
-    (greenBeanCurrentPage - 1) * ITEMS_PER_PAGE,
-    greenBeanCurrentPage * ITEMS_PER_PAGE,
+  // Shared with the workflow column too; keep it within this list's pages.
+  const gridGreenBeanPage = Math.min(
+    greenBeanCurrentPage,
+    Math.max(1, greenBeanPageCount),
   );
+  const paginatedGreenBeanLots = processedGreenBeanLots.slice(
+    (gridGreenBeanPage - 1) * ITEMS_PER_PAGE,
+    gridGreenBeanPage * ITEMS_PER_PAGE,
+  );
+  const kanbanGreenBeanPageCount = Math.ceil(
+    kanbanGreenBeanLots.length / ITEMS_PER_PAGE,
+  );
+  const kanbanGreenBeanPage = Math.min(
+    greenBeanCurrentPage,
+    Math.max(1, kanbanGreenBeanPageCount),
+  );
+  const paginatedKanbanGreenBeanLots = kanbanGreenBeanLots.slice(
+    (kanbanGreenBeanPage - 1) * ITEMS_PER_PAGE,
+    kanbanGreenBeanPage * ITEMS_PER_PAGE,
+  );
+
+  // CSV exports hold every lot the section lists under its current search
+  // and filters, across all pages, in the order shown.
+  const searchFilterPart = (search: string) =>
+    search.trim() ? `search ${search.trim()}` : null;
+
+  const exportParchmentCsv = (
+    lots: ParchmentLot[],
+    filterParts: (string | null | false)[],
+  ) => {
+    if (lots.length === 0) return;
+    const harvestById = new Map(data.harvestLots.map((h) => [h.id, h]));
+    const batchById = new Map(data.processingBatches.map((b) => [b.id, b]));
+    const headers = [
+      "Parchment lot",
+      "Batch",
+      "Source lot",
+      "Farmer / supplier",
+      "Variety",
+      "Process",
+      "Status",
+      "Initial weight (kg)",
+      "Current weight (kg)",
+      "Moisture (%)",
+      "Created",
+    ];
+    const rows = lots.map((p) => {
+      const harvest = p.harvestLotId ? harvestById.get(p.harvestLotId) : undefined;
+      const batch = p.processingBatchId
+        ? batchById.get(p.processingBatchId) ?? { id: p.processingBatchId }
+        : undefined;
+      return [
+        formatParchmentId(p),
+        batch ? formatProcessingBatchId(batch) : "",
+        harvest
+          ? formatHarvestLotId(harvest)
+          : p.externalSource
+            ? `External ${p.externalSource.code}`.trim()
+            : "",
+        harvest?.farmerName ??
+          p.externalSource?.supplierName ??
+          p.externalSource?.origin ??
+          "",
+        harvest?.cherryVariety ?? p.externalSource?.variety ?? "",
+        p.processType,
+        formatParchmentStatus(p.status),
+        csvFixed(p.initialWeightKg),
+        csvFixed(p.currentWeightKg),
+        p.moistureContent,
+        csvDate(p.createdAt),
+      ];
+    });
+    downloadCsv(csvFilename("parchment-stock", filterParts), headers, rows);
+  };
+
+  const exportGreenBeanCsv = (
+    lots: GreenBeanLot[],
+    filterParts: (string | null | false)[],
+  ) => {
+    if (lots.length === 0) return;
+    const parchmentById = new Map(data.parchmentLots.map((p) => [p.id, p]));
+    const harvestById = new Map(data.harvestLots.map((h) => [h.id, h]));
+    const headers = [
+      "Green bean lot",
+      "Source lot",
+      "Farmer / supplier",
+      "Variety",
+      "Process",
+      "Grade",
+      "Availability",
+      "Initial weight (kg)",
+      "Current weight (kg)",
+      "Price per kg",
+      "Currency",
+      "Stock value",
+      "Price set on",
+      "Created",
+    ];
+    const rows = lots.map((g) => {
+      const parchment = g.parchmentLotId
+        ? parchmentById.get(g.parchmentLotId)
+        : undefined;
+      const harvest = parchment?.harvestLotId
+        ? harvestById.get(parchment.harvestLotId)
+        : undefined;
+      const price = g.pricePerKg || undefined;
+      return [
+        formatGreenBeanId(g),
+        parchment
+          ? formatParchmentId(parchment)
+          : g.sourceType === "External"
+            ? "External"
+            : "",
+        harvest?.farmerName ??
+          g.externalSource?.producerName ??
+          g.externalSource?.originName ??
+          parchment?.externalSource?.supplierName ??
+          "",
+        g.externalSource?.variety ??
+          harvest?.cherryVariety ??
+          parchment?.externalSource?.variety ??
+          "",
+        parchment?.processType ?? g.externalSource?.processType ?? "",
+        g.grade,
+        g.availabilityStatus,
+        csvFixed(g.initialWeightKg),
+        csvFixed(g.currentWeightKg ?? 0),
+        csvFixed(price),
+        price ? g.currency || "THB" : "",
+        price ? csvFixed(price * (g.currentWeightKg ?? 0)) : "",
+        csvDate(g.priceSetDate),
+        csvDate(g.createdAt),
+      ];
+    });
+    downloadCsv(csvFilename("green-bean-stock", filterParts), headers, rows);
+  };
+
+  const parchmentStatusLabel: Record<string, string> = {
+    AwaitingHulling: "Awaiting Hulling",
+    Hulled: "Hulled",
+  };
+  const greenBeanStatusLabel: Record<string, string> = {
+    InStock: "In Stock",
+    Depleted: "Depleted",
+  };
+
+  const exportParchmentTable = () =>
+    exportParchmentCsv(processedParchmentLots, [
+      searchFilterPart(parchmentSearch),
+      parchmentStatusFilter !== "all" &&
+        (parchmentStatusLabel[parchmentStatusFilter] ?? parchmentStatusFilter),
+      parchmentProcessFilter !== "all" && parchmentProcessFilter,
+    ]);
+  const exportParchmentKanban = () =>
+    exportParchmentCsv(kanbanParchmentLots, [
+      searchFilterPart(parchmentSearch),
+      "in stock",
+    ]);
+  const exportGreenBeanTable = () =>
+    exportGreenBeanCsv(processedGreenBeanLots, [
+      searchFilterPart(greenBeanSearch),
+      greenBeanStatusFilter !== "all" &&
+        (greenBeanStatusLabel[greenBeanStatusFilter] ?? greenBeanStatusFilter),
+      greenBeanGradeFilter !== "all" && greenBeanGradeFilter,
+    ]);
+  const exportGreenBeanKanban = () =>
+    exportGreenBeanCsv(kanbanGreenBeanLots, [
+      searchFilterPart(greenBeanSearch),
+      "in stock",
+    ]);
 
   const tableView = (
     <div className="space-y-4">
@@ -1522,6 +1724,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <DebouncedSearchInput
               placeholder="Search lots..."
+              value={harvestLotSearch}
               onSearch={onHarvestLotSearch}
               className="pl-9 w-full border border-green-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-green-300 focus:border-green-300 outline-none"
             />
@@ -1628,6 +1831,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <DebouncedSearchInput
                   placeholder="Search lots..."
+                  value={parchmentSearch}
                   onSearch={onParchmentSearch}
                   className="pl-9 w-full border border-amber-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-amber-300 focus:border-amber-300 outline-none"
                 />
@@ -1663,6 +1867,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   className="w-[160px]"
                 />
               </div>
+              <ExportCsvButton
+                onClick={exportParchmentTable}
+                count={processedParchmentLots.length}
+              />
             </div>
           </div>
         </div>
@@ -1809,7 +2017,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
         {/* Pagination */}
         <Pagination
-          currentPage={parchmentCurrentPage}
+          currentPage={gridParchmentPage}
           totalPages={parchmentPageCount}
           onPageChange={setParchmentCurrentPage}
         />
@@ -1957,6 +2165,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <DebouncedSearchInput
                   placeholder="Search lots..."
+                  value={greenBeanSearch}
                   onSearch={onGreenBeanSearch}
                   className="pl-9 w-full border border-teal-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-teal-300 focus:border-teal-300 outline-none"
                 />
@@ -1984,6 +2193,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 }}
                 placeholder="Grade"
                 className="w-[160px]"
+              />
+              <ExportCsvButton
+                onClick={exportGreenBeanTable}
+                count={processedGreenBeanLots.length}
               />
             </div>
           </div>
@@ -2207,7 +2420,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
         {/* Pagination */}
         <Pagination
-          currentPage={greenBeanCurrentPage}
+          currentPage={gridGreenBeanPage}
           totalPages={greenBeanPageCount}
           onPageChange={setGreenBeanCurrentPage}
         />
@@ -2247,6 +2460,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <DebouncedSearchInput
               placeholder="Search lots..."
+              value={harvestLotSearch}
               onSearch={onHarvestLotSearch}
               className="pl-9 w-full border border-green-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-green-300 focus:border-green-300 outline-none"
             />
@@ -2357,12 +2571,20 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           <p className="text-[11px] text-gray-500 mt-1">
             Hull &amp; grade to turn these into green beans
           </p>
-          <div className="relative mt-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <DebouncedSearchInput
-              placeholder="Search lots..."
-              onSearch={onParchmentSearch}
-              className="pl-9 w-full border border-amber-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-amber-300 focus:border-amber-300 outline-none"
+          <div className="flex items-stretch gap-2 mt-2">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <DebouncedSearchInput
+                placeholder="Search lots..."
+                value={parchmentSearch}
+                onSearch={onParchmentSearch}
+                className="pl-9 w-full border border-amber-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-amber-300 focus:border-amber-300 outline-none"
+              />
+            </div>
+            <ExportCsvButton
+              compact
+              onClick={exportParchmentKanban}
+              count={kanbanParchmentLots.length}
             />
           </div>
         </div>
@@ -2476,7 +2698,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           )}
         </div>
         <Pagination
-          currentPage={parchmentCurrentPage}
+          currentPage={kanbanParchmentPage}
           totalPages={kanbanParchmentPageCount}
           onPageChange={setParchmentCurrentPage}
         />
@@ -2494,29 +2716,37 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             </div>
             <h3 className="text-sm font-bold text-gray-900">3 · Green Bean Stock</h3>
             <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-semibold bg-white text-teal-700 border border-teal-200">
-              {processedGreenBeanLots.length}
+              {kanbanGreenBeanLots.length}
             </span>
           </div>
           <p className="text-[11px] text-gray-500 mt-1">
             Withdraw to sell, or send for roasting
           </p>
-          <div className="relative mt-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <DebouncedSearchInput
-              placeholder="Search lots..."
-              onSearch={onGreenBeanSearch}
-              className="pl-9 w-full border border-teal-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-teal-300 focus:border-teal-300 outline-none"
+          <div className="flex items-stretch gap-2 mt-2">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <DebouncedSearchInput
+                placeholder="Search lots..."
+                value={greenBeanSearch}
+                onSearch={onGreenBeanSearch}
+                className="pl-9 w-full border border-teal-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-teal-300 focus:border-teal-300 outline-none"
+              />
+            </div>
+            <ExportCsvButton
+              compact
+              onClick={exportGreenBeanKanban}
+              count={kanbanGreenBeanLots.length}
             />
           </div>
         </div>
         <div className="p-3 space-y-2 flex-1">
-          {paginatedGreenBeanLots.length === 0 ? (
+          {paginatedKanbanGreenBeanLots.length === 0 ? (
             <div className="text-center py-8 text-gray-400">
               <Coffee className="h-10 w-10 mx-auto mb-2 opacity-30" />
               <p className="text-sm font-medium">No green bean lots</p>
             </div>
           ) : (
-            paginatedGreenBeanLots.map((g) => {
+            paginatedKanbanGreenBeanLots.map((g) => {
               const isNewGreenBean = isRecentItem(g.createdAt);
               // Prioritize processor score over cupping scores
               const displayScore = g.processorScore
@@ -2678,8 +2908,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           )}
         </div>
         <Pagination
-          currentPage={greenBeanCurrentPage}
-          totalPages={greenBeanPageCount}
+          currentPage={kanbanGreenBeanPage}
+          totalPages={kanbanGreenBeanPageCount}
           onPageChange={setGreenBeanCurrentPage}
         />
       </div>

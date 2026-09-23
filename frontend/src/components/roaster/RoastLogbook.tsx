@@ -13,7 +13,8 @@ import DatePicker from '../common/DatePicker'
 import Select from '../common/Select'
 import { useDataContext } from '../../hooks/useDataContext'
 import { RoastLevel, User, UserRole } from '../../types'
-import { toFixed2, toRoastBatchId } from '../../utils/formatters'
+import { toFixed2, toRoaId, toRoastBatchId } from '../../utils/formatters'
+import { csvFilename, csvFixed, downloadCsv } from '../../utils/exportCSV'
 import RoastDetailsModal from './RoastDetailsModal'
 
 interface RoastLogbookProps {
@@ -183,10 +184,17 @@ const RoastLogbook: React.FC<RoastLogbookProps> = ({ currentUser }) => {
     if (page > totalPages) setPage(totalPages)
   }, [page, totalPages])
 
+  // Exports every roast that matches the filters above, across all pages.
   const exportCsv = () => {
+    const roasterNames = new Map(data.users.map((user) => [user.id, user.name]))
+    const roasterName = (roasterId: string) =>
+      roasterNames.get(roasterId) || (roasterId === currentUser.id ? currentUser.name : '')
+
     const headers = [
       'Roast date',
       'Roast ID',
+      'Source lot',
+      ...(isAdmin ? ['Roaster'] : []),
       'Variety',
       'Process',
       'Grade',
@@ -197,38 +205,36 @@ const RoastLogbook: React.FC<RoastLogbookProps> = ({ currentUser }) => {
       'Weight loss %',
       'Roast notes',
       'Flavor notes',
+      'Record ID',
     ]
-
-    const escapeCell = (value: unknown) => {
-      const text = String(value ?? '').replace(/^[=+\-@]/, "'$&")
-      return `"${text.replace(/"/g, '""')}"`
-    }
 
     const rows = records.map((roast) => [
       roast.roastDate,
       roast.displayId || toRoastBatchId(roast.id),
+      toRoaId(roast.greenBeanLotId),
+      ...(isAdmin ? [roasterName(roast.roasterId)] : []),
       roast.variety,
       roast.process,
       roast.grade,
       roast.roastLevel || 'Not set',
-      toFixed2(roast.batchSizeKg),
-      roast.roastedWeightKg != null ? toFixed2(roast.roastedWeightKg) : '',
-      roast.yieldPercentage.toFixed(1),
-      roast.weightLossPct != null ? roast.weightLossPct.toFixed(1) : '',
+      csvFixed(roast.batchSizeKg),
+      csvFixed(roast.roastedWeightKg),
+      csvFixed(roast.yieldPercentage, 1),
+      csvFixed(roast.weightLossPct, 1),
       roast.roastProfileNotes || '',
       roast.flavorNotes || '',
+      roast.id,
     ])
 
-    const csv = [headers, ...rows].map((row) => row.map(escapeCell).join(',')).join('\r\n')
-    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `roast-logbook-${new Date().toISOString().slice(0, 10)}.csv`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(url)
+    const activeFilters = [
+      dateFilter,
+      processFilter !== 'All process types' && processFilter,
+      varietyFilter !== 'All varieties' && varietyFilter,
+      gradeFilter !== 'All grades' && gradeFilter,
+      levelFilter !== 'All levels' && levelFilter,
+    ]
+
+    downloadCsv(csvFilename('roast-log', activeFilters), headers, rows)
   }
 
   return (
