@@ -71,6 +71,13 @@ async function main() {
       roles: [UserRole.Farmer],
     },
     {
+      email: "farmer2@coffee.com",
+      username: "farmer2",
+      password: await hashPassword("farmer123"),
+      name: "Farmer 2 User",
+      roles: [UserRole.Farmer],
+    },
+    {
       email: "processor@coffee.com",
       username: "processor1",
       password: await hashPassword("processor123"),
