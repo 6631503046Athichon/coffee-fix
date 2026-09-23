@@ -69,14 +69,11 @@ export const updateCustomer = async (customerId: string, customerData: Partial<C
 };
 
 /**
- * Delete a customer
+ * Delete a customer. The server's message is rethrown unchanged so the
+ * confirm popup can show why a customer cannot be deleted (it has sales).
  */
 export const deleteCustomer = async (customerId: string): Promise<void> => {
-  try {
-    await api.delete(`/customers/${customerId}`);
-  } catch (error) {
-    throw new Error(handleApiError(error, 'delete customer'));
-  }
+  await api.delete(`/customers/${customerId}`);
 };
 
 /**

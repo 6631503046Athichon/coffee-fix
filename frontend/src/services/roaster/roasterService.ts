@@ -39,6 +39,7 @@ export function transformRoastBatch(batch: any): RoastBatch {
     batchSizeKg: batch.batchSizeKg,
     yieldPercentage: batch.yieldPercentage,
     roastedWeightKg: batch.roastedWeightKg ?? undefined,
+    soldWeightKg: batch.soldWeightKg ?? 0,
     weightLossPct: batch.weightLossPct ?? undefined,
     roastLevel: batch.roastLevel as RoastLevel | undefined,
     roastProfileNotes: batch.roastProfileNotes,

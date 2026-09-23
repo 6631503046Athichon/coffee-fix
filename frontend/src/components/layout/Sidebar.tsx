@@ -56,6 +56,8 @@ const SECTIONS: NavSection[] = [
   { id: 'admin', label: 'Administration', icon: Shield, roles: [UserRole.Admin] },
 ]
 
+const ROASTER_ONLY_HREFS = ['/roaster', '/roast-logbook', '/sales', '/customers']
+
 const Sidebar: React.FC<SidebarProps> = ({
   navItems,
   currentUserRoles,
@@ -67,9 +69,10 @@ const Sidebar: React.FC<SidebarProps> = ({
     normalizedRoles.includes(UserRole.Roaster.toLowerCase()) &&
     !normalizedRoles.includes(UserRole.Admin.toLowerCase())
 
-  // Keep the roaster workspace focused for non-admin roaster accounts.
+  // Keep the roaster workspace focused for non-admin roaster accounts
+  // (compared by href: several pages share a name, e.g. Quality Insights).
   const visibleNavItems = isRoasterOnly
-    ? navItems.filter((item) => ['Roaster Workbench', 'Roast Logbook'].includes(item.name))
+    ? navItems.filter((item) => ROASTER_ONLY_HREFS.includes(item.href))
     : navItems
 
   // Filter nav items: show if user has ANY of the required roles.

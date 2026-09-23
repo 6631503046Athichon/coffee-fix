@@ -14,7 +14,16 @@ export interface ModalProps {
   showCloseButton?: boolean;
   className?: string;
   overlayClassName?: string;
+  /** On phones (below the `sm` breakpoint) fill the whole screen instead of
+   *  floating as a card, so long forms and their footer buttons fit. */
+  mobileFullScreen?: boolean;
 }
+
+// The `!` variants beat the inline height/margin below and a caller's
+// `!p-*` / `!rounded-*`; `100dvh` keeps the footer above the phone toolbar.
+const MOBILE_FULL_SCREEN_OVERLAY = 'max-sm:!h-[100dvh] max-sm:!items-stretch';
+const MOBILE_FULL_SCREEN_BOX =
+  'max-sm:!m-0 max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-screen max-sm:max-w-none max-sm:!rounded-none max-sm:!p-4';
 
 const maxWidthClasses = {
   sm: 'max-w-sm',
@@ -46,6 +55,7 @@ export const Modal: React.FC<ModalProps> = ({
   showCloseButton = true,
   className = '',
   overlayClassName = '',
+  mobileFullScreen = false,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
@@ -153,7 +163,7 @@ export const Modal: React.FC<ModalProps> = ({
       aria-labelledby={ariaLabelledBy}
       aria-label={ariaLabelledBy ? undefined : title || 'Dialog'}
       onClick={(e) => e.stopPropagation()}
-      className={`fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 ${overlayClassName}`}
+      className={`fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 ${mobileFullScreen ? MOBILE_FULL_SCREEN_OVERLAY : ''} ${overlayClassName}`}
       style={{
         position: 'fixed',
         top: 0,
@@ -168,7 +178,7 @@ export const Modal: React.FC<ModalProps> = ({
     >
       <div
         ref={containerRef}
-        className={`bg-white rounded-3xl p-8 shadow-2xl ${maxWidth === 'auto' ? 'w-auto min-w-[400px]' : 'w-full'} ${maxWidthClasses[maxWidth]} max-h-[90vh] overflow-y-auto overscroll-contain ${className}`}
+        className={`bg-white rounded-3xl p-8 shadow-2xl ${maxWidth === 'auto' ? 'w-auto min-w-[400px]' : 'w-full'} ${maxWidthClasses[maxWidth]} max-h-[90vh] overflow-y-auto overscroll-contain ${className} ${mobileFullScreen ? MOBILE_FULL_SCREEN_BOX : ''}`}
         style={{ margin: '1rem' }}
       >
         {(title || showCloseButton) && (

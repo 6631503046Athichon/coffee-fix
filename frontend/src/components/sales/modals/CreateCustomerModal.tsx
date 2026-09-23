@@ -127,6 +127,7 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
       onClose={onClose}
       title={isEditMode ? `Edit Customer: ${editCustomer?.name}` : 'Create New Customer'}
       maxWidth="2xl"
+      mobileFullScreen
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {successMessage && (
@@ -163,7 +164,6 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
             onChange={(v) => setType(v as typeof type)}
             options={customerTypes}
             placeholder="Select customer type..."
-            colorTheme="emerald"
           />
         </div>
 
@@ -198,7 +198,7 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
             onChange={(e) => setAddress(e.target.value)}
             placeholder="123 Main St, City, Country"
             rows={3}
-            className="block w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-all bg-white hover:border-gray-400 placeholder-gray-400 text-sm resize-none"
+            className="block w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white hover:border-gray-400 placeholder-gray-400 text-sm resize-none"
           />
         </div>
 
@@ -211,7 +211,7 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Additional notes about this customer..."
             rows={3}
-            className="block w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-all bg-white hover:border-gray-400 placeholder-gray-400 text-sm resize-none"
+            className="block w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white hover:border-gray-400 placeholder-gray-400 text-sm resize-none"
           />
         </div>
 

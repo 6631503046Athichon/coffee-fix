@@ -46,4 +46,33 @@ describe('Modal', () => {
 
     expect(onCardClick).not.toHaveBeenCalled()
   })
+
+  it('fills the phone screen only when mobileFullScreen is set', () => {
+    const { rerender } = render(
+      <Modal isOpen onClose={() => {}} title="Sell" className="!p-5 !rounded-xl" mobileFullScreen>
+        <p>Body</p>
+      </Modal>,
+    )
+    const overlay = screen.getByRole('dialog')
+    const box = overlay.firstElementChild as HTMLElement
+    expect(overlay).toHaveClass('max-sm:!h-[100dvh]', 'max-sm:!items-stretch')
+    expect(box).toHaveClass(
+      'max-sm:!m-0',
+      'max-sm:h-[100dvh]',
+      'max-sm:max-h-[100dvh]',
+      'max-sm:w-screen',
+      'max-sm:max-w-none',
+      'max-sm:!rounded-none',
+      'max-sm:!p-4',
+      '!p-5',
+    )
+
+    rerender(
+      <Modal isOpen onClose={() => {}} title="Sell">
+        <p>Body</p>
+      </Modal>,
+    )
+    expect(screen.getByRole('dialog')).not.toHaveClass('max-sm:!items-stretch')
+    expect(screen.getByRole('dialog').firstElementChild).not.toHaveClass('max-sm:!m-0')
+  })
 })

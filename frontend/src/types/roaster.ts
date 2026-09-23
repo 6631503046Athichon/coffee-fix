@@ -29,6 +29,8 @@ export interface RoastBatch {
   batchSizeKg: number;
   yieldPercentage: number;
   roastedWeightKg?: number;
+  /** Roasted kg on sales that are not cancelled; roastedWeightKg - soldWeightKg is left to sell. */
+  soldWeightKg?: number;
   weightLossPct?: number;
   roastLevel?: RoastLevel; // Optional for backward compatibility
   roastProfileNotes: string;

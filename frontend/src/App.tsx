@@ -2,11 +2,11 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, Link } from 'react-router-dom';
-import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, ClipboardList, Edit, Flame, MapPin, Tag, Package, Box, Bean } from 'lucide-react';
+import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, ClipboardList, Edit, Flame, MapPin, Tag, Package, Box, Bean, Receipt } from 'lucide-react';
 
 import { UserRole, CuppingSessionType, Customer } from './types';
 import { INITIAL_APP_DATA } from './constants';
-import { DataContext } from './hooks/useDataContext';
+import { DataContext, SaleOrdersStatus } from './hooks/useDataContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { connectionManager } from './utils/connectionManager';
@@ -14,7 +14,6 @@ import { logger } from './utils/logger';
 import { getDashboardPathByRole } from './utils/routing';
 import ToastContainer from './components/common/ToastContainer';
 import { getAllSaleOrders } from './services/sales/saleOrderService';
-import { getAllInvoices } from './services/sales/invoiceService';
 import { getAllPricingHistory } from './services/sales/pricingHistoryService';
 import { api, bulkLoadPhase1, bulkLoadPhase2 } from './services/api';
 import { transformFarmFromBackend, transformHarvestLotFromBackend, transformSoilAnalysisFromBackend, transformWeatherRecordFromBackend, transformGAPLogFromBackend } from './services/utils/transformers';
@@ -57,6 +56,7 @@ const RoastLogbook = lazy(() => import('./components/roaster/RoastLogbook'));
 const CoffeeVarietiesManager = lazy(() => import('./components/admin/CoffeeVarietiesManager'));
 const CoffeeGradeManagement = lazy(() => import('./components/admin/CoffeeGradeManagement'));
 const CustomerManagement = lazy(() => import('./components/sales/CustomerManagement'));
+const SalesLog = lazy(() => import('./components/sales/SalesLog'));
 
 const RouteLoader: React.FC = () => (
   <div className="min-h-[16rem] flex items-center justify-center">
@@ -158,6 +158,19 @@ const ProtectedRoutes: React.FC = () => {
   // Cached data versions for smart auto-refresh (detects if data changed before reloading)
   const lastVersionsRef = useRef<Record<string, string | null>>({});
 
+  // Sales are loaded (and their version stamps watched) only for the roles
+  // that have a sales log. Read through a ref so the loader keeps its identity.
+  const canSeeSalesRef = useRef(false);
+  const canSeeSales = !!currentUser && (
+    !!currentUser.isSuperAdmin ||
+    currentUser.roles.includes(UserRole.Admin) ||
+    currentUser.roles.includes(UserRole.Roaster)
+  );
+  useEffect(() => {
+    canSeeSalesRef.current = canSeeSales;
+  });
+  const [saleOrdersStatus, setSaleOrdersStatus] = useState<SaleOrdersStatus>('loading');
+
   // Helper function to merge backend data with mock data (backend data takes priority for same IDs)
   const mergeArrays = useCallback(<T extends { id: string }>(backendData: T[], mockData: T[]): T[] => {
     const backendIds = new Set(backendData.map(item => item.id));
@@ -174,11 +187,19 @@ const ProtectedRoutes: React.FC = () => {
   const loadDataFromBackend = useCallback(async () => {
     try {
       // Sales endpoints may fail without sinking the whole load, so they carry
-      // their own catch and report through a flag.
+      // their own catch and report through a flag. Invoices have no screen, so
+      // they are not loaded at all.
+      let saleOrdersLoadFailed = false;
+      const saleOrdersRequest = canSeeSalesRef.current
+        ? getAllSaleOrders().catch((err) => {
+            saleOrdersLoadFailed = true;
+            console.warn('Failed to load sale orders from backend:', err);
+            return null;
+          })
+        : Promise.resolve([]);
       let salesDataLoadFailed = false;
       const salesRequest = Promise.all([
-        getAllSaleOrders(),
-        getAllInvoices(),
+        saleOrdersRequest,
         getAllPricingHistory(),
       ]).catch((err) => {
         salesDataLoadFailed = true;
@@ -204,8 +225,9 @@ const ProtectedRoutes: React.FC = () => {
         versionsRequest,
       ]);
 
-      const [storedSaleOrders, storedInvoices, storedPricingHistory]: [any[], any[], any[]] =
-        sales ?? [[], [], []];
+      const loadedSaleOrders = sales?.[0] ?? null;
+      const storedPricingHistory: any[] = sales?.[1] ?? [];
+      const saleOrdersFailed = saleOrdersLoadFailed || salesDataLoadFailed || !loadedSaleOrders;
 
       const storedFarms = phase1.farms.map(transformFarmFromBackend);
       const storedHarvestLots = phase1.harvestLots.map(transformHarvestLotFromBackend);
@@ -229,8 +251,8 @@ const ProtectedRoutes: React.FC = () => {
         coffeeGrades: phase1.coffeeGrades ?? prev.coffeeGrades,
         customers: mergeArrays(storedCustomers, INITIAL_APP_DATA.customers),
         users: phase1.users,
-        saleOrders: salesDataLoadFailed ? prev.saleOrders : storedSaleOrders,
-        invoices: salesDataLoadFailed ? prev.invoices : storedInvoices,
+        saleOrders: loadedSaleOrders && !saleOrdersFailed ? loadedSaleOrders : prev.saleOrders,
+        invoices: prev.invoices,
         pricingHistory: salesDataLoadFailed ? prev.pricingHistory : storedPricingHistory,
         soilAnalyses: storedSoilAnalyses,
         weatherRecords: storedWeatherRecords,
@@ -242,16 +264,21 @@ const ProtectedRoutes: React.FC = () => {
         roastBatches: storedRoastBatches,
       }));
 
+      // A failed load keeps the rows already shown, so the log only reports
+      // 'failed' while no load has ever succeeded.
+      setSaleOrdersStatus((s) => (saleOrdersFailed ? (s === 'ok' ? 'ok' : 'failed') : 'ok'));
+
       // Same rule as before: a sales failure clears the stamps so the next
       // cycle does a full reload, and a version-fetch failure leaves the
       // previous stamps untouched rather than wiping them.
-      if (salesDataLoadFailed) {
+      if (saleOrdersLoadFailed || salesDataLoadFailed) {
         lastVersionsRef.current = {};
       } else if (versions) {
         lastVersionsRef.current = versions;
       }
     } catch (error) {
       lastVersionsRef.current = {};
+      setSaleOrdersStatus((s) => (s === 'ok' ? 'ok' : 'failed'));
       console.error('Failed to load data from backend:', error);
       // Fallback to INITIAL_APP_DATA if API fails
     }
@@ -302,8 +329,12 @@ const ProtectedRoutes: React.FC = () => {
       if (isEditingRef.current || !connectionManager.isConnected()) return;
       try {
         const versions = await api.get<Record<string, string | null>>('/data-version');
+        // Sale and invoice stamps only matter to roles that load sales;
+        // without this every recorded sale would reload every user.
         const hasChanges = Object.keys(versions).some(
-          key => versions[key] !== lastVersionsRef.current[key]
+          key =>
+            (canSeeSalesRef.current || (key !== 'saleOrders' && key !== 'invoices')) &&
+            versions[key] !== lastVersionsRef.current[key]
         );
         if (hasChanges) {
           await loadDataFromBackend();
@@ -365,7 +396,10 @@ const ProtectedRoutes: React.FC = () => {
     };
   }, [isAuthenticated, isAuthLoading, loadDataFromBackend]);
 
-  const contextValue = useMemo(() => ({ data, setData, refreshData, setIsEditing, isEditing }), [data, setData, refreshData, setIsEditing, isEditing]);
+  const contextValue = useMemo(
+    () => ({ data, setData, refreshData, setIsEditing, isEditing, saleOrdersStatus }),
+    [data, setData, refreshData, setIsEditing, isEditing, saleOrdersStatus],
+  );
 
   const navItems = useMemo(() => {
     let competitionAdminHref = '/cupping'; // Default to hub
@@ -415,6 +449,7 @@ const ProtectedRoutes: React.FC = () => {
       // Roaster Section
       { name: 'Roaster Workbench', href: '/roaster', icon: Flame, roles: [UserRole.Roaster, UserRole.Admin], section: 'roaster' },
       { name: 'Roast Logbook', href: '/roast-logbook', icon: ClipboardList, roles: [UserRole.Roaster, UserRole.Admin], section: 'roaster' },
+      { name: 'Sales', href: '/sales', icon: Receipt, roles: [UserRole.Roaster, UserRole.Admin], section: 'roaster' },
       { name: 'Customer Management', href: '/customers', icon: Users, roles: [UserRole.Admin, UserRole.Roaster], section: 'roaster' },
       { name: 'Quality Insights', href: '/insights', icon: Lightbulb, roles: [UserRole.Roaster], section: 'roaster' },
 
@@ -537,6 +572,14 @@ const ProtectedRoutes: React.FC = () => {
                 element={
                   <ProtectedRoute allowedRoles={[UserRole.Admin, UserRole.Roaster]}>
                     {withRouteLoader(<CustomerManagement />)}
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/sales"
+                element={
+                  <ProtectedRoute allowedRoles={[UserRole.Admin, UserRole.Roaster]}>
+                    {withRouteLoader(<SalesLog currentUser={currentUser!} />)}
                   </ProtectedRoute>
                 }
               />

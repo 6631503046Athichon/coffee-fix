@@ -101,3 +101,23 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 input[type="password"] {
   -moz-appearance: textfield;
 }
+
+/* Sale receipt printing. While a sale's details popup is open it portals the
+   receipt into #sale-print-root (a direct child of body) and adds the body
+   class, so printing then shows only the receipt. No @page rule: it cannot
+   be scoped and would change every other print in the app. */
+@media screen {
+  #sale-print-root {
+    display: none;
+  }
+}
+
+@media print {
+  body.printing-sale-receipt > *:not(#sale-print-root) {
+    display: none !important;
+  }
+
+  body.printing-sale-receipt #sale-print-root {
+    display: block;
+  }
+}
