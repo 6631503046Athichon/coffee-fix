@@ -581,7 +581,7 @@ const UserManagement: React.FC = () => {
             {resetPasswordUser && (
                 <div className="fixed inset-0 z-50 overflow-y-auto">
                     <div className="flex min-h-screen items-center justify-center p-4">
-                        <div className="fixed inset-0 bg-black/50" onClick={() => setResetPasswordUser(null)} />
+                        <div className="fixed inset-0 bg-black/50" />
                         <div className="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6">
                             <h3 className="text-lg font-bold text-gray-900 mb-4">
                                 Reset Password for {resetPasswordUser.name}

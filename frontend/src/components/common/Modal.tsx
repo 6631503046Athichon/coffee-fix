@@ -138,20 +138,16 @@ export const Modal: React.FC<ModalProps> = ({
     return null;
   }
 
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Only close when the user clicked the backdrop itself, not when
-    // the click bubbled up from a child element inside the dialog.
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
   const modalContent = (
+    // Clicking the backdrop does not close the dialog: a stray click there
+    // used to throw away whatever had been typed into the form. Close with
+    // the X button, Cancel or Escape instead. The click is still stopped here
+    // so it never reaches whatever rendered the modal (a clickable card or row).
     <div
       role="dialog"
       aria-modal="true"
       aria-label={title || 'Dialog'}
-      onClick={handleBackdropClick}
+      onClick={(e) => e.stopPropagation()}
       className={`fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 ${overlayClassName}`}
       style={{
         position: 'fixed',
@@ -168,7 +164,6 @@ export const Modal: React.FC<ModalProps> = ({
       <div
         ref={containerRef}
         className={`bg-white rounded-3xl p-8 shadow-2xl ${maxWidth === 'auto' ? 'w-auto min-w-[400px]' : 'w-full'} ${maxWidthClasses[maxWidth]} max-h-[90vh] overflow-y-auto overscroll-contain ${className}`}
-        onClick={(e) => e.stopPropagation()}
         style={{ margin: '1rem' }}
       >
         {(title || showCloseButton) && (
