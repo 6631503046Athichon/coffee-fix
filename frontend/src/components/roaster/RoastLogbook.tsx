@@ -158,6 +158,9 @@ const RoastLogbook: React.FC<RoastLogbookProps> = ({ currentUser }) => {
     : 0
   const totalPages = Math.max(1, Math.ceil(records.length / pageSize))
   const paginatedRecords = records.slice((page - 1) * pageSize, page * pageSize)
+  // Blank rows pad a short last page so the table, and the pager under it,
+  // keep the same height on every page.
+  const fillerRows = totalPages > 1 ? pageSize - paginatedRecords.length : 0
 
   // The open roast, with the source labels the details dialog expects.
   const selectedRecord = selectedRoastId
@@ -389,7 +392,7 @@ const RoastLogbook: React.FC<RoastLogbookProps> = ({ currentUser }) => {
                         setSelectedRoastId(roast.id)
                       }
                     }}
-                    className="cursor-pointer bg-white outline-none transition-colors hover:bg-[#f7fbf7] focus-visible:bg-[#edf5ee]"
+                    className="h-[100px] cursor-pointer bg-white outline-none transition-colors hover:bg-[#f7fbf7] focus-visible:bg-[#edf5ee]"
                   >
                     <td className="whitespace-nowrap px-5 py-4 align-top">
                       <div className="flex items-center gap-2 text-sm font-semibold text-[#294936]">
@@ -403,19 +406,25 @@ const RoastLogbook: React.FC<RoastLogbookProps> = ({ currentUser }) => {
                       </p>
                     </td>
                     <td className="px-5 py-4 align-top">
-                      <p className="text-sm font-semibold text-[#294936]">{roast.variety}</p>
+                      <p className="line-clamp-2 text-sm font-semibold text-[#294936]">
+                        {roast.variety}
+                      </p>
                     </td>
-                    <td className="px-5 py-4 align-top text-sm text-[#55635a]">{roast.process}</td>
-                    <td className="px-5 py-4 align-top text-sm text-[#55635a]">{roast.grade}</td>
+                    <td className="px-5 py-4 align-top text-sm text-[#55635a]">
+                      <p className="line-clamp-2">{roast.process}</p>
+                    </td>
+                    <td className="px-5 py-4 align-top text-sm text-[#55635a]">
+                      <p className="line-clamp-2">{roast.grade}</p>
+                    </td>
                     <td className="px-5 py-4 align-top">
                       <span className="rounded-full bg-[#fff1df] px-2.5 py-1 text-xs font-semibold text-[#a85c1e]">
                         {roast.roastLevel || 'Not set'}
                       </span>
                     </td>
-                    <td className="px-5 py-4 text-right align-top text-sm font-bold text-[#294936]">
+                    <td className="whitespace-nowrap px-5 py-4 text-right align-top text-sm font-bold text-[#294936]">
                       {toFixed2(roast.batchSizeKg)} kg
                     </td>
-                    <td className="px-5 py-4 text-right align-top text-sm font-bold text-[#d87832]">
+                    <td className="whitespace-nowrap px-5 py-4 text-right align-top text-sm font-bold text-[#d87832]">
                       {roast.roastedWeightKg != null
                         ? `${toFixed2(roast.roastedWeightKg)} kg`
                         : '—'}
@@ -424,18 +433,34 @@ const RoastLogbook: React.FC<RoastLogbookProps> = ({ currentUser }) => {
                       <p className="text-sm font-bold text-[#49629a]">
                         {roast.yieldPercentage.toFixed(1)}%
                       </p>
-                      <p className="mt-1 text-xs text-[#9aa69e]">
+                      <p className="mt-1 whitespace-nowrap text-xs text-[#9aa69e]">
                         {roast.weightLossPct != null
                           ? `${roast.weightLossPct.toFixed(1)}% loss`
                           : '—'}
                       </p>
                     </td>
                     <td className="max-w-[220px] px-5 py-4 align-top text-xs leading-relaxed text-[#718077]">
-                      {roast.roastProfileNotes || 'No notes'}
+                      <p className="line-clamp-1" title={roast.roastProfileNotes || undefined}>
+                        {roast.roastProfileNotes || 'No notes'}
+                      </p>
                       {roast.flavorNotes && (
-                        <p className="mt-2 font-semibold text-[#a85c1e]">{roast.flavorNotes}</p>
+                        <p
+                          className="mt-2 line-clamp-2 font-semibold text-[#a85c1e]"
+                          title={roast.flavorNotes}
+                        >
+                          {roast.flavorNotes}
+                        </p>
                       )}
                     </td>
+                  </tr>
+                ))}
+                {Array.from({ length: fillerRows }, (_, index) => (
+                  <tr
+                    key={`filler-${index}`}
+                    aria-hidden="true"
+                    className={`h-[100px] ${index > 0 ? '!border-transparent' : ''}`}
+                  >
+                    <td colSpan={10} />
                   </tr>
                 ))}
               </tbody>
