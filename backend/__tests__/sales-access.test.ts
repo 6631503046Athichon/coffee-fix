@@ -44,7 +44,13 @@ Object.assign(mockPrisma.roastBatch, { count: jest.fn() })
 Object.assign(mockPrisma.roasterInventoryItem, { findUnique: jest.fn() })
 Object.assign(mockPrisma.invoice, { findUnique: jest.fn() })
 Object.assign(mockPrisma.saleOrder, { findUnique: jest.fn(), count: jest.fn() })
-Object.assign(mockPrisma.customer, { findUnique: jest.fn(), delete: jest.fn(), count: jest.fn() })
+Object.assign(mockPrisma.customer, {
+  findUnique: jest.fn(),
+  create: jest.fn(),
+  update: jest.fn(),
+  delete: jest.fn(),
+  count: jest.fn(),
+})
 
 jest.mock('@/lib/prisma', () => ({
   __esModule: true,
@@ -396,6 +402,60 @@ describe('sales access and scoping', () => {
       const response = await DELETE(deleteCustomer(), params(CUSTOMER))
       expect(response.status).toBe(403)
       expect(mockPrisma.customer.delete).not.toHaveBeenCalled()
+    })
+
+    const createCustomer = () =>
+      request('/api/customers', {
+        method: 'POST',
+        body: JSON.stringify({ name: '  Cafe Doi  ', type: 'Retailer', address: ' 12 Nimman Rd ' }),
+      })
+
+    test.each([
+      ['Processor', processor],
+      ['Roaster', roaster],
+      ['Admin', admin],
+    ])('a %s may add a customer', async (_role, user) => {
+      mockAuthUser = user
+      mockPrisma.customer.create.mockResolvedValueOnce({ id: CUSTOMER, name: 'Cafe Doi' })
+      const { POST } = await import('@/app/api/customers/route')
+      const response = await POST(createCustomer())
+      expect(response.status).toBe(201)
+      expect((await response.json()).customer).toEqual({ id: CUSTOMER, name: 'Cafe Doi' })
+      expect(mockPrisma.customer.create).toHaveBeenCalledWith({
+        data: {
+          name: 'Cafe Doi',
+          type: 'Retailer',
+          contactEmail: null,
+          contactPhone: null,
+          address: '12 Nimman Rd',
+          notes: null,
+        },
+      })
+    })
+
+    test('403 for a Farmer adding a customer', async () => {
+      mockAuthUser = farmer
+      const { POST } = await import('@/app/api/customers/route')
+      const response = await POST(createCustomer())
+      expect(response.status).toBe(403)
+      expect(mockPrisma.customer.create).not.toHaveBeenCalled()
+    })
+
+    test('a Processor still cannot list, read or edit customers', async () => {
+      mockAuthUser = processor
+      const list = await import('@/app/api/customers/route')
+      expect((await list.GET(request('/api/customers'))).status).toBe(403)
+      expect(mockPrisma.customer.findMany).not.toHaveBeenCalled()
+
+      const one = await import('@/app/api/customers/[id]/route')
+      expect((await one.GET(request(`/api/customers/${CUSTOMER}`), params(CUSTOMER))).status).toBe(403)
+      const edit = request(`/api/customers/${CUSTOMER}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name: 'Renamed' }),
+      })
+      expect((await one.PUT(edit, params(CUSTOMER))).status).toBe(403)
+      expect(mockPrisma.customer.findUnique).not.toHaveBeenCalled()
+      expect(mockPrisma.customer.update).not.toHaveBeenCalled()
     })
 
     test('409 when a sale lands between the count and the delete; 404 when already gone', async () => {

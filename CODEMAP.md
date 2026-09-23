@@ -59,7 +59,7 @@ Roasters sell roasted coffee from their roast batches. A sale's lines each hold 
 - `sale-orders/route.ts` — GET the sales log (a roaster sees only their own sales, Admins all, other roles an empty list), POST record a sale (server prices every line)
 - `sale-orders/[id]/route.ts` — GET / PUT (customer, date, currency, notes, status, lines; `expectedUpdatedAt` guards stale edits) / DELETE (returns the kg to the roasts and removes the sale's invoices)
 - `invoices/route.ts`, `invoices/[id]/route.ts` — API only, no UI. Scoped to the sale's owner; a cancelled sale can't be invoiced
-- `customers/route.ts`, `customers/[id]/route.ts` — the shared address book. Sale counts are the caller's own; Roasters and Admins may delete a customer nobody has sold to
+- `customers/route.ts`, `customers/[id]/route.ts` — the shared address book. Sale counts are the caller's own; Roasters and Admins may delete a customer nobody has sold to. Processors may only create one (from the green-bean Withdraw Stock popup)
 - `pricing-history/route.ts`
 
 #### Farm observations

@@ -105,6 +105,7 @@ import StartProcessingModal from "./modals/StartProcessingModal";
 import HullAndGradeModal from "./modals/HullAndGradeModal";
 import CompleteBatchModal from "./modals/CompleteBatchModal";
 import SetPriceModal from "./modals/SetPriceModal";
+import CreateCustomerModal from "../sales/modals/CreateCustomerModal";
 import { logger } from "../../utils/logger";
 import {
   csvDate,
@@ -195,6 +196,19 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const [withdrawalDeliveryAddress, setWithdrawalDeliveryAddress] =
     useState("");
   const [withdrawalTargetRoasterId, setWithdrawalTargetRoasterId] = useState("");
+  const [showNewCustomer, setShowNewCustomer] = useState(false);
+  // True only while the "+ New customer" popup of the current withdrawal is
+  // up. A save that finishes after it was closed still adds the customer to
+  // the list but must not pick it on whatever withdrawal is open by then.
+  const newCustomerPendingRef = useRef(false);
+  const openNewCustomer = () => {
+    newCustomerPendingRef.current = true;
+    setShowNewCustomer(true);
+  };
+  const closeNewCustomer = () => {
+    newCustomerPendingRef.current = false;
+    setShowNewCustomer(false);
+  };
 
   // Score Modal State
   const [scoringMode, setScoringMode] = useState<"simple" | "detailed">(
@@ -353,27 +367,47 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   });
 
 
-  // Customer options for dropdown
+  // Customer picker for a Sale withdrawal. The customer is optional, so once
+  // one is picked the list also offers "No customer" to take it back.
   const customerOptions = useMemo(() => {
-    return customers.map((customer) => ({
-      value: customer.id,
-      label: `${customer.name} (${customer.type})`,
-    }));
-  }, [customers]);
+    const options = [...customers]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((customer) => ({
+        value: customer.id,
+        label: `${customer.name} (${customer.type})`,
+      }));
+    return withdrawalCustomerId
+      ? [{ value: "", label: "No customer" }, ...options]
+      : options;
+  }, [customers, withdrawalCustomerId]);
 
-  // Handle customer selection - auto-fill name and address
+  // Picking a customer fills the name and the delivery address (still
+  // editable). An address the previous pick filled in is dropped when the
+  // new customer has none; one typed by hand is kept.
+  const applyWithdrawalCustomer = (customer: Customer | undefined) => {
+    const previous = customers.find((c) => c.id === withdrawalCustomerId);
+    setWithdrawalCustomerId(customer?.id ?? "");
+    setWithdrawalCustomerName(customer?.name ?? "");
+    setWithdrawalDeliveryAddress((current) => {
+      if (customer?.address) return customer.address;
+      return previous?.address && current === previous.address ? "" : current;
+    });
+  };
+
   const handleCustomerSelect = (customerId: string) => {
-    setWithdrawalCustomerId(customerId);
-    const selectedCustomer = customers.find((c) => c.id === customerId);
-    if (selectedCustomer) {
-      setWithdrawalCustomerName(selectedCustomer.name);
-      if (selectedCustomer.address) {
-        setWithdrawalDeliveryAddress(selectedCustomer.address);
-      }
-    } else {
-      setWithdrawalCustomerName("");
-      setWithdrawalDeliveryAddress("");
-    }
+    applyWithdrawalCustomer(customers.find((c) => c.id === customerId));
+  };
+
+  // "+ New customer" in the Sale fields: add the saved customer to the app
+  // data so the picker lists it, then pick it.
+  const handleWithdrawalCustomerCreated = (customer: Customer) => {
+    setData((prev) => ({
+      ...prev,
+      customers: prev.customers.some((c) => c.id === customer.id)
+        ? prev.customers.map((c) => (c.id === customer.id ? customer : c))
+        : [customer, ...prev.customers],
+    }));
+    if (newCustomerPendingRef.current) applyWithdrawalCustomer(customer);
   };
 
   // Update selectedProcessType when processTypeOptions changes (ensures it's always valid)
@@ -1149,6 +1183,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       setWithdrawalType("Sample");
       setWithdrawalAmount("");
       setWithdrawalTargetRoasterId("");
+      // A cancelled Sale must not carry its customer or price to the next lot.
+      setWithdrawalSalePrice("");
+      setWithdrawalCurrency("THB");
+      setWithdrawalCustomerId("");
+      setWithdrawalCustomerName("");
+      setWithdrawalDeliveryAddress("");
+      newCustomerPendingRef.current = false;
     }
     setModal(type);
   };
@@ -3427,71 +3468,84 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     {/* Conditional Sale Fields */}
                     {withdrawalType === "Sale" && (
                       <div className="mb-5 p-4 bg-blue-50/70 rounded-xl border border-blue-200 space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-                              Customer
-                            </label>
-                            {customers.length > 0 ? (
-                              <div className="space-y-1.5">
-                                <Select
-                                  value={withdrawalCustomerId}
-                                  onChange={(v) => handleCustomerSelect(v as string)}
-                                  options={customerOptions}
-                                  placeholder="Select customer..."
-                                  colorTheme="blue"
-                                />
-                                <input
-                                  type="text"
-                                  value={withdrawalCustomerName}
-                                  onChange={(e) => {
-                                    setWithdrawalCustomerName(e.target.value);
-                                    setWithdrawalCustomerId("");
-                                  }}
-                                  placeholder="Or type name..."
-                                  className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                />
-                              </div>
-                            ) : (
-                              <input
-                                type="text"
-                                value={withdrawalCustomerName}
-                                onChange={(e) => setWithdrawalCustomerName(e.target.value)}
-                                placeholder="Customer name..."
-                                className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                              />
-                            )}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div
+                            role="group"
+                            aria-labelledby="withdrawal-customer-label"
+                            className="min-w-0"
+                          >
+                            <div className="flex items-center justify-between gap-2 h-5 mb-1.5">
+                              <span
+                                id="withdrawal-customer-label"
+                                className="text-xs font-semibold text-gray-600"
+                              >
+                                Customer
+                              </span>
+                              <button
+                                type="button"
+                                onClick={openNewCustomer}
+                                className={
+                                  customers.length === 0
+                                    ? "inline-flex items-center gap-1 rounded-md bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-blue-700"
+                                    : "inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
+                                }
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                                New customer
+                              </button>
+                            </div>
+                            <Select
+                              value={withdrawalCustomerId || null}
+                              onChange={(v) => handleCustomerSelect(v ? String(v) : "")}
+                              options={customerOptions}
+                              placeholder={
+                                customers.length === 0
+                                  ? "No customers yet"
+                                  : "Select customer..."
+                              }
+                              disabled={customers.length === 0}
+                              colorTheme="blue"
+                            />
                           </div>
-                          <div>
-                            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                          <div className="min-w-0">
+                            <label
+                              htmlFor="withdrawal-delivery-address"
+                              className="flex items-center h-5 text-xs font-semibold text-gray-600 mb-1.5"
+                            >
                               Delivery Address
                             </label>
                             <input
+                              id="withdrawal-delivery-address"
                               type="text"
                               value={withdrawalDeliveryAddress}
                               onChange={(e) => setWithdrawalDeliveryAddress(e.target.value)}
                               placeholder="123 Main St, City"
-                              className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                              className="block w-full min-w-0 h-[46px] border border-gray-300 rounded-lg px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                             />
                           </div>
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                          <label
+                            htmlFor="withdrawal-sale-price"
+                            className="block text-xs font-semibold text-gray-600 mb-1.5"
+                          >
                             Price per kg
                           </label>
                           <div className="flex gap-2">
                             <input
+                              id="withdrawal-sale-price"
                               type="number"
                               step="0.01"
                               value={withdrawalSalePrice}
                               onChange={(e) => setWithdrawalSalePrice(e.target.value)}
                               placeholder="0.00"
-                              className="flex-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                              className="flex-1 block w-full min-w-0 border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                             />
                             <Select
                               value={withdrawalCurrency}
                               onChange={(v) => setWithdrawalCurrency(v as string)}
                               options={["THB", "USD", "EUR"]}
+                              className="w-24 shrink-0"
                               colorTheme="blue"
                             />
                           </div>
@@ -4661,6 +4715,14 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           </div>
         </ModalPortal>
       )}
+      {/* Rendered outside the workbench <form>: React bubbles a submit through
+          portals, so inside it saving a customer would also submit the
+          withdrawal. Its overlay sits above the Withdraw Stock popup. */}
+      <CreateCustomerModal
+        isOpen={showNewCustomer}
+        onClose={closeNewCustomer}
+        onCustomerCreated={handleWithdrawalCustomerCreated}
+      />
       {pricingLot && (
         <SetPriceModal
           lot={pricingLot}
