@@ -10,7 +10,7 @@ export const getFarmCollaborators = async (farmId: string): Promise<FarmCollabor
     const response = await api.get<{ collaborators: FarmCollaborator[] }>(`/farms/${farmId}/collaborators`);
     return response.collaborators;
   } catch (error) {
-    handleApiError(error, 'fetch farm collaborators');
+    handleApiError(error, 'fetch farmhands');
     return [];
   }
 };
@@ -28,7 +28,7 @@ export const addFarmCollaborator = async (
     });
     return response.collaborator;
   } catch (error) {
-    handleApiError(error, 'add farm collaborator');
+    handleApiError(error, 'add farmhand');
     return null;
   }
 };
@@ -41,7 +41,7 @@ export const removeFarmCollaborator = async (farmId: string, userId: string): Pr
     await api.delete(`/farms/${farmId}/collaborators?userId=${userId}`);
     return true;
   } catch (error) {
-    handleApiError(error, 'remove farm collaborator');
+    handleApiError(error, 'remove farmhand');
     return false;
   }
 };

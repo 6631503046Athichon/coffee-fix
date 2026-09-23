@@ -236,12 +236,12 @@ const AddFarmPage: React.FC = () => {
 		if (!selectedCollaboratorId) return;
 		// Can't add owner as collaborator
 		if (selectedCollaboratorId === selectedOwnerId) {
-			setFormError('The farm owner cannot also be added as a collaborator.');
+			setFormError('The farm owner cannot also be added as a farmhand.');
 			return;
 		}
 		// Can't add duplicate
 		if (collaborators.some(c => c.userId === selectedCollaboratorId)) {
-			setFormError('This user is already listed as a collaborator.');
+			setFormError('This user is already listed as a farmhand.');
 			return;
 		}
 		setFormError(null);
@@ -804,7 +804,7 @@ const AddFarmPage: React.FC = () => {
 								<div className="p-1.5 bg-indigo-50 rounded-lg">
 									<Users className="h-4 w-4 text-indigo-600" />
 								</div>
-								<label className="text-sm font-semibold text-gray-700">Farm Caretakers</label>
+								<label className="text-sm font-semibold text-gray-700">Farmhands</label>
 							</div>
 
 							{/* Add collaborator row */}
@@ -816,7 +816,7 @@ const AddFarmPage: React.FC = () => {
 										onChange={(v) => setSelectedCollaboratorId(v as string)}
 										getValue={(u: User) => u.id}
 										getLabel={(u: User) => `${u.name}${u.email ? ` (${u.email})` : u.username ? ` (${u.username})` : ''}`}
-										placeholder={farmersLoading ? 'Loading farmers...' : 'Select caretaker...'}
+										placeholder={farmersLoading ? 'Loading farmers...' : 'Select farmhand...'}
 										disabled={farmersLoading || collaboratorLoading}
 										colorTheme="blue"
 									/>
@@ -864,7 +864,7 @@ const AddFarmPage: React.FC = () => {
 							) : (
 								<div className="flex items-center gap-2 py-4 px-3 rounded-xl bg-gray-50 border border-dashed border-gray-200">
 									<Users className="h-4 w-4 text-gray-300" />
-                                    <p className="text-sm text-gray-400">No caretakers added yet.</p>
+                                    <p className="text-sm text-gray-400">No farmhands added yet.</p>
 								</div>
 							)}
 						</div>
