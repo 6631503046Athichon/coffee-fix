@@ -347,8 +347,17 @@ export interface PublicTraceData {
     parchmentLot?: any;
     roastBatches: any[];
   };
-  traceId: string;
+  // The lot's public id; null in a staff preview of a lot not yet published.
+  traceId: string | null;
 }
+
+/**
+ * Fetch a lot's traceability story for staff (auth required). Same data the
+ * public page shows, and it works before the lot has a public id.
+ */
+export const getTracePreviewData = async (lotId: string): Promise<PublicTraceData> => {
+  return api.get<PublicTraceData>(`/green-bean-lots/${lotId}/trace-preview`);
+};
 
 /**
  * Fetch public traceability data (no auth required)

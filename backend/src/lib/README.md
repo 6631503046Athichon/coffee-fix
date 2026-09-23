@@ -31,6 +31,14 @@ JWT and password primitives.
 Prisma client singleton. Re-uses the same instance across Next.js hot-reloads
 to avoid connection-pool exhaustion in dev.
 
+## `trace.ts`
+The public traceability story of a green bean lot.
+- `publicTraceSelect` — the Prisma select behind it. It is served without auth,
+  so it must never read inventory or PII fields.
+- `serializePublicTrace(lot, traceId)` — the response body. Used by the public
+  `trace/[publicId]` route and the staff `green-bean-lots/[id]/trace-preview`
+  route, so a preview matches what customers will see.
+
 ## `validations/`
 Zod schemas, one file per domain (`farm`, `harvestLot`, `parchmentLot`,
 `greenBeanLot`, `processingBatch`, `roasting`, `sales`, `gapLog`,

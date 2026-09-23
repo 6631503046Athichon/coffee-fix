@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { handleApiError } from '@/lib/middleware'
+import { publicTraceSelect, serializePublicTrace } from '@/lib/trace'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,95 +13,11 @@ export async function GET(
   try {
     const { publicId } = await params
 
-    // SECURITY: This is a PUBLIC (unauthenticated) endpoint. Do not fetch
-    // sensitive fields here — even if downstream code forgets to strip them,
-    // they are never read out of the DB.
-    //   - currentWeightKg / availabilityStatus: business inventory data
-    //   - farmerName / farm.ownerNames: PII
+    // SECURITY: This is a PUBLIC (unauthenticated) endpoint. publicTraceSelect
+    // never reads sensitive fields out of the DB — see lib/trace.ts.
     const greenBeanLot = await prisma.greenBeanLot.findFirst({
       where: { publicTraceId: publicId },
-      select: {
-        id: true,
-        grade: true,
-        sourceType: true,
-        externalSource: true,
-        cuppingFragrance: true,
-        cuppingFlavor: true,
-        cuppingAftertaste: true,
-        cuppingAcidity: true,
-        cuppingBody: true,
-        cuppingBalance: true,
-        cuppingOverall: true,
-        cuppingUniformity: true,
-        cuppingCleanCup: true,
-        cuppingSweetness: true,
-        parchmentLot: {
-          select: {
-            id: true,
-            processType: true,
-            moistureContent: true,
-            createdAt: true,
-            processingBatch: {
-              select: {
-                id: true,
-                processType: true,
-                processNotes: true,
-                baggingDate: true,
-                dryingStartDate: true,
-                dryingEndDate: true,
-                harvestLot: {
-                  select: {
-                    id: true,
-                    cherryVariety: true,
-                    harvestDate: true,
-                    farm: {
-                      select: {
-                        id: true,
-                        farmName: true,
-                        location: true,
-                        altitude: true,
-                        varieties: true,
-                        googleMapsUrl: true,
-                        latitude: true,
-                        longitude: true,
-                      },
-                    },
-                  },
-                },
-                dryingLogs: {
-                  orderBy: { date: 'asc' },
-                },
-              },
-            },
-            harvestLot: {
-              select: {
-                id: true,
-                cherryVariety: true,
-                harvestDate: true,
-                farmPlotLocation: true,
-              },
-            },
-          },
-        },
-        roastBatches: {
-          select: {
-            id: true,
-            roastDate: true,
-            roastLevel: true,
-            roastProfileNotes: true,
-            flavorNotes: true,
-            batchSizeKg: true,
-            yieldPercentage: true,
-            roaster: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
-          orderBy: { roastDate: 'desc' },
-        },
-      },
+      select: publicTraceSelect,
     })
 
     if (!greenBeanLot) {
@@ -112,29 +29,7 @@ export async function GET(
 
     // Return sanitized public data. Location Details are intentionally included
     // so the public traceability page can show the farm map.
-    const publicData = {
-      lot: {
-        id: greenBeanLot.id,
-        grade: greenBeanLot.grade,
-        sourceType: greenBeanLot.sourceType,
-        externalSource: greenBeanLot.externalSource,
-        cuppingFragrance: greenBeanLot.cuppingFragrance,
-        cuppingFlavor: greenBeanLot.cuppingFlavor,
-        cuppingAftertaste: greenBeanLot.cuppingAftertaste,
-        cuppingAcidity: greenBeanLot.cuppingAcidity,
-        cuppingBody: greenBeanLot.cuppingBody,
-        cuppingBalance: greenBeanLot.cuppingBalance,
-        cuppingOverall: greenBeanLot.cuppingOverall,
-        cuppingUniformity: greenBeanLot.cuppingUniformity,
-        cuppingCleanCup: greenBeanLot.cuppingCleanCup,
-        cuppingSweetness: greenBeanLot.cuppingSweetness,
-        parchmentLot: greenBeanLot.parchmentLot,
-        roastBatches: greenBeanLot.roastBatches,
-      },
-      traceId: publicId,
-    }
-
-    return NextResponse.json(publicData)
+    return NextResponse.json(serializePublicTrace(greenBeanLot, publicId))
   } catch (error) {
     return handleApiError(error)
   }
