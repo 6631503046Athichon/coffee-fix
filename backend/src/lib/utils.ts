@@ -52,6 +52,64 @@ export function parseDateOnly(value: unknown): Date | null {
 }
 
 /**
+ * Strict number parsing for money inputs. Accepts a finite number, or a
+ * string holding only a plain decimal number ("150", "-3", "180.25").
+ * Unlike safeParseFloat, "150abc", [150], true and "0x10" all give null.
+ */
+export function parseStrictNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value.trim())) {
+    const parsed = Number(value.trim())
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+/**
+ * parseDateOnly, but a date that is not a real calendar day (2026-02-30)
+ * comes back as an Invalid Date instead of silently rolling over to
+ * March 2. Applies to plain YYYY-MM-DD and to the date part of an ISO
+ * datetime.
+ */
+export function parseStrictDateOnly(value: unknown): Date | null {
+  const parsed = parseDateOnly(value)
+  if (!parsed || Number.isNaN(parsed.getTime())) return parsed
+  const match = /^(\d{4})-(\d{2})-(\d{2})(T|$)/.exec(String(value))
+  if (match) {
+    const [y, m, d] = [Number(match[1]), Number(match[2]), Number(match[3])]
+    const check = new Date(Date.UTC(y, m - 1, d))
+    if (
+      check.getUTCFullYear() !== y ||
+      check.getUTCMonth() !== m - 1 ||
+      check.getUTCDate() !== d
+    ) {
+      return new Date(NaN)
+    }
+  }
+  return parsed
+}
+
+// The business runs on Thai time; Railway servers run on UTC.
+const BUSINESS_TIME_ZONE = 'Asia/Bangkok'
+
+/**
+ * Today's calendar date in the business timezone, anchored at 12:00 UTC
+ * exactly like a picked date from parseDateOnly. Use it for dates the
+ * server stamps itself (e.g. "price set today"), so a record made at
+ * 03:00 Thai time is not read back as the previous (UTC) day.
+ */
+export function todayDateOnly(now: Date = new Date()): Date {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now)
+  const part = (type: string) => parts.find((p) => p.type === type)?.value
+  return new Date(`${part('year')}-${part('month')}-${part('day')}T12:00:00.000Z`)
+}
+
+/**
  * Generate the next sequential displayId for a given prefix.
  * Format: {PREFIX}-{YEAR}-{NUMBER} e.g. HL-2026-1, PB-2026-2
  * Queries the table for the highest existing number in the current year.

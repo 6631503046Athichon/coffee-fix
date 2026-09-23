@@ -6,6 +6,9 @@ export interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
+  /** Id of an element inside the dialog that names it (for dialogs that
+   *  draw their own header instead of passing `title`). */
+  ariaLabelledBy?: string;
   children: React.ReactNode;
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '5xl' | 'auto';
   showCloseButton?: boolean;
@@ -37,6 +40,7 @@ export const Modal: React.FC<ModalProps> = ({
   isOpen,
   onClose,
   title,
+  ariaLabelledBy,
   children,
   maxWidth = 'md',
   showCloseButton = true,
@@ -146,7 +150,8 @@ export const Modal: React.FC<ModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={title || 'Dialog'}
+      aria-labelledby={ariaLabelledBy}
+      aria-label={ariaLabelledBy ? undefined : title || 'Dialog'}
       onClick={(e) => e.stopPropagation()}
       className={`fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 ${overlayClassName}`}
       style={{

@@ -73,6 +73,7 @@ import {
   Minus,
   ChevronDown,
   Layers,
+  Pencil,
 } from "lucide-react";
 import {
   addProcessingBatch,
@@ -103,6 +104,7 @@ import {
 import StartProcessingModal from "./modals/StartProcessingModal";
 import HullAndGradeModal from "./modals/HullAndGradeModal";
 import CompleteBatchModal from "./modals/CompleteBatchModal";
+import SetPriceModal from "./modals/SetPriceModal";
 import { logger } from "../../utils/logger";
 
 import {
@@ -165,6 +167,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const [selectedGreenBeanForSource, setSelectedGreenBeanForSource] =
     useState<GreenBeanLot | null>(null);
   const [scoringLot, setScoringLot] = useState<GreenBeanLot | null>(null);
+  const [pricingLot, setPricingLot] = useState<GreenBeanLot | null>(null);
 
   // Form States
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1167,6 +1170,31 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     }
   };
 
+  // Merge only the price fields into the stored lot — the PUT response does
+  // not carry everything bulk-load does, so swapping the whole object in
+  // would drop data.
+  const handlePriceSaved = (updatedLot: GreenBeanLot) => {
+    setData((prev) => ({
+      ...prev,
+      greenBeanLots: prev.greenBeanLots.map((g) =>
+        g.id === updatedLot.id
+          ? {
+              ...g,
+              pricePerKg: updatedLot.pricePerKg,
+              currency: updatedLot.currency,
+              priceSetDate: updatedLot.priceSetDate,
+              priceSetBy: updatedLot.priceSetBy,
+            }
+          : g,
+      ),
+    }));
+    setPricingLot(null);
+    addToast({
+      type: "success",
+      message: `Price for ${formatGreenBeanId(updatedLot)} set to ${(updatedLot.pricePerKg ?? 0).toFixed(2)} ${updatedLot.currency || "THB"}/kg`,
+    });
+  };
+
   // Whole-lot semantics: a cherry lot is either Ready (listed here) or
   // Complete (consumed by a processing batch and gone from this list).
   const readyForProcessingLots = useMemo(
@@ -2148,6 +2176,15 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             QC Score
                           </button>
                           <button
+                            type="button"
+                            onClick={() => setPricingLot(g)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 transition-colors"
+                            title={g.pricePerKg ? "Edit price" : "Set price"}
+                          >
+                            <DollarSign size={14} />
+                            Price
+                          </button>
+                          <button
                             onClick={() => openModal("withdrawStock", g)}
                             disabled={g.availabilityStatus === "Withdrawn"}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm transition-all"
@@ -2572,14 +2609,32 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         Price
                       </span>
                       {g.pricePerKg ? (
-                        <span className="font-medium text-teal-600">
-                          {g.pricePerKg.toFixed(2)} {g.currency || "THB"}/kg
-                          <span className="font-normal text-gray-400">
-                            {" "}· {(g.pricePerKg * (g.currentWeightKg ?? 0)).toFixed(2)} total
+                        <span className="flex items-center gap-1 min-w-0">
+                          <span className="font-medium text-teal-600 truncate">
+                            {g.pricePerKg.toFixed(2)} {g.currency || "THB"}/kg
+                            <span className="font-normal text-gray-400">
+                              {" "}· {(g.pricePerKg * (g.currentWeightKg ?? 0)).toFixed(2)} total
+                            </span>
                           </span>
+                          <button
+                            type="button"
+                            onClick={() => setPricingLot(g)}
+                            className="p-0.5 rounded text-gray-400 hover:text-blue-600 hover:bg-gray-100 transition-colors flex-shrink-0"
+                            title="Edit price"
+                            aria-label={`Edit price of ${formatGreenBeanId(g)}`}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
                         </span>
                       ) : (
-                        <span className="text-gray-400">Not set</span>
+                        <button
+                          type="button"
+                          onClick={() => setPricingLot(g)}
+                          className="font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                          aria-label={`Set price of ${formatGreenBeanId(g)}`}
+                        >
+                          Set price
+                        </button>
                       )}
                     </div>
                     <div className="flex justify-between items-center">
@@ -4088,6 +4143,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                       type="button"
                                       onClick={() => {
                                         setSelectedParchmentForHistory(null);
+                                        setPricingLot(g);
+                                      }}
+                                      className="inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 transition-all"
+                                      title={g.pricePerKg ? "Edit price" : "Set price"}
+                                    >
+                                      <DollarSign className="h-3.5 w-3.5" />
+                                      Price
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedParchmentForHistory(null);
                                         openModal("withdrawStock", g);
                                       }}
                                       disabled={g.availabilityStatus === "Withdrawn"}
@@ -4363,6 +4430,14 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             </div>
           </div>
         </ModalPortal>
+      )}
+      {pricingLot && (
+        <SetPriceModal
+          lot={pricingLot}
+          onClose={() => setPricingLot(null)}
+          onSaved={handlePriceSaved}
+          onError={(message) => addToast({ type: "error", message })}
+        />
       )}
       {invoiceView && (
         <InvoiceReceipt

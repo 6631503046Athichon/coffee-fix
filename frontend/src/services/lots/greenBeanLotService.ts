@@ -32,6 +32,8 @@ interface BackendGreenBeanLot {
   cuppingSweetness?: number | null;
   pricePerKg?: number | null;
   currency?: string | null;
+  priceSetDate?: string | null;
+  priceSetBy?: string | null;
   createdAt?: string | null;
 }
 
@@ -145,6 +147,28 @@ export const updateGreenBeanLotAvailability = async (
   return transformGreenBeanLotFromBackend(response.greenBeanLot);
 };
 
+export interface UpdateGreenBeanLotPriceInput {
+  pricePerKg: number;
+  currency: string;
+  /** YYYY-MM-DD; the backend defaults to now when omitted */
+  priceSetDate?: string;
+}
+
+/**
+ * Set a green bean lot's price. The backend stamps who set it and writes a
+ * pricing-history row in the same transaction.
+ */
+export const updateGreenBeanLotPrice = async (
+  id: string,
+  input: UpdateGreenBeanLotPriceInput,
+): Promise<GreenBeanLot> => {
+  const response = await api.put<{ greenBeanLot: BackendGreenBeanLot }>(
+    `/green-bean-lots/${id}`,
+    input,
+  );
+  return transformGreenBeanLotFromBackend(response.greenBeanLot);
+};
+
 /**
  * Fetch all green bean lots, optionally filtered by sourceType, availabilityStatus, or parchmentLotId
  */
@@ -209,6 +233,10 @@ export function transformGreenBeanLotFromBackend(backendLot: BackendGreenBeanLot
     cuppingSweetness: backendLot.cuppingSweetness ?? undefined,
     pricePerKg: backendLot.pricePerKg ?? undefined,
     currency: backendLot.currency ?? undefined,
+    priceSetDate: backendLot.priceSetDate
+      ? new Date(backendLot.priceSetDate).toISOString().substring(0, 10)
+      : undefined,
+    priceSetBy: backendLot.priceSetBy ?? undefined,
     createdAt: backendLot.createdAt
       ? new Date(backendLot.createdAt).toISOString()
       : undefined,

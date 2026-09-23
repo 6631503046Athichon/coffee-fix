@@ -56,3 +56,49 @@ describe('parseDateOnly', () => {
     expect(Number.isNaN(d!.getTime())).toBe(true)
   })
 })
+
+describe('parseStrictDateOnly', () => {
+  test('keeps the 12:00 UTC anchor for a real calendar day', async () => {
+    const { parseStrictDateOnly } = await import('@/lib/utils')
+    expect(parseStrictDateOnly('2024-02-29')!.toISOString()).toBe('2024-02-29T12:00:00.000Z')
+    expect(parseStrictDateOnly(null)).toBeNull()
+  })
+
+  test.each(['2026-02-30', '2025-02-29', '2026-04-31', '2026-13-01', '2026-02-30T08:00:00Z'])(
+    '%p is refused instead of rolling over',
+    async (value) => {
+      const { parseStrictDateOnly } = await import('@/lib/utils')
+      expect(Number.isNaN(parseStrictDateOnly(value)!.getTime())).toBe(true)
+    },
+  )
+})
+
+describe('todayDateOnly', () => {
+  test('uses the Thai calendar day, anchored at 12:00 UTC', async () => {
+    const { todayDateOnly } = await import('@/lib/utils')
+    // 03:30 on 23 Sep in Bangkok is still 22 Sep in UTC.
+    expect(todayDateOnly(new Date('2026-09-22T20:30:00Z')).toISOString())
+      .toBe('2026-09-23T12:00:00.000Z')
+    // 23:30 on 23 Sep in Bangkok.
+    expect(todayDateOnly(new Date('2026-09-23T16:30:00Z')).toISOString())
+      .toBe('2026-09-23T12:00:00.000Z')
+  })
+})
+
+describe('parseStrictNumber', () => {
+  test('takes finite numbers and plain decimal strings', async () => {
+    const { parseStrictNumber } = await import('@/lib/utils')
+    expect(parseStrictNumber(150)).toBe(150)
+    expect(parseStrictNumber('180.25')).toBe(180.25)
+    expect(parseStrictNumber(' 7 ')).toBe(7)
+    expect(parseStrictNumber('-3')).toBe(-3)
+  })
+
+  test.each(['150abc', [150], true, '0x10', '', '1e3', Infinity, NaN, null, undefined])(
+    'refuses %p',
+    async (value) => {
+      const { parseStrictNumber } = await import('@/lib/utils')
+      expect(parseStrictNumber(value)).toBeNull()
+    },
+  )
+})

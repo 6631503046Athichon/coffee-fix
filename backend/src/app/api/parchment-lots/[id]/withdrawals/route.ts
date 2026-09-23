@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
-import { safeParseFloat, nextDisplayIds, withDisplayIdRetry } from '@/lib/utils'
+import {
+  safeParseFloat,
+  parseStrictNumber,
+  todayDateOnly,
+  nextDisplayIds,
+  withDisplayIdRetry,
+} from '@/lib/utils'
 
 // POST /api/parchment-lots/:id/withdrawals - Create withdrawal
 export async function POST(
@@ -59,9 +65,14 @@ export async function POST(
     }
 
     // SECURITY: Only the Processor who created the parent ProcessingBatch
-    // (or Admin) can draw down this lot. Roasters reaching this endpoint via
-    // RoastingStock flows are covered by their own inventory endpoints.
-    requireOwnership(user, lot.processingBatch?.createdById, ['Admin', 'Roaster'])
+    // (or Admin) can draw down this lot. The Roaster bypass is limited to
+    // RoastingStock; any other type (Hull & Grade above all, which creates
+    // green bean lots owned by the caller) needs real ownership.
+    requireOwnership(
+      user,
+      lot.processingBatch?.createdById,
+      withdrawalType === 'RoastingStock' ? ['Admin', 'Roaster'] : ['Admin']
+    )
 
     const amount = safeParseFloat(amountKg)
     if (amount === null || amount <= 0) {
@@ -108,6 +119,19 @@ export async function POST(
             { error: `Duplicate grade is not allowed: ${grade}` },
             { status: 400 }
           )
+        }
+
+        // Price is optional (empty or 0 = no price), but a value that is
+        // present must be a plain, non-negative number ("150abc" is refused).
+        const rawPrice = gl?.price
+        if (rawPrice !== undefined && rawPrice !== null && rawPrice !== '') {
+          const glPrice = parseStrictNumber(rawPrice)
+          if (glPrice === null || glPrice < 0) {
+            return NextResponse.json(
+              { error: `Price per kg for ${grade} must be a number of 0 or more` },
+              { status: 400 }
+            )
+          }
         }
 
         seenGrades.add(grade)
@@ -209,15 +233,20 @@ export async function POST(
 
       // If HullAndGrade, create green bean lots
       if (withdrawalType === 'HullAndGrade' && gradedLots) {
+        // Today on Thai time, anchored at 12:00 UTC like a picked date, so a
+        // lot hulled before 07:00 is not dated the previous (UTC) day.
+        const pricedAt = todayDateOnly()
         for (let i = 0; i < gradedLots.length; i++) {
           const gl = gradedLots[i]
           const weight = safeParseFloat(gl.weight)
-          const glPrice = safeParseFloat(gl.price)
+          const glPrice = parseStrictNumber(gl.price)
           const glScore = safeParseFloat(gl.score)
+          // 0 or empty means the operator left the price for later.
+          const setPrice = glPrice !== null && glPrice > 0 ? glPrice : null
 
           if (weight === null || weight <= 0) continue
 
-          await tx.greenBeanLot.create({
+          const createdLot = await tx.greenBeanLot.create({
             data: {
               displayId: greenBeanDisplayIds[i],
               sourceType: 'Internal',
@@ -227,15 +256,30 @@ export async function POST(
               currentWeightKg: weight,
               availabilityStatus: 'Available',
               createdById: user.id,
-              ...(glPrice !== null && {
-                pricePerKg: glPrice,
+              ...(setPrice !== null && {
+                pricePerKg: setPrice,
                 currency: 'THB',
+                priceSetDate: pricedAt,
+                priceSetBy: user.id,
               }),
               ...(glScore !== null && {
                 processorScore: glScore,
               }),
             },
           })
+
+          // A price set at hulling gets the same audit row as one set later.
+          if (setPrice !== null) {
+            await tx.pricingHistory.create({
+              data: {
+                greenBeanLotId: createdLot.id,
+                pricePerKg: setPrice,
+                currency: 'THB',
+                effectiveDate: pricedAt,
+                setBy: user.id,
+              },
+            })
+          }
         }
       }
 

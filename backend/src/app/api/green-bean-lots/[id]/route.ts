@@ -2,7 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireOwnership, requireRole, handleApiError } from "@/lib/middleware";
-import { safeParseFloat } from "@/lib/utils";
+import {
+  safeParseFloat,
+  parseStrictDateOnly,
+  parseStrictNumber,
+  todayDateOnly,
+} from "@/lib/utils";
+import {
+  currencySchema,
+  greenBeanAvailabilityStatusSchema,
+} from "@/lib/validations/common";
 
 // GET /api/green-bean-lots/:id
 export async function GET(
@@ -219,6 +228,7 @@ export async function PUT(
         currentWeightKg: true,
         availabilityStatus: true,
         createdById: true,
+        currency: true,
       },
     });
 
@@ -259,32 +269,85 @@ export async function PUT(
       nextWeight = weight;
       updateData.currentWeightKg = weight;
     }
+    let parsedAvailability: "Available" | "Withdrawn" | undefined;
+    if (availabilityStatus !== undefined) {
+      const statusResult =
+        greenBeanAvailabilityStatusSchema.safeParse(availabilityStatus);
+      if (!statusResult.success) {
+        return NextResponse.json(
+          { error: "Invalid availabilityStatus value" },
+          { status: 400 },
+        );
+      }
+      parsedAvailability = statusResult.data;
+    }
     if (nextWeight <= 0) {
       updateData.availabilityStatus = 'Withdrawn';
-    } else if (availabilityStatus !== undefined) {
-      updateData.availabilityStatus = availabilityStatus;
+    } else if (parsedAvailability !== undefined) {
+      updateData.availabilityStatus = parsedAvailability;
     }
+
+    // Currency and priceSetDate describe a price, so they only change with
+    // one: on their own they would re-denominate or re-date the current price
+    // with no pricing-history row and a misleading priceSetBy.
+    if (
+      pricePerKg === undefined &&
+      (currency !== undefined || priceSetDate !== undefined)
+    ) {
+      return NextResponse.json(
+        { error: "currency and priceSetDate can only be sent together with pricePerKg" },
+        { status: 400 },
+      );
+    }
+
+    // Parse priceSetDate once; it doubles as the pricing-history effective
+    // date. A picked calendar date (YYYY-MM-DD) is anchored at 12:00 UTC so it
+    // reads as the same day in every timezone; an impossible day is refused.
+    const parsedPriceSetDate = priceSetDate
+      ? parseStrictDateOnly(priceSetDate)
+      : null;
+    if (parsedPriceSetDate && Number.isNaN(parsedPriceSetDate.getTime())) {
+      return NextResponse.json(
+        { error: "Invalid priceSetDate value" },
+        { status: 400 },
+      );
+    }
+
+    // Setting a price always stamps who set it and when, and always leaves a
+    // pricing-history row behind (written in the transaction below).
+    let priceEntry: {
+      pricePerKg: number;
+      currency: string;
+      effectiveDate: Date;
+    } | null = null;
     if (pricePerKg !== undefined) {
-      const parsedPrice = safeParseFloat(pricePerKg);
-      if (parsedPrice === null || parsedPrice < 0) {
+      const parsedPrice = parseStrictNumber(pricePerKg);
+      if (parsedPrice === null || parsedPrice <= 0) {
         return NextResponse.json(
-          { error: "Invalid pricePerKg value" },
+          { error: "pricePerKg must be a number greater than 0" },
           { status: 400 },
         );
       }
+      const currencyResult = currencySchema.safeParse(
+        currency ?? existingLot.currency ?? "THB",
+      );
+      if (!currencyResult.success) {
+        return NextResponse.json(
+          { error: "Invalid currency value" },
+          { status: 400 },
+        );
+      }
+      // No date sent: today on Thai time, anchored like a picked date.
+      const effectiveDate = parsedPriceSetDate ?? todayDateOnly();
       updateData.pricePerKg = parsedPrice;
-    }
-    if (currency !== undefined) updateData.currency = currency;
-    if (priceSetDate !== undefined) {
-      const parsedPriceSetDate = priceSetDate ? new Date(priceSetDate) : null;
-      if (priceSetDate && parsedPriceSetDate && Number.isNaN(parsedPriceSetDate.getTime())) {
-        return NextResponse.json(
-          { error: "Invalid priceSetDate value" },
-          { status: 400 },
-        );
-      }
-      updateData.priceSetDate = parsedPriceSetDate;
+      updateData.currency = currencyResult.data;
+      updateData.priceSetDate = effectiveDate;
       updateData.priceSetBy = user.id;
+      priceEntry = {
+        pricePerKg: parsedPrice,
+        currency: currencyResult.data,
+        effectiveDate,
+      };
     }
 
     // Update the lot AND write the pricing-history audit row in a single
@@ -320,23 +383,31 @@ export async function PUT(
               name: true,
             },
           },
+          // Same shape as bulk-load, so a caller that swaps in the returned
+          // lot keeps its withdrawal history instead of wiping it.
+          withdrawalHistory: {
+            include: {
+              withdrawnByUser: {
+                select: { id: true, name: true },
+              },
+            },
+            orderBy: { date: "desc" },
+          },
         },
       });
 
-      // Create pricing history entry if price was set
-      if (pricePerKg !== undefined && currency) {
-        const price = safeParseFloat(pricePerKg);
-        if (price !== null && price >= 0) {
-          await tx.pricingHistory.create({
-            data: {
-              greenBeanLotId: id,
-              pricePerKg: price,
-              currency,
-              effectiveDate: priceSetDate ? new Date(priceSetDate) : new Date(),
-              setBy: user.id,
-            },
-          });
-        }
+      // Every price set leaves an audit row, whether or not the caller sent
+      // a currency (it falls back to the lot's currency, then THB).
+      if (priceEntry) {
+        await tx.pricingHistory.create({
+          data: {
+            greenBeanLotId: id,
+            pricePerKg: priceEntry.pricePerKg,
+            currency: priceEntry.currency,
+            effectiveDate: priceEntry.effectiveDate,
+            setBy: user.id,
+          },
+        });
       }
 
       return lot;

@@ -1,17 +1,23 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { vi } from 'vitest'
 import { INITIAL_APP_DATA } from '../../constants'
 import { DataContext } from '../../hooks/useDataContext'
 import { ToastProvider } from '../../contexts/ToastContext'
-import { ProcessingBatchStatus, UserRole } from '../../types'
-import type { AppData, HarvestLot } from '../../types'
+import { GreenBeanSourceType, ProcessingBatchStatus, UserRole } from '../../types'
+import type { AppData, GreenBeanLot, HarvestLot } from '../../types'
 import { addProcessingBatch } from '../../services/processing/processingBatchService'
+import { updateGreenBeanLotPrice } from '../../services/lots/greenBeanLotService'
 import ProcessorWorkbench from './ProcessorWorkbench'
 
 vi.mock('../../services/processing/processingBatchService', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../services/processing/processingBatchService')>(),
   addProcessingBatch: vi.fn(),
+}))
+
+vi.mock('../../services/lots/greenBeanLotService', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../services/lots/greenBeanLotService')>(),
+  updateGreenBeanLotPrice: vi.fn(),
 }))
 
 const lot: HarvestLot = {
@@ -25,8 +31,13 @@ const batch = {
   status: ProcessingBatchStatus.Completed, parchmentWeightKg: 80,
 }
 
-function Harness({ initial, refreshData }: { initial: AppData; refreshData: () => Promise<void> }) {
+function Harness({ initial, refreshData, onData }: {
+  initial: AppData
+  refreshData: () => Promise<void>
+  onData?: (data: AppData) => void
+}) {
   const [data, setData] = useState(initial)
+  useEffect(() => { onData?.(data) }, [data, onData])
   return (
     <DataContext.Provider value={{ data, setData, refreshData, isEditing: false, setIsEditing: () => {} }}>
       <ToastProvider>
@@ -67,5 +78,56 @@ describe('Record Process', () => {
     expect(screen.queryByRole('button', { name: 'Record Process' })).not.toBeInTheDocument()
     expect(screen.queryByText('320.00 kg')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Green bean price', () => {
+  const greenLot: GreenBeanLot = {
+    id: 'gbl-1', displayId: 'GBL-2026-7', sourceType: GreenBeanSourceType.Internal,
+    grade: 'Grade A', initialWeightKg: 50, currentWeightKg: 40,
+    availabilityStatus: 'Available', cuppingScores: [],
+    withdrawalHistory: [{ amountKg: 10, withdrawalType: 'Sample', purpose: 'Sample', date: '2026-09-01' }],
+  }
+
+  beforeEach(() => vi.clearAllMocks())
+
+  it('sets a price from the lot card and merges only the price into the stored lot', async () => {
+    // The PUT response is thinner than bulk-load (here: no withdrawal history);
+    // the stored lot must keep what it already had.
+    vi.mocked(updateGreenBeanLotPrice).mockResolvedValue({
+      ...greenLot, pricePerKg: 180, currency: 'THB', priceSetDate: '2026-09-23',
+      priceSetBy: 'processor', withdrawalHistory: [],
+    })
+    const onData = vi.fn()
+    render(
+      <Harness
+        initial={{ ...INITIAL_APP_DATA, greenBeanLots: [greenLot] }}
+        refreshData={async () => {}}
+        onData={onData}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set price of GBL-2026-7' }))
+    fireEvent.change(screen.getByLabelText('Price per kg'), { target: { value: '180' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save price' }))
+
+    expect(await screen.findByRole('button', { name: 'Edit price of GBL-2026-7' })).toBeInTheDocument()
+    expect(updateGreenBeanLotPrice).toHaveBeenCalledWith('gbl-1', expect.objectContaining({
+      pricePerKg: 180, currency: 'THB',
+    }))
+    expect(screen.queryByRole('button', { name: 'Save price' })).not.toBeInTheDocument()
+
+    const stored = onData.mock.lastCall![0].greenBeanLots[0]
+    expect(stored).toMatchObject({
+      pricePerKg: 180, currency: 'THB', priceSetDate: '2026-09-23', priceSetBy: 'processor',
+    })
+    expect(stored.withdrawalHistory).toHaveLength(1)
+  })
+
+  it('offers the price action in the data grid too', () => {
+    render(<Harness initial={{ ...INITIAL_APP_DATA, greenBeanLots: [greenLot] }} refreshData={async () => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Price' }))
+    expect(screen.getByRole('button', { name: 'Save price' })).toBeInTheDocument()
   })
 })
