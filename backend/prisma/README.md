@@ -1,10 +1,22 @@
 # Prisma — data model index
 
-Single source of truth: `schema.prisma`. Seed in `seed.ts`. Migrations in
-`migrations/`.
+Single source of truth: `schema.prisma`. Seed in `seed.ts`.
 
-Run `npx prisma migrate dev --name <slug>` for new migrations, `npx prisma
-studio` to inspect data.
+Schema changes ship as hand-written SQL in `prisma/sql/` (`001_…`, `002_…`),
+because deploys run `prisma generate` and never push the schema. Apply a file
+to the database **before** deploying the backend that reads it, from
+`backend/`:
+
+```
+node --env-file=<env file> scripts/maintenance/apply-sql-file.js prisma/sql/<file>.sql
+```
+
+or paste it into the Supabase SQL Editor. Keep every statement guarded
+(`IF NOT EXISTS`, drop-then-add for constraints) so a file is safe to re-run,
+and never let a comment line end with a semicolon (`apply-sql-file.js` splits
+on them). Match Prisma's names (`<Model>_<field>_idx`, `<Model>_<field>_fkey`)
+so a later `db push` sees no drift. `npx prisma db push` is for a local
+database only. `npx prisma studio` inspects data.
 
 ## Model index
 
@@ -58,14 +70,14 @@ batch. A green bean withdrawal inherits from its green bean lot.
 | Model | Purpose |
 |---|---|
 | `RoasterInventoryItem` | unroasted green inventory, internal or external |
-| `RoastBatch` | individual roast batch tied to inventory |
+| `RoastBatch` | individual roast batch tied to inventory. `soldWeightKg` = roasted kg held by sales that are not Cancelled; written only by the sale-order routes through a guarded SQL `UPDATE`, so it never passes `roastedWeightKg`. Left to sell = `roastedWeightKg - soldWeightKg` |
 
 ### Sales
 | Model | Purpose |
 |---|---|
-| `Customer` | sale customer (B2B or retail) |
-| `SaleOrder` | order header, `status: SaleOrderStatus` |
-| `SaleOrderItem` | order line items |
+| `Customer` | sale customer (B2B or retail). Shared by every roaster |
+| `SaleOrder` | order header, `status: SaleOrderStatus`, owner `createdBy`. `customerName`, `customerPhone`, `customerAddress` are snapshots taken when the sale is recorded or its customer changes, so the receipt never changes afterwards |
+| `SaleOrderItem` | order line. `roastBatchId` = the roast it was sold from (null on older green-bean lines, which are read-only); `greenBeanLotId` is copied from the roast and `lotGrade` is a snapshot of its grade |
 | `Invoice` | invoice header, `status: InvoiceStatus` |
 | `InvoiceItem` | invoice line items |
 | `PricingHistory` | append-only price snapshots |

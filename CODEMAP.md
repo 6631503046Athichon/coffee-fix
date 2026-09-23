@@ -49,13 +49,17 @@ Routes follow Next.js App Router file conventions. Each `route.ts` exports HTTP 
 - `process-types/route.ts`, `process-types/[id]/route.ts` — reference list of process types
 
 #### Roaster — `roast-batches/`, `roaster-inventory/`
-- `roast-batches/route.ts`
-- `roaster-inventory/route.ts`, `roaster-inventory/[id]/route.ts`
+- `roast-batches/route.ts` — list (Roaster/Admin; a roaster only ever gets their own) & create
+- `roast-batches/[id]/route.ts` — edit / delete a roast. Roasted kg can't drop below the kg already sold (400); a roast on any sale can't be deleted (409 naming the sales)
+- `roast-batches/sellable/route.ts` — GET roasts with roasted kg left to sell, plus `missingWeightCount`. Feeds the Sell popup (Admins may pass `?roasterId`)
+- `roaster-inventory/route.ts`, `roaster-inventory/[id]/route.ts` — Roaster/Admin only, scoped to the caller's own rows
 
 #### Sales — `sale-orders/`, `invoices/`, `customers/`, `pricing-history/`
-- `sale-orders/route.ts`, `sale-orders/[id]/route.ts`
-- `invoices/route.ts`, `invoices/[id]/route.ts`
-- `customers/route.ts`, `customers/[id]/route.ts`
+Roasters sell roasted coffee from their roast batches. A sale's lines each hold kg of one roast (`RoastBatch.soldWeightKg`, moved by guarded SQL in `lib/saleOrders.ts`); Cancelled sales hold nothing.
+- `sale-orders/route.ts` — GET the sales log (a roaster sees only their own sales, Admins all, other roles an empty list), POST record a sale (server prices every line)
+- `sale-orders/[id]/route.ts` — GET / PUT (customer, date, currency, notes, status, lines; `expectedUpdatedAt` guards stale edits) / DELETE (returns the kg to the roasts and removes the sale's invoices)
+- `invoices/route.ts`, `invoices/[id]/route.ts` — API only, no UI. Scoped to the sale's owner; a cancelled sale can't be invoiced
+- `customers/route.ts`, `customers/[id]/route.ts` — the shared address book. Sale counts are the caller's own; Roasters and Admins may delete a customer nobody has sold to
 - `pricing-history/route.ts`
 
 #### Farm observations
@@ -85,7 +89,7 @@ Routes follow Next.js App Router file conventions. Each `route.ts` exports HTTP 
 - `trace/[publicId]/route.ts` — public traceability page data (no auth)
 - `health/route.ts` — health check
 - `bulk-load/route.ts` — dashboard initial-load aggregator (one round-trip to hydrate the app)
-- `data-version/route.ts` — cache-busting version stamp
+- `data-version/route.ts` — cache-busting version stamp per table; the sales and invoice stamps cover only the caller's own sales (all for Admins, none for other roles)
 - `backfill-display-ids/route.ts` — admin migration tool for legacy rows
 - `cron/weather/route.ts` — weather collection for hosts with no long-lived process. Guarded by a `CRON_SECRET` bearer token and meant to be called by an external scheduler every minute; safe to over-call because each farm still writes only once per its own interval.
 
@@ -104,14 +108,16 @@ The scheduler only arms its `setInterval` on a host that keeps a process alive. 
 - `email.ts` — nodemailer setup + reset email templates
 - `credentialGenerator.ts` — username/password generation for new users
 - `documentNumbers.ts` — sale order / invoice numbering
+- `saleOrders.ts` — sale JSON shapes and serializers, line pricing, `applyReservationChange` (the guarded sold-kg SQL), sale error messages. Type-only imports, so tests load it without mocks
 - `utils.ts` — `safeParseFloat`, `safeParseInt`, `parseDateOnly`, `nextDisplayId`, `nextDisplayIds`, `withDisplayIdRetry`
 - `validations/` — Zod schemas, one file per domain (`farm.ts`, `harvestLot.ts`, `parchmentLot.ts`, `greenBeanLot.ts`, `processingBatch.ts`, `roasting.ts`, `sales.ts`, `gapLog.ts`, `soilAnalysis.ts`, `weatherRecord.ts`, `cupping.ts`, `user.ts`, `cropYear.ts`, `referenceData.ts`, `middleware.ts`, `common.ts`, `index.ts`)
 
 ### Prisma — `backend/prisma/`
 - `schema.prisma` — single-source-of-truth data model
 - `seed.ts` — seed script (demo data)
+- `sql/` — hand-written schema changes, applied to Supabase **before** the backend that needs them deploys: `001_coffee_grades.sql`, `002_roasted_sales.sql` (sold kg on roasts, roast links on sale lines, customer snapshots on sales). Apply with `node --env-file=<env file> scripts/maintenance/apply-sql-file.js prisma/sql/<file>` or the Supabase SQL Editor
 
-There is no `migrations/` directory — it is gitignored and deploys run `prisma db push` (see `backend/railway.json`), so the schema file is the only history.
+There is no `migrations/` directory — it is gitignored. Vercel deploys run `prisma generate` only, never `db push`, so schema changes ship as the SQL files above. (`backend/railway.json` still carries a `db push` pre-deploy command from the old Railway service.)
 
 Key models: `User`, `Farm`, `FarmCollaborator`, `CropYear`, `HarvestLot`, `ProcessingBatch`, `DryingLogEntry`, `PhysicalTestResults`, `ParchmentLot`, `ParchmentWithdrawal`, `GreenBeanLot`, `GreenBeanWithdrawal`, `RoasterInventoryItem`, `RoastBatch`, `SaleOrder`, `SaleOrderItem`, `Invoice`, `InvoiceItem`, `Customer`, `PricingHistory`, `WeatherRecord`, `SoilAnalysis`, `GAPLogEntry`, `ActivityType`, `CoffeeVariety`, `ProcessType`, `PasswordResetToken`, plus cupping models (HANDS-OFF).
 
@@ -120,7 +126,7 @@ Key models: `User`, `Farm`, `FarmCollaborator`, `CropYear`, `HarvestLot`, `Proce
 Split by blast radius, so it is obvious what is safe to point at production.
 
 - `diagnostics/` — **read only**, never writes: `check-data.js`, `check-db.ts`, `check-display-ids.js`, `check-relations.js`, `find-duplicates.ts`, `measure-db-latency.js`, `test-supabase.js`, `verify-migration.js`, `weather-stats.js`
-- `maintenance/` — **writes rows**: `dedupe-weather-records.js`, `merge-duplicate-inventory.ts`, `populate-display-ids.ts`
+- `maintenance/` — **writes rows**: `dedupe-weather-records.js`, `merge-duplicate-inventory.ts`, `populate-display-ids.ts`, `apply-sql-file.js` (runs a `.sql` file against `DATABASE_URL`). Also `check-roast-sold-kg.sql`, a read-only drift check run through `apply-sql-file.js` (expect 0 rows)
 - `win/` — PowerShell helpers: `deploy-migrate.ps1`, `deploy-push.ps1`, `kill-port.ps1`
 
 Run everything from `backend/`, e.g. `node scripts/diagnostics/check-data.js supabase` or `.\scripts\win\deploy-push.ps1`. `check-data.js`, `test-supabase.js` and `verify-migration.js` read `backend/.env` directly rather than taking the URL on the command line, so passwords never land in shell history.
@@ -133,6 +139,9 @@ Jest suites:
 - `plaintext-password-removal.test.ts`, `registration-lockdown.test.ts`
 - `safe-parsing.test.ts`, `display-id.test.ts`, `parse-date-only.test.ts`
 - `url-validation.test.ts`
+- `roast-batch-edit-delete.test.ts` — roast edit/delete bookkeeping, sold-kg guards
+- `roasted-sales.test.ts` — sale-order routes: pricing, stock moves, concurrency guards
+- `sales-access.test.ts` — who sees which roasts, sales, invoices and customers; bulk-load and data-version
 - `setup.ts` — Jest bootstrap
 
 ---
@@ -167,8 +176,8 @@ Every file lives in a domain folder; the root holds only those folders and a `RE
   - `processor/workbench/` — sub-components: `KanbanCard`, `KanbanColumn`, `Pagination`, `DebouncedSearchInput`, `GradeDropdown`, `ProcessTypeDropdown`, `CropYearChips`, `ModalPortal`, `scoring.ts`, `constants.ts`
   - `processor/modals/` — `CompleteBatchModal`, `HullAndGradeModal`, `ParchmentWithdrawModal`, `StartProcessingModal`
 - `roaster/` — `RoasterWorkbench`, `InternalLotsTable`, `ExternalLotsTable`, `RoastLogPanel`
-- `sales/` — `CustomerManagement`
-  - `sales/modals/` — `CreateCustomerModal`
+- `sales/` — `CustomerManagement`, `SalesLog` (route `/sales`), `saleDisplay` (shared chips and formatters), `SaleReceipt` (print-only receipt)
+  - `sales/modals/` — `CreateCustomerModal`, `SaleOrderModal` (sell / edit), `SaleDetailsModal` (status chips, print, delete)
 - `traceability/` — `TraceabilityHub`, `TraceabilityPage`, `PublicTraceabilityPage`
   - `traceability/modals/` — `QRCodeModal` (mints public trace IDs, hence not in `common/`)
 - `insights/` — `QualityInsights`
@@ -248,7 +257,7 @@ Vitest. Co-located as `*.test.ts` in `src/utils/` and `src/services/utils/`. Set
 | Run a DB tool that writes rows | `backend/scripts/maintenance/` — same invocation |
 | Adjust password / JWT | `backend/src/lib/auth.ts` |
 | Adjust ownership chain | `backend/src/lib/middleware.ts` + the API route |
-| Add a Prisma migration | `cd backend && npx prisma migrate dev --name <slug>` |
+| Change the database schema | `backend/prisma/schema.prisma` + a guarded `backend/prisma/sql/NNN_<slug>.sql`, applied before deploy (see `backend/prisma/README.md`) |
 | Run BOLA tests | `cd backend && npx jest bola-authorization` |
 
 ---

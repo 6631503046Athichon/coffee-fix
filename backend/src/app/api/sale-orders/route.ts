@@ -1,205 +1,220 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Prisma, SaleOrderStatus } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
-import { validateBody, validateQuery, createSaleOrderSchema, saleOrderQuerySchema } from '@/lib/validations'
+import { validateQuery, createSaleOrderSchema, saleOrderQuerySchema } from '@/lib/validations'
 import { getNextSaleOrderNumber, isUniqueConstraintError } from '@/lib/documentNumbers'
+import { parseDateOnly, todayDateOnly } from '@/lib/utils'
+import {
+  DAY_MS,
+  MAX_ORDER_NUMBER_ATTEMPTS,
+  SALE_TX_OPTIONS,
+  applyReservationChange,
+  canSeeSales,
+  checkSaleBatches,
+  firstIssueMessage,
+  isAdminUser,
+  priceLines,
+  readJsonObject,
+  reservationsByBatch,
+  saleBatchSelect,
+  saleErrorResponse,
+  saleOrderInclude,
+  serializeSaleOrder,
+  type AffectedRoastBatchJson,
+  type SaleOrderRow,
+} from '@/lib/saleOrders'
 
-// GET /api/sale-orders - List all sale orders
+// GET /api/sale-orders - The sales log
+// Roasters see only the sales they recorded; Admins see every sale. Other
+// roles get an empty list (not 403) so an old tab's refresh loop stays healthy.
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    if (!canSeeSales(user)) {
+      return NextResponse.json({ saleOrders: [] })
+    }
 
     const queryValidation = validateQuery(request, saleOrderQuerySchema)
     if (!queryValidation.success) {
       return queryValidation.error
     }
 
-    const { customerId, status, search } = queryValidation.data
-    const where: Prisma.SaleOrderWhereInput = {}
+    const { customerId, status, search, startDate, endDate } = queryValidation.data
+    // The owner scope sits in AND, so the search OR below can never widen it.
+    const and: Prisma.SaleOrderWhereInput[] = []
 
-    if (customerId) {
-      where.customerId = customerId
+    if (!isAdminUser(user)) {
+      and.push({ createdBy: user.id })
     }
 
-    if (status && (Object.values(SaleOrderStatus) as string[]).includes(status)) {
-      where.status = status as SaleOrderStatus
+    if (customerId) {
+      and.push({ customerId })
+    }
+
+    if (status) {
+      and.push({ status })
     }
 
     const normalizedSearch = search?.trim()
     if (normalizedSearch) {
-      where.OR = [
-        { orderNumber: { contains: normalizedSearch, mode: 'insensitive' } },
-        { customerName: { contains: normalizedSearch, mode: 'insensitive' } },
-        { customer: { name: { contains: normalizedSearch, mode: 'insensitive' } } },
-      ]
+      and.push({
+        OR: [
+          { orderNumber: { contains: normalizedSearch, mode: 'insensitive' } },
+          { customerName: { contains: normalizedSearch, mode: 'insensitive' } },
+          { customer: { name: { contains: normalizedSearch, mode: 'insensitive' } } },
+        ],
+      })
+    }
+
+    // Sale dates are stored at 12:00Z, so whole UTC days cover them.
+    if (startDate) {
+      and.push({ orderDate: { gte: new Date(`${startDate}T00:00:00.000Z`) } })
+    }
+
+    if (endDate) {
+      and.push({ orderDate: { lt: new Date(new Date(`${endDate}T00:00:00.000Z`).getTime() + DAY_MS) } })
     }
 
     const saleOrders = await prisma.saleOrder.findMany({
-      where,
-      include: {
-        customer: {
-          select: {
-            id: true,
-            name: true,
-            type: true,
-          },
-        },
-        items: {
-          include: {
-            greenBeanLot: {
-              select: {
-                id: true,
-                grade: true,
-              },
-            },
-          },
-        },
-        creator: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-      orderBy: { orderDate: 'desc' },
+      where: { AND: and },
+      include: saleOrderInclude,
+      orderBy: [{ orderDate: 'desc' }, { createdAt: 'desc' }],
     })
 
-    return NextResponse.json({ saleOrders })
+    return NextResponse.json({ saleOrders: saleOrders.map(serializeSaleOrder) })
   } catch (error) {
     return handleApiError(error)
   }
 }
 
-// POST /api/sale-orders - Create new sale order
+// POST /api/sale-orders - Record a sale of roasted coffee
+// Every line comes from one of the seller's own roasts. Amounts are priced
+// here, and the roasts' sold kg move in the same transaction as the sale.
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request)
     requireRole(user, ['Admin', 'Roaster'])
 
-    const validation = await validateBody(request, createSaleOrderSchema)
-    if (!validation.success) {
-      return validation.error
+    const body = await readJsonObject(request)
+    if (!body) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    const { customerId, orderDate, status, items, currency, notes } = validation.data
+    const parsed = createSaleOrderSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: firstIssueMessage(parsed.error) }, { status: 400 })
+    }
+    const input = parsed.data
+
+    const orderDate = parseDateOnly(input.orderDate) ?? todayDateOnly()
+    // A day of slack covers clients ahead of Bangkok time.
+    if (orderDate.getTime() > todayDateOnly().getTime() + DAY_MS) {
+      return NextResponse.json({ error: 'Sale date cannot be in the future' }, { status: 400 })
+    }
 
     const customer = await prisma.customer.findUnique({
-      where: { id: customerId },
-      select: { id: true, name: true },
+      where: { id: input.customerId },
+      select: { id: true, name: true, contactPhone: true, address: true },
     })
 
     if (!customer) {
-      return NextResponse.json(
-        { error: 'Customer not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
     }
 
-    const uniqueLotIds = Array.from(new Set(items.map((item) => item.greenBeanLotId)))
-    const greenBeanLots = await prisma.greenBeanLot.findMany({
-      where: { id: { in: uniqueLotIds } },
-      select: { id: true },
+    const batchIds = input.items.map((item) => item.roastBatchId)
+    const batches = await prisma.roastBatch.findMany({
+      where: { id: { in: batchIds } },
+      select: saleBatchSelect,
     })
-
-    if (greenBeanLots.length !== uniqueLotIds.length) {
-      return NextResponse.json(
-        { error: 'One or more green bean lots were not found' },
-        { status: 400 }
-      )
+    // Admins too: nobody sells another roaster's coffee in their own name.
+    const checked = checkSaleBatches(
+      batchIds,
+      batches,
+      user.id,
+      'You can only sell roasts from your own Roast Logbook.',
+    )
+    if ('error' in checked) {
+      return NextResponse.json({ error: checked.error.message }, { status: checked.error.status })
     }
 
-    const totalAmount = items.reduce((sum, item) => sum + item.subtotal, 0)
+    const { rows, totalAmount } = priceLines(input.items, checked.batchById)
+    const status = input.status ?? 'Confirmed'
 
-    const maxRetries = 5
-    let saleOrder: { id: string } | null = null
+    let result: { saleOrder: SaleOrderRow; affected: AffectedRoastBatchJson[] } | null = null
 
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
+    for (let attempt = 0; attempt < MAX_ORDER_NUMBER_ATTEMPTS; attempt++) {
       const orderNumber = await getNextSaleOrderNumber()
 
       try {
-        saleOrder = await prisma.$transaction(async (tx) => {
+        result = await prisma.$transaction(async (tx) => {
           const order = await tx.saleOrder.create({
             data: {
               orderNumber,
-              customerId,
+              customerId: customer.id,
               customerName: customer.name,
-              orderDate: orderDate ? new Date(orderDate) : new Date(),
-              status: status || 'Draft',
+              customerPhone: customer.contactPhone,
+              customerAddress: customer.address,
+              orderDate,
+              status,
               totalAmount,
-              currency: currency || 'THB',
-              notes: notes?.trim() || null,
+              currency: input.currency ?? 'THB',
+              notes: input.notes?.trim() || null,
               createdBy: user.id,
             },
+            select: { id: true },
           })
 
-          for (const item of items) {
-            await tx.saleOrderItem.create({
-              data: {
-                saleOrderId: order.id,
-                greenBeanLotId: item.greenBeanLotId,
-                lotGrade: item.lotGrade,
-                quantity: item.quantity,
-                pricePerKg: item.pricePerKg,
-                subtotal: item.subtotal,
-              },
-            })
-          }
+          // Spaced createdAt keeps the lines in the order they were entered.
+          const t0 = Date.now()
+          await tx.saleOrderItem.createMany({
+            data: rows.map((row, i) => ({ ...row, saleOrderId: order.id, createdAt: new Date(t0 + i) })),
+          })
 
-          return order
-        })
+          const affected = await applyReservationChange(tx, new Map(), reservationsByBatch(status, rows))
+
+          // Read back inside the transaction: api.ts retries any 503, so a
+          // 503 must only ever come from an attempt that rolled back.
+          const saleOrder = await tx.saleOrder.findUnique({
+            where: { id: order.id },
+            include: saleOrderInclude,
+          })
+          if (!saleOrder) {
+            throw new Error('Sale vanished while it was being recorded')
+          }
+          return { saleOrder, affected }
+        }, SALE_TX_OPTIONS)
 
         break
       } catch (error) {
-        if (isUniqueConstraintError(error) && attempt < maxRetries - 1) {
+        // Another sale took this number first; read the next one and retry.
+        if (isUniqueConstraintError(error)) {
           continue
         }
         throw error
       }
     }
 
-    if (!saleOrder) {
+    if (!result) {
       return NextResponse.json(
         { error: 'Unable to generate a unique sale order number. Please try again.' },
         { status: 409 }
       )
     }
 
-    const fullOrder = await prisma.saleOrder.findUnique({
-      where: { id: saleOrder.id },
-      include: {
-        customer: {
-          select: {
-            id: true,
-            name: true,
-            type: true,
-          },
-        },
-        items: {
-          include: {
-            greenBeanLot: {
-              select: {
-                id: true,
-                grade: true,
-              },
-            },
-          },
-        },
-        creator: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    })
-
     return NextResponse.json(
-      { saleOrder: fullOrder, message: 'Sale order created successfully' },
+      {
+        saleOrder: serializeSaleOrder(result.saleOrder),
+        affectedRoastBatches: result.affected,
+        message: 'Sale recorded',
+      },
       { status: 201 }
     )
   } catch (error) {
+    const mapped = saleErrorResponse(error)
+    if (mapped) {
+      return NextResponse.json(mapped.body, { status: mapped.status })
+    }
     return handleApiError(error)
   }
 }
-

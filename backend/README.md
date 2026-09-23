@@ -154,8 +154,11 @@ The API will be available at `http://localhost:3001`
 
 ### Roast Batches
 
-- `GET /api/roast-batches` - List all roast batches
+- `GET /api/roast-batches` - List roast batches (a Roaster only gets their own)
 - `POST /api/roast-batches` - Create roast batch
+- `PUT /api/roast-batches/:id` - Correct a roast (roasted kg can't drop below the kg sold)
+- `DELETE /api/roast-batches/:id` - Delete a roast (409 while it is on a sale)
+- `GET /api/roast-batches/sellable` - Roasts with roasted kg left to sell
 
 ### Cupping Sessions
 
@@ -227,14 +230,17 @@ The API will be available at `http://localhost:3001`
 - `POST /api/customers` - Create customer
 - `GET /api/customers/:id` - Get customer by ID
 - `PUT /api/customers/:id` - Update customer
-- `DELETE /api/customers/:id` - Delete customer (Admin only)
+- `DELETE /api/customers/:id` - Delete a customer nobody has sold to (Admin, Roaster)
 
 ### Sale Orders
 
-- `GET /api/sale-orders` - List all sale orders
-- `POST /api/sale-orders` - Create sale order
+Roasted coffee sold from roast batches. A Roaster sees and changes only their own sales.
+
+- `GET /api/sale-orders` - The sales log
+- `POST /api/sale-orders` - Record a sale
 - `GET /api/sale-orders/:id` - Get sale order by ID
-- `PUT /api/sale-orders/:id` - Update sale order
+- `PUT /api/sale-orders/:id` - Edit a sale (lines, customer, date, currency, notes, status)
+- `DELETE /api/sale-orders/:id` - Delete a sale (its kg go back to the roasts)
 
 ### Invoices
 

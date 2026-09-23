@@ -2,21 +2,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { isAdminUser } from '@/lib/saleOrders'
 
-// GET /api/roast-batches - List all roast batches
+// GET /api/roast-batches - List roast batches
+// Roasters see only their own batches (?roasterId is ignored for them);
+// Admins see every batch and may filter by ?roasterId.
 export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request)
+    requireRole(user, ['Roaster', 'Admin'])
 
     const where: Prisma.RoastBatchWhereInput = {}
-    
-    // Filter by roasterId if provided
+
     const roasterId = request.nextUrl.searchParams.get('roasterId')
-    if (roasterId) {
-      where.roasterId = roasterId
-    } else if (user.roles.includes('Roaster') && !user.roles.includes('Admin')) {
-      // Roasters see only their own batches
+    if (!isAdminUser(user)) {
       where.roasterId = user.id
+    } else if (roasterId) {
+      where.roasterId = roasterId
     }
 
     // Filter by greenBeanLotId if provided

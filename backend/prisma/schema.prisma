@@ -570,6 +570,10 @@ model RoastBatch {
   batchSizeKg        Float
   yieldPercentage    Float
   roastedWeightKg    Float?
+  /// Roasted kg on sale orders that are not Cancelled. Written only by the
+  /// sale-order routes through a guarded UPDATE, so it never passes
+  /// roastedWeightKg. Left to sell = roastedWeightKg - soldWeightKg.
+  soldWeightKg       Float                @default(0)
   weightLossPct      Float?
   roastLevel         RoastLevel?
   roastProfileNotes  String
@@ -579,6 +583,7 @@ model RoastBatch {
   greenBeanLot       GreenBeanLot         @relation(fields: [greenBeanLotId], references: [id])
   roaster            User                 @relation(fields: [roasterId], references: [id])
   roasterInventory   RoasterInventoryItem @relation(fields: [roasterInventoryId], references: [id])
+  saleOrderItems     SaleOrderItem[]
 
   @@index([roasterId])
   @@index([roastDate])
@@ -603,24 +608,28 @@ model Customer {
 }
 
 model SaleOrder {
-  id           String          @id @default(uuid())
-  orderNumber  String          @unique
-  customerId   String
-  customerName String
-  orderDate    DateTime        @default(now())
-  status       SaleOrderStatus @default(Draft)
-  totalAmount  Float
-  currency     String
-  notes        String?
-  createdBy    String
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  invoices     Invoice[]
-  creator      User            @relation(fields: [createdBy], references: [id])
-  customer     Customer        @relation(fields: [customerId], references: [id])
-  items        SaleOrderItem[]
+  id              String          @id @default(uuid())
+  orderNumber     String          @unique
+  customerId      String
+  customerName    String
+  /// Customer phone and address as they were when the sale was recorded (receipt snapshot).
+  customerPhone   String?
+  customerAddress String?
+  orderDate       DateTime        @default(now())
+  status          SaleOrderStatus @default(Draft)
+  totalAmount     Float
+  currency        String
+  notes           String?
+  createdBy       String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  invoices        Invoice[]
+  creator         User            @relation(fields: [createdBy], references: [id])
+  customer        Customer        @relation(fields: [customerId], references: [id])
+  items           SaleOrderItem[]
 
   @@index([customerId])
+  @@index([createdBy])
   @@index([status])
   @@index([orderDate])
   @@index([updatedAt])
@@ -629,17 +638,23 @@ model SaleOrder {
 model SaleOrderItem {
   id             String       @id @default(uuid())
   saleOrderId    String
+  /// Roasted-coffee line: the roast batch it was sold from. Null on older green-bean lines.
+  roastBatchId   String?
+  /// Always set. On roast lines the server copies the batch's green bean lot.
   greenBeanLotId String
+  /// Snapshot of the green lot's grade at sale time (max 50 chars).
   lotGrade       String
   quantity       Float
   pricePerKg     Float
   subtotal       Float
   createdAt      DateTime     @default(now())
   greenBeanLot   GreenBeanLot @relation(fields: [greenBeanLotId], references: [id])
+  roastBatch     RoastBatch?  @relation(fields: [roastBatchId], references: [id], onDelete: Restrict)
   saleOrder      SaleOrder    @relation(fields: [saleOrderId], references: [id], onDelete: Cascade)
 
   @@index([saleOrderId])
   @@index([greenBeanLotId])
+  @@index([roastBatchId])
 }
 
 model Invoice {

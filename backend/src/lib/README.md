@@ -72,6 +72,19 @@ flow forces a change).
 ## `documentNumbers.ts`
 Sale-order and invoice number formatting.
 
+## `saleOrders.ts` — selling roasted coffee
+Type-only imports, so routes and tests can use it without mocks.
+- `saleOrderInclude` / `serializeSaleOrder(o)` and `roastSummarySelect` /
+  `serializeRoastSummary(b)` — the sale JSON every sale route returns
+- `priceLines(items, batchById)` — server-side line amounts (kg to 3 dp, money
+  to 2 dp); client subtotals are never read
+- `reservationsByBatch(status, lines)` + `applyReservationChange(tx, old, new)` —
+  move `RoastBatch.soldWeightKg` with one guarded SQL `UPDATE` per roast, in id
+  order, inside the sale's transaction. Throws `StockError` when a roast has
+  too little left
+- `isAdminUser`, `canSeeSales`, `roastBatchLabel` (same as the frontend's
+  `toRoastBatchId`), `firstIssueMessage`, `saleErrorResponse`
+
 ---
 
 ## Quick-import map
@@ -86,3 +99,4 @@ Sale-order and invoice number formatting.
 | Parse a date-only string safely | `parseDateOnly` from `./utils` |
 | Insert with a `displayId` | `withDisplayIdRetry(() => …)` from `./utils` |
 | Query the DB | `prisma` from `./prisma` |
+| Change a roast's sold kg | `applyReservationChange` from `./saleOrders` (never write `soldWeightKg` directly) |

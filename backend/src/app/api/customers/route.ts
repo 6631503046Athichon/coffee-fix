@@ -3,6 +3,7 @@ import { Prisma, CustomerType } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { validateBody, validateQuery, createCustomerSchema, customerQuerySchema } from '@/lib/validations'
+import { isAdminUser } from '@/lib/saleOrders'
 
 // GET /api/customers - List all customers
 export async function GET(request: NextRequest) {
@@ -40,12 +41,14 @@ export async function GET(request: NextRequest) {
       ]
     }
 
+    // The address book is shared, but a Roaster's sale count covers only the
+    // sales they recorded.
     const customers = await prisma.customer.findMany({
       where,
       include: {
         _count: {
           select: {
-            saleOrders: true,
+            saleOrders: isAdminUser(user) ? true : { where: { createdBy: user.id } },
           },
         },
       },

@@ -79,7 +79,25 @@ export async function GET(
             },
           },
         },
+        // Column-listed so a roaster's sold kg (RoastBatch.soldWeightKg)
+        // never reaches whoever opens the lot.
         roastBatches: {
+          select: {
+            id: true,
+            roasterId: true,
+            roasterInventoryId: true,
+            greenBeanLotId: true,
+            roastDate: true,
+            batchSizeKg: true,
+            yieldPercentage: true,
+            roastedWeightKg: true,
+            weightLossPct: true,
+            roastLevel: true,
+            roastProfileNotes: true,
+            flavorNotes: true,
+            createdAt: true,
+            updatedAt: true,
+          },
           orderBy: { roastDate: "desc" },
         },
       },
@@ -435,7 +453,8 @@ export async function DELETE(
       where: { id },
       include: {
         roasterInventory: true,
-        roastBatches: true,
+        // Only the count matters here.
+        roastBatches: { select: { id: true } },
       },
     });
 

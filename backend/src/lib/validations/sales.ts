@@ -13,6 +13,7 @@ import {
   saleOrderStatusSchema,
   invoiceStatusSchema,
 } from './common';
+import { parseStrictDateOnly } from '../utils';
 
 // ============================================
 // Customer Schemas
@@ -32,43 +33,76 @@ export const createCustomerSchema = z.object({
 export const updateCustomerSchema = createCustomerSchema.partial();
 
 // ============================================
-// Sale Order Item Schema
+// Sale Order Schemas (roasted coffee sold from roast batches)
 // ============================================
 
-const saleOrderItemSchema = z.object({
-  greenBeanLotId: uuidSchema,
-  lotGrade: nonEmptyStringSchema.pipe(z.string().max(50)),
-  quantity: positiveWeightSchema,
-  pricePerKg: positiveNumberSchema,
-  subtotal: positiveNumberSchema,
+// A plain calendar date. parseStrictDateOnly lives in lib/utils, which has no
+// imports of its own; it only runs inside the refine callback, at parse time.
+// zod 4 still runs the refine after the regex fails, so it must cope with any
+// string: parseStrictDateOnly('') is null. The regex aborts so a malformed
+// value reports only the format message.
+export const saleDateOnlySchema = z.string({ message: 'Sale date must be a date like 2026-09-23' })
+  .regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'Sale date must be a date like 2026-09-23', abort: true })
+  .refine((v) => {
+    const date = parseStrictDateOnly(v);
+    return date != null && !Number.isNaN(date.getTime());
+  }, 'Sale date must be a valid date');
+
+const saleLineSchema = z.object({
+  roastBatchId: z.string({ message: 'Choose a roast' }).uuid('Choose a roast'),
+  quantity: z.number({ message: 'Enter the kg sold' })
+    .min(0.001, 'Quantity must be at least 0.001 kg')
+    .max(100000, 'Quantity must be 100000 kg or less'),
+  pricePerKg: z.number({ message: 'Enter a price per kg' })
+    .min(0, 'Price per kg cannot be negative')
+    .max(1000000, 'Price per kg is too large'),
 });
 
-// ============================================
-// Sale Order Schemas
-// ============================================
+const saleLinesSchema = z.array(saleLineSchema, { message: 'Add at least one roast to the sale' })
+  .min(1, 'Add at least one roast to the sale')
+  .max(30, 'A sale can have at most 30 lines')
+  .refine(
+    (lines) => new Set(lines.map((line) => line.roastBatchId)).size === lines.length,
+    'Each roast can appear only once in a sale'
+  );
 
+const saleNotesSchema = z.string({ message: 'Notes must be text' })
+  .trim()
+  .max(1000, 'Notes must be 1000 characters or fewer')
+  .optional()
+  .nullable();
+
+const saleCurrencySchema = z.enum(['THB', 'USD', 'EUR', 'JPY', 'CNY'], {
+  message: 'Currency must be THB, USD, EUR, JPY or CNY',
+});
+
+// Unknown keys (subtotal, totalAmount, customerName, greenBeanLotId, lotGrade)
+// are stripped: the server prices every line and copies the lot and grade
+// from the roast.
 export const createSaleOrderSchema = z.object({
-  customerId: uuidSchema,
-  customerName: nonEmptyStringSchema.pipe(
-    z.string().max(200, 'Customer name must be 200 characters or fewer')
-  ).optional(),
-  orderDate: dateStringSchema.optional(),
-  status: saleOrderStatusSchema.optional().default('Draft'),
-  totalAmount: positiveNumberSchema.optional(),
-  currency: currencySchema.optional(),
-  notes: z.string().trim().max(1000, 'Notes must be 1000 characters or fewer').optional().nullable(),
-  items: z.array(saleOrderItemSchema).min(1, 'At least one sale order item is required'),
+  customerId: z.string({ message: 'Choose a customer' }).uuid('Choose a customer'),
+  orderDate: saleDateOnlySchema.optional(), // default: today in Bangkok
+  // Default 'Confirmed'; the UI never sends it.
+  status: z.enum(['Draft', 'Confirmed', 'Delivered'], {
+    message: 'A new sale must be Draft, Confirmed or Delivered',
+  }).optional(),
+  currency: saleCurrencySchema.optional(), // default 'THB'
+  notes: saleNotesSchema,
+  items: saleLinesSchema,
 });
 
 export const updateSaleOrderSchema = z.object({
-  customerId: uuidSchema.optional(),
-  customerName: z.string().max(200).optional(),
-  orderDate: dateStringSchema.optional(),
-  status: saleOrderStatusSchema.optional(),
-  totalAmount: positiveNumberSchema.optional(),
-  currency: currencySchema.optional(),
-  notes: z.string().trim().max(1000).optional().nullable(),
-  items: z.array(saleOrderItemSchema).optional(),
+  customerId: z.string({ message: 'Choose a customer' }).uuid('Choose a customer').optional(),
+  orderDate: saleDateOnlySchema.optional(),
+  status: z.enum(['Draft', 'Confirmed', 'Delivered', 'Cancelled'], {
+    message: 'Status must be Draft, Confirmed, Delivered or Cancelled',
+  }).optional(),
+  currency: saleCurrencySchema.optional(),
+  notes: saleNotesSchema,
+  // Present = replaces ALL lines.
+  items: saleLinesSchema.optional(),
+  // updatedAt the client's copy was loaded from; a stale edit is refused.
+  expectedUpdatedAt: z.string().datetime('Invalid expectedUpdatedAt').optional(),
 });
 
 // ============================================
@@ -125,8 +159,8 @@ export const saleOrderQuerySchema = z.object({
   search: z.string().optional(),
   customerId: uuidSchema.optional(),
   status: saleOrderStatusSchema.optional(),
-  startDate: dateStringSchema.optional(),
-  endDate: dateStringSchema.optional(),
+  startDate: saleDateOnlySchema.optional(),
+  endDate: saleDateOnlySchema.optional(),
 });
 
 export const invoiceQuerySchema = z.object({

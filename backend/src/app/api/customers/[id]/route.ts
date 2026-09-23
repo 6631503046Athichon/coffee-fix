@@ -3,6 +3,10 @@ import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { validateBody, updateCustomerSchema } from '@/lib/validations'
+import { isAdminUser, isPrismaCode } from '@/lib/saleOrders'
+
+const CUSTOMER_HAS_SALES_MESSAGE =
+  'This customer has sales recorded (by you or another roaster), so it cannot be deleted.'
 
 // GET /api/customers/:id
 export async function GET(
@@ -16,10 +20,14 @@ export async function GET(
     requireRole(user, ['Admin', 'Roaster'])
     const { id } = await params
 
+    // The customer is shared; the sales on it are the viewer's own (Admins see all).
+    const ownSales: Prisma.SaleOrderWhereInput = isAdminUser(user) ? {} : { createdBy: user.id }
+
     const customer = await prisma.customer.findUnique({
       where: { id },
       include: {
         saleOrders: {
+          where: ownSales,
           take: 10,
           orderBy: { orderDate: 'desc' },
           include: {
@@ -28,7 +36,7 @@ export async function GET(
         },
         _count: {
           select: {
-            saleOrders: true,
+            saleOrders: { where: ownSales },
           },
         },
       },
@@ -95,30 +103,39 @@ export async function PUT(
 }
 
 // DELETE /api/customers/:id
+// The address book is shared, so a customer anyone has sold to stays.
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(request)
-    requireRole(user, ['Admin'])
+    requireRole(user, ['Admin', 'Roaster'])
     const { id } = await params
 
-    // Check if customer has orders
+    // Counts every roaster's sales, not only the caller's.
     const ordersCount = await prisma.saleOrder.count({
       where: { customerId: id },
     })
 
     if (ordersCount > 0) {
-      return NextResponse.json(
-        { error: 'Cannot delete customer with existing orders' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: CUSTOMER_HAS_SALES_MESSAGE }, { status: 409 })
     }
 
-    await prisma.customer.delete({
-      where: { id },
-    })
+    try {
+      await prisma.customer.delete({
+        where: { id },
+      })
+    } catch (error) {
+      // A sale was recorded for this customer after the count above.
+      if (isPrismaCode(error, 'P2003')) {
+        return NextResponse.json({ error: CUSTOMER_HAS_SALES_MESSAGE }, { status: 409 })
+      }
+      if (isPrismaCode(error, 'P2025')) {
+        return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+      }
+      throw error
+    }
 
     return NextResponse.json({ message: 'Customer deleted successfully' })
   } catch (error) {

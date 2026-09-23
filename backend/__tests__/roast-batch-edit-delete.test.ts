@@ -17,6 +17,9 @@ const mockPrisma: any = {
     updateMany: jest.fn(async () => ({ count: 1 })),
     update: jest.fn(async () => ({ id: 'inv-1', claimedWeightKg: 50, remainingWeightKg: 30 })),
   },
+  saleOrderItem: {
+    findMany: jest.fn(async () => []),
+  },
   $transaction: jest.fn(async (callback: any) => callback(mockPrisma)),
 }
 
@@ -72,6 +75,7 @@ const existingRoast = {
   greenBeanLotId: 'lot-1',
   batchSizeKg: 10,
   roastedWeightKg: 8.5,
+  soldWeightKg: 0,
   yieldPercentage: 85,
   weightLossPct: 15,
   roastLevel: 'Medium',
@@ -108,6 +112,7 @@ describe('roast batch edit and delete', () => {
     mockPrisma.roastBatch.updateMany.mockResolvedValue({ count: 1 })
     mockPrisma.roastBatch.delete.mockResolvedValue(existingRoast)
     mockPrisma.roasterInventoryItem.updateMany.mockResolvedValue({ count: 1 })
+    mockPrisma.saleOrderItem.findMany.mockResolvedValue([])
   })
 
   describe('PUT /api/roast-batches/[id]', () => {
@@ -156,7 +161,11 @@ describe('roast batch edit and delete', () => {
         data: { remainingWeightKg: { decrement: 2 } },
       })
       const update = mockPrisma.roastBatch.updateMany.mock.calls[0][0]
-      expect(update.where).toEqual({ id: 'roast-1', updatedAt: existingUpdatedAt })
+      expect(update.where).toEqual({
+        id: 'roast-1',
+        updatedAt: existingUpdatedAt,
+        soldWeightKg: { lte: 9 + 1e-6 },
+      })
       expect(update.data).toMatchObject({
         batchSizeKg: 12,
         roastedWeightKg: 9,
@@ -327,9 +336,50 @@ describe('roast batch edit and delete', () => {
     test('409 when the roast changed underneath the edit', async () => {
       mockAuthUser = roaster
       mockPrisma.roastBatch.updateMany.mockResolvedValueOnce({ count: 0 })
+      mockPrisma.roastBatch.findUnique
+        .mockResolvedValueOnce(existingRoast)
+        .mockResolvedValueOnce({ updatedAt: new Date('2026-09-20T11:00:00.000Z'), soldWeightKg: 0 })
       const { PUT } = await import('@/app/api/roast-batches/[id]/route')
       const response = await PUT(putRequest({ batchSizeKg: 12 }), routeParams)
       expect(response.status).toBe(409)
+      expect(mockPrisma.roasterInventoryItem.updateMany).not.toHaveBeenCalled()
+    })
+
+    test('400 when the roasted weight would drop below the kg already sold', async () => {
+      mockAuthUser = roaster
+      mockPrisma.roastBatch.findUnique.mockResolvedValueOnce({ ...existingRoast, soldWeightKg: 3.5 })
+      const { PUT } = await import('@/app/api/roast-batches/[id]/route')
+      const response = await PUT(putRequest({ roastedWeightKg: 3 }), routeParams)
+      expect(response.status).toBe(400)
+      const body = await response.json()
+      expect(body.error).toContain('3.5 kg already sold')
+      // Shown inline by the roast dialog, not treated as a stale form.
+      expect(body.error).not.toMatch(/changed or removed by someone else|^Roast batch not found$/)
+      expect(mockPrisma.roastBatch.updateMany).not.toHaveBeenCalled()
+    })
+
+    test('the roasted weight may equal the kg already sold', async () => {
+      mockAuthUser = roaster
+      mockPrisma.roastBatch.findUnique.mockResolvedValueOnce({ ...existingRoast, soldWeightKg: 8 })
+      const { PUT } = await import('@/app/api/roast-batches/[id]/route')
+      const response = await PUT(putRequest({ roastedWeightKg: 8 }), routeParams)
+      expect(response.status).toBe(200)
+      expect(mockPrisma.roastBatch.updateMany.mock.calls[0][0].where.soldWeightKg).toEqual({
+        lte: 8 + 1e-6,
+      })
+    })
+
+    test('400, not 409, when a sale took the kg after the roast was read', async () => {
+      mockAuthUser = roaster
+      mockPrisma.roastBatch.updateMany.mockResolvedValueOnce({ count: 0 })
+      mockPrisma.roastBatch.findUnique
+        .mockResolvedValueOnce(existingRoast)
+        // Same updatedAt (sales never bump it), but 9.2 kg are sold now.
+        .mockResolvedValueOnce({ updatedAt: existingUpdatedAt, soldWeightKg: 9.2 })
+      const { PUT } = await import('@/app/api/roast-batches/[id]/route')
+      const response = await PUT(putRequest({ batchSizeKg: 12, roastedWeightKg: 9 }), routeParams)
+      expect(response.status).toBe(400)
+      expect((await response.json()).error).toContain('9.2 kg already sold')
       expect(mockPrisma.roasterInventoryItem.updateMany).not.toHaveBeenCalled()
     })
   })
@@ -370,6 +420,52 @@ describe('roast batch edit and delete', () => {
         remainingWeightKg: 30,
       })
       expect(body.message).toBe('Roast batch deleted successfully')
+    })
+
+    test('409 naming the sales when the roast is on a sale', async () => {
+      mockAuthUser = roaster
+      mockPrisma.saleOrderItem.findMany.mockResolvedValueOnce([
+        { saleOrder: { orderNumber: 'ORD-2026-0001' } },
+      ])
+      const { DELETE } = await import('@/app/api/roast-batches/[id]/route')
+      const response = await DELETE(deleteRequest(), routeParams)
+      expect(response.status).toBe(409)
+      const body = await response.json()
+      expect(body.error).toContain('ORD-2026-0001')
+      expect(body.error).not.toContain('…')
+      expect(mockPrisma.saleOrderItem.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { roastBatchId: 'roast-1' }, take: 6 }),
+      )
+      expect(mockPrisma.roastBatch.delete).not.toHaveBeenCalled()
+      expect(mockPrisma.roasterInventoryItem.update).not.toHaveBeenCalled()
+    })
+
+    test('lists at most five sales, then an ellipsis', async () => {
+      mockAuthUser = roaster
+      mockPrisma.saleOrderItem.findMany.mockResolvedValueOnce(
+        [1, 2, 3, 4, 5, 6].map((n) => ({ saleOrder: { orderNumber: `ORD-2026-000${n}` } })),
+      )
+      const { DELETE } = await import('@/app/api/roast-batches/[id]/route')
+      const response = await DELETE(deleteRequest(), routeParams)
+      expect(response.status).toBe(409)
+      const body = await response.json()
+      expect(body.error).toContain('ORD-2026-0005, …')
+      expect(body.error).not.toContain('ORD-2026-0006')
+    })
+
+    test('409 when a sale takes the roast between the check and the delete', async () => {
+      mockAuthUser = roaster
+      mockPrisma.roastBatch.delete.mockRejectedValueOnce(
+        Object.assign(new Error('Foreign key constraint failed'), { code: 'P2003' }),
+      )
+      mockPrisma.saleOrderItem.findMany
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ saleOrder: { orderNumber: 'ORD-2026-0002' } }])
+      const { DELETE } = await import('@/app/api/roast-batches/[id]/route')
+      const response = await DELETE(deleteRequest(), routeParams)
+      expect(response.status).toBe(409)
+      expect((await response.json()).error).toContain('ORD-2026-0002')
+      expect(mockPrisma.roasterInventoryItem.update).not.toHaveBeenCalled()
     })
 
     test('a repeated delete does not return the beans twice', async () => {

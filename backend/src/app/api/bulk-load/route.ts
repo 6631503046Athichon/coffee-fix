@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
     const isAdmin = user.roles.includes('Admin') || user.isSuperAdmin
     const isFarmer = user.roles.includes('Farmer')
     const isRoaster = user.roles.includes('Roaster')
+    const isProcessor = user.roles.includes('Processor')
 
     if (phase === '1') {
       // Phase 1: Essential data
@@ -103,13 +104,13 @@ export async function GET(request: NextRequest) {
             return []
           }),
 
-        // Customers
-        prisma.customer.findMany({
-          include: {
-            _count: { select: { saleOrders: true } },
-          },
-          orderBy: { createdAt: 'desc' },
-        }),
+        // Customers: the shared address book. Roasters sell to them and
+        // processors pick them in the green-bean Sale withdrawal; other roles
+        // have no use for the contact details. No sale counts here: a count
+        // across every roaster's sales would leak their activity.
+        isAdmin || isRoaster || isProcessor
+          ? prisma.customer.findMany({ orderBy: { createdAt: 'desc' } })
+          : Promise.resolve([]),
 
         // Users (different shapes for admin vs non-admin)
         isAdmin
@@ -178,7 +179,9 @@ export async function GET(request: NextRequest) {
         ? { parchmentLot: { harvestLot: { farmId: { in: farmIds } } } }
         : {}
 
-      // Roaster scope
+      // Roaster scope: roasters get their own inventory and roasts, Admins
+      // get everyone's, and other roles get none (the rows carry sold kg).
+      const canSeeRoasts = isAdmin || isRoaster
       const roasterWhere: Record<string, unknown> = {}
       if (isRoaster && !isAdmin) {
         roasterWhere.roasterId = user.id
@@ -281,7 +284,7 @@ export async function GET(request: NextRequest) {
         }),
 
         // Roaster Inventory
-        prisma.roasterInventoryItem.findMany({
+        canSeeRoasts ? prisma.roasterInventoryItem.findMany({
           where: roasterWhere,
           take: 100,
           include: {
@@ -304,10 +307,10 @@ export async function GET(request: NextRequest) {
             roastBatches: { orderBy: { roastDate: 'desc' }, take: 5 },
           },
           orderBy: { createdAt: 'desc' },
-        }),
+        }) : Promise.resolve([]),
 
         // Roast Batches
-        prisma.roastBatch.findMany({
+        canSeeRoasts ? prisma.roastBatch.findMany({
           where: roasterWhere,
           take: 100,
           include: {
@@ -316,7 +319,7 @@ export async function GET(request: NextRequest) {
             roasterInventory: { select: { id: true, claimedWeightKg: true, remainingWeightKg: true } },
           },
           orderBy: { roastDate: 'desc' },
-        }),
+        }) : Promise.resolve([]),
       ])
 
       return NextResponse.json({

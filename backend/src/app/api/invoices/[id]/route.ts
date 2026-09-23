@@ -64,6 +64,9 @@ export async function GET(
       )
     }
 
+    // SECURITY: Ownership — a Roaster reads only invoices on their own sales.
+    requireOwnership(user, invoice.saleOrder.createdBy, ['Admin'])
+
     return NextResponse.json({ invoice })
   } catch (error) {
     return handleApiError(error)

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, requireOwnership, handleApiError } from '@/lib/middleware'
 import { safeParseFloat } from '@/lib/utils'
 
 // GET /api/roaster-inventory/:id
@@ -10,7 +10,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    requireRole(user, ['Roaster', 'Admin'])
     const { id } = await params
 
     const inventoryItem = await prisma.roasterInventoryItem.findUnique({
@@ -63,6 +64,9 @@ export async function GET(
         { status: 404 }
       )
     }
+
+    // SECURITY: a Roaster reads only their own inventory and roasts.
+    requireOwnership(user, inventoryItem.roasterId, ['Admin'])
 
     return NextResponse.json({ inventoryItem })
   } catch (error) {

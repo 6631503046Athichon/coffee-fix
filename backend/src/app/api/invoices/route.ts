@@ -1,14 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma, InvoiceStatus } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, requireOwnership, handleApiError } from '@/lib/middleware'
 import { validateBody, validateQuery, createInvoiceSchema, invoiceQuerySchema } from '@/lib/validations'
 import { getNextInvoiceNumber, isUniqueConstraintError } from '@/lib/documentNumbers'
+import { MAX_ORDER_NUMBER_ATTEMPTS, canSeeSales, isAdminUser } from '@/lib/saleOrders'
 
-// GET /api/invoices - List all invoices
+// GET /api/invoices - List invoices
+// Roasters see only invoices on the sales they recorded; Admins see every
+// invoice. Other roles get an empty list (not 403) so an old tab's refresh
+// loop stays healthy.
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
+    if (!canSeeSales(user)) {
+      return NextResponse.json({ invoices: [] })
+    }
 
     const queryValidation = validateQuery(request, invoiceQuerySchema)
     if (!queryValidation.success) {
@@ -24,6 +31,11 @@ export async function GET(request: NextRequest) {
 
     if (status && (Object.values(InvoiceStatus) as string[]).includes(status)) {
       where.status = status as InvoiceStatus
+    }
+
+    // The owner scope sits in AND, so the search OR below can never widen it.
+    if (!isAdminUser(user)) {
+      where.AND = [{ saleOrder: { createdBy: user.id } }]
     }
 
     const normalizedSearch = search?.trim()
@@ -99,6 +111,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // SECURITY: Ownership — a Roaster invoices only the sales they recorded.
+    requireOwnership(user, saleOrder.createdBy, ['Admin'])
+
+    if (saleOrder.status === 'Cancelled') {
+      return NextResponse.json(
+        { error: 'A cancelled sale cannot be invoiced' },
+        { status: 409 }
+      )
+    }
+
     if (saleOrder.items.length === 0) {
       return NextResponse.json(
         { error: 'Cannot create an invoice from a sale order with no items' },
@@ -120,10 +142,9 @@ export async function POST(request: NextRequest) {
     const taxAmount = tax ?? 0
     const totalAmount = subtotal + taxAmount
 
-    const maxRetries = 5
     let invoice: { id: string } | null = null
 
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
+    for (let attempt = 0; attempt < MAX_ORDER_NUMBER_ATTEMPTS; attempt++) {
       const invoiceNumber = await getNextInvoiceNumber()
 
       try {
@@ -162,7 +183,9 @@ export async function POST(request: NextRequest) {
 
         break
       } catch (error) {
-        if (isUniqueConstraintError(error) && attempt < maxRetries - 1) {
+        // Another invoice took this number first; read the next one and retry.
+        // After the last attempt the 409 below answers.
+        if (isUniqueConstraintError(error)) {
           continue
         }
         throw error
