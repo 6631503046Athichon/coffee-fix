@@ -45,6 +45,16 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
+// Open dialogs, innermost last. Only the innermost answers Escape and traps
+// Tab, so a popup opened from another (New customer from the Sell popup)
+// closes on its own.
+const openModals: symbol[] = [];
+
+// Controls the focus trap can land on: a pane hidden with `inert` (the Start
+// roast popup's other pane) is skipped.
+const isReachable = (el: HTMLElement) =>
+  !el.hasAttribute('disabled') && !el.closest('[inert]');
+
 export const Modal: React.FC<ModalProps> = ({
   isOpen,
   onClose,
@@ -74,6 +84,9 @@ export const Modal: React.FC<ModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
+    const token = Symbol('modal');
+    openModals.push(token);
+
     // Remember whatever had focus before we opened so we can restore it.
     previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
 
@@ -82,7 +95,9 @@ export const Modal: React.FC<ModalProps> = ({
     const focusFirst = () => {
       const root = containerRef.current;
       if (!root) return;
-      const focusables = root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+      const focusables = Array.from(
+        root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      ).filter(isReachable);
       if (focusables.length > 0) {
         focusables[0].focus();
       } else {
@@ -95,6 +110,8 @@ export const Modal: React.FC<ModalProps> = ({
     const rafId = window.requestAnimationFrame(focusFirst);
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (openModals[openModals.length - 1] !== token) return;
+
       if (e.key === 'Escape') {
         e.stopPropagation();
         onCloseRef.current();
@@ -107,7 +124,7 @@ export const Modal: React.FC<ModalProps> = ({
       if (!root) return;
       const focusables = Array.from(
         root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-      ).filter((el) => !el.hasAttribute('disabled'));
+      ).filter(isReachable);
 
       if (focusables.length === 0) {
         e.preventDefault();
@@ -124,7 +141,9 @@ export const Modal: React.FC<ModalProps> = ({
           last.focus();
         }
       } else {
-        if (active === last) {
+        // Also when the focused control was just removed (focus fell to
+        // <body>): the next Tab starts inside the dialog, not behind it.
+        if (active === last || !root.contains(active)) {
           e.preventDefault();
           first.focus();
         }
@@ -134,6 +153,8 @@ export const Modal: React.FC<ModalProps> = ({
     document.addEventListener('keydown', handleKeyDown);
 
     return () => {
+      const index = openModals.lastIndexOf(token);
+      if (index !== -1) openModals.splice(index, 1);
       window.cancelAnimationFrame(rafId);
       document.removeEventListener('keydown', handleKeyDown);
       // Restore focus to the element that was focused before open.

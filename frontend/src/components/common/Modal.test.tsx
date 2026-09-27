@@ -1,5 +1,5 @@
-import React from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
+import React, { useState } from 'react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { vi } from 'vitest'
 import { Modal } from './Modal'
 
@@ -74,5 +74,123 @@ describe('Modal', () => {
     )
     expect(screen.getByRole('dialog')).not.toHaveClass('max-sm:!items-stretch')
     expect(screen.getByRole('dialog').firstElementChild).not.toHaveClass('max-sm:!m-0')
+  })
+
+  describe('with a popup opened from another', () => {
+    const Stacked: React.FC<{
+      onOuterClose: () => void
+      onInnerClose: () => void
+      onOuterLastFocus?: () => void
+    }> = ({ onOuterClose, onInnerClose, onOuterLastFocus }) => {
+      const [innerOpen, setInnerOpen] = useState(false)
+      return (
+        <Modal isOpen onClose={onOuterClose} title="Sell coffee">
+          <input aria-label="Notes" />
+          <button type="button" onClick={() => setInnerOpen(true)} onFocus={onOuterLastFocus}>
+            New customer
+          </button>
+          <Modal
+            isOpen={innerOpen}
+            onClose={() => {
+              onInnerClose()
+              setInnerOpen(false)
+            }}
+            title="Create New Customer"
+            showCloseButton={false}
+          >
+            <input aria-label="Name" />
+            <button type="button">Create</button>
+          </Modal>
+        </Modal>
+      )
+    }
+
+    it('closes only the top popup on Escape', () => {
+      const onOuterClose = vi.fn()
+      const onInnerClose = vi.fn()
+      render(<Stacked onOuterClose={onOuterClose} onInnerClose={onInnerClose} />)
+      fireEvent.click(screen.getByRole('button', { name: 'New customer' }))
+
+      fireEvent.keyDown(document, { key: 'Escape' })
+
+      expect(onInnerClose).toHaveBeenCalledTimes(1)
+      expect(onOuterClose).not.toHaveBeenCalled()
+      expect(screen.queryByRole('dialog', { name: 'Create New Customer' })).not.toBeInTheDocument()
+
+      // With the top one gone, the popup underneath answers Escape again.
+      fireEvent.keyDown(document, { key: 'Escape' })
+      expect(onOuterClose).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps Shift+Tab inside the top popup', () => {
+      const onOuterLastFocus = vi.fn()
+      render(
+        <Stacked onOuterClose={() => {}} onInnerClose={() => {}} onOuterLastFocus={onOuterLastFocus} />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'New customer' }))
+      const name = screen.getByLabelText('Name')
+      act(() => name.focus())
+
+      fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+
+      expect(screen.getByRole('button', { name: 'Create' })).toHaveFocus()
+      // The popup underneath never pulled focus back to its own last control.
+      expect(onOuterLastFocus).not.toHaveBeenCalled()
+    })
+  })
+
+  it('wraps Tab past a pane hidden with inert', () => {
+    render(
+      <Modal isOpen onClose={() => {}} title="Start roast" showCloseButton={false}>
+        <button type="button">First</button>
+        <div inert>
+          <button type="button">Hidden pane</button>
+        </div>
+        <button type="button">Last</button>
+        <div inert>
+          <button type="button">Hidden too</button>
+        </div>
+      </Modal>,
+    )
+    const last = screen.getByRole('button', { name: 'Last' })
+    act(() => last.focus())
+
+    fireEvent.keyDown(document, { key: 'Tab' })
+
+    expect(screen.getByRole('button', { name: 'First' })).toHaveFocus()
+  })
+
+  it('pulls a forward Tab back inside when the focused control was removed', () => {
+    const Swap: React.FC = () => {
+      const [claimed, setClaimed] = useState(false)
+      return (
+        <Modal isOpen onClose={() => {}} title="Sell green beans" showCloseButton={false}>
+          <button type="button">First</button>
+          {claimed ? (
+            <input aria-label="Kg" />
+          ) : (
+            <button type="button" onClick={() => setClaimed(true)}>
+              Claim Stock
+            </button>
+          )}
+        </Modal>
+      )
+    }
+    render(
+      <>
+        <button type="button">Behind the popup</button>
+        <Swap />
+      </>,
+    )
+    const claim = screen.getByRole('button', { name: 'Claim Stock' })
+    act(() => claim.focus())
+    fireEvent.click(claim)
+    // The button unmounted with focus on it, so focus fell to <body>.
+    expect(document.body).toHaveFocus()
+
+    const tab = fireEvent.keyDown(document, { key: 'Tab' })
+
+    expect(tab).toBe(false)
+    expect(screen.getByRole('button', { name: 'First' })).toHaveFocus()
   })
 })
