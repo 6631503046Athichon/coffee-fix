@@ -1,21 +1,22 @@
 import {
   AppData,
+  GreenStockSummary,
   RoastLevel,
   RoastSaleSummary,
   SaleOrder,
   SaleOrderItem,
   SaleOrderStatus,
+  SellableGreenLot,
   SellableRoast,
 } from '../../types';
 import { api } from '../api';
 import { handleApiError } from '../../utils/errorHandler';
-import { toRoastBatchId } from '../../utils/formatters';
+import { toRoaId, toRoastBatchId } from '../../utils/formatters';
 
-export interface SaleLineInput {
-  roastBatchId: string;
-  quantity: number;
-  pricePerKg: number;
-}
+/** One sale line: roasted coffee from a roast batch, or green beans from a stock row. */
+export type SaleLineInput =
+  | { roastBatchId: string; quantity: number; pricePerKg: number }
+  | { roasterInventoryId: string; quantity: number; pricePerKg: number };
 
 export interface SaleOrderInput {
   customerId: string;
@@ -25,15 +26,25 @@ export interface SaleOrderInput {
   items?: SaleLineInput[];
 }
 
+/** A new sale. Admin only: `sellerId` records it for that roaster, from that roaster's stock. */
+export type CreateSaleOrderInput = SaleOrderInput & { sellerId?: string };
+
 export interface AffectedRoastBatch {
   id: string;
   soldWeightKg: number;
   availableKg: number;
 }
 
+/** A stock row whose green kg a sale took or gave back. */
+export interface AffectedInventoryItem {
+  id: string;
+  remainingWeightKg: number;
+}
+
 export interface SaleMutationResult {
   saleOrder: SaleOrder;
   affectedRoastBatches: AffectedRoastBatch[];
+  affectedInventoryItems: AffectedInventoryItem[];
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- raw backend JSON */
@@ -64,6 +75,19 @@ export function transformRoastSummary(raw: any): RoastSaleSummary {
   };
 }
 
+export function transformGreenSummary(raw: any): GreenStockSummary {
+  return {
+    id: raw.id,
+    label: optionalString(raw.label) ?? toRoaId(raw.greenBeanLotId ?? raw.id),
+    greenBeanLotId: raw.greenBeanLotId,
+    greenBeanLotDisplayId: optionalString(raw.greenBeanLotDisplayId),
+    grade: optionalString(raw.grade),
+    variety: optionalString(raw.variety),
+    process: optionalString(raw.process),
+    availableKg: numberOr(raw.availableKg, 0),
+  };
+}
+
 // Tolerates the sale JSON of the backend that was live before roast sales
 // (no roast, invoiceCount, updatedAt or customer snapshots).
 export function transformSaleOrderFromBackend(order: any): SaleOrder {
@@ -90,12 +114,14 @@ export function transformSaleOrderFromBackend(order: any): SaleOrder {
     items: (order.items || []).map((item: any): SaleOrderItem => ({
       id: item.id,
       roastBatchId: item.roastBatchId ?? undefined,
+      roasterInventoryId: item.roasterInventoryId ?? undefined,
       greenBeanLotId: item.greenBeanLotId,
       lotGrade: item.lotGrade || item.greenBeanLot?.grade || '',
       quantity: numberOr(item.quantity, 0),
       pricePerKg: numberOr(item.pricePerKg, 0),
       subtotal: numberOr(item.subtotal, 0),
       roast: item.roast ? transformRoastSummary(item.roast) : undefined,
+      green: item.green ? transformGreenSummary(item.green) : undefined,
     })),
     totalAmount: numberOr(order.totalAmount, 0),
     currency: order.currency || 'THB',
@@ -114,6 +140,14 @@ const transformAffected = (raw: any): AffectedRoastBatch[] =>
         id: b.id,
         soldWeightKg: numberOr(b.soldWeightKg, 0),
         availableKg: numberOr(b.availableKg, 0),
+      }))
+    : [];
+
+const transformAffectedInventory = (raw: any): AffectedInventoryItem[] =>
+  Array.isArray(raw)
+    ? raw.map((b: any) => ({
+        id: b.id,
+        remainingWeightKg: numberOr(b.remainingWeightKg, 0),
       }))
     : [];
 
@@ -166,17 +200,39 @@ export const getSellableRoasts = async (
   }
 };
 
+/** Green stock rows with kg left to sell (the viewer's own; an admin may ask for a roaster's). */
+export const getSellableGreenLots = async (roasterId?: string): Promise<SellableGreenLot[]> => {
+  try {
+    const response = await api.get<{ greenLots: any[] }>(
+      '/roaster-inventory/sellable',
+      roasterId ? { roasterId } : undefined
+    );
+    return (response.greenLots || []).map((raw: any): SellableGreenLot => ({
+      ...transformGreenSummary(raw),
+      roasterId: raw.roasterId,
+    }));
+  } catch (error) {
+    throw new Error(handleApiError(error, 'fetch green beans to sell'));
+  }
+};
+
 // Create, update and delete rethrow the server's error unchanged: its
 // message is written for the user and the popups show it as it is.
 
-export const createSaleOrder = async (input: SaleOrderInput): Promise<SaleMutationResult> => {
-  const response = await api.post<{ saleOrder: any; affectedRoastBatches?: any[] }>(
-    '/sale-orders',
-    input
-  );
+export const createSaleOrder = async ({
+  sellerId,
+  ...input
+}: CreateSaleOrderInput): Promise<SaleMutationResult> => {
+  // sellerId goes out only when given: a sale of one's own stock never names a seller.
+  const response = await api.post<{
+    saleOrder: any;
+    affectedRoastBatches?: any[];
+    affectedInventoryItems?: any[];
+  }>('/sale-orders', sellerId ? { ...input, sellerId } : input);
   return {
     saleOrder: transformSaleOrderFromBackend(response.saleOrder),
     affectedRoastBatches: transformAffected(response.affectedRoastBatches),
+    affectedInventoryItems: transformAffectedInventory(response.affectedInventoryItems),
   };
 };
 
@@ -184,25 +240,34 @@ export const updateSaleOrder = async (
   id: string,
   input: Partial<SaleOrderInput> & { status?: SaleOrderStatus; expectedUpdatedAt: string }
 ): Promise<SaleMutationResult> => {
-  const response = await api.put<{ saleOrder: any; affectedRoastBatches?: any[] }>(
-    `/sale-orders/${id}`,
-    input
-  );
+  const response = await api.put<{
+    saleOrder: any;
+    affectedRoastBatches?: any[];
+    affectedInventoryItems?: any[];
+  }>(`/sale-orders/${id}`, input);
   return {
     saleOrder: transformSaleOrderFromBackend(response.saleOrder),
     affectedRoastBatches: transformAffected(response.affectedRoastBatches),
+    affectedInventoryItems: transformAffectedInventory(response.affectedInventoryItems),
   };
 };
 
 export const deleteSaleOrder = async (
   id: string,
   expectedUpdatedAt: string
-): Promise<{ affectedRoastBatches: AffectedRoastBatch[]; deletedInvoices: number }> => {
-  const response = await api.delete<{ affectedRoastBatches?: any[]; deletedInvoices?: number }>(
-    `/sale-orders/${id}?expectedUpdatedAt=${encodeURIComponent(expectedUpdatedAt)}`
-  );
+): Promise<{
+  affectedRoastBatches: AffectedRoastBatch[];
+  affectedInventoryItems: AffectedInventoryItem[];
+  deletedInvoices: number;
+}> => {
+  const response = await api.delete<{
+    affectedRoastBatches?: any[];
+    affectedInventoryItems?: any[];
+    deletedInvoices?: number;
+  }>(`/sale-orders/${id}?expectedUpdatedAt=${encodeURIComponent(expectedUpdatedAt)}`);
   return {
     affectedRoastBatches: transformAffected(response?.affectedRoastBatches),
+    affectedInventoryItems: transformAffectedInventory(response?.affectedInventoryItems),
     deletedInvoices: numberOr(response?.deletedInvoices, 0),
   };
 };
@@ -215,12 +280,18 @@ export const compareSalesNewestFirst = (a: SaleOrder, b: SaleOrder): number =>
 
 /**
  * Merges a sale change into the app data without a full reload: upserts or
- * removes the sale (keeping the list newest first) and patches the sold kg of
- * the roasts the change touched.
+ * removes the sale (keeping the list newest first), patches the sold kg of
+ * the roasts the change touched and the green kg left in the stock rows it
+ * took from or gave back to.
  */
 export function applySaleChange(
   prev: AppData,
-  change: { upsert?: SaleOrder; removeId?: string; affectedRoastBatches?: AffectedRoastBatch[] }
+  change: {
+    upsert?: SaleOrder;
+    removeId?: string;
+    affectedRoastBatches?: AffectedRoastBatch[];
+    affectedInventoryItems?: AffectedInventoryItem[];
+  }
 ): AppData {
   let saleOrders = prev.saleOrders;
   if (change.removeId) {
@@ -242,5 +313,13 @@ export function applySaleChange(
       })
     : prev.roastBatches;
 
-  return { ...prev, saleOrders, roastBatches };
+  const affectedStock = new Map((change.affectedInventoryItems ?? []).map((i) => [i.id, i]));
+  const roasterInventory = affectedStock.size
+    ? prev.roasterInventory.map((item) => {
+        const hit = affectedStock.get(item.id);
+        return hit ? { ...item, remainingWeightKg: hit.remainingWeightKg } : item;
+      })
+    : prev.roasterInventory;
+
+  return { ...prev, saleOrders, roastBatches, roasterInventory };
 }

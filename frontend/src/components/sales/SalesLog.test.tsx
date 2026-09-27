@@ -5,11 +5,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppData, SaleOrder, User } from '../../types'
 import type { SaleOrdersStatus } from '../../hooks/useDataContext'
 import { csvFilename, downloadCsv } from '../../utils/exportCSV'
-import { createSaleOrder, getSellableRoasts } from '../../services/sales/saleOrderService'
+import {
+  createSaleOrder,
+  getSellableGreenLots,
+  getSellableRoasts,
+} from '../../services/sales/saleOrderService'
 import {
   TestDataProvider,
   appData,
   customer,
+  greenStock,
   roast,
   roasterUser,
   sale,
@@ -38,6 +43,7 @@ vi.mock('../../utils/exportCSV', async (importOriginal) => ({
 vi.mock('../../services/sales/saleOrderService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/sales/saleOrderService')>()),
   getSellableRoasts: vi.fn(),
+  getSellableGreenLots: vi.fn(),
   createSaleOrder: vi.fn(),
 }))
 
@@ -114,6 +120,7 @@ describe('SalesLog', { timeout: 20000 }, () => {
   beforeEach(() => {
     vi.clearAllMocks()
     auth.currentUser = roasterUser
+    vi.mocked(getSellableGreenLots).mockResolvedValue([])
   })
 
   it('lists sales newest first and narrows them by date', () => {
@@ -223,7 +230,7 @@ describe('SalesLog', { timeout: 20000 }, () => {
     const [filename, headers, rows] = vi.mocked(downloadCsv).mock.calls[0]
     expect(filename).toBe('sales_2026-09-23.csv')
     expect(headers).toEqual([
-      'Sale #', 'Date', 'Status', 'Customer', 'Customer type', 'Roast ID', 'Roast date', 'Roast level',
+      'Sale #', 'Date', 'Status', 'Customer', 'Customer type', 'Item', 'Roast ID', 'Roast date', 'Roast level',
       'Green lot', 'Grade', 'Variety', 'Process', 'Kg', 'Price per kg', 'Line total', 'Sale total',
       'Currency', 'Notes',
     ])
@@ -231,15 +238,69 @@ describe('SalesLog', { timeout: 20000 }, () => {
     expect(rows.some((row) => row[0] === 'ORD-2026-0999')).toBe(false)
     // Newest first, as shown; the sale total only on each sale's first line.
     expect(rows[0]).toEqual([
-      'ORD-2026-0124', '2026-08-25', 'Confirmed', 'Cafe Aroma', 'Retailer', 'RB-1024', '2026-09-10',
+      'ORD-2026-0124', '2026-08-25', 'Confirmed', 'Cafe Aroma', 'Retailer', 'Roasted', 'RB-1024', '2026-09-10',
       'Medium', 'GBL-2026-7', 'Grade A', 'Typica', 'Washed', '1.500', '300.00', '450.00', '552.63',
       'THB', '',
     ])
     expect(rows[1].slice(0, 1)).toEqual(['ORD-2026-0124'])
-    expect(rows[1][5]).toBe('RB-2024')
-    expect(rows[1][12]).toBe('0.250')
-    expect(rows[1][15]).toBe('')
+    expect(rows[1][6]).toBe('RB-2024')
+    expect(rows[1][13]).toBe('0.250')
+    expect(rows[1][16]).toBe('')
     expect(rows[49][0]).toBe('ORD-2026-0100')
+  })
+
+  it('exports a green-bean line with its lot and blank roast columns', () => {
+    const greenSale = sale({
+      id: 'g1',
+      orderNumber: 'ORD-2026-0050',
+      items: [
+        saleItem({
+          id: 'g1-a',
+          quantity: 5,
+          pricePerKg: 320,
+          lotGrade: 'Grade AA',
+          green: greenStock({ label: 'ROA-4412', greenBeanLotDisplayId: 'GBL-2026-9', variety: 'Geisha', process: 'Natural' }),
+        }),
+        saleItem({ id: 'g1-b', roast: undefined, roastBatchId: undefined, quantity: 1, pricePerKg: 100 }),
+      ],
+    })
+    renderLog({ data: appData({ customers: [aroma], saleOrders: [greenSale] }) })
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
+
+    const rows = vi.mocked(downloadCsv).mock.calls[0][2]
+    expect(rows[0].slice(5, 13)).toEqual([
+      'Green beans', '', '', '', 'GBL-2026-9', 'Grade AA', 'Geisha', 'Natural',
+    ])
+    expect(rows[1][5]).toBe('Green beans (older sale)')
+  })
+
+  it('finds green-bean sales by searching green', () => {
+    const greenSale = sale({
+      id: 'g1',
+      orderNumber: 'ORD-2026-0050',
+      orderDate: '2026-09-20',
+      createdAt: '2026-09-20T01:00:00.000Z',
+      items: [saleItem({ id: 'g1-a', green: greenStock({ label: 'ROA-4412' }) })],
+    })
+    renderLog({ data: appData({ customers: [aroma, blueDoor], saleOrders: [greenSale, s2, s1] }) })
+
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'green' } })
+    expect(shownSales()).toEqual(['Sale ORD-2026-0050'])
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'roa-4412' } })
+    expect(shownSales()).toEqual(['Sale ORD-2026-0050'])
+  })
+
+  it('splits Kg sold into roasted and green once a green line counts', () => {
+    const greenSale = sale({
+      id: 'g1',
+      orderNumber: 'ORD-2026-0050',
+      orderDate: '2026-09-20',
+      createdAt: '2026-09-20T01:00:00.000Z',
+      items: [saleItem({ id: 'g1-a', quantity: 5, green: greenStock() })],
+    })
+    renderLog({ data: appData({ customers: [aroma, blueDoor], saleOrders: [greenSale, s3, s2, s1] }) })
+
+    expect(screen.getByTestId('totals-kg')).toHaveTextContent('6 roasted · 5 green')
   })
 
   it('disables Export when nothing matches', () => {
@@ -283,11 +344,15 @@ describe('SalesLog', { timeout: 20000 }, () => {
   it('shows the details of a sale right after it is recorded', async () => {
     const recorded = sale({ id: 'new', orderNumber: 'ORD-2026-0042', orderDate: '2026-09-22', createdAt: '2026-09-22T05:00:00.000Z' })
     vi.mocked(getSellableRoasts).mockResolvedValue({ roasts: [sellable({ id: 'rb-1' })], missingWeightCount: 0 })
-    vi.mocked(createSaleOrder).mockResolvedValue({ saleOrder: recorded, affectedRoastBatches: [] })
+    vi.mocked(createSaleOrder).mockResolvedValue({
+      saleOrder: recorded,
+      affectedRoastBatches: [],
+      affectedInventoryItems: [],
+    })
     renderLog({ url: '/sales?customer=cust-1' })
 
     fireEvent.click(screen.getByRole('button', { name: 'New sale' }))
-    const roastGroup = await screen.findByRole('group', { name: 'Roast for line 1' })
+    const roastGroup = await screen.findByRole('group', { name: 'Item for line 1' })
     fireEvent.click(within(roastGroup).getAllByRole('button')[0])
     fireEvent.click(within(roastGroup).getByRole('button', { name: /RB-0421/ }))
     fireEvent.change(screen.getByLabelText('Kg'), { target: { value: '1' } })
@@ -319,11 +384,11 @@ describe('SalesLog', { timeout: 20000 }, () => {
     expect(screen.getByText('No sales for Quiet Corner yet')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Sell to Quiet Corner' }))
 
-    const dialog = screen.getByRole('dialog', { name: 'Sell roasted coffee' })
+    const dialog = screen.getByRole('dialog', { name: 'Sell coffee' })
     expect(within(within(dialog).getByRole('group', { name: 'Customer' })).getByRole('button')).toHaveTextContent(
       'Quiet Corner (Retailer)',
     )
-    await within(dialog).findByRole('group', { name: 'Roast for line 1' })
+    await within(dialog).findByRole('group', { name: 'Item for line 1' })
   })
 
   it('starts a new sale with the chosen customer from the no-sales-yet state too', async () => {
@@ -336,10 +401,10 @@ describe('SalesLog', { timeout: 20000 }, () => {
     const emptyState = screen.getByText('No sales yet').parentElement as HTMLElement
     fireEvent.click(within(emptyState).getByRole('button', { name: 'New sale' }))
 
-    const dialog = screen.getByRole('dialog', { name: 'Sell roasted coffee' })
+    const dialog = screen.getByRole('dialog', { name: 'Sell coffee' })
     expect(within(within(dialog).getByRole('group', { name: 'Customer' })).getByRole('button')).toHaveTextContent(
       'Quiet Corner (Retailer)',
     )
-    await within(dialog).findByRole('group', { name: 'Roast for line 1' })
+    await within(dialog).findByRole('group', { name: 'Item for line 1' })
   })
 })

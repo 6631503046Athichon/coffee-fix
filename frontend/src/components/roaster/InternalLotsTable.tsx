@@ -144,7 +144,7 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-mono text-sm font-bold text-[#294936]">
-                        {toRoaId(lot.id)}
+                        {toRoaId(lot.greenBeanLotId)}
                       </p>
                       <p className="mt-1 text-xs font-medium text-[#8b9a90]">
                         Internal roasting stock

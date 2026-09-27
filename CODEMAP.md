@@ -178,7 +178,7 @@ Every file lives in a domain folder; the root holds only those folders and a `RE
   - `processor/modals/` — `CompleteBatchModal`, `HullAndGradeModal`, `ParchmentWithdrawModal`, `StartProcessingModal`
 - `roaster/` — `RoasterWorkbench`, `InternalLotsTable`, `ExternalLotsTable`, `RoastLogPanel`
 - `sales/` — `CustomerManagement`, `SalesLog` (route `/sales`), `saleDisplay` (shared chips and formatters), `SaleReceipt` (print-only receipt)
-  - `sales/modals/` — `CreateCustomerModal`, `SaleOrderModal` (sell / edit), `SaleDetailsModal` (status chips, print, delete)
+  - `sales/modals/` — `CreateCustomerModal`, `SaleOrderModal` (sell / edit; an Admin recording a new sale picks the roaster in "Sell for" (their own stock is "Me" at the top), or gets one as `sellerId` from Start roast → Sell, and the lists load that roaster's stock), `SaleDetailsModal` (status chips, print, delete)
 - `traceability/` — `TraceabilityHub`, `TraceabilityPage`, `PublicTraceabilityPage`
   - `traceability/modals/` — `QRCodeModal` (mints public trace IDs, hence not in `common/`)
 - `insights/` — `QualityInsights`

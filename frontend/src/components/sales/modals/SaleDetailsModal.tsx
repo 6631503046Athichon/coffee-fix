@@ -14,6 +14,7 @@ import {
 } from '../../../services/sales/saleOrderService'
 import SaleReceipt from '../SaleReceipt'
 import {
+  GreenBeansTag,
   RoastLevelTag,
   SALE_STATUSES,
   SaleStatusChip,
@@ -134,6 +135,7 @@ const SaleDetailsDialog: React.FC<Omit<SaleDetailsModalProps, 'order'> & { order
         applySaleChange(prev, {
           upsert: result.saleOrder,
           affectedRoastBatches: result.affectedRoastBatches,
+          affectedInventoryItems: result.affectedInventoryItems,
         }),
       )
       setMode('view')
@@ -153,6 +155,7 @@ const SaleDetailsDialog: React.FC<Omit<SaleDetailsModalProps, 'order'> & { order
         applySaleChange(prev, {
           removeId: order.id,
           affectedRoastBatches: result.affectedRoastBatches,
+          affectedInventoryItems: result.affectedInventoryItems,
         }),
       )
       addToast({ type: 'success', message: `Sale ${order.orderNumber} deleted` })
@@ -280,6 +283,19 @@ const SaleDetailsDialog: React.FC<Omit<SaleDetailsModalProps, 'order'> & { order
                             <RoastLevelTag level={item.roast.roastLevel} />
                           </div>
                           <p className="text-gray-600">{describeBean(item) || 'Roasted coffee'}</p>
+                        </>
+                      ) : item.green ? (
+                        <>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="font-semibold text-gray-900">{item.green.label}</span>
+                            <GreenBeansTag />
+                            {item.green.greenBeanLotDisplayId && (
+                              <span className="text-xs text-gray-500">
+                                {item.green.greenBeanLotDisplayId}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-gray-600">{describeBean(item) || 'Green beans'}</p>
                         </>
                       ) : (
                         <p className="text-gray-700">{describeLine(item)}</p>

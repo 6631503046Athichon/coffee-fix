@@ -7,9 +7,11 @@ import { RoastLevel, UserRole } from '../types'
 import type {
   AppData,
   Customer,
+  GreenStockSummary,
   RoastSaleSummary,
   SaleOrder,
   SaleOrderItem,
+  SellableGreenLot,
   SellableRoast,
   User,
 } from '../types'
@@ -50,14 +52,36 @@ export const sellable = (over: Partial<SellableRoast> = {}): SellableRoast => ({
   ...over,
 })
 
+/** Green beans in a roaster's stock row, as on a sale line. */
+export const greenStock = (over: Partial<GreenStockSummary> = {}): GreenStockSummary => ({
+  id: 'inv-1',
+  label: 'ROA-4412',
+  greenBeanLotId: 'gbl-9',
+  greenBeanLotDisplayId: 'GBL-2026-9',
+  grade: 'Grade A',
+  variety: 'Typica',
+  process: 'Washed',
+  availableKg: 12,
+  ...over,
+})
+
+export const sellableGreen = (over: Partial<SellableGreenLot> = {}): SellableGreenLot => ({
+  ...greenStock(),
+  roasterId: roasterUser.id,
+  ...over,
+})
+
+/** A roasted line by default; pass `green` for a green-bean line from a stock row. */
 export const saleItem = (over: Partial<SaleOrderItem> = {}): SaleOrderItem => {
-  const r = over.roast === undefined && !('roast' in over) ? roast() : over.roast
+  const g = over.green
+  const r = g || (over.roast === undefined && 'roast' in over) ? over.roast : (over.roast ?? roast())
   const quantity = over.quantity ?? 2
   const pricePerKg = over.pricePerKg ?? 500
   return {
     id: 'item-1',
     roastBatchId: r?.id,
-    greenBeanLotId: r?.greenBeanLotId ?? 'gbl-1',
+    ...(g ? { roasterInventoryId: g.id, green: g } : {}),
+    greenBeanLotId: r?.greenBeanLotId ?? g?.greenBeanLotId ?? 'gbl-1',
     lotGrade: 'Grade A',
     quantity,
     pricePerKg,

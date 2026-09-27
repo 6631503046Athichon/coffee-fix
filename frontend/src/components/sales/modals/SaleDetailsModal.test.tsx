@@ -3,10 +3,12 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SaleOrder, User } from '../../../types'
 import { deleteSaleOrder, updateSaleOrder } from '../../../services/sales/saleOrderService'
+import type { RoasterInventoryItem } from '../../../types'
 import {
   TestDataProvider,
   adminUser,
   appData,
+  greenStock,
   roast,
   roasterUser,
   sale,
@@ -35,11 +37,28 @@ const twoLineSale = sale({
   ],
 })
 
+const mixedSale = sale({
+  items: [
+    saleItem({ id: 'l1', quantity: 2.5, roast: roast({ id: 'rb-1', label: 'RB-0421' }) }),
+    saleItem({ id: 'l2', quantity: 5, pricePerKg: 320, green: greenStock({ id: 'inv-1', label: 'ROA-4412' }) }),
+  ],
+})
+
+const stockRow: RoasterInventoryItem = {
+  id: 'inv-1',
+  roasterId: roasterUser.id,
+  greenBeanLotId: 'gbl-9',
+  claimedWeightKg: 20,
+  remainingWeightKg: 7,
+}
+
 const renderDetails = (
   order: SaleOrder = twoLineSale,
   initialMode?: 'view' | 'confirm-delete',
 ) => {
-  const handle: TestDataHandle = { current: appData({ saleOrders: [order] }) }
+  const handle: TestDataHandle = {
+    current: appData({ saleOrders: [order], roasterInventory: [stockRow] }),
+  }
   const onClose = vi.fn()
   const onEdit = vi.fn()
   const refreshData = vi.fn(async () => {})
@@ -83,6 +102,7 @@ describe('SaleDetailsModal', { timeout: 20000 }, () => {
     vi.mocked(updateSaleOrder).mockResolvedValue({
       saleOrder: cancelled,
       affectedRoastBatches: [{ id: 'rb-1', soldWeightKg: 0, availableKg: 10 }],
+      affectedInventoryItems: [],
     })
     const { handle } = renderDetails()
 
@@ -126,7 +146,11 @@ describe('SaleDetailsModal', { timeout: 20000 }, () => {
   })
 
   it('confirms a delete with what goes back to stock and the invoices that go too', async () => {
-    vi.mocked(deleteSaleOrder).mockResolvedValue({ affectedRoastBatches: [], deletedInvoices: 2 })
+    vi.mocked(deleteSaleOrder).mockResolvedValue({
+      affectedRoastBatches: [],
+      affectedInventoryItems: [],
+      deletedInvoices: 2,
+    })
     const { handle, onClose } = renderDetails({ ...twoLineSale, invoiceCount: 2, status: 'Delivered' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
@@ -177,6 +201,57 @@ describe('SaleDetailsModal', { timeout: 20000 }, () => {
     expect(document.getElementById('sale-print-root')).toBeNull()
     expect(document.body).not.toHaveClass('printing-sale-receipt')
     print.mockRestore()
+  })
+
+  it('shows a green-bean line with its lot, the Green beans tag and the GBL id', () => {
+    renderDetails(mixedSale)
+    const dialog = screen.getByRole('dialog', { name: 'Sale ORD-2026-0001' })
+
+    expect(within(dialog).getByText('ROA-4412')).toBeInTheDocument()
+    expect(within(dialog).getByText('Green beans')).toBeInTheDocument()
+    expect(within(dialog).getByText('GBL-2026-9')).toBeInTheDocument()
+    expect(within(dialog).getAllByText('Grade A Typica Washed')).toHaveLength(2)
+  })
+
+  it('says green kg go back to the stock row, and passes the stock changes on', async () => {
+    vi.mocked(updateSaleOrder).mockResolvedValue({
+      saleOrder: { ...mixedSale, status: 'Cancelled', updatedAt: '2026-09-21T00:00:00.000Z' },
+      affectedRoastBatches: [],
+      affectedInventoryItems: [{ id: 'inv-1', remainingWeightKg: 12 }],
+    })
+    const { handle } = renderDetails(mixedSale)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelled' }))
+    const confirm = screen.getByRole('alertdialog', { name: 'Cancel sale ORD-2026-0001?' })
+    expect(confirm).toHaveTextContent('2.5 kg back to RB-0421, 5 kg of green beans back to ROA-4412.')
+
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel sale' }))
+    await waitFor(() => expect(handle.current.roasterInventory[0].remainingWeightKg).toBe(12))
+  })
+
+  it('names the green kg a delete gives back and patches the stock row', async () => {
+    vi.mocked(deleteSaleOrder).mockResolvedValue({
+      affectedRoastBatches: [],
+      affectedInventoryItems: [{ id: 'inv-1', remainingWeightKg: 12 }],
+      deletedInvoices: 0,
+    })
+    const { handle, onClose } = renderDetails(mixedSale, 'confirm-delete')
+
+    const confirm = screen.getByRole('alertdialog', { name: 'Delete sale ORD-2026-0001?' })
+    expect(confirm).toHaveTextContent('5 kg of green beans back to ROA-4412')
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Delete sale' }))
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    await waitFor(() => expect(handle.current.roasterInventory[0].remainingWeightKg).toBe(12))
+  })
+
+  it('prints a green-bean line as Green beans with its lot', () => {
+    renderDetails(mixedSale)
+    const receipt = document.getElementById('sale-print-root') as HTMLElement
+
+    expect(within(receipt).getByRole('columnheader', { name: 'Item' })).toBeInTheDocument()
+    expect(within(receipt).getByText('Green beans')).toBeInTheDocument()
+    expect(within(receipt).getByText('ROA-4412 · GBL-2026-9')).toBeInTheDocument()
   })
 
   it('hands the sale to onEdit', () => {

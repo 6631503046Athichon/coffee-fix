@@ -63,7 +63,7 @@ const SaleReceipt: React.FC<{ order: SaleOrder }> = ({ order }) => {
       <table className="mt-5 w-full border-collapse text-left">
         <thead>
           <tr className="border-b border-gray-400 text-xs uppercase tracking-wider text-gray-500">
-            <th className="py-1.5 pr-3 font-semibold">Roast</th>
+            <th className="py-1.5 pr-3 font-semibold">Item</th>
             <th className="py-1.5 pr-3 font-semibold">Coffee</th>
             <th className="py-1.5 pr-3 text-right font-semibold">Kg</th>
             <th className="py-1.5 pr-3 text-right font-semibold">Price/kg</th>
@@ -79,6 +79,17 @@ const SaleReceipt: React.FC<{ order: SaleOrder }> = ({ order }) => {
                     <span className="font-semibold">{item.roast.label}</span>
                     <span className="block text-xs text-gray-500">
                       {formatSaleDate(item.roast.roastDate)} · {item.roast.roastLevel ?? 'No level'}
+                    </span>
+                  </td>
+                  <td className="py-1.5 pr-3">{describeBean(item)}</td>
+                </>
+              ) : item.green ? (
+                <>
+                  <td className="py-1.5 pr-3">
+                    <span className="font-semibold">Green beans</span>
+                    <span className="block text-xs text-gray-500">
+                      {item.green.label}
+                      {item.green.greenBeanLotDisplayId ? ` · ${item.green.greenBeanLotDisplayId}` : ''}
                     </span>
                   </td>
                   <td className="py-1.5 pr-3">{describeBean(item)}</td>

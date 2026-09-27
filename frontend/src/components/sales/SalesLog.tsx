@@ -18,6 +18,7 @@ import {
   formatKg,
   formatMoney,
   formatSaleDate,
+  lineKind,
   saleCustomerName,
   totalsByCurrency,
 } from './saleDisplay'
@@ -39,6 +40,7 @@ const CSV_HEADERS = [
   'Status',
   'Customer',
   'Customer type',
+  'Item',
   'Roast ID',
   'Roast date',
   'Roast level',
@@ -65,6 +67,11 @@ const matchesSearch = (order: SaleOrder, query: string): boolean =>
       item.roast?.variety,
       item.roast?.process,
       item.roast?.greenBeanLotDisplayId,
+      item.green?.label,
+      item.green?.variety,
+      item.green?.process,
+      item.green?.greenBeanLotDisplayId,
+      item.roastBatchId ? undefined : 'green beans',
     ]),
   ].some((value) => !!value && value.toLowerCase().includes(query))
 
@@ -200,6 +207,12 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
     (sum, o) => sum + o.items.reduce((s, item) => s + item.quantity, 0),
     0,
   )
+  // Green beans (lines not sold from a roast) are counted apart from roasted coffee.
+  const greenKgSold = counted.reduce(
+    (sum, o) => sum + o.items.reduce((s, item) => (item.roastBatchId ? s : s + item.quantity), 0),
+    0,
+  )
+  const anyGreenCounted = counted.some((o) => o.items.some((item) => !item.roastBatchId))
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const currentPage = Math.min(page, pageCount)
@@ -261,19 +274,21 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
         ...(isAdmin ? [order.creatorName ?? ''] : []),
       ]
       if (order.items.length === 0) {
-        rows.push([...sale, ...Array<CsvCell>(10).fill(''), ...tail(true)])
+        rows.push([...sale, ...Array<CsvCell>(11).fill(''), ...tail(true)])
         continue
       }
       order.items.forEach((item, index) => {
+        const source = item.roast ?? item.green
         rows.push([
           ...sale,
+          lineKind(item),
           item.roast?.label ?? '',
           csvDate(item.roast?.roastDate),
           item.roast?.roastLevel ?? '',
-          item.roast?.greenBeanLotDisplayId ?? '',
+          item.roast?.greenBeanLotDisplayId ?? item.green?.greenBeanLotDisplayId ?? item.green?.label ?? '',
           item.lotGrade,
-          item.roast?.variety ?? '',
-          item.roast?.process ?? '',
+          source?.variety ?? '',
+          source?.process ?? '',
           csvFixed(item.quantity, 3),
           csvFixed(item.pricePerKg, 2),
           csvFixed(item.subtotal, 2),
@@ -345,7 +360,7 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
         <div className="px-4 py-10 text-center">
           <Receipt className="mx-auto h-8 w-8 text-gray-300" />
           <p className="mt-2 font-semibold text-gray-800">No sales yet</p>
-          <p className="text-sm text-gray-500">Record a sale of roasted coffee to a customer.</p>
+          <p className="text-sm text-gray-500">Record a sale of roasted coffee or green beans to a customer.</p>
           <button
             type="button"
             onClick={() => setPanel({ kind: 'create', customerId: customerId || undefined })}
@@ -380,7 +395,7 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">Sales</h1>
-              <p className="text-sm text-gray-500">Roasted coffee you have sold</p>
+              <p className="text-sm text-gray-500">Coffee you have sold</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -497,7 +512,9 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
           <span>
             <span className="text-gray-500">Kg sold</span>{' '}
             <span className="font-semibold text-gray-900" data-testid="totals-kg">
-              {formatKg(kgSold)}
+              {anyGreenCounted
+                ? `${formatKg(kgSold - greenKgSold)} roasted · ${formatKg(greenKgSold)} green`
+                : formatKg(kgSold)}
             </span>
           </span>
           <span>

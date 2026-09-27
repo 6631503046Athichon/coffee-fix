@@ -36,10 +36,33 @@ export interface SellableRoast extends RoastSaleSummary {
   roasterId: string;
 }
 
+/** Green beans in a roaster's stock (a RoasterInventoryItem), as on a sale and in the list that can be sold. */
+export interface GreenStockSummary {
+  /** RoasterInventoryItem id */
+  id: string;
+  /** 'ROA-1234' from the green lot id: the id the roaster pages show */
+  label: string;
+  greenBeanLotId: string;
+  /** 'GBL-2026-7' */
+  greenBeanLotDisplayId?: string;
+  /** Live grade of the green lot; sale lines show their own lotGrade snapshot instead. */
+  grade?: string;
+  variety?: string;
+  process?: string;
+  /** Green kg in the stock row that no sale holds. */
+  availableKg: number;
+}
+
+export interface SellableGreenLot extends GreenStockSummary {
+  roasterId: string;
+}
+
 export interface SaleOrderItem {
   id: string;
-  /** Set on roasted-coffee lines; missing on lines recorded before roast sales. */
+  /** Set on roasted-coffee lines. */
   roastBatchId?: string;
+  /** Set on green-bean lines sold from a roaster's stock. Lines recorded before roast sales have neither. */
+  roasterInventoryId?: string;
   greenBeanLotId: string;
   /** Grade of the green lot when the sale was recorded. */
   lotGrade: string;
@@ -48,6 +71,7 @@ export interface SaleOrderItem {
   pricePerKg: number;
   subtotal: number;
   roast?: RoastSaleSummary;
+  green?: GreenStockSummary;
 }
 
 /** The customer as it is now (the sale keeps its own name/phone/address snapshot). */

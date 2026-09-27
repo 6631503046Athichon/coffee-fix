@@ -205,7 +205,7 @@ const CustomerManagement: React.FC = () => {
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">Customer Management</h1>
-              <p className="text-sm text-gray-500">Customers you sell roasted coffee to</p>
+              <p className="text-sm text-gray-500">Customers you sell coffee to</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -358,7 +358,9 @@ const CustomerManagement: React.FC = () => {
       <SaleOrderModal
         isOpen={!!sellTo}
         initialCustomerId={sellTo?.id}
-        onClose={() => setSellTo(null)}
+        // Reload the table: a customer added with the popup's New customer is
+        // only in the app data until then.
+        onClose={() => { setSellTo(null); fetchCustomers(); }}
         onSaved={(saved) =>
           navigate(`/sales?customer=${encodeURIComponent(saved.customerId)}&sale=${encodeURIComponent(saved.id)}`)
         }

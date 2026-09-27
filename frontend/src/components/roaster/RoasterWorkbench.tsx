@@ -16,7 +16,7 @@ import {
   GreenBeanSourceType,
   UserRole,
 } from '../../types'
-import { Package, Flame, Coffee, Loader2, ArrowRight, X } from 'lucide-react'
+import { Package, Flame, Coffee, Loader2, ArrowRight, X, HandCoins } from 'lucide-react'
 import ExternalLotsTable from './ExternalLotsTable'
 import InternalLotsTable from './InternalLotsTable'
 import RoastLogPanel from './RoastLogPanel'
@@ -26,6 +26,8 @@ import { claimGreenBeanLot, createRoastBatch } from '../../services/roaster/roas
 import { createGreenBeanLot } from '../../services/lots/greenBeanLotService'
 import { formatGreenBeanId } from '../../utils/formatDisplayId'
 import { useToast } from '../../contexts/ToastContext'
+import { SaleOrderForm } from '../sales/modals/SaleOrderModal'
+import { formatKg } from '../sales/saleDisplay'
 
 interface RoasterWorkbenchProps {
   currentUser: User
@@ -60,7 +62,7 @@ const parseWeightInput = (value: string): number => {
 // Removed local CustomDropdown in favor of shared Select component
 
 const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
-  const { data, setData } = useDataContext()
+  const { data, setData, refreshData } = useDataContext()
   const gradeNames = useGradeNames()
   const location = useLocation()
   const navigate = useNavigate()
@@ -85,6 +87,19 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
   const [roastLevel, setRoastLevel] = useState<RoastLevel>(RoastLevel.Medium)
   const [selectedAromaCategories, setSelectedAromaCategories] = useState<string[]>(['Sweet'])
   const [selectedFlavorTags, setSelectedFlavorTags] = useState<string[]>([])
+  // Start roast offers [Roast | Sell]. Sell sells the lot's green beans
+  // straight to a customer; a purchased lot is claimed into stock first.
+  const [startMode, setStartMode] = useState<'roast' | 'sell'>('roast')
+  const [saleFormMounted, setSaleFormMounted] = useState(false)
+  const [sellInitialKg, setSellInitialKg] = useState<number | undefined>(undefined)
+  const [sellClaimKg, setSellClaimKg] = useState('')
+  const [sellClaimError, setSellClaimError] = useState('')
+  const [isClaimingForSale, setIsClaimingForSale] = useState(false)
+  // Bumped on every open and close, so a claim that finishes after its popup
+  // was closed (or another lot opened) does not switch the popup it no longer belongs to.
+  const startLotSessionRef = useRef(0)
+  // The same number for render (a ref is not read while rendering).
+  const [startLotSession, setStartLotSession] = useState(0)
   const availableLotsRef = useRef<HTMLButtonElement>(null)
   const internalLotsRef = useRef<HTMLButtonElement>(null)
   const [lotsTab, setLotsTab] = useState<'internal' | 'external'>('internal')
@@ -233,9 +248,11 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     [data.roasterInventory, currentUser.id, isAdmin],
   )
 
+  // Like the stock above: Admins see every roast (a roast they log from a
+  // roaster's stock is recorded for that roaster), roasters only their own.
   const myRoasts = useMemo(() => {
     const sortedRoasts = data.roastBatches
-      .filter((roast) => roast.roasterId === currentUser.id)
+      .filter((roast) => isAdmin || roast.roasterId === currentUser.id)
       .sort((a, b) => new Date(b.roastDate).getTime() - new Date(a.roastDate).getTime())
 
     return sortedRoasts
@@ -274,6 +291,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     data.harvestLots,
     data.roasterInventory,
     currentUser.id,
+    isAdmin,
   ])
   // Pagination for Roast Log
   const [page, setPage] = useState(1)
@@ -341,16 +359,29 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     setIsClaimModalOpen(true)
   }
 
+  const resetStartMode = () => {
+    startLotSessionRef.current += 1
+    setStartLotSession(startLotSessionRef.current)
+    setStartMode('roast')
+    setSaleFormMounted(false)
+    setSellInitialKg(undefined)
+    setSellClaimKg('')
+    setSellClaimError('')
+    setIsClaimingForSale(false)
+  }
+
   const openLogRoastModal = (
     inventoryItem: RoasterInventoryItem & { variety: string; process: string },
   ) => {
+    resetStartMode()
     setSelectedInventoryItem(inventoryItem)
     setRoastForm({ batchSize: '', roastedWeight: '', notes: '' })
     setRoastLevel(RoastLevel.Medium)
 
     const existing = (
       data.roastBatches
-        .filter((r) => r.roasterId === currentUser.id && r.roasterInventoryId === inventoryItem.id)
+        // Every roast of a stock row belongs to the row's owner, whoever logged it.
+        .filter((r) => r.roasterInventoryId === inventoryItem.id)
         .at(-1)?.flavorNotes || ''
     )
       .split(',')
@@ -364,6 +395,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
 
   const handleExternalRoast = (lot: GreenBeanLot & { variety: string; process: string }) => {
     // Open form instantly — no API call yet. We claim only the batch amount on submit.
+    resetStartMode()
     setSelectedExternalLot(lot)
     setSelectedInventoryItem(null)
     setRoastForm({ batchSize: '', roastedWeight: '', notes: '' })
@@ -397,9 +429,139 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
   }
 
   const closeLogRoastModal = () => {
+    resetStartMode()
     setIsLogRoastModalOpen(false)
     setSelectedExternalLot(null)
     setIsSubmittingRoast(false)
+  }
+
+  // ── Start roast → Sell ──
+  // A roaster sells from their own stock rows. An Admin may also sell from
+  // another roaster's row: the sale is recorded for that roaster (sellerId),
+  // which the server accepts only for a user with the Roaster role. An owner
+  // the users list does not have is left to the server to check.
+  const rowOwner = selectedInventoryItem
+    ? data.users.find((user) => user.id === selectedInventoryItem.roasterId)
+    : undefined
+  const ownerCanSell = !rowOwner || !!rowOwner.roles?.includes(UserRole.Roaster)
+  const sellRow =
+    selectedInventoryItem &&
+    (selectedInventoryItem.roasterId === currentUser.id || (isAdmin && ownerCanSell))
+      ? selectedInventoryItem
+      : null
+  const canSellHere = !selectedInventoryItem || !!sellRow
+  const sellingForOther = !!sellRow && sellRow.roasterId !== currentUser.id
+  const sellRowOwnerName = sellingForOther
+    ? data.users.find((user) => user.id === sellRow.roasterId)?.name || 'this roaster'
+    : ''
+  const ownStockOfLot = selectedExternalLot
+    ? data.roasterInventory.find(
+        (item) =>
+          item.roasterId === currentUser.id &&
+          item.greenBeanLotId === selectedExternalLot.id &&
+          item.remainingWeightKg > 0.01,
+      )
+    : undefined
+  const shelfKg =
+    data.greenBeanLots.find((lot) => lot.id === selectedExternalLot?.id)?.currentWeightKg ??
+    selectedExternalLot?.currentWeightKg ??
+    0
+
+  // The sale form mounts the first time Sell is chosen, so the lists it sells
+  // from load only then; afterwards it stays mounted to keep what was typed.
+  const chooseStartMode = (mode: 'roast' | 'sell') => {
+    setStartMode(mode)
+    if (mode === 'sell' && sellRow) setSaleFormMounted(true)
+  }
+
+  // Beans the roaster already holds of this purchased lot: sell those, no claim.
+  const sellFromOwnStock = () => {
+    if (!ownStockOfLot || !selectedExternalLot) return
+    setSelectedInventoryItem({
+      ...ownStockOfLot,
+      variety: selectedExternalLot.variety,
+      process: selectedExternalLot.process,
+    })
+    setSelectedExternalLot(null)
+    setSaleFormMounted(true)
+  }
+
+  // A purchased lot is sold from stock: claim the kg first with the existing
+  // claim API, then the popup switches to that stock row (so Roast, too, uses
+  // the row from here on and never claims a second time).
+  const handleClaimForSale = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const lot = selectedExternalLot
+    if (!lot || isClaimingForSale) return
+    const entered = parseWeightInput(sellClaimKg)
+    if (!Number.isFinite(entered) || entered <= 0) {
+      setSellClaimError('Enter the kg you are selling')
+      return
+    }
+    if (entered > shelfKg + 0.0005) {
+      setSellClaimError(`At most ${formatKg(shelfKg)} kg are on the shelf`)
+      return
+    }
+    // Within half a gram of the shelf means all of it: send the shelf's exact
+    // kg, which the claim route's own check (no slack) accepts.
+    const kg = Math.abs(entered - shelfKg) < 0.0005 ? shelfKg : Math.round(entered * 1000) / 1000
+    if (kg <= 0) {
+      setSellClaimError('Enter the kg you are selling')
+      return
+    }
+    // The Sell list (like Internal Lots) leaves out stock rows at 0.01 kg or
+    // less, so a claim that small could never be sold.
+    const heldKg =
+      data.roasterInventory.find(
+        (item) => item.roasterId === currentUser.id && item.greenBeanLotId === lot.id,
+      )?.remainingWeightKg ?? 0
+    if (kg + heldKg <= 0.01) {
+      setSellClaimError('Claim more than 0.01 kg to sell it')
+      return
+    }
+    const session = startLotSessionRef.current
+    setSellClaimError('')
+    setIsClaimingForSale(true)
+    try {
+      const { inventoryItem, updatedSourceLot } = await claimGreenBeanLot(lot.id, kg)
+      setData((prev) => ({
+        ...prev,
+        // Upsert: a roaster has one stock row per lot, which a claim tops up.
+        roasterInventory: prev.roasterInventory.some((item) => item.id === inventoryItem.id)
+          ? prev.roasterInventory.map((item) =>
+              item.id === inventoryItem.id ? inventoryItem : item,
+            )
+          : [...prev.roasterInventory, inventoryItem],
+        greenBeanLots: updatedSourceLot
+          ? prev.greenBeanLots.map((l) =>
+              l.id === updatedSourceLot.id
+                ? {
+                    ...l,
+                    currentWeightKg: updatedSourceLot.currentWeightKg,
+                    availabilityStatus: updatedSourceLot.availabilityStatus,
+                  }
+                : l,
+            )
+          : prev.greenBeanLots,
+      }))
+      addToast({
+        type: 'success',
+        message: `Claimed ${formatKg(kg)} kg into your stock. They stay there if you cancel the sale.`,
+      })
+      if (session !== startLotSessionRef.current) return
+      setSelectedInventoryItem({ ...inventoryItem, variety: lot.variety, process: lot.process })
+      setSelectedExternalLot(null)
+      setSellInitialKg(kg)
+      setSaleFormMounted(true)
+      setIsClaimingForSale(false)
+    } catch (err: unknown) {
+      // The shelf may have shrunk (another roaster claimed from it): reload,
+      // so the shelf kg, Use all and the header show what is left.
+      void refreshData()
+      if (session !== startLotSessionRef.current) return
+      setSellClaimError(err instanceof Error ? err.message : 'Could not claim the green beans')
+      setIsClaimingForSale(false)
+    }
   }
 
   const handleLogRoastSubmit = async (e: React.FormEvent) => {
@@ -859,9 +1021,11 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         onClose={closeLogRoastModal}
         maxWidth="2xl"
         showCloseButton={false}
+        ariaLabelledBy="start-lot-title"
         // Fixed height: picking flavors makes the content longer, and a dialog that is
         // centred and sized by its content would grow up and down under the cursor.
         className="h-[min(90vh,860px)]"
+        mobileFullScreen
       >
         {(selectedInventoryItem || selectedExternalLot) &&
           (() => {
@@ -876,330 +1040,576 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             const remainingAfterRoast = Math.max(0, availableKg - (batchValue || 0))
             const weightInput =
               'block w-full rounded-xl border border-[#d6dfd7] bg-white py-3 pl-4 pr-12 text-xl font-bold text-[#294936] outline-none transition-all duration-200 placeholder:font-semibold placeholder:text-[#b3beb6] focus:border-[#d87832] focus:ring-4 focus:ring-orange-100'
+            const selling = startMode === 'sell'
+            // A sale still saving when this popup is closed (Escape or X) must
+            // not close the popup opened after it: its callbacks belong to this one.
+            const sellSession = startLotSession
+            const closeThisSale = () => {
+              if (sellSession === startLotSessionRef.current) closeLogRoastModal()
+            }
+            // Live kg of the stock row being sold (the popup's copy is a snapshot).
+            const sellRowKg = sellRow
+              ? (data.roasterInventory.find((item) => item.id === sellRow.id)?.remainingWeightKg ??
+                sellRow.remainingWeightKg)
+              : 0
+            const footerClass =
+              'sticky -bottom-8 z-10 -mx-8 -mb-8 mt-6 flex items-center justify-between gap-3 rounded-b-3xl border-t border-[#e8ece8] bg-white px-8 py-4 max-sm:-bottom-4 max-sm:-mx-4 max-sm:-mb-4 max-sm:px-4 max-sm:rounded-none'
+            const chipClass = (active: boolean, activeClass: string) =>
+              `flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-all disabled:cursor-not-allowed disabled:opacity-50 ${active ? activeClass : 'border-[#e2e8e1] bg-white text-[#718077] hover:border-[#b8cabe]'}`
             return (
-              <form
-                onSubmit={handleLogRoastSubmit}
-                className="flex min-h-[calc(min(90vh,860px)_-_4rem)] flex-col text-[#263b31]"
-              >
+              <div className="flex min-h-[calc(min(90vh,860px)_-_4rem)] flex-col text-[#263b31] max-sm:min-h-[calc(100dvh-2rem)]">
                 {/* Header: pinned, only the fields between it and the footer scroll. */}
-                <div className="sticky -top-8 z-10 -mx-8 -mt-8 mb-5 flex items-start justify-between gap-4 rounded-t-3xl bg-white px-8 pb-4 pt-8">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-[#d87832] shadow-sm shadow-orange-200">
-                      <Flame className="h-6 w-6 text-white" />
-                    </div>
-                    <div>
-                      <h2 className="text-2xl font-bold tracking-tight text-gray-900">
-                        Log a new roast
-                      </h2>
-                      <p className="mt-0.5 text-sm text-[#66756b]">
-                        Lot{' '}
-                        <span className="font-mono font-bold text-[#294936]">{toRoaId(lotId)}</span>{' '}
-                        ·{' '}
-                        <span className="font-semibold text-[#2e6848]">
-                          {toFixed2(availableKg)} kg
-                        </span>{' '}
-                        available
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={closeLogRoastModal}
-                    aria-label="Close"
-                    title="Close"
-                    className="-mr-2 -mt-1 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl text-[#718077] transition-colors hover:bg-[#f1f5f1] hover:text-[#294936]"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-
-                <div className="flex-1 space-y-6">
-                  {/* 1. Weights */}
-                  <section>
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <h3 className="text-base font-bold text-[#294936]">1. Batch weights</h3>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setRoastForm({
-                            ...roastForm,
-                            batchSize: toFixed2(availableKg).toString(),
-                          })
-                        }
-                        className="rounded-lg border border-[#f0d3b8] bg-[#fff8ed] px-3 py-1.5 text-xs font-bold text-[#b45f22] transition-colors hover:bg-[#fff1df]"
+                <div className="sticky -top-8 z-10 -mx-8 -mt-8 mb-5 rounded-t-3xl bg-white px-8 pb-4 pt-8 max-sm:-top-4 max-sm:-mx-4 max-sm:-mt-4 max-sm:px-4 max-sm:pt-4 max-sm:rounded-none">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div
+                        className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl shadow-sm ${selling ? 'bg-[#2e6848]' : 'bg-[#d87832] shadow-orange-200'}`}
                       >
-                        Use all {toFixed2(availableKg)} kg
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <div>
-                        <label
-                          htmlFor="roast-batch-size"
-                          className="mb-2 block text-sm font-semibold text-[#46564b]"
-                        >
-                          Green beans in
-                        </label>
-                        <div className="relative">
-                          <input
-                            id="roast-batch-size"
-                            type="number"
-                            min={0.01}
-                            step="any"
-                            required
-                            max={availableKg}
-                            value={roastForm.batchSize}
-                            onChange={(e) =>
-                              setRoastForm({ ...roastForm, batchSize: e.target.value })
-                            }
-                            onInvalid={(e) =>
-                              (e.currentTarget as HTMLInputElement).setCustomValidity(
-                                `Batch size must be between 0.01 and ${availableKg.toFixed(2)} kg`,
-                              )
-                            }
-                            onInput={(e) =>
-                              (e.currentTarget as HTMLInputElement).setCustomValidity('')
-                            }
-                            className={weightInput}
-                            placeholder="0.00"
-                          />
-                          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[#829188]">
-                            kg
-                          </span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label
-                          htmlFor="roast-roasted-weight"
-                          className="mb-2 block text-sm font-semibold text-[#46564b]"
-                        >
-                          Roasted beans out
-                        </label>
-                        <div className="relative">
-                          <input
-                            id="roast-roasted-weight"
-                            type="number"
-                            min={0.01}
-                            step="any"
-                            required
-                            max={parseWeightInput(roastForm.batchSize) || undefined}
-                            value={roastForm.roastedWeight}
-                            onChange={(e) =>
-                              setRoastForm({ ...roastForm, roastedWeight: e.target.value })
-                            }
-                            onInvalid={(e) =>
-                              (e.currentTarget as HTMLInputElement).setCustomValidity(
-                                parseWeightInput(roastForm.batchSize)
-                                  ? `Roasted weight cannot exceed batch size (${parseWeightInput(roastForm.batchSize).toFixed(2)} kg)`
-                                  : 'Please enter batch size first',
-                              )
-                            }
-                            onInput={(e) =>
-                              (e.currentTarget as HTMLInputElement).setCustomValidity('')
-                            }
-                            className={weightInput}
-                            placeholder="0.00"
-                          />
-                          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[#829188]">
-                            kg
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* One live summary instead of three separate readouts */}
-                    <div className="mt-4 grid grid-cols-3 overflow-hidden rounded-xl border border-[#e2e8e1] bg-[#f7faf7]">
-                      <div className="border-r border-[#e2e8e1] px-4 py-3">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#829188]">
-                          Yield
-                        </p>
-                        <p className="mt-0.5 text-lg font-bold text-[#2e6848]">
-                          {yieldPercentage ? `${yieldPercentage.toFixed(1)}%` : '—'}
-                        </p>
-                      </div>
-                      <div className="border-r border-[#e2e8e1] px-4 py-3">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#829188]">
-                          Weight loss
-                        </p>
-                        <p className="mt-0.5 text-lg font-bold text-[#d87832]">
-                          {lossPercentage ? `${lossPercentage.toFixed(1)}%` : '—'}
-                        </p>
-                      </div>
-                      <div className="px-4 py-3">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#829188]">
-                          Left in stock
-                        </p>
-                        <p className="mt-0.5 text-lg font-bold text-[#294936]">
-                          {toFixed2(remainingAfterRoast)}{' '}
-                          <span className="text-xs font-semibold text-[#829188]">kg</span>
-                        </p>
-                      </div>
-                    </div>
-                  </section>
-
-                  {/* 2. Level */}
-                  <section>
-                    <h3 className="mb-3 text-base font-bold text-[#294936]">2. Roast level</h3>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[RoastLevel.Light, RoastLevel.Medium, RoastLevel.Dark].map((level) => (
-                        <button
-                          key={level}
-                          type="button"
-                          aria-pressed={roastLevel === level}
-                          onClick={() => setRoastLevel(level)}
-                          className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold transition-all ${roastLevel === level ? 'border-[#d87832] bg-[#fff1df] text-[#b45f22] shadow-sm' : 'border-[#e2e8e1] bg-white text-[#718077] hover:border-[#b8cabe]'}`}
-                        >
-                          <span
-                            className={`h-2.5 w-2.5 rounded-full ${level === RoastLevel.Light ? 'bg-[#d5a455]' : level === RoastLevel.Medium ? 'bg-[#9b633b]' : 'bg-[#3d302b]'}`}
-                          />
-                          {level}
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-
-                  {/* 3. Notes */}
-                  <section>
-                    <h3 className="mb-3 text-base font-bold text-[#294936]">
-                      3. Notes and flavors{' '}
-                      <span className="text-sm font-normal text-[#9aa69e]">(optional)</span>
-                    </h3>
-                    <label
-                      htmlFor="roast-notes"
-                      className="mb-2 block text-sm font-semibold text-[#46564b]"
-                    >
-                      Roast notes
-                    </label>
-                    <textarea
-                      id="roast-notes"
-                      rows={2}
-                      value={roastForm.notes}
-                      onChange={(e) => setRoastForm({ ...roastForm, notes: e.target.value })}
-                      onInput={(e) => {
-                        const el = e.currentTarget
-                        el.style.height = 'auto'
-                        el.style.height = el.scrollHeight + 'px'
-                      }}
-                      className="block max-h-40 w-full resize-none overflow-y-auto rounded-xl border border-[#d6dfd7] bg-white px-4 py-3 text-sm text-[#294936] outline-none transition-all duration-200 focus:border-[#d87832] focus:ring-4 focus:ring-orange-100"
-                      placeholder="e.g., First crack at 9:30. Dropped at 11:15."
-                    />
-
-                    <p className="mb-2 mt-5 text-sm font-semibold text-[#46564b]">
-                      Flavor notes{' '}
-                      <span className="font-normal text-[#9aa69e]">— tap to add or remove</span>
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {Object.keys(FLAVOR_GROUPS).map((category) => {
-                        const isSelected = selectedAromaCategories.includes(category)
-                        return (
-                          <button
-                            key={category}
-                            type="button"
-                            aria-pressed={isSelected}
-                            onClick={() =>
-                              setSelectedAromaCategories((prev) =>
-                                isSelected
-                                  ? prev.filter((item) => item !== category)
-                                  : [...prev, category],
-                              )
-                            }
-                            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${isSelected ? 'border-[#2e6848] bg-[#e9f2ec] text-[#2e6848]' : 'border-[#dfe9df] bg-white text-[#718077] hover:border-[#9cb8a6]'}`}
-                          >
-                            {category}
-                          </button>
-                        )
-                      })}
-                    </div>
-
-                    {selectedAromaCategories.length > 0 ? (
-                      <div className="mt-3 flex flex-wrap gap-2 rounded-xl border border-[#e2e8e1] bg-[#f7fbf7] p-3">
-                        {selectedAromaCategories
-                          .flatMap((category) => FLAVOR_GROUPS[category])
-                          .map((note) => {
-                            const isSelected = selectedFlavorTags.includes(note)
-                            return (
-                              <button
-                                key={note}
-                                type="button"
-                                aria-pressed={isSelected}
-                                onClick={() =>
-                                  setSelectedFlavorTags((prev) =>
-                                    isSelected
-                                      ? prev.filter((item) => item !== note)
-                                      : [...prev, note],
-                                  )
-                                }
-                                className={`rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${isSelected ? 'border-[#d87832] bg-[#fff1df] font-bold text-[#b45f22]' : 'border-transparent bg-white text-[#718077] hover:border-[#e2e8e1]'}`}
-                              >
-                                {note}
-                              </button>
-                            )
-                          })}
-                      </div>
-                    ) : (
-                      <p className="mt-3 rounded-xl bg-[#f7faf7] px-3 py-3 text-xs text-[#829188]">
-                        Choose a flavor group above to see its notes.
-                      </p>
-                    )}
-
-                    {/* Always rendered: the first tag fills a row that is already there. */}
-                    <div className="mt-3 flex min-h-[30px] flex-wrap items-center gap-2">
-                      <span className="text-xs font-semibold text-[#829188]">Selected:</span>
-                      {selectedFlavorTags.length === 0 && (
-                        <span className="text-xs text-[#a2ada5]">none yet</span>
-                      )}
-                      {selectedFlavorTags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-100 py-1 pl-3 pr-1.5 text-xs font-semibold text-yellow-800"
-                        >
-                          {tag}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setSelectedFlavorTags((prev) => prev.filter((t) => t !== tag))
-                            }
-                            className="flex h-5 w-5 items-center justify-center rounded-full text-yellow-700 hover:bg-yellow-200 hover:text-yellow-900"
-                            aria-label={`Remove ${tag}`}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  </section>
-                </div>
-
-                {/* Always in reach: the footer sticks to the bottom of the dialog while it scrolls. */}
-                <div className="sticky -bottom-8 z-10 -mx-8 -mb-8 mt-6 flex items-center justify-between gap-3 rounded-b-3xl border-t border-[#e8ece8] bg-white px-8 py-4">
-                  <p className="hidden text-sm text-[#66756b] sm:block">
-                    {batchValue && roastedValue
-                      ? `${toFixed2(batchValue)} kg in → ${toFixed2(roastedValue)} kg out · ${roastLevel}`
-                      : 'Enter both weights to log this roast.'}
-                  </p>
-                  <div className="flex flex-1 gap-3 sm:flex-none">
-                    <Button type="button" variant="secondary" onClick={closeLogRoastModal}>
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      variant="primary"
-                      size="lg"
-                      disabled={isSubmittingRoast}
-                      icon={
-                        isSubmittingRoast ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                        {selling ? (
+                          <HandCoins className="h-6 w-6 text-white" />
                         ) : (
-                          <Flame className="h-4 w-4" />
-                        )
-                      }
-                      className="flex-1 !bg-[#d87832] hover:!bg-[#bd5d1e] disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
+                          <Flame className="h-6 w-6 text-white" />
+                        )}
+                      </div>
+                      <div>
+                        <h2
+                          id="start-lot-title"
+                          className="text-2xl font-bold tracking-tight text-gray-900"
+                        >
+                          {selling ? 'Sell green beans' : 'Log a new roast'}
+                        </h2>
+                        {!selling ? (
+                          <p className="mt-0.5 text-sm text-[#66756b]">
+                            Lot{' '}
+                            <span className="font-mono font-bold text-[#294936]">
+                              {toRoaId(lotId)}
+                            </span>{' '}
+                            ·{' '}
+                            <span className="font-semibold text-[#2e6848]">
+                              {toFixed2(availableKg)} kg
+                            </span>{' '}
+                            available
+                          </p>
+                        ) : sellRow ? (
+                          <p className="mt-0.5 text-sm text-[#66756b]">
+                            Lot{' '}
+                            <span className="font-mono font-bold text-[#294936]">
+                              {toRoaId(sellRow.greenBeanLotId)}
+                            </span>{' '}
+                            ·{' '}
+                            <span className="font-semibold text-[#2e6848]">
+                              {formatKg(sellRowKg)} kg
+                            </span>{' '}
+                            {sellingForOther ? (
+                              <>
+                                in stock · Selling for{' '}
+                                <span className="font-semibold text-[#294936]">
+                                  {sellRowOwnerName}
+                                </span>
+                              </>
+                            ) : (
+                              'in your stock'
+                            )}
+                          </p>
+                        ) : (
+                          <p className="mt-0.5 text-sm text-[#66756b]">
+                            Lot{' '}
+                            <span className="font-mono font-bold text-[#294936]">
+                              {toRoaId(lotId)}
+                            </span>{' '}
+                            ·{' '}
+                            <span className="font-semibold text-[#2e6848]">
+                              {formatKg(shelfKg)} kg
+                            </span>{' '}
+                            on the shelf
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeLogRoastModal}
+                      aria-label="Close"
+                      title="Close"
+                      className="-mr-2 -mt-1 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl text-[#718077] transition-colors hover:bg-[#f1f5f1] hover:text-[#294936]"
                     >
-                      {isSubmittingRoast ? 'Saving…' : 'Log Roast'}
-                    </Button>
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  {/* What to do with this lot. Both panes stay mounted (hidden
+                      and inert), so switching never loses what was typed. */}
+                  <div
+                    role="group"
+                    aria-label="Roast or sell this lot"
+                    className="mt-4 grid grid-cols-2 gap-2"
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={startMode === 'roast'}
+                      onClick={() => chooseStartMode('roast')}
+                      className={chipClass(
+                        startMode === 'roast',
+                        'border-[#d87832] bg-[#fff1df] text-[#b45f22] shadow-sm',
+                      )}
+                    >
+                      <Flame className="h-4 w-4 flex-shrink-0" />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-bold">Roast</span>
+                        <span className="block text-xs font-medium opacity-80 max-sm:hidden">
+                          Roast now, sell the coffee later
+                        </span>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={startMode === 'sell'}
+                      onClick={() => chooseStartMode('sell')}
+                      disabled={!canSellHere}
+                      title={
+                        canSellHere
+                          ? undefined
+                          : isAdmin
+                            ? "Only a roaster's stock can be sold for them"
+                            : 'Only the roaster who owns this stock can sell it'
+                      }
+                      className={chipClass(
+                        startMode === 'sell',
+                        'border-[#2e6848] bg-[#e9f2ec] text-[#2e6848] shadow-sm',
+                      )}
+                    >
+                      <HandCoins className="h-4 w-4 flex-shrink-0" />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-bold">Sell</span>
+                        <span className="block text-xs font-medium opacity-80 max-sm:hidden">
+                          Sell these green beans now
+                        </span>
+                      </span>
+                    </button>
                   </div>
                 </div>
-              </form>
+
+                <form
+                  onSubmit={handleLogRoastSubmit}
+                  className={startMode === 'roast' ? 'flex flex-1 flex-col' : 'hidden'}
+                  inert={startMode !== 'roast'}
+                >
+                  <div className="flex-1 space-y-6">
+                    {/* 1. Weights */}
+                    <section>
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <h3 className="text-base font-bold text-[#294936]">1. Batch weights</h3>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setRoastForm({
+                              ...roastForm,
+                              batchSize: toFixed2(availableKg).toString(),
+                            })
+                          }
+                          className="rounded-lg border border-[#f0d3b8] bg-[#fff8ed] px-3 py-1.5 text-xs font-bold text-[#b45f22] transition-colors hover:bg-[#fff1df]"
+                        >
+                          Use all {toFixed2(availableKg)} kg
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div>
+                          <label
+                            htmlFor="roast-batch-size"
+                            className="mb-2 block text-sm font-semibold text-[#46564b]"
+                          >
+                            Green beans in
+                          </label>
+                          <div className="relative">
+                            <input
+                              id="roast-batch-size"
+                              type="number"
+                              min={0.01}
+                              step="any"
+                              required
+                              max={availableKg}
+                              value={roastForm.batchSize}
+                              onChange={(e) =>
+                                setRoastForm({ ...roastForm, batchSize: e.target.value })
+                              }
+                              onInvalid={(e) =>
+                                (e.currentTarget as HTMLInputElement).setCustomValidity(
+                                  `Batch size must be between 0.01 and ${availableKg.toFixed(2)} kg`,
+                                )
+                              }
+                              onInput={(e) =>
+                                (e.currentTarget as HTMLInputElement).setCustomValidity('')
+                              }
+                              className={weightInput}
+                              placeholder="0.00"
+                            />
+                            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[#829188]">
+                              kg
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label
+                            htmlFor="roast-roasted-weight"
+                            className="mb-2 block text-sm font-semibold text-[#46564b]"
+                          >
+                            Roasted beans out
+                          </label>
+                          <div className="relative">
+                            <input
+                              id="roast-roasted-weight"
+                              type="number"
+                              min={0.01}
+                              step="any"
+                              required
+                              max={parseWeightInput(roastForm.batchSize) || undefined}
+                              value={roastForm.roastedWeight}
+                              onChange={(e) =>
+                                setRoastForm({ ...roastForm, roastedWeight: e.target.value })
+                              }
+                              onInvalid={(e) =>
+                                (e.currentTarget as HTMLInputElement).setCustomValidity(
+                                  parseWeightInput(roastForm.batchSize)
+                                    ? `Roasted weight cannot exceed batch size (${parseWeightInput(roastForm.batchSize).toFixed(2)} kg)`
+                                    : 'Please enter batch size first',
+                                )
+                              }
+                              onInput={(e) =>
+                                (e.currentTarget as HTMLInputElement).setCustomValidity('')
+                              }
+                              className={weightInput}
+                              placeholder="0.00"
+                            />
+                            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[#829188]">
+                              kg
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* One live summary instead of three separate readouts */}
+                      <div className="mt-4 grid grid-cols-3 overflow-hidden rounded-xl border border-[#e2e8e1] bg-[#f7faf7]">
+                        <div className="border-r border-[#e2e8e1] px-4 py-3">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#829188]">
+                            Yield
+                          </p>
+                          <p className="mt-0.5 text-lg font-bold text-[#2e6848]">
+                            {yieldPercentage ? `${yieldPercentage.toFixed(1)}%` : '—'}
+                          </p>
+                        </div>
+                        <div className="border-r border-[#e2e8e1] px-4 py-3">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#829188]">
+                            Weight loss
+                          </p>
+                          <p className="mt-0.5 text-lg font-bold text-[#d87832]">
+                            {lossPercentage ? `${lossPercentage.toFixed(1)}%` : '—'}
+                          </p>
+                        </div>
+                        <div className="px-4 py-3">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#829188]">
+                            Left in stock
+                          </p>
+                          <p className="mt-0.5 text-lg font-bold text-[#294936]">
+                            {toFixed2(remainingAfterRoast)}{' '}
+                            <span className="text-xs font-semibold text-[#829188]">kg</span>
+                          </p>
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* 2. Level */}
+                    <section>
+                      <h3 className="mb-3 text-base font-bold text-[#294936]">2. Roast level</h3>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[RoastLevel.Light, RoastLevel.Medium, RoastLevel.Dark].map((level) => (
+                          <button
+                            key={level}
+                            type="button"
+                            aria-pressed={roastLevel === level}
+                            onClick={() => setRoastLevel(level)}
+                            className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-bold transition-all ${roastLevel === level ? 'border-[#d87832] bg-[#fff1df] text-[#b45f22] shadow-sm' : 'border-[#e2e8e1] bg-white text-[#718077] hover:border-[#b8cabe]'}`}
+                          >
+                            <span
+                              className={`h-2.5 w-2.5 rounded-full ${level === RoastLevel.Light ? 'bg-[#d5a455]' : level === RoastLevel.Medium ? 'bg-[#9b633b]' : 'bg-[#3d302b]'}`}
+                            />
+                            {level}
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+
+                    {/* 3. Notes */}
+                    <section>
+                      <h3 className="mb-3 text-base font-bold text-[#294936]">
+                        3. Notes and flavors{' '}
+                        <span className="text-sm font-normal text-[#9aa69e]">(optional)</span>
+                      </h3>
+                      <label
+                        htmlFor="roast-notes"
+                        className="mb-2 block text-sm font-semibold text-[#46564b]"
+                      >
+                        Roast notes
+                      </label>
+                      <textarea
+                        id="roast-notes"
+                        rows={2}
+                        value={roastForm.notes}
+                        onChange={(e) => setRoastForm({ ...roastForm, notes: e.target.value })}
+                        onInput={(e) => {
+                          const el = e.currentTarget
+                          el.style.height = 'auto'
+                          el.style.height = el.scrollHeight + 'px'
+                        }}
+                        className="block max-h-40 w-full resize-none overflow-y-auto rounded-xl border border-[#d6dfd7] bg-white px-4 py-3 text-sm text-[#294936] outline-none transition-all duration-200 focus:border-[#d87832] focus:ring-4 focus:ring-orange-100"
+                        placeholder="e.g., First crack at 9:30. Dropped at 11:15."
+                      />
+
+                      <p className="mb-2 mt-5 text-sm font-semibold text-[#46564b]">
+                        Flavor notes{' '}
+                        <span className="font-normal text-[#9aa69e]">— tap to add or remove</span>
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.keys(FLAVOR_GROUPS).map((category) => {
+                          const isSelected = selectedAromaCategories.includes(category)
+                          return (
+                            <button
+                              key={category}
+                              type="button"
+                              aria-pressed={isSelected}
+                              onClick={() =>
+                                setSelectedAromaCategories((prev) =>
+                                  isSelected
+                                    ? prev.filter((item) => item !== category)
+                                    : [...prev, category],
+                                )
+                              }
+                              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${isSelected ? 'border-[#2e6848] bg-[#e9f2ec] text-[#2e6848]' : 'border-[#dfe9df] bg-white text-[#718077] hover:border-[#9cb8a6]'}`}
+                            >
+                              {category}
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      {selectedAromaCategories.length > 0 ? (
+                        <div className="mt-3 flex flex-wrap gap-2 rounded-xl border border-[#e2e8e1] bg-[#f7fbf7] p-3">
+                          {selectedAromaCategories
+                            .flatMap((category) => FLAVOR_GROUPS[category])
+                            .map((note) => {
+                              const isSelected = selectedFlavorTags.includes(note)
+                              return (
+                                <button
+                                  key={note}
+                                  type="button"
+                                  aria-pressed={isSelected}
+                                  onClick={() =>
+                                    setSelectedFlavorTags((prev) =>
+                                      isSelected
+                                        ? prev.filter((item) => item !== note)
+                                        : [...prev, note],
+                                    )
+                                  }
+                                  className={`rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${isSelected ? 'border-[#d87832] bg-[#fff1df] font-bold text-[#b45f22]' : 'border-transparent bg-white text-[#718077] hover:border-[#e2e8e1]'}`}
+                                >
+                                  {note}
+                                </button>
+                              )
+                            })}
+                        </div>
+                      ) : (
+                        <p className="mt-3 rounded-xl bg-[#f7faf7] px-3 py-3 text-xs text-[#829188]">
+                          Choose a flavor group above to see its notes.
+                        </p>
+                      )}
+
+                      {/* Always rendered: the first tag fills a row that is already there. */}
+                      <div className="mt-3 flex min-h-[30px] flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold text-[#829188]">Selected:</span>
+                        {selectedFlavorTags.length === 0 && (
+                          <span className="text-xs text-[#a2ada5]">none yet</span>
+                        )}
+                        {selectedFlavorTags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-100 py-1 pl-3 pr-1.5 text-xs font-semibold text-yellow-800"
+                          >
+                            {tag}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedFlavorTags((prev) => prev.filter((t) => t !== tag))
+                              }
+                              className="flex h-5 w-5 items-center justify-center rounded-full text-yellow-700 hover:bg-yellow-200 hover:text-yellow-900"
+                              aria-label={`Remove ${tag}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </section>
+                  </div>
+
+                  {/* Always in reach: the footer sticks to the bottom of the dialog while it scrolls. */}
+                  <div className={footerClass}>
+                    <p className="hidden text-sm text-[#66756b] sm:block">
+                      {batchValue && roastedValue
+                        ? `${toFixed2(batchValue)} kg in → ${toFixed2(roastedValue)} kg out · ${roastLevel}`
+                        : 'Enter both weights to log this roast.'}
+                    </p>
+                    <div className="flex flex-1 gap-3 sm:flex-none">
+                      <Button type="button" variant="secondary" onClick={closeLogRoastModal}>
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        size="lg"
+                        disabled={isSubmittingRoast}
+                        icon={
+                          isSubmittingRoast ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Flame className="h-4 w-4" />
+                          )
+                        }
+                        className="flex-1 !bg-[#d87832] hover:!bg-[#bd5d1e] disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
+                      >
+                        {isSubmittingRoast ? 'Saving…' : 'Log Roast'}
+                      </Button>
+                    </div>
+                  </div>
+                </form>
+
+                {/* Sell: the shared sale form with this stock row on its first line. */}
+                <div
+                  className={startMode === 'sell' ? 'flex flex-1 flex-col' : 'hidden'}
+                  inert={startMode !== 'sell'}
+                >
+                  {saleFormMounted && sellRow ? (
+                    <SaleOrderForm
+                      embedded
+                      key={sellRow.id}
+                      sellerId={sellRow.roasterId}
+                      initialGreenLine={{ roasterInventoryId: sellRow.id, kg: sellInitialKg }}
+                      onClose={closeThisSale}
+                      onSaved={closeThisSale}
+                    />
+                  ) : selectedExternalLot ? (
+                    // A purchased lot is still on the shelf: claim what is sold first.
+                    <form noValidate onSubmit={handleClaimForSale} className="flex flex-1 flex-col">
+                      <div className="flex-1 space-y-5">
+                        <section>
+                          <h3 className="text-base font-bold text-[#294936]">
+                            Claim the green beans you are selling
+                          </h3>
+                          <p className="mt-1 text-sm text-[#66756b]">
+                            These beans are still on the purchased-lots shelf. Claim the kg you are
+                            selling into your stock, then choose the customer and price.
+                          </p>
+                        </section>
+
+                        {ownStockOfLot && (
+                          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#dfe9df] bg-[#f7fbf7] px-4 py-3">
+                            <p className="text-sm text-[#46564b]">
+                              You already have{' '}
+                              <span className="font-bold text-[#294936]">
+                                {formatKg(ownStockOfLot.remainingWeightKg)} kg
+                              </span>{' '}
+                              of this lot in your stock.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={sellFromOwnStock}
+                              className="rounded-lg border border-[#b8cabe] bg-white px-3 py-1.5 text-xs font-bold text-[#2e6848] transition-colors hover:bg-[#e9f2ec]"
+                            >
+                              Sell from my stock
+                            </button>
+                          </div>
+                        )}
+
+                        <section>
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <label
+                              htmlFor="sell-claim-kg"
+                              className="text-sm font-semibold text-[#46564b]"
+                            >
+                              Green beans to sell
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSellClaimKg(formatKg(shelfKg))
+                                setSellClaimError('')
+                              }}
+                              className="rounded-lg border border-[#cfe0d4] bg-[#f1f7f2] px-3 py-1.5 text-xs font-bold text-[#2e6848] transition-colors hover:bg-[#e9f2ec]"
+                            >
+                              Use all {formatKg(shelfKg)} kg
+                            </button>
+                          </div>
+                          <div className="relative">
+                            <input
+                              id="sell-claim-kg"
+                              type="text"
+                              inputMode="decimal"
+                              autoComplete="off"
+                              value={sellClaimKg}
+                              onChange={(e) => {
+                                setSellClaimKg(e.target.value)
+                                setSellClaimError('')
+                              }}
+                              aria-invalid={!!sellClaimError}
+                              aria-describedby={sellClaimError ? 'sell-claim-error' : undefined}
+                              className={weightInput}
+                              placeholder="0.00"
+                            />
+                            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-[#829188]">
+                              kg
+                            </span>
+                          </div>
+                          {sellClaimError && (
+                            <p
+                              id="sell-claim-error"
+                              role="alert"
+                              className="mt-2 text-sm font-medium text-red-600"
+                            >
+                              {sellClaimError}
+                            </p>
+                          )}
+                        </section>
+                      </div>
+
+                      <div className={footerClass}>
+                        <p className="hidden text-sm text-[#66756b] sm:block">
+                          Next: choose the customer and price.
+                        </p>
+                        <div className="flex flex-1 gap-3 sm:flex-none">
+                          <Button type="button" variant="secondary" onClick={closeLogRoastModal}>
+                            Cancel
+                          </Button>
+                          <Button
+                            type="submit"
+                            variant="primary"
+                            size="lg"
+                            disabled={isClaimingForSale}
+                            icon={
+                              isClaimingForSale ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Package className="h-4 w-4" />
+                              )
+                            }
+                            className="flex-1 !bg-[#2e6848] hover:!bg-[#24553a] disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
+                          >
+                            Claim Stock
+                          </Button>
+                        </div>
+                      </div>
+                    </form>
+                  ) : null}
+                </div>
+              </div>
             )
           })()}
       </Modal>

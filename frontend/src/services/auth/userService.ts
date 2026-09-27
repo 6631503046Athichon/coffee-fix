@@ -42,6 +42,19 @@ export const getAllUsers = async (filters?: {
   }
 };
 
+/**
+ * Every user, like getAllUsers, but a failed request throws instead of
+ * returning [], so the caller can tell a failure from an empty list.
+ */
+export const getAllUsersOrThrow = async (): Promise<User[]> => {
+  try {
+    const response = await api.get<{ users: any[] }>("/users");
+    return (response.users || []).map(mapUser);
+  } catch (error) {
+    throw new Error(handleApiError(error, "fetch users"));
+  }
+};
+
 export const createUser = async (payload: Record<string, any>): Promise<{ user: User; credentials?: { username: string; password: string; message?: string } }> => {
   try {
     const response = await api.post<{ user: any; credentials?: { username: string; password: string; message?: string } }>('/users', payload);

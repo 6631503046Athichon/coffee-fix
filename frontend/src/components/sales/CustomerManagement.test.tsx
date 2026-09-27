@@ -3,8 +3,8 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { User } from '../../types'
-import { getAllCustomers } from '../../services/sales/customerService'
-import { getSellableRoasts } from '../../services/sales/saleOrderService'
+import { addCustomer, getAllCustomers } from '../../services/sales/customerService'
+import { getSellableGreenLots, getSellableRoasts } from '../../services/sales/saleOrderService'
 import { TestDataProvider, appData, customer, roasterUser, sellable } from '../../test/salesFixtures'
 import type { TestDataHandle } from '../../test/salesFixtures'
 import CustomerManagement from './CustomerManagement'
@@ -25,10 +25,12 @@ vi.mock('../../services/sales/customerService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/sales/customerService')>()),
   getAllCustomers: vi.fn(),
   deleteCustomer: vi.fn(),
+  addCustomer: vi.fn(),
 }))
 vi.mock('../../services/sales/saleOrderService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/sales/saleOrderService')>()),
   getSellableRoasts: vi.fn(),
+  getSellableGreenLots: vi.fn(),
 }))
 
 const aroma = customer({ id: 'cust-1', name: 'Cafe Aroma' })
@@ -41,6 +43,7 @@ describe('CustomerManagement', { timeout: 20000 }, () => {
     auth.currentUser = roasterUser
     vi.mocked(getAllCustomers).mockResolvedValue([blueDoor, aroma])
     vi.mocked(getSellableRoasts).mockResolvedValue({ roasts: [sellable()], missingWeightCount: 0 })
+    vi.mocked(getSellableGreenLots).mockResolvedValue([])
   })
 
   it('brings the app data up to date with the list it shows, so Sell finds the customer', async () => {
@@ -57,11 +60,44 @@ describe('CustomerManagement', { timeout: 20000 }, () => {
     await waitFor(() => expect(handle.current.customers.map((c) => c.id)).toEqual(['cust-2', 'cust-1']))
 
     fireEvent.click(within(row).getByRole('button', { name: 'Sell' }))
-    const dialog = screen.getByRole('dialog', { name: 'Sell roasted coffee' })
+    const dialog = screen.getByRole('dialog', { name: 'Sell coffee' })
     expect(within(within(dialog).getByRole('group', { name: 'Customer' })).getByRole('button')).toHaveTextContent(
       'Blue Door (Distributor)',
     )
     expect(within(dialog).queryByText('No customers yet')).not.toBeInTheDocument()
-    await within(dialog).findByRole('group', { name: 'Roast for line 1' })
+    await within(dialog).findByRole('group', { name: 'Item for line 1' })
+  })
+
+  it('shows a customer added with New customer in the Sell popup once that popup closes', async () => {
+    const created = customer({ id: 'cust-new', name: 'Green Leaf' })
+    vi.mocked(addCustomer).mockResolvedValue(created)
+    render(
+      <MemoryRouter initialEntries={['/customers']}>
+        <TestDataProvider initial={appData({ customers: [aroma] })}>
+          <CustomerManagement />
+        </TestDataProvider>
+      </MemoryRouter>,
+    )
+
+    const row = await screen.findByRole('row', { name: /Blue Door/ })
+    fireEvent.click(within(row).getByRole('button', { name: 'Sell' }))
+    const dialog = screen.getByRole('dialog', { name: 'Sell coffee' })
+    // From here on the server lists it too.
+    vi.mocked(getAllCustomers).mockResolvedValue([blueDoor, aroma, created])
+    fireEvent.click(within(dialog).getByRole('button', { name: 'New customer' }))
+    const create = screen.getByRole('dialog', { name: 'Create New Customer' })
+    fireEvent.change(within(create).getByLabelText('Customer Name *'), { target: { value: 'Green Leaf' } })
+    fireEvent.click(within(create).getByRole('button', { name: 'Create Customer' }))
+    await waitFor(() =>
+      expect(within(within(dialog).getByRole('group', { name: 'Customer' })).getByRole('button')).toHaveTextContent(
+        'Green Leaf',
+      ),
+    )
+    expect(screen.queryByRole('row', { name: /Green Leaf/ })).not.toBeInTheDocument()
+
+    // The sale is not recorded.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    expect(await screen.findByRole('row', { name: /Green Leaf/ })).toBeInTheDocument()
   })
 })

@@ -1,5 +1,5 @@
 import React from 'react'
-import type { RoastSaleSummary, SaleOrder, SaleOrderItem, SaleOrderStatus } from '../../types'
+import type { SaleOrder, SaleOrderItem, SaleOrderStatus } from '../../types'
 
 // Shared labels and formatting for the sales log, the sale popups and the receipt.
 
@@ -40,6 +40,13 @@ export const RoastLevelTag: React.FC<{ level?: string | null }> = ({ level }) =>
     </span>
   )
 
+/** Marks a sale line of green beans sold straight from the roaster's stock. */
+export const GreenBeansTag: React.FC = () => (
+  <span className="inline-flex items-center whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+    Green beans
+  </span>
+)
+
 /** kg with at most 3 decimals and no trailing zeros: 2.5, 0.125, 3. */
 export const formatKg = (kg: number): string => String(+kg.toFixed(3))
 
@@ -66,12 +73,14 @@ export const saleCustomerName = (order: SaleOrder): string =>
   order.customerName || order.customer?.name || ''
 
 /** Grade (snapshot at sale time), variety and process of a sale line. */
-export const describeBean = (item: SaleOrderItem): string =>
-  [item.lotGrade, item.roast?.variety, item.roast?.process].filter(Boolean).join(' ')
+export const describeBean = (item: SaleOrderItem): string => {
+  const source = item.roast ?? item.green
+  return [item.lotGrade, source?.variety, source?.process].filter(Boolean).join(' ')
+}
 
-/** Grade, variety and process of a roast that can be sold. */
-export const describeRoastOption = (roast: RoastSaleSummary): string =>
-  [roast.grade, roast.variety, roast.process].filter(Boolean).join(' ')
+/** Grade, variety and process of a roast or green lot that can be sold. */
+export const describeRoastOption = (lot: { grade?: string; variety?: string; process?: string }): string =>
+  [lot.grade, lot.variety, lot.process].filter(Boolean).join(' ')
 
 /** One line of a sale in a single string (lists, search, legacy lines). */
 export const describeLine = (item: SaleOrderItem): string => {
@@ -81,18 +90,34 @@ export const describeLine = (item: SaleOrderItem): string => {
       .filter(Boolean)
       .join(' · ')
   }
+  const green = item.green
+  if (green) {
+    return ['Green beans', green.label, green.greenBeanLotDisplayId, describeBean(item), `${formatKg(item.quantity)} kg`]
+      .filter(Boolean)
+      .join(' · ')
+  }
   return `${item.lotGrade} (green) · ${formatKg(item.quantity)} kg`
 }
 
+/** What a sale line sold: roasted coffee, green beans from stock, or a line from before roast sales. */
+export const lineKind = (item: SaleOrderItem): 'Roasted' | 'Green beans' | 'Green beans (older sale)' =>
+  item.roastBatchId ? 'Roasted' : item.roasterInventoryId ? 'Green beans' : 'Green beans (older sale)'
+
 /**
  * What goes back to stock when the sale is cancelled or deleted:
- * '2.5 kg back to RB-0421, 1 kg back to RB-0107'. Empty for a cancelled sale.
+ * '2.5 kg back to RB-0421, 5 kg of green beans back to ROA-4412'. Empty for a
+ * cancelled sale.
  */
 export const releaseSummary = (order: SaleOrder): string => {
   if (order.status === 'Cancelled') return ''
   return order.items
-    .filter((item) => item.roastBatchId)
-    .map((item) => `${formatKg(item.quantity)} kg back to ${item.roast?.label ?? 'its roast'}`)
+    .flatMap((item) =>
+      item.roastBatchId
+        ? [`${formatKg(item.quantity)} kg back to ${item.roast?.label ?? 'its roast'}`]
+        : item.roasterInventoryId
+          ? [`${formatKg(item.quantity)} kg of green beans back to ${item.green?.label ?? 'your stock'}`]
+          : [],
+    )
     .join(', ')
 }
 
