@@ -36,7 +36,7 @@ Routes follow Next.js App Router file conventions. Each `route.ts` exports HTTP 
 #### Lots — traceability chain `harvest → parchment → green bean`
 - `harvest-lots/route.ts`, `harvest-lots/[id]/route.ts`
 - `parchment-lots/route.ts`, `parchment-lots/[id]/route.ts`
-- `parchment-lots/[id]/withdrawals/route.ts` — record parchment withdrawals (sale / sample / loss)
+- `parchment-lots/[id]/withdrawals/route.ts` — record parchment withdrawals (sale / sample / loss / roasting stock); Hull & Grade creates one green bean lot per graded row, takes an optional `gradedLots[i].price` (THB/kg, max 2 decimals, empty or 0 = no price; stamps priceSetDate/priceSetBy and writes a PricingHistory row) and returns the new lots as `greenBeanLots`
 - `parchment-lots/import-excel/route.ts` — bulk import from Excel
 - `green-bean-lots/route.ts`, `green-bean-lots/[id]/route.ts`
 - `green-bean-lots/[id]/withdrawals/route.ts` — track green bean usage
@@ -174,7 +174,7 @@ Every file lives in a domain folder; the root holds only those folders and a `RE
 - `farmer/` — `FarmerDashboard`, `FarmManagement`, `AddFarmPage`, `HarvestLotsManagement`, `HarvestLotDetail`, `FarmSoilPanel`, `FarmWeatherPanel`, `FarmerDataHub`, `GAPComplianceHelper`
   - `farmer/modals/` — `HarvestLotModal`
 - `processor/` — `ProcessorWorkbench` (large), `ParchmentTab`, `InvoiceReceipt`
-  - `processor/workbench/` — sub-components: `KanbanCard`, `KanbanColumn`, `Pagination`, `DebouncedSearchInput`, `GradeDropdown`, `ProcessTypeDropdown`, `CropYearChips`, `ModalPortal`, `scoring.ts`, `constants.ts`
+  - `processor/workbench/` — sub-components: `KanbanCard`, `KanbanColumn`, `Pagination`, `DebouncedSearchInput`, `GradeDropdown`, `ProcessTypeDropdown`, `CropYearChips`, `ModalPortal`, `GradePriceInput` + `GradeSplitValue` + `gradePrice.ts` (optional Price / kg on grade-split rows and the total value line), `scoring.ts`, `constants.ts`
   - `processor/modals/` — `CompleteBatchModal`, `HullAndGradeModal`, `ParchmentWithdrawModal`, `StartProcessingModal`
 - `roaster/` — `RoasterWorkbench`, `InternalLotsTable`, `ExternalLotsTable`, `RoastLogPanel`
 - `sales/` — `CustomerManagement`, `SalesLog` (route `/sales`), `saleDisplay` (shared chips and formatters), `SaleReceipt` (print-only receipt)

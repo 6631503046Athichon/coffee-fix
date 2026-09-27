@@ -460,7 +460,7 @@ describe('green bean lot pricing', () => {
       expect(txMock.greenBeanLot.create).not.toHaveBeenCalled()
     })
 
-    test.each([-10, '150abc'])('400 for a hull price of %p, before anything is written', async (price) => {
+    test.each([-10, '150abc', 220.555, '220.555'])('400 for a hull price of %p, before anything is written', async (price) => {
       mockAuthUser = processor
       const { POST } = await import('@/app/api/parchment-lots/[id]/withdrawals/route')
       const response = await POST(
@@ -510,6 +510,95 @@ describe('green bean lot pricing', () => {
         priced.priceSetDate,
       )
       expectNoWritesOutsideTransaction()
+    })
+
+    test('the 2-decimal message names the grade', async () => {
+      mockAuthUser = processor
+      const { POST } = await import('@/app/api/parchment-lots/[id]/withdrawals/route')
+      const response = await POST(
+        hullRequest([
+          { grade: 'Grade A', weight: 60, price: 220.55 },
+          { grade: 'Grade B', weight: 20, price: 180.125 },
+        ]),
+        parchmentParams,
+      )
+
+      expect(response.status).toBe(400)
+      expect((await response.json()).error).toBe('Price per kg for Grade B must have at most 2 decimals')
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+    })
+
+    test('a price on a later row stays with its own grade, lot and audit row', async () => {
+      mockAuthUser = processor
+      const { POST } = await import('@/app/api/parchment-lots/[id]/withdrawals/route')
+      const response = await POST(
+        hullRequest([
+          { grade: 'Grade B', weight: 20 },
+          { grade: 'Grade A', weight: 60, price: 220 },
+        ]),
+        parchmentParams,
+      )
+
+      expect(response.status).toBe(201)
+      const [first, second] = txMock.greenBeanLot.create.mock.calls.map((call: any) => call[0].data)
+      const year = new Date().getFullYear()
+      expect(first).toMatchObject({ grade: 'Grade B', displayId: `GBL-${year}-1` })
+      expect(first.pricePerKg).toBeUndefined()
+      expect(second).toMatchObject({ grade: 'Grade A', displayId: `GBL-${year}-2`, pricePerKg: 220 })
+
+      expect(txMock.pricingHistory.create).toHaveBeenCalledTimes(1)
+      expect(txMock.pricingHistory.create.mock.calls[0][0].data).toMatchObject({
+        greenBeanLotId: 'gbl-2',
+        pricePerKg: 220,
+      })
+
+      const body = await response.json()
+      expect(body.greenBeanLots[0]).toMatchObject({ id: 'gbl-1', grade: 'Grade B' })
+      expect(body.greenBeanLots[0].pricePerKg).toBeUndefined()
+      expect(body.greenBeanLots[1]).toMatchObject({ id: 'gbl-2', grade: 'Grade A', pricePerKg: 220 })
+    })
+
+    test('the response hands back the created lots with their prices', async () => {
+      mockAuthUser = processor
+      const { POST } = await import('@/app/api/parchment-lots/[id]/withdrawals/route')
+      const response = await POST(
+        hullRequest([
+          { grade: 'Grade A', weight: 60, price: '220.50' },
+          { grade: 'Grade B', weight: 40 },
+        ]),
+        parchmentParams,
+      )
+
+      expect(response.status).toBe(201)
+      const body = await response.json()
+      expect(body.parchmentLot).toMatchObject({ id: 'parchment-1' })
+      expect(body.greenBeanLots).toHaveLength(2)
+      expect(body.greenBeanLots[0]).toMatchObject({
+        id: 'gbl-1',
+        grade: 'Grade A',
+        currentWeightKg: 60,
+        pricePerKg: 220.5,
+        currency: 'THB',
+        priceSetBy: 'processor-1',
+        priceSetDate: todayDateOnly().toISOString(),
+      })
+      expect(body.greenBeanLots[1]).toMatchObject({ id: 'gbl-2', grade: 'Grade B', currentWeightKg: 40 })
+      expect(body.greenBeanLots[1].pricePerKg).toBeUndefined()
+    })
+
+    test('a withdrawal that is not Hull & Grade answers with no green bean lots', async () => {
+      mockAuthUser = processor
+      const { POST } = await import('@/app/api/parchment-lots/[id]/withdrawals/route')
+      const response = await POST(
+        new NextRequest('http://localhost:3001/api/parchment-lots/parchment-1/withdrawals', {
+          method: 'POST',
+          body: JSON.stringify({ amountKg: 10, withdrawalType: 'Sample', purpose: 'Sample' }),
+        }),
+        parchmentParams,
+      )
+
+      expect(response.status).toBe(201)
+      expect((await response.json()).greenBeanLots).toEqual([])
     })
   })
 })

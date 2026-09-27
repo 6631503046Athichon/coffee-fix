@@ -34,7 +34,7 @@ for the visual file tree.
 | `harvest-lots/[id]/route.ts` | read / update / delete a harvest lot |
 | `parchment-lots/route.ts` | list & create parchment lots |
 | `parchment-lots/[id]/route.ts` | read / update / delete a parchment lot |
-| `parchment-lots/[id]/withdrawals/route.ts` | record parchment withdrawals (sale / sample / loss) |
+| `parchment-lots/[id]/withdrawals/route.ts` | record parchment withdrawals (sale / sample / loss / roasting stock); Hull & Grade creates one green bean lot per graded row, takes an optional `gradedLots[i].price` (THB/kg, max 2 decimals, empty or 0 = no price; stamps priceSetDate/priceSetBy and writes a PricingHistory row) and returns the new lots as `greenBeanLots` |
 | `parchment-lots/import-excel/route.ts` | bulk import parchment lots from Excel |
 | `green-bean-lots/route.ts` | list & create green bean lots |
 | `green-bean-lots/[id]/route.ts` | read / update / delete a green bean lot |

@@ -17,6 +17,12 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import GradePriceInput from "../workbench/GradePriceInput";
+import GradeSplitValue from "../workbench/GradeSplitValue";
+import {
+  hasGradePriceError,
+  parseGradePrice,
+} from "../workbench/gradePrice";
 
 // ---------------------------------------------------------------------------
 // GradeDropdown (inlined from HullAndGradeModal pattern)
@@ -240,6 +246,9 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
   const allHullGradesValid = gradedLots.every(
     (lot) => lot.grade && parseFloat(lot.weight) > 0,
   );
+  // Optional price per kg per graded lot: empty is fine, a typed one must be
+  // valid before the withdrawal can be confirmed.
+  const hasHullPriceError = hasGradePriceError(gradedLots);
   const canAddMoreGrades = gradedLots.length < gradeNames.length;
 
   const lotId =
@@ -253,7 +262,8 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
     if (withdrawalType === "HullAndGrade") {
       if (totalGreenNum <= 0 || exceedsSelectedHullAmount || weightMismatch)
         return false;
-      if (!allHullGradesValid || hasDuplicateGrades) return false;
+      if (!allHullGradesValid || hasDuplicateGrades || hasHullPriceError)
+        return false;
     }
     return true;
   })();
@@ -285,12 +295,15 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
 
     if (withdrawalType === "HullAndGrade") {
       base.totalGreenBeanWeight = totalGreenNum;
-      base.gradedLots = gradedLots.map((l) => ({
-        grade: l.grade,
-        weight: parseFloat(l.weight) || 0,
-        price: parseFloat(l.price) || undefined,
-        score: parseFloat(l.score) || undefined,
-      }));
+      base.gradedLots = gradedLots.map((l) => {
+        const price = parseGradePrice(l.price);
+        return {
+          grade: l.grade,
+          weight: parseFloat(l.weight) || 0,
+          ...(price !== undefined && { price }),
+          score: parseFloat(l.score) || undefined,
+        };
+      });
     }
 
     await onSubmit(base);
@@ -537,8 +550,8 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
                         #{index + 1}
                       </span>
                     </div>
-                    <div className="flex-1 grid grid-cols-2 gap-2">
-                      <div>
+                    <div className="flex-1 min-w-0 grid grid-cols-2 sm:grid-cols-[1.5fr_1fr_1fr] gap-2 items-start">
+                      <div className="col-span-2 sm:col-span-1 min-w-0">
                         <label className="block text-[10px] font-bold text-gray-600 mb-0.5 uppercase tracking-wide">
                           Grade
                         </label>
@@ -554,7 +567,7 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
                           usedGrades={selectedGrades}
                         />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <label className="block text-[10px] font-bold text-gray-600 mb-0.5 uppercase tracking-wide">
                           Weight (kg)
                         </label>
@@ -562,6 +575,7 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
                           type="number"
                           step="0.1"
                           placeholder="0.00"
+                          aria-label={`Weight (kg), row ${index + 1}`}
                           value={lot.weight}
                           onChange={(e) =>
                             setGradedLots(
@@ -571,6 +585,25 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
                             )
                           }
                           className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="block text-[10px] font-bold text-gray-600 mb-0.5 uppercase tracking-wide">
+                          Price / kg{" "}
+                          <span className="normal-case font-semibold tracking-normal">
+                            (optional)
+                          </span>
+                        </span>
+                        <GradePriceInput
+                          value={lot.price}
+                          onChange={(value) =>
+                            setGradedLots(
+                              gradedLots.map((l, i) =>
+                                i === index ? { ...l, price: value } : l,
+                              ),
+                            )
+                          }
+                          row={index + 1}
                         />
                       </div>
                     </div>
@@ -654,6 +687,7 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
                   </span>
                 )}
               </div>
+              <GradeSplitValue rows={gradedLots} />
               {exceedsSelectedHullAmount && (
                 <div className="mt-2 flex items-start gap-1.5 bg-red-100 rounded-md p-2 border border-red-200">
                   <AlertCircle size={12} className="text-red-600 flex-shrink-0 mt-0.5" />
@@ -662,7 +696,7 @@ const ParchmentWithdrawModal: React.FC<ParchmentWithdrawModalProps> = ({
                   </p>
                 </div>
               )}
-              {!exceedsSelectedHullAmount && gradedWeightSum > 0 && (
+              {!exceedsSelectedHullAmount && !hasHullPriceError && gradedWeightSum > 0 && (
                 <div className="mt-2 flex items-center gap-1.5 bg-green-100 rounded-md p-2 border border-green-200">
                   <Check size={12} className="text-green-600 flex-shrink-0" />
                   <p className="text-[10px] font-semibold text-green-800">

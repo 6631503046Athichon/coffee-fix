@@ -5,12 +5,13 @@ import { INITIAL_APP_DATA } from '../../constants'
 import { DataContext } from '../../hooks/useDataContext'
 import { ToastProvider } from '../../contexts/ToastContext'
 import ToastContainer from '../common/ToastContainer'
-import { GreenBeanSourceType, ProcessingBatchStatus, UserRole } from '../../types'
-import type { AppData, Customer, GreenBeanLot, HarvestLot } from '../../types'
+import { GreenBeanSourceType, ParchmentSourceType, ProcessingBatchStatus, UserRole } from '../../types'
+import type { AppData, Customer, GreenBeanLot, HarvestLot, ParchmentLot } from '../../types'
 import { addProcessingBatch } from '../../services/processing/processingBatchService'
 import { createWithdrawal, updateGreenBeanLotPrice } from '../../services/lots/greenBeanLotService'
 import { addCustomer } from '../../services/sales/customerService'
 import { deleteHarvestLot, updateHarvestLotDetails } from '../../services/lots/harvestLotService'
+import { createParchmentWithdrawal } from '../../services/lots/parchmentLotService'
 import ProcessorWorkbench from './ProcessorWorkbench'
 
 vi.mock('../../services/processing/processingBatchService', async (importOriginal) => ({
@@ -33,6 +34,11 @@ vi.mock('../../services/lots/harvestLotService', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../services/lots/harvestLotService')>(),
   updateHarvestLotDetails: vi.fn(),
   deleteHarvestLot: vi.fn(),
+}))
+
+vi.mock('../../services/lots/parchmentLotService', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../services/lots/parchmentLotService')>(),
+  createParchmentWithdrawal: vi.fn(),
 }))
 
 const lot: HarvestLot = {
@@ -473,4 +479,168 @@ describe('Cherry lot edit and delete', () => {
       expect(del).not.toBeInTheDocument()
     }
   })
+})
+
+describe('Hull & Grade price', () => {
+  const parchment: ParchmentLot = {
+    id: 'pl-1', displayId: 'PL-2026-3', sourceType: ParchmentSourceType.Internal,
+    initialWeightKg: 100, currentWeightKg: 100, moistureContent: 11,
+    processType: 'Washed', status: 'AwaitingHulling', withdrawalHistory: [],
+  }
+
+  // Text queries rather than getByRole: role queries over the whole
+  // workbench are slow enough to push the suite's timeouts.
+  const openHull = () => {
+    fireEvent.click(screen.getByText('Hull & Grade', { selector: 'button' }))
+    return screen.getByText('Save', { selector: 'button' }).closest('form')!
+  }
+  const saveButton = () => screen.getByText('Save', { selector: 'button' })
+  const weight = (row: number) => screen.getByLabelText(`Weight (kg), row ${row}`)
+  const price = (row: number) => screen.getByLabelText(`Price per kg in THB (optional), row ${row}`)
+  // The "12,500.00 THB value" line under the kg total.
+  const valueLine = (form: HTMLElement) => within(form).queryByText(/^[\d,]+\.\d{2} THB$/)
+  const addGrade = (form: HTMLElement, grade: string) => {
+    fireEvent.click(within(form).getByText('Add Grade', { selector: 'button' }))
+    fireEvent.click(within(form).getAllByText('Select grade').at(-1)!.closest('button')!)
+    fireEvent.click(within(form).getByText(grade, { selector: 'button' }))
+  }
+  const gbl = (id: string, displayId: string, grade: string, kg: number, price?: number): GreenBeanLot => ({
+    id, displayId, sourceType: GreenBeanSourceType.Internal,
+    parchmentLotId: 'pl-1', grade, initialWeightKg: kg, currentWeightKg: kg,
+    availabilityStatus: 'Available', cuppingScores: [], withdrawalHistory: [],
+    ...(price !== undefined && {
+      pricePerKg: price, currency: 'THB', priceSetDate: '2026-09-27', priceSetBy: 'processor',
+    }),
+  })
+
+  // A successful save scrolls to the green bean stock 100 ms after closing;
+  // jsdom has no scrollIntoView, so give it one (left in place: the timer
+  // can outlive a test by a tick).
+  beforeEach(() => {
+    vi.clearAllMocks()
+    Element.prototype.scrollIntoView = vi.fn()
+  })
+
+  it('puts an optional THB price input directly after the weight on every row', () => {
+    render(<Harness initial={{ ...INITIAL_APP_DATA, parchmentLots: [parchment] }} refreshData={async () => {}} />)
+    const form = openHull()
+    addGrade(form, 'Grade B')
+
+    // Form controls in tab order: the one right after each weight is its price.
+    const controls = Array.from(form.querySelectorAll('input, button, select, textarea'))
+    for (const row of [1, 2]) {
+      const input = price(row) as HTMLInputElement
+      expect(controls[controls.indexOf(weight(row)) + 1]).toBe(input)
+      expect(input).toHaveAttribute('inputmode', 'decimal')
+      expect(input).toHaveAttribute('placeholder', 'Optional')
+      expect(input.value).toBe('')
+      expect(input.parentElement).toHaveTextContent('THB')
+    }
+    // The column header on wide screens, plus a label per row for phones;
+    // every one of them says the price is optional.
+    expect(within(form).getAllByText('(optional)')).toHaveLength(3)
+    for (const hint of within(form).getAllByText('(optional)')) {
+      expect(hint.parentElement).toHaveTextContent('Price / kg (optional)')
+    }
+  }, 15000)
+
+  it('sends a typed price as gradedLots[i].price, closes before the reload, and shows the priced lots on their cards', async () => {
+    vi.mocked(createParchmentWithdrawal).mockResolvedValue({
+      parchmentLot: { ...parchment, currentWeightKg: 0, status: 'Hulled' },
+      greenBeanLots: [
+        gbl('gbl-new-1', 'GBL-2026-40', 'Grade A', 50, 250),
+        gbl('gbl-new-2', 'GBL-2026-41', 'Grade B', 30),
+      ],
+    })
+    const onData = vi.fn()
+    // Keep the reload pending: the lots must come from the save response.
+    const refreshData = vi.fn(() => new Promise<void>(() => {}))
+    render(<Harness initial={{ ...INITIAL_APP_DATA, parchmentLots: [parchment] }} refreshData={refreshData} onData={onData} />)
+    const form = openHull()
+    addGrade(form, 'Grade B')
+    fireEvent.change(weight(1), { target: { value: '50' } })
+    fireEvent.change(price(1), { target: { value: '250' } })
+    fireEvent.change(weight(2), { target: { value: '30' } })
+    expect(valueLine(form)).toHaveTextContent('12,500.00 THB value · 1 of 2 grades priced')
+    fireEvent.submit(form)
+
+    await waitFor(() => expect(createParchmentWithdrawal).toHaveBeenCalledTimes(1))
+    const [lotId, payload] = vi.mocked(createParchmentWithdrawal).mock.calls[0]
+    expect(lotId).toBe('pl-1')
+    expect(payload).toMatchObject({ withdrawalType: 'HullAndGrade', totalGreenBeanWeight: 80 })
+    expect(payload.gradedLots![0]).toMatchObject({ grade: 'Grade A', weight: 50, price: 250 })
+    expect(payload.gradedLots![1]).toMatchObject({ grade: 'Grade B', weight: 30 })
+    expect(payload.gradedLots![1]).not.toHaveProperty('price')
+
+    // The popup closes while the reload is still pending, and the new lots
+    // are already on screen: priced on one card, "Set price" on the other.
+    await waitFor(() => expect(screen.queryByText('Save', { selector: 'button' })).not.toBeInTheDocument())
+    expect(refreshData).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('250.00 THB/kg')).toBeInTheDocument()
+    expect(screen.getByLabelText('Edit price of GBL-2026-40')).toBeInTheDocument()
+    expect(screen.getByLabelText('Set price of GBL-2026-41')).toBeInTheDocument()
+
+    await waitFor(() => expect(onData.mock.lastCall![0].greenBeanLots).toHaveLength(2))
+    const stored = onData.mock.lastCall![0] as AppData
+    expect(stored.greenBeanLots.find((g) => g.id === 'gbl-new-1')).toMatchObject({ pricePerKg: 250, currency: 'THB' })
+    expect(stored.greenBeanLots.find((g) => g.id === 'gbl-new-2')!.pricePerKg).toBeUndefined()
+    expect(stored.parchmentLots[0]).toMatchObject({ id: 'pl-1', currentWeightKg: 0, status: 'Hulled' })
+  }, 20000)
+
+  it('keeps each price with its own grade after a middle row is removed', async () => {
+    vi.mocked(createParchmentWithdrawal).mockResolvedValue({
+      parchmentLot: { ...parchment, currentWeightKg: 0, status: 'Hulled' },
+      greenBeanLots: [],
+    })
+    render(<Harness initial={{ ...INITIAL_APP_DATA, parchmentLots: [parchment] }} refreshData={async () => {}} />)
+    const form = openHull()
+    addGrade(form, 'Grade B')
+    addGrade(form, 'Grade C')
+    for (const [row, kg, thb] of [[1, '50', '100'], [2, '20', '200'], [3, '30', '300']] as const) {
+      fireEvent.change(weight(row), { target: { value: kg } })
+      fireEvent.change(price(row), { target: { value: thb } })
+    }
+    fireEvent.click(within(form).getByLabelText('Remove row 2'))
+    expect((price(2) as HTMLInputElement).value).toBe('300')
+    fireEvent.submit(form)
+
+    await waitFor(() => expect(createParchmentWithdrawal).toHaveBeenCalledTimes(1))
+    const payload = vi.mocked(createParchmentWithdrawal).mock.calls[0][1]
+    expect(payload.gradedLots!.map(({ grade, weight: kg, price: thb }) => ({ grade, kg, thb }))).toEqual([
+      { grade: 'Grade A', kg: 50, thb: 100 },
+      { grade: 'Grade C', kg: 30, thb: 300 },
+    ])
+  }, 20000)
+
+  it('flags a price of 0, -1, abc or 1.234 on its row, blocks Save, and shows no value until a price is valid', () => {
+    render(<Harness initial={{ ...INITIAL_APP_DATA, parchmentLots: [parchment] }} refreshData={async () => {}} />)
+    const form = openHull()
+    const save = saveButton()
+    fireEvent.change(weight(1), { target: { value: '80' } })
+    // No price is fine: Save is open and no value is shown.
+    expect(save).toBeEnabled()
+    expect(valueLine(form)).not.toBeInTheDocument()
+
+    for (const [typed, message] of [
+      ['0', 'Must be more than 0'],
+      ['-1', 'Must be more than 0'],
+      ['abc', 'Numbers only, e.g. 1200.50'],
+      ['1.234', 'Max 2 decimals'],
+    ]) {
+      fireEvent.change(price(1), { target: { value: typed } })
+      expect(screen.getByText(message)).toBeInTheDocument()
+      expect(price(1)).toHaveAttribute('aria-invalid', 'true')
+      expect(save).toBeDisabled()
+      expect(form).not.toHaveTextContent('Ready to confirm')
+      expect(valueLine(form)).not.toBeInTheDocument()
+      fireEvent.submit(form)
+    }
+    expect(createParchmentWithdrawal).not.toHaveBeenCalled()
+
+    fireEvent.change(price(1), { target: { value: '180.5' } })
+    expect(save).toBeEnabled()
+    expect(form).toHaveTextContent('Ready to confirm')
+    expect(valueLine(form)).toHaveTextContent('14,440.00 THB value')
+    expect(valueLine(form)).not.toHaveTextContent('grades priced')
+  }, 15000)
 })

@@ -51,8 +51,12 @@ import {
   getHarvestLotCherryWeight,
   getReadyHarvestLots,
   GradeDropdown,
+  GradePriceInput,
+  GradeSplitValue,
   ModalPortal,
   Pagination,
+  hasGradePriceError,
+  parseGradePrice,
 } from './workbench'
 import {
   formatGreenBeanId,
@@ -66,6 +70,27 @@ import {
 
 interface ParchmentTabProps {
   currentUser: User
+}
+
+/**
+ * Why a Process & Grade split cannot be saved yet, or null. A row with
+ * neither a weight nor a price is an unused spare and is skipped; any other
+ * row must have a grade and a weight above 0, because leaving it out would
+ * drop the kg or price typed on it while the whole parchment is used up.
+ */
+const gradeSplitRowProblem = (
+  rows: { grade: string; weight: string; price: string }[],
+): string | null => {
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]
+    if (r.weight.trim() === '' && r.price.trim() === '') continue
+    if (!r.grade) return `Pick a grade for row ${i + 1}.`
+    const w = parseFloat(r.weight)
+    if (isNaN(w) || w <= 0) {
+      return `Enter a weight above 0 for row ${i + 1} (${r.grade}).`
+    }
+  }
+  return null
 }
 
 const PROCESS_TYPES = ['Honey', 'Natural', 'Washed'] as const
@@ -152,9 +177,10 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
       : `row-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+  // `price` is the optional THB price per kg for that grade's new lot.
   const [gradeRows, setGradeRows] = useState<
-    { rowKey: string; grade: string; weight: string }[]
-  >(() => [{ rowKey: newRowId(), grade: 'Grade A', weight: '' }])
+    { rowKey: string; grade: string; weight: string; price: string }[]
+  >(() => [{ rowKey: newRowId(), grade: 'Grade A', weight: '', price: '' }])
   const [processError, setProcessError] = useState<string | null>(null)
   const [processSubmitting, setProcessSubmitting] = useState(false)
 
@@ -333,7 +359,9 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
       dryingEndDate: '',
       notes: '',
     })
-    setGradeRows([{ rowKey: newRowId(), grade: 'Grade A', weight: '' }])
+    setGradeRows([
+      { rowKey: newRowId(), grade: 'Grade A', weight: '', price: '' },
+    ])
     setProcessError(null)
   }
 
@@ -383,7 +411,16 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     }
 
     // ── Stage 2 validation: grade splits ─────────────────────────
-    const rows = gradeRows.filter((r) => r.grade && r.weight)
+    // Refuse a half-filled row instead of silently leaving it (and the
+    // kg or price on it) out; only rows with nothing typed are skipped.
+    const rowProblem = gradeSplitRowProblem(gradeRows)
+    if (rowProblem) {
+      setProcessError(rowProblem)
+      return
+    }
+    const rows = gradeRows.filter(
+      (r) => r.weight.trim() !== '' || r.price.trim() !== '',
+    )
     if (rows.length === 0) {
       setProcessError('Add at least one grade split for the green beans.')
       return
@@ -395,11 +432,13 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         return
       }
       seen.add(r.grade)
-      const w = parseFloat(r.weight)
-      if (isNaN(w) || w <= 0) {
-        setProcessError(`Weight for ${r.grade} must be greater than 0.`)
-        return
-      }
+    }
+    // The price is optional, but one that is typed must be valid.
+    if (hasGradePriceError(gradeRows)) {
+      setProcessError(
+        'Fix the price per kg: leave it empty or enter a number above 0 with at most 2 decimals.',
+      )
+      return
     }
     const totalGreen = rows.reduce(
       (s, r) => s + (parseFloat(r.weight) || 0),
@@ -447,23 +486,47 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
       }
 
       // Stage 2: hull-and-grade the parchment → green-bean lots
-      await createParchmentWithdrawal(newParchment.id, {
-        amountKg: newParchment.currentWeightKg,
-        withdrawalType: 'HullAndGrade',
-        purpose: 'Hull and grade',
-        totalGreenBeanWeight: totalGreen,
-        gradedLots: rows.map((r) => ({
-          grade: r.grade,
-          weight: parseFloat(r.weight),
-        })),
-      })
+      const { parchmentLot: hulledParchment, greenBeanLots: newGreenBeanLots } =
+        await createParchmentWithdrawal(newParchment.id, {
+          amountKg: newParchment.currentWeightKg,
+          withdrawalType: 'HullAndGrade',
+          purpose: 'Hull and grade',
+          totalGreenBeanWeight: totalGreen,
+          gradedLots: rows.map((r) => {
+            const price = parseGradePrice(r.price)
+            return {
+              grade: r.grade,
+              weight: parseFloat(r.weight),
+              ...(price !== undefined && { price }),
+            }
+          }),
+        })
+
+      // Show the new green-bean lots (price included) straight away, with
+      // their parchment lot so they group under the right process type,
+      // even if the reload below fails.
+      setData((prev) => ({
+        ...prev,
+        parchmentLots: [
+          ...prev.parchmentLots.filter((p) => p.id !== hulledParchment.id),
+          hulledParchment,
+        ],
+        greenBeanLots: [
+          ...prev.greenBeanLots.filter(
+            (g) => !newGreenBeanLots.some((n) => n.id === g.id),
+          ),
+          ...newGreenBeanLots,
+        ],
+      }))
 
       addToast({
         type: 'success',
         message: `Processed and graded ${fmt(totalGreen)} kg of green beans.`,
       })
-      await refreshData()
+      // The new lots are already on screen; close before the reload so a
+      // slow refresh cannot hold the popup open.
       setProcessLot(null)
+      await refreshData()
     } catch (e: any) {
       if (batchCreated) {
         // The cherry lot is consumed even when the later grading step fails.
@@ -773,6 +836,10 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         )
         const yieldPct = parchKg > 0 ? (totalGreen / parchKg) * 100 : 0
         const overflow = parchKg > 0 && totalGreen > parchKg + 0.01
+        const priceError = hasGradePriceError(gradeRows)
+        const rowProblem = gradeSplitRowProblem(gradeRows)
+        // Green only when Save & Grade would go through.
+        const ready = totalGreen > 0 && !overflow && !priceError && !rowProblem
 
         return (
           <Modal
@@ -940,6 +1007,26 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
               tone="amber"
             />
 
+            {/* Column headers (phones label each field instead) */}
+            <div className="hidden sm:grid grid-cols-[1.75rem_minmax(0,1fr)_7rem_9rem_2rem] gap-2 px-2 -mb-1">
+              <span />
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                Grade
+              </span>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                Weight (kg)
+              </span>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                Price / kg{' '}
+                <span className="normal-case font-semibold tracking-normal">
+                  (optional)
+                </span>
+              </span>
+              <span />
+            </div>
+
+            {/* # | Grade | Weight | Price / kg | delete. On phones:
+                # | Grade | delete, then Weight | Price. */}
             <div className="space-y-2">
               {gradeRows.map((row, i) => {
                 const usedGrades = gradeRows
@@ -948,12 +1035,14 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                 return (
                   <div
                     key={row.rowKey}
-                    className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-2 py-2"
+                    className="grid grid-cols-[1.75rem_minmax(0,1fr)_minmax(0,1fr)_2rem] sm:grid-cols-[1.75rem_minmax(0,1fr)_7rem_9rem_2rem] gap-2 items-start bg-amber-50 border border-amber-100 rounded-xl px-2 py-2"
                   >
-                    <span className="flex-shrink-0 w-7 h-7 bg-amber-600 text-white rounded-md flex items-center justify-center text-xs font-bold">
-                      {i + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
+                    <div className="col-start-1 row-start-1 h-[46px] flex items-center">
+                      <span className="w-7 h-7 bg-amber-600 text-white rounded-md flex items-center justify-center text-xs font-bold">
+                        {i + 1}
+                      </span>
+                    </div>
+                    <div className="col-start-2 col-span-2 row-start-1 sm:col-span-1 min-w-0">
                       <GradeDropdown
                         value={row.grade}
                         onChange={(v) => {
@@ -966,28 +1055,56 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                         size="md"
                       />
                     </div>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={row.weight}
-                      onChange={(e) => {
-                        const next = [...gradeRows]
-                        next[i] = { ...next[i], weight: e.target.value }
-                        setGradeRows(next)
-                      }}
-                      placeholder="kg"
-                      className="w-28 h-[46px] border border-gray-300 rounded-xl px-4 text-base font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all bg-white"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setGradeRows(gradeRows.filter((_, j) => j !== i))
-                      }
-                      disabled={gradeRows.length === 1}
-                      className="p-2 text-gray-400 hover:text-red-600 disabled:opacity-30 flex-shrink-0"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="col-start-1 col-span-2 row-start-2 sm:col-start-3 sm:col-span-1 sm:row-start-1 min-w-0">
+                      <span className="sm:hidden block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                        Weight (kg)
+                      </span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={row.weight}
+                        onChange={(e) => {
+                          const next = [...gradeRows]
+                          next[i] = { ...next[i], weight: e.target.value }
+                          setGradeRows(next)
+                        }}
+                        placeholder="0.00"
+                        aria-label={`Weight (kg), row ${i + 1}`}
+                        className="w-full h-[46px] border border-gray-300 rounded-xl px-4 text-base font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all bg-white"
+                      />
+                    </div>
+                    <div className="col-start-3 col-span-2 row-start-2 sm:col-start-4 sm:col-span-1 sm:row-start-1 min-w-0">
+                      <span className="sm:hidden block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                        Price / kg{' '}
+                        <span className="normal-case font-semibold tracking-normal">
+                          (optional)
+                        </span>
+                      </span>
+                      <GradePriceInput
+                        value={row.price}
+                        onChange={(v) => {
+                          const next = [...gradeRows]
+                          next[i] = { ...next[i], price: v }
+                          setGradeRows(next)
+                        }}
+                        row={i + 1}
+                        accent="amber"
+                        size="md"
+                      />
+                    </div>
+                    <div className="col-start-4 row-start-1 sm:col-start-5 h-[46px] flex items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setGradeRows(gradeRows.filter((_, j) => j !== i))
+                        }
+                        disabled={gradeRows.length === 1}
+                        aria-label={`Remove row ${i + 1}`}
+                        className="p-2 text-gray-400 hover:text-red-600 disabled:opacity-30"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                 )
               })}
@@ -996,7 +1113,10 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             <button
               type="button"
               onClick={() =>
-                setGradeRows([...gradeRows, { rowKey: newRowId(), grade: '', weight: '' }])
+                setGradeRows([
+                  ...gradeRows,
+                  { rowKey: newRowId(), grade: '', weight: '', price: '' },
+                ])
               }
               disabled={gradeRows.length >= gradeNames.length}
               className="w-full py-2.5 border border-dashed border-amber-300 rounded-xl text-sm font-bold text-amber-700 hover:bg-amber-50 hover:border-amber-400 disabled:opacity-30 inline-flex items-center justify-center gap-1.5 transition-all"
@@ -1009,7 +1129,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
               className={`rounded-xl border px-3 py-3 transition-colors ${
                 overflow
                   ? 'bg-red-50 border-red-300'
-                  : totalGreen > 0
+                  : ready
                     ? 'bg-green-50 border-green-300'
                     : 'bg-gray-50 border-gray-200'
               }`}
@@ -1018,9 +1138,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                 <span className="text-[11px] font-bold uppercase tracking-wider text-gray-600">
                   Total green bean
                 </span>
-                {totalGreen > 0 && !overflow && (
-                  <Check className="h-4 w-4 text-green-600" />
-                )}
+                {ready && <Check className="h-4 w-4 text-green-600" />}
                 {overflow && <AlertCircle className="h-4 w-4 text-red-600" />}
               </div>
               <div className="flex items-baseline gap-2 mt-1">
@@ -1036,9 +1154,15 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                   yield {yieldPct.toFixed(1)}%
                 </span>
               </div>
+              <GradeSplitValue rows={gradeRows} />
               {overflow && (
                 <p className="text-[11px] text-red-700 mt-1.5 font-semibold">
                   Total exceeds parchment weight ({fmt(parchKg)} kg)
+                </p>
+              )}
+              {!overflow && rowProblem && (
+                <p className="text-[11px] text-red-700 mt-1.5 font-semibold">
+                  {rowProblem}
                 </p>
               )}
             </div>
@@ -1049,7 +1173,10 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
               submitLabel={
                 processSubmitting ? 'Processing...' : 'Save & Grade'
               }
-              submitDisabled={processSubmitting || overflow}
+              submitDisabled={
+                processSubmitting || overflow || priceError || !!rowProblem
+              }
+              cancelDisabled={processSubmitting}
               accent="green"
             />
           </Modal>
@@ -1263,9 +1390,16 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                         </p>
                       </div>
                     </div>
-                    <span className="text-sm font-extrabold text-emerald-600 flex-shrink-0">
-                      {fmt(gbl.currentWeightKg ?? 0)} kg
-                    </span>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-extrabold text-emerald-600">
+                        {fmt(gbl.currentWeightKg ?? 0)} kg
+                      </p>
+                      <p className="text-[10px] font-semibold text-gray-500 leading-tight">
+                        {gbl.pricePerKg
+                          ? `${gbl.pricePerKg.toFixed(2)} ${gbl.currency || 'THB'}/kg`
+                          : 'No price'}
+                      </p>
+                    </div>
                   </div>
 
                   {/* Step 2 — parchment ancestor */}
@@ -1853,15 +1987,25 @@ const ModalFooter: React.FC<{
   onSubmit: () => void
   submitLabel: string
   submitDisabled?: boolean
+  /** Defaults to `submitDisabled`; pass it when a form can be invalid but
+   *  should still be cancellable. */
+  cancelDisabled?: boolean
   accent?: Accent
-}> = ({ onCancel, onSubmit, submitLabel, submitDisabled, accent = 'gray' }) => {
+}> = ({
+  onCancel,
+  onSubmit,
+  submitLabel,
+  submitDisabled,
+  cancelDisabled = submitDisabled,
+  accent = 'gray',
+}) => {
   const a = ACCENT[accent]
   return (
     <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 -mx-6 px-6 -mb-5 pb-4 bg-gray-50">
       <button
         type="button"
         onClick={onCancel}
-        disabled={submitDisabled}
+        disabled={cancelDisabled}
         className="px-6 py-2.5 border border-gray-300 bg-white rounded-xl shadow-sm text-sm font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 transition-all"
       >
         Cancel

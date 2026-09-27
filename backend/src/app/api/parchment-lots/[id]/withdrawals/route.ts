@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { GreenBeanLot } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
@@ -132,6 +133,14 @@ export async function POST(
               { status: 400 }
             )
           }
+          // THB to the satang, as the form allows: 220.555 is refused rather
+          // than stored and audited with a third decimal.
+          if (Math.abs(glPrice * 100 - Math.round(glPrice * 100)) > 1e-6) {
+            return NextResponse.json(
+              { error: `Price per kg for ${grade} must have at most 2 decimals` },
+              { status: 400 }
+            )
+          }
         }
 
         seenGrades.add(grade)
@@ -173,13 +182,17 @@ export async function POST(
     // [max+1 .. max+N] from one read. Wrap the entire transaction in the
     // retry helper so concurrent allocators rewind the whole withdrawal +
     // green-bean creates if displayId collides at commit time.
-    await withDisplayIdRetry(async () => {
+    // Resolves to the green bean lots a Hull & Grade created (empty for any
+    // other type), so the response can hand them back with their prices.
+    const createdGreenBeanLots = await withDisplayIdRetry(async () => {
       const greenBeanDisplayIds: string[] =
         withdrawalType === 'HullAndGrade' && gradedLots
           ? await nextDisplayIds(prisma.greenBeanLot, 'GBL', gradedLots.length)
           : []
 
-      await prisma.$transaction(async (tx) => {
+      return prisma.$transaction(async (tx) => {
+      const createdLots: GreenBeanLot[] = []
+
       // Atomic decrement with a where guard so two concurrent withdrawals
       // cannot both pass the up-front amount-vs-currentWeight check and end
       // up double-spending the lot. updateMany compiles to a single SQL
@@ -267,6 +280,7 @@ export async function POST(
               }),
             },
           })
+          createdLots.push(createdLot)
 
           // A price set at hulling gets the same audit row as one set later.
           if (setPrice !== null) {
@@ -289,6 +303,8 @@ export async function POST(
         // since that requires a greenBeanLotId. The roast profile notes and cupping
         // score are stored in the withdrawal record itself.
       }
+
+      return createdLots
       })
     })
 
@@ -304,6 +320,9 @@ export async function POST(
     return NextResponse.json(
       {
         parchmentLot: updatedLot,
+        // The new lots as saved, price included, so the client can show them
+        // before its next full reload.
+        greenBeanLots: createdGreenBeanLots,
         message: 'Withdrawal created successfully',
       },
       { status: 201 }

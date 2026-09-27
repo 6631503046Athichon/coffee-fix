@@ -138,6 +138,10 @@ import {
   KanbanColumn,
   Pagination,
   ExportCsvButton,
+  GradePriceInput,
+  GradeSplitValue,
+  hasGradePriceError,
+  parseGradePrice,
 } from "./workbench";
 import type {
   ViewMode,
@@ -471,6 +475,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
   const hasDuplicateHullGrades = duplicateHullGrades.length > 0;
   const canAddMoreHullGrades = gradedLots.length < MAX_GRADE_OPTIONS;
+  // Optional price per kg on each graded lot: empty is fine (Set price
+  // later), anything typed must be valid before Save is allowed.
+  const hasHullPriceError = useMemo(
+    () => hasGradePriceError(gradedLots),
+    [gradedLots],
+  );
 
   const resetAllScoreForms = useCallback(() => {
     setSimpleQcScore("");
@@ -1125,23 +1135,55 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           );
           return;
         }
+        if (hasHullPriceError) {
+          setFormError(
+            "Fix the price per kg: leave it empty or enter a number above 0 with at most 2 decimals.",
+          );
+          return;
+        }
 
         setIsSubmitting(true);
         try {
-          await createParchmentWithdrawal(selectedParchment.id, {
-            amountKg: selectedParchment.currentWeightKg,
-            withdrawalType: "HullAndGrade",
-            purpose: "Hull and grade",
-            totalGreenBeanWeight: greenWeight,
-            gradedLots: gradedLots.map((lot) => ({
-              grade: lot.grade,
-              weight: parseFloat(lot.weight) || 0,
-              price: lot.price ? parseFloat(lot.price) : undefined,
-              score: lot.score ? parseFloat(lot.score) : undefined,
-            })),
-          });
+          const hulledParchmentId = selectedParchment.id;
+          const { parchmentLot: hulledParchment, greenBeanLots: newGreenBeanLots } =
+            await createParchmentWithdrawal(hulledParchmentId, {
+              amountKg: selectedParchment.currentWeightKg,
+              withdrawalType: "HullAndGrade",
+              purpose: "Hull and grade",
+              totalGreenBeanWeight: greenWeight,
+              gradedLots: gradedLots.map((lot) => {
+                const price = parseGradePrice(lot.price);
+                return {
+                  grade: lot.grade,
+                  weight: parseFloat(lot.weight) || 0,
+                  ...(price !== undefined && { price }),
+                  score: lot.score ? parseFloat(lot.score) : undefined,
+                };
+              }),
+            });
 
-          await refreshData();
+          // Show the new lots (with any price set here) and the used-up
+          // parchment straight away, even if the reload below fails.
+          setData((prev) => ({
+            ...prev,
+            parchmentLots: prev.parchmentLots.map((p) =>
+              p.id === hulledParchmentId
+                ? {
+                    ...p,
+                    currentWeightKg: hulledParchment.currentWeightKg,
+                    status: hulledParchment.status,
+                    withdrawalHistory:
+                      hulledParchment.withdrawalHistory ?? p.withdrawalHistory,
+                  }
+                : p,
+            ),
+            greenBeanLots: [
+              ...prev.greenBeanLots.filter(
+                (g) => !newGreenBeanLots.some((n) => n.id === g.id),
+              ),
+              ...newGreenBeanLots,
+            ],
+          }));
 
           addToast({
             type: "success",
@@ -1162,6 +1204,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               block: "start",
             });
           }, 100);
+
+          // The save has finished and the new lots are already on screen.
+          // Reload after closing the form so a slow refresh cannot hold the
+          // popup open (same as Record Process).
+          await refreshData();
         } catch (error: any) {
           console.error("Failed to hull and grade:", error);
           addToast({
@@ -3403,29 +3450,33 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           </div>
                         </div>
 
-                        {/* Column headers */}
-                        <div className="flex items-center gap-2 px-3 mb-1">
-                          <div className="w-8" />
-                          <div className="flex-1 grid grid-cols-[1.5fr_1fr] gap-2">
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Grade</span>
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Weight (kg)</span>
-                          </div>
-                          <div className="w-8" />
+                        {/* Column headers (phones label each field instead) */}
+                        <div className="hidden sm:grid grid-cols-[2rem_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_2rem] gap-2 px-3 mb-1">
+                          <span />
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Grade</span>
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Weight (kg)</span>
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                            Price / kg <span className="normal-case font-semibold tracking-normal">(optional)</span>
+                          </span>
+                          <span />
                         </div>
 
-                        {/* Graded Lots */}
+                        {/* Graded Lots — # | Grade | Weight | Price / kg | delete.
+                            On phones: # | Grade | delete, then Weight | Price. */}
                         <div className="space-y-2 mb-3">
                           {gradedLots.map((lot, index) => (
                             <div
                               key={lot.rowKey}
-                              className="flex items-center gap-2 bg-gray-50 rounded-xl p-3 border border-gray-200"
+                              className="grid grid-cols-[2rem_minmax(0,1fr)_minmax(0,1fr)_2rem] sm:grid-cols-[2rem_minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_2rem] gap-2 items-start bg-gray-50 rounded-xl p-3 border border-gray-200"
                             >
-                              <div className="flex-shrink-0 w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
-                                <span className="text-white font-bold text-sm">
-                                  {index + 1}
-                                </span>
+                              <div className="col-start-1 row-start-1 h-[38px] flex items-center">
+                                <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
+                                  <span className="text-white font-bold text-sm">
+                                    {index + 1}
+                                  </span>
+                                </div>
                               </div>
-                              <div className="flex-1 grid grid-cols-[1.5fr_1fr] gap-2">
+                              <div className="col-start-2 col-span-2 row-start-1 sm:col-span-1 min-w-0">
                                 <GradeDropdown
                                   value={lot.grade}
                                   onChange={(value) =>
@@ -3438,10 +3489,16 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                   index={index}
                                   usedGrades={selectedHullGrades}
                                 />
+                              </div>
+                              <div className="col-start-1 col-span-2 row-start-2 sm:col-start-3 sm:col-span-1 sm:row-start-1 min-w-0">
+                                <span className="sm:hidden block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                                  Weight (kg)
+                                </span>
                                 <input
                                   type="number"
                                   step="0.1"
                                   placeholder="0.00"
+                                  aria-label={`Weight (kg), row ${index + 1}`}
                                   value={lot.weight}
                                   onChange={(e) =>
                                     setGradedLots(
@@ -3454,14 +3511,33 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                   className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500"
                                 />
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => setGradedLots(gradedLots.filter((_, i) => i !== index))}
-                                disabled={gradedLots.length <= 1}
-                                className="flex-shrink-0 p-2 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
-                              >
-                                <Trash2 size={16} />
-                              </button>
+                              <div className="col-start-3 col-span-2 row-start-2 sm:col-start-4 sm:col-span-1 sm:row-start-1 min-w-0">
+                                <span className="sm:hidden block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                                  Price / kg <span className="normal-case font-semibold tracking-normal">(optional)</span>
+                                </span>
+                                <GradePriceInput
+                                  value={lot.price}
+                                  onChange={(value) =>
+                                    setGradedLots(
+                                      gradedLots.map((l, i) =>
+                                        i === index ? { ...l, price: value } : l,
+                                      ),
+                                    )
+                                  }
+                                  row={index + 1}
+                                />
+                              </div>
+                              <div className="col-start-4 row-start-1 sm:col-start-5 h-[38px] flex items-center justify-center">
+                                <button
+                                  type="button"
+                                  onClick={() => setGradedLots(gradedLots.filter((_, i) => i !== index))}
+                                  disabled={gradedLots.length <= 1}
+                                  aria-label={`Remove row ${index + 1}`}
+                                  className="p-2 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -3499,7 +3575,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             : 0;
                           const hasError =
                             exceedsParchmentWeight || hasDuplicateHullGrades;
-                          const isComplete = !hasError && gradedWeightSum > 0;
+                          // A bad price is flagged on its own row; it only
+                          // holds back "Ready to confirm" here.
+                          const isComplete =
+                            !hasError && !hasHullPriceError && gradedWeightSum > 0;
                           return (
                             <div className={`mt-4 rounded-xl p-3 border transition-colors ${hasError ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"}`}>
                               {/* Yield bar (sum vs parchment) */}
@@ -3523,6 +3602,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                 {isComplete && <Check className="h-5 w-5 text-green-500" />}
                                 {hasError && <AlertCircle className="h-5 w-5 text-red-500" />}
                               </div>
+                              <GradeSplitValue rows={gradedLots} />
                               {exceedsParchmentWeight && (
                                 <p className="text-[11px] font-semibold text-red-600 mt-1">
                                   Total exceeds parchment weight ({parchmentKg.toFixed(2)} kg)
@@ -3833,6 +3913,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           gradedWeightSum - (parseFloat(totalGreenWeight) || 0),
                         ) > 0.01 ||
                           hasDuplicateHullGrades ||
+                          hasHullPriceError ||
                           gradedLots.some(
                             (lot) =>
                               !lot.grade ||

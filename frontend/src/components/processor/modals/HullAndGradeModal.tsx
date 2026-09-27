@@ -4,12 +4,13 @@ import { useGradeNames, useGradeOptions } from "../../../hooks/useGradeOptions";
 import {
   ChevronsRight,
   Scale,
-  DollarSign,
   AlertCircle,
   Check,
   Plus,
   Trash2,
 } from "lucide-react";
+import GradePriceInput from "../workbench/GradePriceInput";
+import GradeSplitValue from "../workbench/GradeSplitValue";
 
 const GradeDropdown: React.FC<{
   value: string;
@@ -280,6 +281,7 @@ const HullAndGradeModal: React.FC<HullAndGradeModalProps> = ({
                     type="number"
                     step="0.1"
                     placeholder="0.00"
+                    aria-label={`Weight (kg), row ${index + 1}`}
                     value={lot.weight}
                     onChange={(e) =>
                       onGradedLotsChange(
@@ -293,25 +295,22 @@ const HullAndGradeModal: React.FC<HullAndGradeModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">
-                    <div className="flex items-center gap-1">
-                      <DollarSign size={12} className="text-gray-500" />
-                      Price/kg (THB)
-                    </div>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Optional"
+                  <span className="block text-xs font-bold text-gray-600 mb-1 uppercase tracking-wide">
+                    Price / kg{" "}
+                    <span className="normal-case font-semibold tracking-normal">
+                      (optional)
+                    </span>
+                  </span>
+                  <GradePriceInput
                     value={lot.price}
-                    onChange={(e) =>
+                    onChange={(value) =>
                       onGradedLotsChange(
                         gradedLots.map((l, i) =>
-                          i === index ? { ...l, price: e.target.value } : l,
+                          i === index ? { ...l, price: value } : l,
                         ),
                       )
                     }
-                    className="block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm font-semibold focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    row={index + 1}
                   />
                 </div>
                 <div>
@@ -405,6 +404,7 @@ const HullAndGradeModal: React.FC<HullAndGradeModalProps> = ({
             {totalWeightNum.toFixed(2)} kg
           </span>
         </div>
+        <GradeSplitValue rows={gradedLots} />
         {weightMismatch && (
           <div className="mt-3 flex items-start gap-2 bg-red-100 rounded-lg p-3 border border-red-200">
             <AlertCircle

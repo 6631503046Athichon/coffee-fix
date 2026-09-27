@@ -1,5 +1,6 @@
-import { ParchmentLot } from "../../types";
+import { GreenBeanLot, ParchmentLot } from "../../types";
 import { api, API_BASE_URL } from "../api";
+import { transformGreenBeanLotFromBackend } from "./greenBeanLotService";
 
 /**
  * Fetch all parchment lots, optionally filtered by processingBatchId, status, or processType
@@ -87,15 +88,27 @@ export interface CreateParchmentWithdrawalInput {
   gradedLots?: { grade: string; weight: number; price?: number; score?: number }[];
 }
 
+export interface CreateParchmentWithdrawalResult {
+  parchmentLot: ParchmentLot;
+  /** The lots a Hull & Grade created, price included; empty otherwise. */
+  greenBeanLots: GreenBeanLot[];
+}
+
 export const createParchmentWithdrawal = async (
   lotId: string,
   data: CreateParchmentWithdrawalInput,
-): Promise<ParchmentLot> => {
-  const response = await api.post<{ parchmentLot: any; message: string }>(
-    `/parchment-lots/${lotId}/withdrawals`,
-    data,
-  );
-  return transformParchmentLotFromBackend(response.parchmentLot);
+): Promise<CreateParchmentWithdrawalResult> => {
+  const response = await api.post<{
+    parchmentLot: any;
+    greenBeanLots?: Parameters<typeof transformGreenBeanLotFromBackend>[0][];
+    message: string;
+  }>(`/parchment-lots/${lotId}/withdrawals`, data);
+  return {
+    parchmentLot: transformParchmentLotFromBackend(response.parchmentLot),
+    greenBeanLots: (response.greenBeanLots ?? []).map(
+      transformGreenBeanLotFromBackend,
+    ),
+  };
 };
 
 /**

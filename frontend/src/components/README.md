@@ -51,7 +51,8 @@ Wired against `services/auth/authService.ts` and `AuthContext`.
 - `InvoiceReceipt.tsx` — invoice printout
 - `processor/workbench/` — `KanbanCard`, `KanbanColumn`, `Pagination`,
   `DebouncedSearchInput`, `GradeDropdown`, `ProcessTypeDropdown`, `CropYearChips`,
-  `ModalPortal`, `scoring.ts`, `constants.ts`
+  `ModalPortal`, `GradePriceInput` / `GradeSplitValue` / `gradePrice.ts` (optional
+  Price / kg on every grade-split row, total value line), `scoring.ts`, `constants.ts`
 - `processor/modals/` — `CompleteBatchModal`, `HullAndGradeModal`,
   `ParchmentWithdrawModal`, `StartProcessingModal`
 
