@@ -51,6 +51,7 @@ import {
   getHarvestLotCherryWeight,
   getReadyHarvestLots,
   GradeDropdown,
+  ModalPortal,
   Pagination,
 } from './workbench'
 import {
@@ -1765,59 +1766,64 @@ const Modal: React.FC<{
   // looked half-empty on desktop). 'lg' bumps to max-w-4xl for richer
   // forms (e.g. Hull & Grade with many grade rows).
   const widthClass = size === 'lg' ? 'max-w-4xl' : 'max-w-2xl'
+  // Portalled to <body> like the Workbench's modals: rendered in place, the
+  // page's space-y-6 gave the fixed backdrop a 24px top margin, leaving an
+  // undimmed strip across the top of the screen.
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div
-        className={`bg-white rounded-2xl shadow-2xl w-full ${widthClass} max-h-[92vh] overflow-hidden flex flex-col`}
-      >
-        <header className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            {Icon && (
-              <div
-                className={`p-2.5 ${a.iconBlock} rounded-xl shadow-md flex-shrink-0`}
-              >
-                <Icon className="h-6 w-6 text-white" />
+    <ModalPortal>
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div
+          className={`bg-white rounded-2xl shadow-2xl w-full ${widthClass} max-h-[92vh] overflow-hidden flex flex-col`}
+        >
+          <header className="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              {Icon && (
+                <div
+                  className={`p-2.5 ${a.iconBlock} rounded-xl shadow-md flex-shrink-0`}
+                >
+                  <Icon className="h-6 w-6 text-white" />
+                </div>
+              )}
+              <div className="min-w-0">
+                <h2 className="text-xl font-bold text-gray-900 leading-tight">
+                  {title}
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5 truncate">{subtitle}</p>
+              </div>
+            </div>
+
+            {context && context.length > 0 && (
+              <div className="hidden sm:flex items-center gap-3 text-right flex-shrink-0">
+                {context.map((c, i) => (
+                  <React.Fragment key={c.label}>
+                    {i > 0 && <div className="w-px h-8 bg-gray-200" />}
+                    <div>
+                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                        {c.label}
+                      </p>
+                      <p className="text-sm font-bold text-gray-800 leading-tight max-w-[160px] truncate">
+                        {c.value}
+                      </p>
+                    </div>
+                  </React.Fragment>
+                ))}
               </div>
             )}
-            <div className="min-w-0">
-              <h2 className="text-xl font-bold text-gray-900 leading-tight">
-                {title}
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5 truncate">{subtitle}</p>
-            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 flex-shrink-0"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </header>
+          <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
+            {children}
           </div>
-
-          {context && context.length > 0 && (
-            <div className="hidden sm:flex items-center gap-3 text-right flex-shrink-0">
-              {context.map((c, i) => (
-                <React.Fragment key={c.label}>
-                  {i > 0 && <div className="w-px h-8 bg-gray-200" />}
-                  <div>
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                      {c.label}
-                    </p>
-                    <p className="text-sm font-bold text-gray-800 leading-tight max-w-[160px] truncate">
-                      {c.value}
-                    </p>
-                  </div>
-                </React.Fragment>
-              ))}
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 flex-shrink-0"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </header>
-        <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
-          {children}
         </div>
       </div>
-    </div>
+    </ModalPortal>
   )
 }
 
