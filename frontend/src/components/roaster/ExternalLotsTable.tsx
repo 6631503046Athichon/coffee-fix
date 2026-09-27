@@ -89,31 +89,31 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
       )}
 
       {hideHeader && (
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#f0dfca] bg-[#fff8ed] px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e6ebe5] bg-[#f7fbf7] px-5 py-4">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#b87948]">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7f9184]">
               Sourcing shelf
             </p>
-            <p className="mt-1 text-sm font-bold text-[#7f4b24]">Purchased coffee lots</p>
+            <p className="mt-1 text-sm font-bold text-[#294936]">Purchased coffee lots</p>
           </div>
           <Button
             variant="success"
             size="sm"
             icon={<PlusCircle className="h-3.5 w-3.5" />}
             onClick={onAddExternal}
-            className="shrink-0 bg-[#d87832] hover:bg-[#bd5d1e]"
+            className="shrink-0"
           >
             Add lot
           </Button>
         </div>
       )}
 
-      <div className="bg-[#fffaf4] p-4 sm:p-5">
+      <div className="bg-[#f7fbf7] p-4 sm:p-5">
         {lots.length === 0 ? (
           <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
-            <Package className="mb-3 h-9 w-9 text-[#d7b99b]" />
-            <p className="text-sm font-bold text-[#80664d]">No purchased lots yet</p>
-            <p className="mt-1 text-xs text-[#a98c73]">
+            <Package className="mb-3 h-9 w-9 text-[#a8b8ac]" />
+            <p className="text-sm font-bold text-[#55635a]">No purchased lots yet</p>
+            <p className="mt-1 text-xs text-[#8b9a90]">
               Add an external lot when new coffee arrives.
             </p>
           </div>
@@ -122,37 +122,37 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
             {lots.map((lot) => (
               <article
                 key={lot.id}
-                className="rounded-2xl border border-[#f0dfca] bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#e2a36e] hover:shadow-md"
+                className="rounded-2xl border border-[#dfe9df] bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#9cb8a6] hover:shadow-md"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-mono text-sm font-bold text-[#7f4b24]">{toRoaId(lot.id)}</p>
-                    <p className="mt-1 text-xs font-medium text-[#a98c73]">Purchased source lot</p>
+                    <p className="font-mono text-sm font-bold text-[#294936]">{toRoaId(lot.id)}</p>
+                    <p className="mt-1 text-xs font-medium text-[#8b9a90]">Purchased source lot</p>
                   </div>
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
                       openWithPos(lot.id, e.currentTarget)
                     }}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#f0dfca] text-[#a87950] transition-colors hover:bg-[#fff1df]"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#dfe9df] text-[#557262] transition-colors hover:bg-[#e6f0e8]"
                     title="View Details"
                   >
                     <Package className="h-4 w-4" />
                   </button>
                 </div>
                 <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-[#fff1df] px-2.5 py-1 text-xs font-bold text-[#9b5d2d]">
+                  <span className="rounded-full bg-[#e9f2ec] px-2.5 py-1 text-xs font-bold text-[#2e6848]">
                     {lot.grade || 'Unclassified'}
                   </span>
-                  <span className="rounded-full bg-[#f7f1eb] px-2.5 py-1 text-xs font-medium text-[#80664d]">
+                  <span className="rounded-full bg-[#eef4ef] px-2.5 py-1 text-xs font-medium text-[#55635a]">
                     {lot.process || 'Process not set'}
                   </span>
                   {/* Weight and the action sit together on the right; the button keeps
                       its natural width instead of stretching across the card. */}
                   <span className="ml-auto flex flex-wrap items-center justify-end gap-4">
-                    <span className="text-lg font-bold text-[#7f4b24]">
+                    <span className="text-lg font-bold text-[#294936]">
                       {toFixed2(lot.currentWeightKg)}{' '}
-                      <span className="text-xs font-semibold text-[#a98c73]">kg</span>
+                      <span className="text-xs font-semibold text-[#8b9a90]">kg</span>
                     </span>
                     <Button
                       variant="success"
@@ -172,12 +172,12 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
         )}
         {openPopover && activeLot && (
           <div
-            className="fixed z-[9999] w-56 rounded-xl border border-[#f0dfca] bg-white shadow-2xl"
+            className="fixed z-[9999] w-56 rounded-xl border border-[#dfe9df] bg-white shadow-2xl"
             style={{ top: popoverPos.top, left: popoverPos.left }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between gap-4 border-b border-[#f4eee7] px-4 py-2.5">
-              <span className="text-xs font-bold uppercase tracking-wide text-[#80664d]">
+            <div className="flex items-center justify-between gap-4 border-b border-[#e6ebe5] px-4 py-2.5">
+              <span className="text-xs font-bold uppercase tracking-wide text-[#55635a]">
                 Lot details
               </span>
               <button
@@ -190,14 +190,14 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
             </div>
             <div className="space-y-3 px-4 py-3">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-xs text-[#a98c73]">Variety</span>
-                <span className="text-xs font-semibold text-[#49382c]">
+                <span className="text-xs text-[#8b9a90]">Variety</span>
+                <span className="text-xs font-semibold text-[#294936]">
                   {activeLot.variety || '—'}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-xs text-[#a98c73]">Process</span>
-                <span className="text-xs font-semibold text-[#49382c]">
+                <span className="text-xs text-[#8b9a90]">Process</span>
+                <span className="text-xs font-semibold text-[#294936]">
                   {activeLot.process || '—'}
                 </span>
               </div>
