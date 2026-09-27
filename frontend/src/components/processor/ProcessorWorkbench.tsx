@@ -90,6 +90,7 @@ import {
   createParchmentWithdrawal,
   deleteParchmentLot,
 } from "../../services/lots/parchmentLotService";
+import { deleteHarvestLot } from "../../services/lots/harvestLotService";
 import type { CuppingDetailUpdate } from "../../services/lots/greenBeanLotService";
 import DatePicker from "../common/DatePicker";
 import InvoiceReceipt from "./InvoiceReceipt";
@@ -105,6 +106,7 @@ import StartProcessingModal from "./modals/StartProcessingModal";
 import HullAndGradeModal from "./modals/HullAndGradeModal";
 import CompleteBatchModal from "./modals/CompleteBatchModal";
 import SetPriceModal from "./modals/SetPriceModal";
+import EditHarvestLotModal from "./modals/EditHarvestLotModal";
 import CreateCustomerModal from "../sales/modals/CreateCustomerModal";
 import { logger } from "../../utils/logger";
 import {
@@ -157,6 +159,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>("kanban");
   const isAdmin = currentUser.roles?.includes(UserRole.Admin);
+  // Processors may correct or remove a farmer's cherry lot until it is
+  // processed; the backend enforces the "unprocessed only" rule.
+  const canManageCherryLots =
+    currentUser.roles?.some(
+      (role) => role === UserRole.Processor || role === UserRole.Admin,
+    ) ?? false;
   const greenBeanStockRef = useRef<HTMLDivElement>(null);
 
   // Modal States
@@ -176,6 +184,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     useState<GreenBeanLot | null>(null);
   const [scoringLot, setScoringLot] = useState<GreenBeanLot | null>(null);
   const [pricingLot, setPricingLot] = useState<GreenBeanLot | null>(null);
+  const [editingHarvestLot, setEditingHarvestLot] =
+    useState<HarvestLot | null>(null);
+  const [deletingHarvestLotId, setDeletingHarvestLotId] = useState<
+    string | null
+  >(null);
 
   // Form States
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -870,6 +883,80 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     }
   };
 
+  // Merge only the edited cherry-lot fields into the stored lot — the PUT
+  // response does not carry everything bulk-load does (e.g. farm details),
+  // so swapping the whole object in could drop data.
+  const handleHarvestLotSaved = (updatedLot: HarvestLot) => {
+    setData((prev) => ({
+      ...prev,
+      harvestLots: prev.harvestLots.map((lot) =>
+        lot.id === updatedLot.id
+          ? {
+              ...lot,
+              cherryVariety: updatedLot.cherryVariety,
+              weightKg: updatedLot.weightKg,
+              farmPlotLocation: updatedLot.farmPlotLocation,
+              harvestDate: updatedLot.harvestDate,
+              ...(updatedLot.updatedAt && { updatedAt: updatedLot.updatedAt }),
+            }
+          : lot,
+      ),
+    }));
+    setEditingHarvestLot(null);
+    addToast({
+      type: "success",
+      message: `Cherry lot ${formatHarvestLotId(updatedLot)} updated.`,
+    });
+  };
+
+  // A refused cherry-lot edit or delete that means the list is stale: the lot
+  // was processed (409) or removed (404) since it loaded. Reload so it stops
+  // showing as Ready with actions that can only fail again.
+  const isStaleCherryLotError = (message: string) =>
+    /already been processed|not found/i.test(message);
+
+  const handleHarvestLotEditError = (message: string) => {
+    addToast({ type: "error", message });
+    if (isStaleCherryLotError(message)) {
+      setEditingHarvestLot(null);
+      void refreshData();
+    }
+  };
+
+  const handleDeleteHarvestLot = async (lot: HarvestLot) => {
+    if (deletingHarvestLotId) return;
+    const lotLabel = formatHarvestLotId(lot);
+    if (
+      !window.confirm(
+        `Delete cherry lot ${lotLabel}${lot.farmerName ? ` from ${lot.farmerName}` : ""}? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setDeletingHarvestLotId(lot.id);
+    try {
+      // The workbench lists only Ready lots, so ask the backend to refuse
+      // (not cascade) if this one has been processed since — Admin included.
+      await deleteHarvestLot(lot.id, { ifUnprocessed: true });
+      setData((prev) => ({
+        ...prev,
+        harvestLots: prev.harvestLots.filter((h) => h.id !== lot.id),
+      }));
+      addToast({
+        type: "success",
+        message: `Cherry lot ${lotLabel} deleted.`,
+      });
+    } catch (error) {
+      console.error("Failed to delete harvest lot:", error);
+      const message =
+        error instanceof Error ? error.message : "Failed to delete cherry lot.";
+      addToast({ type: "error", message });
+      if (isStaleCherryLotError(message)) void refreshData();
+    } finally {
+      setDeletingHarvestLotId(null);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
@@ -1272,6 +1359,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const harvestLotTotalPages = Math.ceil(
     filteredHarvestLots.length / HARVEST_LOT_PAGE_SIZE,
   );
+  // A delete, edit or Record Process can shrink the list under the current
+  // page, so keep the page within it.
+  const harvestLotPageSafe = Math.min(
+    harvestLotPage,
+    Math.max(1, harvestLotTotalPages),
+  );
   const paginatedHarvestLots = useMemo(() => {
     // Sort by createdAt (when the lot entered the system) so the row that
     // just shows up with the "NEW" badge actually lands on page 1. Fall back
@@ -1287,13 +1380,17 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         new Date(a.harvestDate || 0).getTime()
       );
     });
-    const startIndex = (harvestLotPage - 1) * HARVEST_LOT_PAGE_SIZE;
+    const startIndex = (harvestLotPageSafe - 1) * HARVEST_LOT_PAGE_SIZE;
     return sorted.slice(startIndex, startIndex + HARVEST_LOT_PAGE_SIZE);
-  }, [filteredHarvestLots, harvestLotPage]);
+  }, [filteredHarvestLots, harvestLotPageSafe]);
 
   // Card View pagination for Incoming Harvest Lots
   const harvestCardTotalPages = Math.ceil(
     filteredHarvestLots.length / ITEMS_PER_PAGE,
+  );
+  const harvestCardPageSafe = Math.min(
+    harvestCardPage,
+    Math.max(1, harvestCardTotalPages),
   );
   const paginatedHarvestCards = useMemo(() => {
     // Same sort as paginatedHarvestLots — keep card view + table view in
@@ -1308,12 +1405,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         new Date(a.harvestDate || 0).getTime()
       );
     });
-    const startIndex = (harvestCardPage - 1) * ITEMS_PER_PAGE;
+    const startIndex = (harvestCardPageSafe - 1) * ITEMS_PER_PAGE;
     return sorted.slice(
       startIndex,
       startIndex + ITEMS_PER_PAGE,
     );
-  }, [filteredHarvestLots, harvestCardPage]);
+  }, [filteredHarvestLots, harvestCardPageSafe]);
 
 
 
@@ -1830,13 +1927,38 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <button
-                        onClick={() => openModal("startProcessing", lot)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 shadow-sm transition-all"
-                      >
-                        <PlayCircle size={14} />
-                        Record Process
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => openModal("startProcessing", lot)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 shadow-sm transition-all"
+                        >
+                          <PlayCircle size={14} />
+                          Record Process
+                        </button>
+                        {canManageCherryLots && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setEditingHarvestLot(lot)}
+                              className="p-1.5 rounded-md text-gray-400 hover:text-blue-600 hover:bg-gray-100 transition-colors"
+                              title="Edit cherry lot"
+                              aria-label={`Edit cherry lot ${formatHarvestLotId(lot)}`}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteHarvestLot(lot)}
+                              disabled={deletingHarvestLotId === lot.id}
+                              className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                              title="Delete cherry lot"
+                              aria-label={`Delete cherry lot ${formatHarvestLotId(lot)}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                     </tr>
                   );
@@ -1847,7 +1969,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         </div>
 
         <Pagination
-          currentPage={harvestLotPage}
+          currentPage={harvestLotPageSafe}
           totalPages={harvestLotTotalPages}
           onPageChange={setHarvestLotPage}
         />
@@ -2533,10 +2655,36 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </span>
                       )}
                     </div>
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap flex-shrink-0 bg-green-50 text-green-700">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                      Ready
-                    </span>
+                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-green-50 text-green-700">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                        Ready
+                      </span>
+                      {canManageCherryLots && (
+                        <>
+                          {/* -my-1 keeps the hit area without making the row taller */}
+                          <button
+                            type="button"
+                            onClick={() => setEditingHarvestLot(lot)}
+                            className="ml-1 p-1 -my-1 rounded-md text-gray-400 hover:text-blue-600 hover:bg-gray-100 transition-colors"
+                            title="Edit cherry lot"
+                            aria-label={`Edit cherry lot ${formatHarvestLotId(lot)}`}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteHarvestLot(lot)}
+                            disabled={deletingHarvestLotId === lot.id}
+                            className="p-1 -my-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            title="Delete cherry lot"
+                            aria-label={`Delete cherry lot ${formatHarvestLotId(lot)}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   <div className="text-xs space-y-1.5 text-gray-500 mb-3">
@@ -2591,7 +2739,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           )}
         </div>
         <Pagination
-          currentPage={harvestCardPage}
+          currentPage={harvestCardPageSafe}
           totalPages={harvestCardTotalPages}
           onPageChange={setHarvestCardPage}
         />
@@ -4729,6 +4877,14 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           onClose={() => setPricingLot(null)}
           onSaved={handlePriceSaved}
           onError={(message) => addToast({ type: "error", message })}
+        />
+      )}
+      {editingHarvestLot && (
+        <EditHarvestLotModal
+          lot={editingHarvestLot}
+          onClose={() => setEditingHarvestLot(null)}
+          onSaved={handleHarvestLotSaved}
+          onError={handleHarvestLotEditError}
         />
       )}
       {invoiceView && (

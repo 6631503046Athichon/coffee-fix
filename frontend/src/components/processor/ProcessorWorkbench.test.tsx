@@ -4,11 +4,13 @@ import { vi } from 'vitest'
 import { INITIAL_APP_DATA } from '../../constants'
 import { DataContext } from '../../hooks/useDataContext'
 import { ToastProvider } from '../../contexts/ToastContext'
+import ToastContainer from '../common/ToastContainer'
 import { GreenBeanSourceType, ProcessingBatchStatus, UserRole } from '../../types'
 import type { AppData, Customer, GreenBeanLot, HarvestLot } from '../../types'
 import { addProcessingBatch } from '../../services/processing/processingBatchService'
 import { createWithdrawal, updateGreenBeanLotPrice } from '../../services/lots/greenBeanLotService'
 import { addCustomer } from '../../services/sales/customerService'
+import { deleteHarvestLot, updateHarvestLotDetails } from '../../services/lots/harvestLotService'
 import ProcessorWorkbench from './ProcessorWorkbench'
 
 vi.mock('../../services/processing/processingBatchService', async (importOriginal) => ({
@@ -27,6 +29,12 @@ vi.mock('../../services/sales/customerService', async (importOriginal) => ({
   addCustomer: vi.fn(),
 }))
 
+vi.mock('../../services/lots/harvestLotService', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../services/lots/harvestLotService')>(),
+  updateHarvestLotDetails: vi.fn(),
+  deleteHarvestLot: vi.fn(),
+}))
+
 const lot: HarvestLot = {
   id: 'hl-f442', displayId: 'HL-2026-44', weightKg: 400, remainingWeightKg: 200,
   status: 'Ready for Processing', farmerName: 'Farmer', cherryVariety: 'Catimor',
@@ -38,17 +46,20 @@ const batch = {
   status: ProcessingBatchStatus.Completed, parchmentWeightKg: 80,
 }
 
-function Harness({ initial, refreshData, onData }: {
+function Harness({ initial, refreshData, onData, roles = [UserRole.Processor], withToasts = false }: {
   initial: AppData
   refreshData: () => Promise<void>
   onData?: (data: AppData) => void
+  roles?: UserRole[]
+  withToasts?: boolean
 }) {
   const [data, setData] = useState(initial)
   useEffect(() => { onData?.(data) }, [data, onData])
   return (
     <DataContext.Provider value={{ data, setData, refreshData, isEditing: false, setIsEditing: () => {} }}>
       <ToastProvider>
-        <ProcessorWorkbench currentUser={{ id: 'processor', name: 'Processor', roles: [UserRole.Processor] }} />
+        <ProcessorWorkbench currentUser={{ id: 'processor', name: 'Processor', roles }} />
+        {withToasts && <ToastContainer />}
       </ToastProvider>
     </DataContext.Provider>
   )
@@ -124,11 +135,11 @@ describe('Green bean price', () => {
     }))
     expect(screen.queryByRole('button', { name: 'Save price' })).not.toBeInTheDocument()
 
-    const stored = onData.mock.lastCall![0].greenBeanLots[0]
-    expect(stored).toMatchObject({
+    // onData fires from an effect, so the stored copy can lag the screen by a tick.
+    await waitFor(() => expect(onData.mock.lastCall![0].greenBeanLots[0]).toMatchObject({
       pricePerKg: 180, currency: 'THB', priceSetDate: '2026-09-23', priceSetBy: 'processor',
-    })
-    expect(stored.withdrawalHistory).toHaveLength(1)
+    }))
+    expect(onData.mock.lastCall![0].greenBeanLots[0].withdrawalHistory).toHaveLength(1)
   })
 
   it('offers the price action in the data grid too', () => {
@@ -215,7 +226,8 @@ describe('Sale customer picker', () => {
       customerName: 'Cafe Doi',
       deliveryAddress: '12 Nimman Rd, back door',
     })
-  })
+    // Many re-renders of the whole workbench: ~3.5 s alone, more under a full parallel run.
+  }, 15000)
 
   it('New customer saves the customer, lists it and picks it without submitting the withdrawal', async () => {
     vi.mocked(addCustomer).mockResolvedValue({
@@ -244,9 +256,9 @@ describe('Sale customer picker', () => {
       name: 'Hill Roasters', type: 'Roaster', address: '9 Doi Rd',
     }))
     expect(address().value).toBe('9 Doi Rd')
-    expect(onData.mock.lastCall![0].customers).toEqual([
+    await waitFor(() => expect(onData.mock.lastCall![0].customers).toEqual([
       { id: 'c-9', name: 'Hill Roasters', type: 'Roaster', address: '9 Doi Rd' },
-    ])
+    ]))
 
     // The customer popup closes itself; the withdrawal stays open and unsent.
     await waitFor(
@@ -316,5 +328,149 @@ describe('Sale customer picker', () => {
     expect(screen.getByRole('button', { name: 'Select customer...' })).toBeInTheDocument()
     expect(address().value).toBe('')
     expect((screen.getByLabelText('Price per kg') as HTMLInputElement).value).toBe('')
+  })
+})
+
+describe('Cherry lot edit and delete', () => {
+  const cherryLot: HarvestLot = {
+    ...lot, farmId: 'farm-1', farmPlotLocation: 'Plot A', cropYearId: 'cy-2026',
+    farm: { id: 'farm-1', farmName: 'Doi Farm' },
+  }
+
+  let confirmSpy: ReturnType<typeof vi.spyOn>
+  beforeEach(() => {
+    vi.clearAllMocks()
+    confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+  })
+  afterEach(() => confirmSpy.mockRestore())
+
+  it('edits a lot from its card and merges only the edited fields into the stored lot', async () => {
+    // The PUT response is thinner than bulk-load (no farm summary here).
+    vi.mocked(updateHarvestLotDetails).mockResolvedValue({
+      ...cherryLot, farm: undefined, cherryVariety: 'Typica', weightKg: 385, harvestDate: '2026-09-14',
+    })
+    const onData = vi.fn()
+    render(<Harness initial={{ ...INITIAL_APP_DATA, harvestLots: [cherryLot] }} refreshData={async () => {}} onData={onData} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit cherry lot HL-2026-44' }))
+    const dialog = screen.getByRole('dialog', { name: 'Edit cherry lot' })
+    fireEvent.change(within(dialog).getByLabelText('Variety'), { target: { value: 'Typica' } })
+    fireEvent.change(within(dialog).getByLabelText('Weight (kg)'), { target: { value: '385' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit cherry lot' })).not.toBeInTheDocument())
+    // Only the changed fields go to the backend.
+    expect(updateHarvestLotDetails).toHaveBeenCalledWith('hl-f442', {
+      cherryVariety: 'Typica', weightKg: 385,
+    })
+    expect(screen.getByText('385.00 kg')).toBeInTheDocument()
+    // onData fires from an effect, so the stored copy can lag the screen by a tick.
+    await waitFor(() => expect(onData.mock.lastCall![0].harvestLots[0]).toMatchObject({
+      cherryVariety: 'Typica', weightKg: 385, harvestDate: '2026-09-14',
+      farmerName: 'Farmer', farmId: 'farm-1', cropYearId: 'cy-2026', status: 'Ready for Processing',
+    }))
+    expect(onData.mock.lastCall![0].harvestLots[0].farm).toEqual({ id: 'farm-1', farmName: 'Doi Farm' })
+  })
+
+  it('deletes a lot from the data grid after confirming', async () => {
+    vi.mocked(deleteHarvestLot).mockResolvedValue(undefined)
+    const onData = vi.fn()
+    render(<Harness initial={{ ...INITIAL_APP_DATA, harvestLots: [cherryLot] }} refreshData={async () => {}} onData={onData} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete cherry lot HL-2026-44' }))
+
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('HL-2026-44'))
+    await waitFor(() => expect(onData.mock.lastCall![0].harvestLots).toEqual([]))
+    // The workbench always asks the backend to refuse a lot processed since
+    // the list loaded, whoever is signed in.
+    expect(deleteHarvestLot).toHaveBeenCalledWith('hl-f442', { ifUnprocessed: true })
+    expect(screen.queryByRole('button', { name: 'Record Process' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the lot when the delete is not confirmed', () => {
+    confirmSpy.mockReturnValue(false)
+    render(<Harness initial={{ ...INITIAL_APP_DATA, harvestLots: [cherryLot] }} refreshData={async () => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete cherry lot HL-2026-44' }))
+    expect(deleteHarvestLot).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Record Process' })).toBeInTheDocument()
+  })
+
+  it('keeps the lot and raises the error when the delete is refused', async () => {
+    vi.mocked(deleteHarvestLot).mockRejectedValue(new Error("You don't have permission to delete harvest lot."))
+    vi.spyOn(console, 'error').mockImplementationOnce(() => {})
+    const refreshData = vi.fn(async () => {})
+    render(<Harness initial={{ ...INITIAL_APP_DATA, harvestLots: [cherryLot] }} refreshData={refreshData} withToasts />)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete cherry lot HL-2026-44' }))
+
+    expect(await screen.findByText("You don't have permission to delete harvest lot.")).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Record Process' })).toBeInTheDocument()
+    expect(refreshData).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['processed elsewhere (409)', 'This cherry lot has already been processed, so it was not deleted'],
+    ['already deleted (404)', 'Resource not found while trying to delete harvest lot.'],
+  ])('reloads the lots when the delete is refused because the lot was %s', async (_label, message) => {
+    vi.mocked(deleteHarvestLot).mockRejectedValue(new Error(message))
+    vi.spyOn(console, 'error').mockImplementationOnce(() => {})
+    const refreshData = vi.fn(async () => {})
+    render(<Harness initial={{ ...INITIAL_APP_DATA, harvestLots: [cherryLot] }} refreshData={refreshData} withToasts />)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete cherry lot HL-2026-44' }))
+
+    expect(await screen.findByText(message)).toBeInTheDocument()
+    expect(refreshData).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes the edit and reloads the lots when the lot was processed elsewhere', async () => {
+    const message = 'This cherry lot has already been processed, so a processor can no longer edit it'
+    vi.mocked(updateHarvestLotDetails).mockRejectedValue(new Error(message))
+    const refreshData = vi.fn(async () => {})
+    render(<Harness initial={{ ...INITIAL_APP_DATA, harvestLots: [cherryLot] }} refreshData={refreshData} withToasts />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit cherry lot HL-2026-44' }))
+    const dialog = screen.getByRole('dialog', { name: 'Edit cherry lot' })
+    fireEvent.change(within(dialog).getByLabelText('Weight (kg)'), { target: { value: '385' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
+
+    expect(await screen.findByText(message)).toBeInTheDocument()
+    expect(refreshData).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog', { name: 'Edit cherry lot' })).not.toBeInTheDocument()
+  })
+
+  it.each(['Workflow', 'Data Grid'])('in %s moves back a page when the last lot on the last page is deleted', async (view) => {
+    vi.mocked(deleteHarvestLot).mockResolvedValue(undefined)
+    // Six lots at five per page; the oldest sits alone on page 2.
+    const lots = Array.from({ length: 6 }, (_, i) => ({
+      ...cherryLot, id: `hl-${i + 1}`, displayId: `HL-2026-${i + 1}`, createdAt: `2026-09-0${i + 1}T00:00:00.000Z`,
+    }))
+    render(<Harness initial={{ ...INITIAL_APP_DATA, harvestLots: lots }} refreshData={async () => {}} />)
+    if (view === 'Data Grid') fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '2' }))
+    expect(screen.getAllByRole('button', { name: 'Record Process' })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete cherry lot HL-2026-1' }))
+
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Record Process' })).toHaveLength(5))
+    expect(screen.queryByRole('button', { name: 'Delete cherry lot HL-2026-1' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['Workflow', [UserRole.Admin], true],
+    ['Data Grid', [UserRole.Admin], true],
+    ['Workflow', [UserRole.Roaster], false],
+    ['Data Grid', [UserRole.Roaster], false],
+  ])('in %s shows the actions for %j: %s', (view, roles, visible) => {
+    render(<Harness initial={{ ...INITIAL_APP_DATA, harvestLots: [cherryLot] }} refreshData={async () => {}} roles={roles} />)
+    if (view === 'Data Grid') fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
+    const edit = screen.queryByRole('button', { name: 'Edit cherry lot HL-2026-44' })
+    const del = screen.queryByRole('button', { name: 'Delete cherry lot HL-2026-44' })
+    if (visible) {
+      expect(edit).toBeInTheDocument()
+      expect(del).toBeInTheDocument()
+    } else {
+      expect(edit).not.toBeInTheDocument()
+      expect(del).not.toBeInTheDocument()
+    }
   })
 })
