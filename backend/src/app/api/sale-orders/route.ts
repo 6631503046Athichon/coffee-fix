@@ -9,18 +9,23 @@ import {
   DAY_MS,
   MAX_ORDER_NUMBER_ATTEMPTS,
   SALE_TX_OPTIONS,
+  applyGreenReservationChange,
   applyReservationChange,
   canSeeSales,
   checkSaleBatches,
+  checkSaleStock,
   firstIssueMessage,
   isAdminUser,
   priceLines,
   readJsonObject,
   reservationsByBatch,
+  reservationsByInventory,
   saleBatchSelect,
   saleErrorResponse,
   saleOrderInclude,
+  saleStockSelect,
   serializeSaleOrder,
+  type AffectedInventoryItemJson,
   type AffectedRoastBatchJson,
   type SaleOrderRow,
 } from '@/lib/saleOrders'
@@ -88,9 +93,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/sale-orders - Record a sale of roasted coffee
-// Every line comes from one of the seller's own roasts. Amounts are priced
-// here, and the roasts' sold kg move in the same transaction as the sale.
+// POST /api/sale-orders - Record a sale of roasted coffee and/or green beans.
+// The seller is the caller, or the roaster an Admin names in `sellerId`; the
+// seller owns the sale (createdBy) and every line comes from one of the
+// seller's own roasts or stock rows. Amounts are priced here, and the roasts'
+// sold kg and the stock rows' green kg move in the same transaction as the sale.
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request)
@@ -107,6 +114,26 @@ export async function POST(request: NextRequest) {
     }
     const input = parsed.data
 
+    // Naming yourself is the same as naming no one.
+    const sellerId = input.sellerId && input.sellerId !== user.id ? input.sellerId : null
+    if (sellerId) {
+      if (!isAdminUser(user)) {
+        return NextResponse.json(
+          { error: 'Only an admin can record a sale for another roaster' },
+          { status: 403 }
+        )
+      }
+      const seller = await prisma.user.findUnique({
+        where: { id: sellerId },
+        select: { roles: true },
+      })
+      if (!seller || !seller.roles.includes('Roaster')) {
+        return NextResponse.json({ error: 'Choose a roaster to sell for' }, { status: 400 })
+      }
+    }
+    // Whose sale this is: its createdBy, and whose roasts and stock it sells.
+    const ownerId = sellerId ?? user.id
+
     const orderDate = parseDateOnly(input.orderDate) ?? todayDateOnly()
     // A day of slack covers clients ahead of Bangkok time.
     if (orderDate.getTime() > todayDateOnly().getTime() + DAY_MS) {
@@ -122,26 +149,50 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
     }
 
-    const batchIds = input.items.map((item) => item.roastBatchId)
-    const batches = await prisma.roastBatch.findMany({
-      where: { id: { in: batchIds } },
-      select: saleBatchSelect,
-    })
-    // Admins too: nobody sells another roaster's coffee in their own name.
+    const batchIds = input.items.flatMap((item) => (item.roastBatchId ? [item.roastBatchId] : []))
+    const stockIds = input.items.flatMap((item) => (item.roasterInventoryId ? [item.roasterInventoryId] : []))
+    const [batches, stock] = await Promise.all([
+      batchIds.length
+        ? prisma.roastBatch.findMany({ where: { id: { in: batchIds } }, select: saleBatchSelect })
+        : Promise.resolve([]),
+      stockIds.length
+        ? prisma.roasterInventoryItem.findMany({ where: { id: { in: stockIds } }, select: saleStockSelect })
+        : Promise.resolve([]),
+    ])
+    // Admins too: every line comes from the seller, so an Admin selling a
+    // roaster's coffee names that roaster in sellerId instead of selling it in
+    // their own name.
     const checked = checkSaleBatches(
       batchIds,
       batches,
-      user.id,
-      'You can only sell roasts from your own Roast Logbook.',
+      ownerId,
+      sellerId
+        ? 'Every roast on a sale must come from the roaster who is selling.'
+        : 'You can only sell roasts from your own Roast Logbook.',
     )
     if ('error' in checked) {
       return NextResponse.json({ error: checked.error.message }, { status: checked.error.status })
     }
+    const checkedStock = checkSaleStock(
+      stockIds,
+      stock,
+      ownerId,
+      sellerId
+        ? 'Every green bean lot on a sale must come from the stock of the roaster who is selling.'
+        : 'You can only sell green beans from your own stock.',
+    )
+    if ('error' in checkedStock) {
+      return NextResponse.json({ error: checkedStock.error.message }, { status: checkedStock.error.status })
+    }
 
-    const { rows, totalAmount } = priceLines(input.items, checked.batchById)
+    const { rows, totalAmount } = priceLines(input.items, checked.batchById, checkedStock.stockById)
     const status = input.status ?? 'Confirmed'
 
-    let result: { saleOrder: SaleOrderRow; affected: AffectedRoastBatchJson[] } | null = null
+    let result: {
+      saleOrder: SaleOrderRow
+      affected: AffectedRoastBatchJson[]
+      affectedInventory: AffectedInventoryItemJson[]
+    } | null = null
 
     for (let attempt = 0; attempt < MAX_ORDER_NUMBER_ATTEMPTS; attempt++) {
       const orderNumber = await getNextSaleOrderNumber()
@@ -160,7 +211,7 @@ export async function POST(request: NextRequest) {
               totalAmount,
               currency: input.currency ?? 'THB',
               notes: input.notes?.trim() || null,
-              createdBy: user.id,
+              createdBy: ownerId,
             },
             select: { id: true },
           })
@@ -171,7 +222,14 @@ export async function POST(request: NextRequest) {
             data: rows.map((row, i) => ({ ...row, saleOrderId: order.id, createdAt: new Date(t0 + i) })),
           })
 
+          // Roasts first, then stock rows: the same lock order as every other sale write.
           const affected = await applyReservationChange(tx, new Map(), reservationsByBatch(status, rows))
+          const affectedInventory = await applyGreenReservationChange(
+            tx,
+            new Map(),
+            reservationsByInventory(status, rows),
+            ownerId,
+          )
 
           // Read back inside the transaction: api.ts retries any 503, so a
           // 503 must only ever come from an attempt that rolled back.
@@ -182,7 +240,7 @@ export async function POST(request: NextRequest) {
           if (!saleOrder) {
             throw new Error('Sale vanished while it was being recorded')
           }
-          return { saleOrder, affected }
+          return { saleOrder, affected, affectedInventory }
         }, SALE_TX_OPTIONS)
 
         break
@@ -206,6 +264,7 @@ export async function POST(request: NextRequest) {
       {
         saleOrder: serializeSaleOrder(result.saleOrder),
         affectedRoastBatches: result.affected,
+        affectedInventoryItems: result.affectedInventory,
         message: 'Sale recorded',
       },
       { status: 201 }

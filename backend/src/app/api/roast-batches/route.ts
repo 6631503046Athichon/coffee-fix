@@ -61,6 +61,8 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/roast-batches - Create new roast batch
+// Roasters roast their own stock; Admins may roast anyone's, and the batch is
+// recorded under the stock's owner.
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request)
@@ -89,7 +91,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (inventory.roasterId !== user.id && !user.roles.includes('Admin')) {
+    if (inventory.roasterId !== user.id && !isAdminUser(user)) {
       return NextResponse.json(
         { error: 'Forbidden' },
         { status: 403 }
@@ -124,10 +126,12 @@ export async function POST(request: NextRequest) {
           throw new Error('INSUFFICIENT_INVENTORY')
         }
 
-        // Create roast batch
+        // The roast belongs to whoever owns the beans: an Admin roasting a
+        // roaster's stock records it in that roaster's Roast Logbook, where
+        // the roaster can edit, delete and sell it.
         const batch = await tx.roastBatch.create({
           data: {
-            roasterId: user.id,
+            roasterId: inventory.roasterId,
             roasterInventoryId,
             greenBeanLotId,
             batchSizeKg: amount,

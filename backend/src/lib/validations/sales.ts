@@ -33,7 +33,7 @@ export const createCustomerSchema = z.object({
 export const updateCustomerSchema = createCustomerSchema.partial();
 
 // ============================================
-// Sale Order Schemas (roasted coffee sold from roast batches)
+// Sale Order Schemas (roasted coffee from roast batches, green beans from roaster stock)
 // ============================================
 
 // A plain calendar date. parseStrictDateOnly lives in lib/utils, which has no
@@ -48,22 +48,41 @@ export const saleDateOnlySchema = z.string({ message: 'Sale date must be a date 
     return date != null && !Number.isNaN(date.getTime());
   }, 'Sale date must be a valid date');
 
+const SALE_LINE_SOURCE_MESSAGE = 'Choose roasted coffee or green beans';
+
+// A line sells kg of one roast (roastBatchId) or of one stock row
+// (roasterInventoryId), never both. An explicit null counts as absent, so a
+// line sent back the way the API returned it still parses.
 const saleLineSchema = z.object({
-  roastBatchId: z.string({ message: 'Choose a roast' }).uuid('Choose a roast'),
+  roastBatchId: z.string({ message: SALE_LINE_SOURCE_MESSAGE }).uuid(SALE_LINE_SOURCE_MESSAGE).nullish(),
+  roasterInventoryId: z.string({ message: SALE_LINE_SOURCE_MESSAGE }).uuid(SALE_LINE_SOURCE_MESSAGE).nullish(),
   quantity: z.number({ message: 'Enter the kg sold' })
     .min(0.001, 'Quantity must be at least 0.001 kg')
     .max(100000, 'Quantity must be 100000 kg or less'),
   pricePerKg: z.number({ message: 'Enter a price per kg' })
     .min(0, 'Price per kg cannot be negative')
     .max(1000000, 'Price per kg is too large'),
+}).superRefine((line, ctx) => {
+  if (!line.roastBatchId && !line.roasterInventoryId) {
+    ctx.addIssue({ code: 'custom', message: SALE_LINE_SOURCE_MESSAGE });
+  } else if (line.roastBatchId && line.roasterInventoryId) {
+    ctx.addIssue({ code: 'custom', message: 'A line is either roasted coffee or green beans, not both' });
+  }
 });
 
-const saleLinesSchema = z.array(saleLineSchema, { message: 'Add at least one roast to the sale' })
-  .min(1, 'Add at least one roast to the sale')
+/** True when no id appears twice (absent ids are ignored). */
+const unique = (ids: (string | null | undefined)[]) => {
+  const set = ids.filter((id): id is string => !!id);
+  return new Set(set).size === set.length;
+};
+
+const saleLinesSchema = z.array(saleLineSchema, { message: 'Add at least one line to the sale' })
+  .min(1, 'Add at least one line to the sale')
   .max(30, 'A sale can have at most 30 lines')
+  .refine((lines) => unique(lines.map((line) => line.roastBatchId)), 'Each roast can appear only once in a sale')
   .refine(
-    (lines) => new Set(lines.map((line) => line.roastBatchId)).size === lines.length,
-    'Each roast can appear only once in a sale'
+    (lines) => unique(lines.map((line) => line.roasterInventoryId)),
+    'Each green bean lot can appear only once in a sale'
   );
 
 const saleNotesSchema = z.string({ message: 'Notes must be text' })
@@ -78,9 +97,14 @@ const saleCurrencySchema = z.enum(['THB', 'USD', 'EUR', 'JPY', 'CNY'], {
 
 // Unknown keys (subtotal, totalAmount, customerName, greenBeanLotId, lotGrade)
 // are stripped: the server prices every line and copies the lot and grade
-// from the roast.
+// from the roast or the stock row.
 export const createSaleOrderSchema = z.object({
   customerId: z.string({ message: 'Choose a customer' }).uuid('Choose a customer'),
+  // The roaster the sale is recorded for; only an Admin may name someone
+  // else (the route checks the role). Absent or null = the caller.
+  sellerId: z.string({ message: 'Choose a roaster to sell for' })
+    .uuid('Choose a roaster to sell for')
+    .nullish(),
   orderDate: saleDateOnlySchema.optional(), // default: today in Bangkok
   // Default 'Confirmed'; the UI never sends it.
   status: z.enum(['Draft', 'Confirmed', 'Delivered'], {
@@ -91,6 +115,8 @@ export const createSaleOrderSchema = z.object({
   items: saleLinesSchema,
 });
 
+// No sellerId: a sale's owner never changes, so a sellerId sent here is
+// stripped like any other unknown key.
 export const updateSaleOrderSchema = z.object({
   customerId: z.string({ message: 'Choose a customer' }).uuid('Choose a customer').optional(),
   orderDate: saleDateOnlySchema.optional(),

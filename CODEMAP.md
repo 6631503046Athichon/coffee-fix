@@ -49,15 +49,16 @@ Routes follow Next.js App Router file conventions. Each `route.ts` exports HTTP 
 - `process-types/route.ts`, `process-types/[id]/route.ts` — reference list of process types
 
 #### Roaster — `roast-batches/`, `roaster-inventory/`
-- `roast-batches/route.ts` — list (Roaster/Admin; a roaster only ever gets their own) & create
+- `roast-batches/route.ts` — list (Roaster/Admin; a roaster only ever gets their own) & create (an Admin may roast anyone's stock; the roast is recorded under the stock's owner)
 - `roast-batches/[id]/route.ts` — edit / delete a roast. Roasted kg can't drop below the kg already sold (400); a roast on any sale can't be deleted (409 naming the sales)
 - `roast-batches/sellable/route.ts` — GET roasts with roasted kg left to sell, plus `missingWeightCount`. Feeds the Sell popup (Admins may pass `?roasterId`)
 - `roaster-inventory/route.ts`, `roaster-inventory/[id]/route.ts` — Roaster/Admin only, scoped to the caller's own rows
+- `roaster-inventory/sellable/route.ts` — GET green stock rows with more than 0.01 kg left; feeds the Sell popup (Admins may pass `?roasterId`)
 
 #### Sales — `sale-orders/`, `invoices/`, `customers/`, `pricing-history/`
-Roasters sell roasted coffee from their roast batches. A sale's lines each hold kg of one roast (`RoastBatch.soldWeightKg`, moved by guarded SQL in `lib/saleOrders.ts`); Cancelled sales hold nothing.
-- `sale-orders/route.ts` — GET the sales log (a roaster sees only their own sales, Admins all, other roles an empty list), POST record a sale (server prices every line)
-- `sale-orders/[id]/route.ts` — GET / PUT (customer, date, currency, notes, status, lines; `expectedUpdatedAt` guards stale edits) / DELETE (returns the kg to the roasts and removes the sale's invoices)
+Roasters sell roasted coffee from their roast batches. A sale's lines each hold kg of one roast (`RoastBatch.soldWeightKg`, moved by guarded SQL in `lib/saleOrders.ts`); Cancelled sales hold nothing. Sales may also carry green-bean lines taken from the seller's roaster stock (`RoasterInventoryItem.remainingWeightKg`).
+- `sale-orders/route.ts` — GET the sales log (a roaster sees only their own sales, Admins all, other roles an empty list), POST record a sale (server prices every line). The seller owns the sale (`createdBy`) and every line comes from the seller's own roasts and stock; an Admin sells for a roaster by passing that roaster's id as `sellerId` (400 unless the user has the Roaster role; 403 when a non-admin names someone else)
+- `sale-orders/[id]/route.ts` — GET / PUT (customer, date, currency, notes, status, lines; `expectedUpdatedAt` guards stale edits; the owner never changes, so `sellerId` is ignored and an Admin's edit moves the owner's stock) / DELETE (returns the kg to the roasts and stock rows and removes the sale's invoices)
 - `invoices/route.ts`, `invoices/[id]/route.ts` — API only, no UI. Scoped to the sale's owner; a cancelled sale can't be invoiced
 - `customers/route.ts`, `customers/[id]/route.ts` — the shared address book. Sale counts are the caller's own; Roasters and Admins may delete a customer nobody has sold to. Processors may only create one (from the green-bean Withdraw Stock popup)
 - `pricing-history/route.ts`
@@ -108,14 +109,14 @@ The scheduler only arms its `setInterval` on a host that keeps a process alive. 
 - `email.ts` — nodemailer setup + reset email templates
 - `credentialGenerator.ts` — username/password generation for new users
 - `documentNumbers.ts` — sale order / invoice numbering
-- `saleOrders.ts` — sale JSON shapes and serializers, line pricing, `applyReservationChange` (the guarded sold-kg SQL), sale error messages. Type-only imports, so tests load it without mocks
+- `saleOrders.ts` — sale JSON shapes and serializers, line pricing, `applyReservationChange` (the guarded sold-kg SQL), `applyGreenReservationChange` (the guarded green-kg SQL on stock rows), sale error messages. Type-only imports, so tests load it without mocks
 - `utils.ts` — `safeParseFloat`, `safeParseInt`, `parseDateOnly`, `nextDisplayId`, `nextDisplayIds`, `withDisplayIdRetry`
 - `validations/` — Zod schemas, one file per domain (`farm.ts`, `harvestLot.ts`, `parchmentLot.ts`, `greenBeanLot.ts`, `processingBatch.ts`, `roasting.ts`, `sales.ts`, `gapLog.ts`, `soilAnalysis.ts`, `weatherRecord.ts`, `cupping.ts`, `user.ts`, `cropYear.ts`, `referenceData.ts`, `middleware.ts`, `common.ts`, `index.ts`)
 
 ### Prisma — `backend/prisma/`
 - `schema.prisma` — single-source-of-truth data model
 - `seed.ts` — seed script (demo data)
-- `sql/` — hand-written schema changes, applied to Supabase **before** the backend that needs them deploys: `001_coffee_grades.sql`, `002_roasted_sales.sql` (sold kg on roasts, roast links on sale lines, customer snapshots on sales). Apply with `node --env-file=<env file> scripts/maintenance/apply-sql-file.js prisma/sql/<file>` or the Supabase SQL Editor
+- `sql/` — hand-written schema changes, applied to Supabase **before** the backend that needs them deploys: `001_coffee_grades.sql`, `002_roasted_sales.sql` (sold kg on roasts, roast links on sale lines, customer snapshots on sales), `003_green_bean_sales.sql` (stock-row links on green-bean sale lines; apply after 002). Apply with `node --env-file=<env file> scripts/maintenance/apply-sql-file.js prisma/sql/<file>` or the Supabase SQL Editor
 
 There is no `migrations/` directory — it is gitignored. Vercel deploys run `prisma generate` only, never `db push`, so schema changes ship as the SQL files above. (`backend/railway.json` still carries a `db push` pre-deploy command from the old Railway service.)
 

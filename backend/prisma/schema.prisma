@@ -544,16 +544,17 @@ model CuppingScore {
 }
 
 model RoasterInventoryItem {
-  id                String       @id @default(uuid())
+  id                String          @id @default(uuid())
   roasterId         String
   greenBeanLotId    String
   claimedWeightKg   Float
   remainingWeightKg Float
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
   roastBatches      RoastBatch[]
-  greenBeanLot      GreenBeanLot @relation(fields: [greenBeanLotId], references: [id])
-  roaster           User         @relation(fields: [roasterId], references: [id], onDelete: Cascade)
+  saleOrderItems    SaleOrderItem[]
+  greenBeanLot      GreenBeanLot    @relation(fields: [greenBeanLotId], references: [id])
+  roaster           User            @relation(fields: [roasterId], references: [id], onDelete: Cascade)
 
   @@unique([roasterId, greenBeanLotId])
   @@index([roasterId])
@@ -636,25 +637,30 @@ model SaleOrder {
 }
 
 model SaleOrderItem {
-  id             String       @id @default(uuid())
-  saleOrderId    String
-  /// Roasted-coffee line: the roast batch it was sold from. Null on older green-bean lines.
-  roastBatchId   String?
-  /// Always set. On roast lines the server copies the batch's green bean lot.
-  greenBeanLotId String
+  id                 String                @id @default(uuid())
+  saleOrderId        String
+  /// Roasted-coffee line: the roast batch it was sold from. Null on green-bean lines and older lines.
+  roastBatchId       String?
+  /// Green-bean line: the seller's stock row the kg came from. Null on roasted and older lines.
+  /// A line never has both (CHECK SaleOrderItem_one_stock_source_check, prisma/sql/003).
+  roasterInventoryId String?
+  /// Always set. On roast and green lines the server copies it from the roast or the stock row.
+  greenBeanLotId     String
   /// Snapshot of the green lot's grade at sale time (max 50 chars).
-  lotGrade       String
-  quantity       Float
-  pricePerKg     Float
-  subtotal       Float
-  createdAt      DateTime     @default(now())
-  greenBeanLot   GreenBeanLot @relation(fields: [greenBeanLotId], references: [id])
-  roastBatch     RoastBatch?  @relation(fields: [roastBatchId], references: [id], onDelete: Restrict)
-  saleOrder      SaleOrder    @relation(fields: [saleOrderId], references: [id], onDelete: Cascade)
+  lotGrade           String
+  quantity           Float
+  pricePerKg         Float
+  subtotal           Float
+  createdAt          DateTime              @default(now())
+  greenBeanLot       GreenBeanLot          @relation(fields: [greenBeanLotId], references: [id])
+  roastBatch         RoastBatch?           @relation(fields: [roastBatchId], references: [id], onDelete: Restrict)
+  roasterInventory   RoasterInventoryItem? @relation(fields: [roasterInventoryId], references: [id], onDelete: Restrict)
+  saleOrder          SaleOrder             @relation(fields: [saleOrderId], references: [id], onDelete: Cascade)
 
   @@index([saleOrderId])
   @@index([greenBeanLotId])
   @@index([roastBatchId])
+  @@index([roasterInventoryId])
 }
 
 model Invoice {

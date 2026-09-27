@@ -299,7 +299,7 @@ describe('roasted coffee sales', () => {
     test.each([
       ['invalid JSON', '{bad json', 'Invalid JSON body'],
       ['a JSON array', '[]', 'Invalid JSON body'],
-      ['no lines', saleBody({ items: [] }), 'Add at least one roast to the sale'],
+      ['no lines', saleBody({ items: [] }), 'Add at least one line to the sale'],
       [
         'the same roast twice',
         saleBody({ items: [line(BATCH_A, 1), line(BATCH_A, 2)] }),
@@ -1066,6 +1066,7 @@ describe('roasted coffee sales', () => {
         message: 'Sale deleted',
         deletedInvoices: 2,
         affectedRoastBatches: [{ id: BATCH_A, soldWeightKg: 2.5, availableKg: 7.5 }],
+        affectedInventoryItems: [],
       })
       const calls = rawCalls()
       expect(calls).toHaveLength(1)

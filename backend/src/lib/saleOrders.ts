@@ -41,6 +41,12 @@ export function roastBatchLabel(id: string): string {
   return 'RB-' + num.toString().padStart(4, '0')
 }
 
+/** Same algorithm as the frontend's toRoaId: the lot id the roaster pages show. */
+export function roaLabel(id: string): string {
+  const num = parseInt(id.replace(/-/g, '').substring(0, 8), 16) % 10000
+  return 'ROA-' + num.toString().padStart(4, '0')
+}
+
 /** '2.5', '0.125' */
 export const formatKgText = (kg: number) => String(round3(kg))
 
@@ -63,6 +69,23 @@ export function availableKgOf(roastedWeightKg: number | null | undefined, soldWe
   return Math.max(0, floor3(roastedWeightKg - (soldWeightKg ?? 0)))
 }
 
+/** The green lot facts a sale line shows: ids, grade, variety and process. */
+export const greenLotFactsSelect = {
+  id: true,
+  displayId: true,
+  grade: true,
+  externalSource: true,
+  parchmentLot: {
+    select: {
+      processType: true,
+      externalSource: true,
+      harvestLot: { select: { cherryVariety: true } },
+    },
+  },
+} satisfies Prisma.GreenBeanLotSelect
+
+type GreenLotFactsRow = Prisma.GreenBeanLotGetPayload<{ select: typeof greenLotFactsSelect }>
+
 export const roastSummarySelect = {
   id: true,
   roasterId: true,
@@ -71,22 +94,17 @@ export const roastSummarySelect = {
   roastedWeightKg: true,
   soldWeightKg: true,
   greenBeanLotId: true,
-  greenBeanLot: {
-    select: {
-      id: true,
-      displayId: true,
-      grade: true,
-      externalSource: true,
-      parchmentLot: {
-        select: {
-          processType: true,
-          externalSource: true,
-          harvestLot: { select: { cherryVariety: true } },
-        },
-      },
-    },
-  },
+  greenBeanLot: { select: greenLotFactsSelect },
 } satisfies Prisma.RoastBatchSelect
+
+/** A stock row (RoasterInventoryItem) as a green-bean sale line and the sellable list show it. */
+export const greenStockSelect = {
+  id: true,
+  roasterId: true,
+  remainingWeightKg: true,
+  greenBeanLotId: true,
+  greenBeanLot: { select: greenLotFactsSelect },
+} satisfies Prisma.RoasterInventoryItemSelect
 
 export const saleOrderInclude = {
   customer: {
@@ -96,7 +114,10 @@ export const saleOrderInclude = {
   _count: { select: { invoices: true } },
   items: {
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    include: { roastBatch: { select: roastSummarySelect } },
+    include: {
+      roastBatch: { select: roastSummarySelect },
+      roasterInventory: { select: greenStockSelect },
+    },
   },
 } satisfies Prisma.SaleOrderInclude
 
@@ -109,9 +130,19 @@ export const saleBatchSelect = {
   greenBeanLot: { select: { grade: true } },
 } satisfies Prisma.RoastBatchSelect
 
+/** What the sale routes read from each stock row before pricing a line. */
+export const saleStockSelect = {
+  id: true,
+  roasterId: true,
+  greenBeanLotId: true,
+  greenBeanLot: { select: { grade: true } },
+} satisfies Prisma.RoasterInventoryItemSelect
+
 export type RoastSummaryRow = Prisma.RoastBatchGetPayload<{ select: typeof roastSummarySelect }>
 export type SaleOrderRow = Prisma.SaleOrderGetPayload<{ include: typeof saleOrderInclude }>
 export type SaleBatchRow = Prisma.RoastBatchGetPayload<{ select: typeof saleBatchSelect }>
+export type GreenStockRow = Prisma.RoasterInventoryItemGetPayload<{ select: typeof greenStockSelect }>
+export type SaleStockRow = Prisma.RoasterInventoryItemGetPayload<{ select: typeof saleStockSelect }>
 
 export type RoastSummaryJson = {
   id: string
@@ -128,15 +159,31 @@ export type RoastSummaryJson = {
   process: string | null
 }
 
+export type GreenStockSummaryJson = {
+  /** RoasterInventoryItem id */
+  id: string
+  /** roaLabel(greenBeanLotId): 'ROA-1234', the lot id the roaster pages show */
+  label: string
+  greenBeanLotId: string
+  greenBeanLotDisplayId: string | null
+  grade: string | null
+  variety: string | null
+  process: string | null
+  /** Green kg in the stock row that no sale holds, rounded down to the gram. */
+  availableKg: number
+}
+
 export type SaleOrderItemJson = {
   id: string
   roastBatchId: string | null
+  roasterInventoryId: string | null
   greenBeanLotId: string
   lotGrade: string
   quantity: number
   pricePerKg: number
   subtotal: number
   roast: RoastSummaryJson | null
+  green: GreenStockSummaryJson | null
 }
 
 export type SaleOrderJson = {
@@ -168,10 +215,31 @@ export type SaleOrderJson = {
 }
 
 export type AffectedRoastBatchJson = { id: string; soldWeightKg: number; availableKg: number }
+export type AffectedInventoryItemJson = { id: string; remainingWeightKg: number }
+
+/**
+ * Grade, variety and process of a green lot. An external lot's own facts win,
+ * then the harvest and parchment it came from.
+ */
+export function lotFacts(lot: GreenLotFactsRow | null | undefined): {
+  grade: string | null
+  variety: string | null
+  process: string | null
+} {
+  const parchment = lot?.parchmentLot ?? null
+  return {
+    grade: nonBlank(lot?.grade),
+    variety:
+      jsonText(lot?.externalSource, 'variety') ||
+      nonBlank(parchment?.harvestLot?.cherryVariety) ||
+      jsonText(parchment?.externalSource, 'variety') ||
+      null,
+    process: jsonText(lot?.externalSource, 'processType') || nonBlank(parchment?.processType) || null,
+  }
+}
 
 export function serializeRoastSummary(b: RoastSummaryRow): RoastSummaryJson {
   const lot = b.greenBeanLot
-  const parchment = lot?.parchmentLot ?? null
   return {
     id: b.id,
     label: roastBatchLabel(b.id),
@@ -182,13 +250,19 @@ export function serializeRoastSummary(b: RoastSummaryRow): RoastSummaryJson {
     availableKg: availableKgOf(b.roastedWeightKg, b.soldWeightKg),
     greenBeanLotId: b.greenBeanLotId,
     greenBeanLotDisplayId: lot?.displayId ?? null,
-    grade: nonBlank(lot?.grade),
-    variety:
-      jsonText(lot?.externalSource, 'variety') ||
-      nonBlank(parchment?.harvestLot?.cherryVariety) ||
-      jsonText(parchment?.externalSource, 'variety') ||
-      null,
-    process: jsonText(lot?.externalSource, 'processType') || nonBlank(parchment?.processType) || null,
+    ...lotFacts(lot),
+  }
+}
+
+export function serializeGreenStock(row: GreenStockRow): GreenStockSummaryJson {
+  return {
+    id: row.id,
+    label: roaLabel(row.greenBeanLotId),
+    greenBeanLotId: row.greenBeanLotId,
+    greenBeanLotDisplayId: row.greenBeanLot?.displayId ?? null,
+    ...lotFacts(row.greenBeanLot),
+    // Sales take their kg straight out of remainingWeightKg, so all of it is free.
+    availableKg: availableKgOf(row.remainingWeightKg, 0),
   }
 }
 
@@ -223,23 +297,25 @@ export function serializeSaleOrder(o: SaleOrderRow): SaleOrderJson {
     items: (o.items ?? []).map((item) => ({
       id: item.id,
       roastBatchId: item.roastBatchId ?? null,
+      roasterInventoryId: item.roasterInventoryId ?? null,
       greenBeanLotId: item.greenBeanLotId,
       lotGrade: item.lotGrade,
       quantity: item.quantity,
       pricePerKg: item.pricePerKg,
       subtotal: item.subtotal,
       roast: item.roastBatch ? serializeRoastSummary(item.roastBatch) : null,
+      green: item.roasterInventory ? serializeGreenStock(item.roasterInventory) : null,
     })),
   }
 }
 
 /**
  * Kg each roast holds for a sale in `status`. A Cancelled sale holds nothing;
- * older green-bean lines (no roast) are skipped.
+ * lines without a roast (green beans, older lines) are skipped.
  */
 export function reservationsByBatch(
   status: SaleOrderStatus,
-  lines: { roastBatchId: string | null; quantity: number }[],
+  lines: { roastBatchId?: string | null; quantity: number }[],
 ): Map<string, number> {
   const reserved = new Map<string, number>()
   if (status === 'Cancelled') return reserved
@@ -251,8 +327,35 @@ export function reservationsByBatch(
   return reserved
 }
 
+/**
+ * Kg each stock row holds for a sale in `status`. A Cancelled sale holds
+ * nothing; lines without a stock row (roasted coffee, older lines) are skipped.
+ */
+export function reservationsByInventory(
+  status: SaleOrderStatus,
+  lines: { roasterInventoryId?: string | null; quantity: number }[],
+): Map<string, number> {
+  const reserved = new Map<string, number>()
+  if (status === 'Cancelled') return reserved
+  for (const line of lines) {
+    if (!line.roasterInventoryId) continue
+    reserved.set(line.roasterInventoryId, (reserved.get(line.roasterInventoryId) ?? 0) + line.quantity)
+  }
+  for (const [id, kg] of reserved) reserved.set(id, round3(kg))
+  return reserved
+}
+
+/** A sale line as the client sends it: kg of one roast or of one stock row. */
+export type SaleLineInput = {
+  roastBatchId?: string | null
+  roasterInventoryId?: string | null
+  quantity: number
+  pricePerKg: number
+}
+
 export type PricedSaleLine = {
-  roastBatchId: string
+  roastBatchId: string | null
+  roasterInventoryId: string | null
   greenBeanLotId: string
   lotGrade: string
   quantity: number
@@ -260,27 +363,52 @@ export type PricedSaleLine = {
   subtotal: number
 }
 
+type SaleLineSource = { id: string; greenBeanLotId: string; greenBeanLot: { grade: string } }
+
 /**
  * Server-side amounts. Client subtotals and totals are never read: every line
- * is priced here, and the green lot and grade come from the roast itself.
+ * is priced here, and the green lot and grade come from the roast or the
+ * stock row itself.
  */
 export function priceLines(
-  items: { roastBatchId: string; quantity: number; pricePerKg: number }[],
-  batchById: Map<string, { id: string; greenBeanLotId: string; greenBeanLot: { grade: string } }>,
+  items: SaleLineInput[],
+  batchById: Map<string, SaleLineSource>,
+  stockById: Map<string, SaleLineSource> = new Map(),
 ): { rows: PricedSaleLine[]; totalAmount: number } {
-  const rows = items.map((item) => {
-    const batch = batchById.get(item.roastBatchId)
-    if (!batch) throw new Error(`Roast ${item.roastBatchId} was not loaded`)
+  const rows = items.map((item): PricedSaleLine => {
+    if (item.roastBatchId && item.roasterInventoryId) {
+      throw new Error('A sale line cannot sell both a roast and a stock row')
+    }
     const quantity = round3(item.quantity)
     const pricePerKg = round2(item.pricePerKg)
-    return {
-      roastBatchId: batch.id,
-      greenBeanLotId: batch.greenBeanLotId,
-      lotGrade: (batch.greenBeanLot?.grade ?? '').slice(0, 50),
-      quantity,
-      pricePerKg,
-      subtotal: round2(quantity * pricePerKg),
+    const subtotal = round2(quantity * pricePerKg)
+    if (item.roastBatchId) {
+      const batch = batchById.get(item.roastBatchId)
+      if (!batch) throw new Error(`Roast ${item.roastBatchId} was not loaded`)
+      return {
+        roastBatchId: batch.id,
+        roasterInventoryId: null,
+        greenBeanLotId: batch.greenBeanLotId,
+        lotGrade: (batch.greenBeanLot?.grade ?? '').slice(0, 50),
+        quantity,
+        pricePerKg,
+        subtotal,
+      }
     }
+    if (item.roasterInventoryId) {
+      const stock = stockById.get(item.roasterInventoryId)
+      if (!stock) throw new Error(`Green stock ${item.roasterInventoryId} was not loaded`)
+      return {
+        roastBatchId: null,
+        roasterInventoryId: stock.id,
+        greenBeanLotId: stock.greenBeanLotId,
+        lotGrade: (stock.greenBeanLot?.grade ?? '').slice(0, 50),
+        quantity,
+        pricePerKg,
+        subtotal,
+      }
+    }
+    throw new Error('A sale line has neither a roast nor a stock row')
   })
   const totalAmount = round2(rows.reduce((sum, row) => sum + row.subtotal, 0))
   return { rows, totalAmount }
@@ -317,12 +445,46 @@ export function checkSaleBatches(
   return { batchById }
 }
 
+/**
+ * Checks the stock rows loaded for a sale: all exist and all belong to
+ * `ownerId`. Returns the error to send, or the rows by id.
+ */
+export function checkSaleStock(
+  ids: string[],
+  rows: SaleStockRow[],
+  ownerId: string,
+  notOwnerMessage: string,
+): { error: { status: number; message: string } } | { stockById: Map<string, SaleStockRow> } {
+  const stockById = new Map(rows.map((row) => [row.id, row]))
+  if (ids.some((id) => !stockById.has(id))) {
+    return {
+      error: {
+        status: 404,
+        message: 'One of the green bean lots on this sale is no longer in your stock. Reload and try again.',
+      },
+    }
+  }
+  if (rows.some((row) => row.roasterId !== ownerId)) {
+    return { error: { status: 403, message: notOwnerMessage } }
+  }
+  return { stockById }
+}
+
 export class StockError extends Error {
   constructor(public roastBatchId: string, public maxKg: number, public askedKg: number) {
     super(
       `Not enough roasted coffee left in ${roastBatchLabel(roastBatchId)}: at most ${formatKgText(maxKg)} kg can go on this sale, ${formatKgText(askedKg)} kg asked.`,
     )
     this.name = 'StockError'
+  }
+}
+
+export class GreenStockError extends Error {
+  constructor(public roasterInventoryId: string, public label: string, public maxKg: number, public askedKg: number) {
+    super(
+      `Not enough green beans left in ${label}: at most ${formatKgText(maxKg)} kg can go on this sale, ${formatKgText(askedKg)} kg asked.`,
+    )
+    this.name = 'GreenStockError'
   }
 }
 
@@ -391,6 +553,68 @@ export async function applyReservationChange(
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
 
+/**
+ * Moves the green kg of the sale owner's stock rows from what the sale held
+ * (`oldRes`) to what it holds now (`newRes`), one guarded UPDATE per row in id
+ * order, after the roasts (fixed lock order: sale -> roasts -> stock rows).
+ * Same guard as the roast POST that competes for the same remainingWeightKg.
+ * Raw SQL on purpose: it never bumps RoasterInventoryItem.updatedAt, whose
+ * data-version stamp goes to every role, and ROUND drops float leftovers that
+ * would block roasting the last kilos.
+ */
+export async function applyGreenReservationChange(
+  tx: SaleTx,
+  oldRes: Map<string, number>,
+  newRes: Map<string, number>,
+  ownerId: string,
+): Promise<AffectedInventoryItemJson[]> {
+  const ids = Array.from(new Set([...oldRes.keys(), ...newRes.keys()])).sort()
+  const deltas: [string, number][] = []
+  for (const id of ids) {
+    const d = round3((newRes.get(id) ?? 0) - (oldRes.get(id) ?? 0))
+    if (Math.abs(d) > WEIGHT_EPSILON) deltas.push([id, d])
+  }
+  // No tx call at all: roast-only sales never touch the stock rows.
+  if (deltas.length === 0) return []
+
+  for (const [id, d] of deltas) {
+    if (d > 0) {
+      const n = await tx.$executeRaw`
+        UPDATE "RoasterInventoryItem"
+        SET "remainingWeightKg" = GREATEST(0, ROUND(("remainingWeightKg" - ${d}::double precision)::numeric, 6))::double precision
+        WHERE "id" = ${id}
+          AND "roasterId" = ${ownerId}
+          AND "remainingWeightKg" >= ${d}::double precision - ${WEIGHT_EPSILON}::double precision`
+      if (n === 0) {
+        const row = await tx.roasterInventoryItem.findUnique({
+          where: { id },
+          select: { roasterId: true, remainingWeightKg: true, greenBeanLotId: true },
+        })
+        const free = row && row.roasterId === ownerId ? availableKgOf(row.remainingWeightKg, 0) : 0
+        throw new GreenStockError(
+          id,
+          roaLabel(row?.greenBeanLotId ?? id),
+          round3(free + (oldRes.get(id) ?? 0)),
+          newRes.get(id) ?? 0,
+        )
+      }
+    } else {
+      await tx.$executeRaw`
+        UPDATE "RoasterInventoryItem"
+        SET "remainingWeightKg" = ROUND(("remainingWeightKg" + ${-d}::double precision)::numeric, 6)::double precision
+        WHERE "id" = ${id}`
+    }
+  }
+
+  const rows = await tx.roasterInventoryItem.findMany({
+    where: { id: { in: deltas.map(([id]) => id) } },
+    select: { id: true, remainingWeightKg: true },
+  })
+  return rows
+    .map((row) => ({ id: row.id, remainingWeightKg: Math.max(0, row.remainingWeightKg) }))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+}
+
 /** First zod issue as a sentence; a line's issue is prefixed with its 1-based line number. */
 export function firstIssueMessage(error: ZodError): string {
   const issue = error.issues[0]
@@ -421,6 +645,12 @@ export function saleErrorResponse(
 ): { status: number; body: Record<string, unknown> } | null {
   if (error instanceof StockError) {
     return { status: 409, body: { error: error.message, roastBatchId: error.roastBatchId, maxKg: error.maxKg } }
+  }
+  if (error instanceof GreenStockError) {
+    return {
+      status: 409,
+      body: { error: error.message, roasterInventoryId: error.roasterInventoryId, maxKg: error.maxKg },
+    }
   }
   if (error instanceof SaleChangedError) {
     return { status: 409, body: { error: SALE_CHANGED_MESSAGE } }

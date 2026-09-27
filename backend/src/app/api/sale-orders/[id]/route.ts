@@ -10,15 +10,19 @@ import {
   SALE_NOT_FOUND_MESSAGE,
   SALE_TX_OPTIONS,
   SaleChangedError,
+  applyGreenReservationChange,
   applyReservationChange,
   checkSaleBatches,
+  checkSaleStock,
   firstIssueMessage,
   priceLines,
   readJsonObject,
   reservationsByBatch,
+  reservationsByInventory,
   saleBatchSelect,
   saleErrorResponse,
   saleOrderInclude,
+  saleStockSelect,
   serializeSaleOrder,
   type PricedSaleLine,
 } from '@/lib/saleOrders'
@@ -30,7 +34,7 @@ const existingSaleSelect = {
   status: true,
   updatedAt: true,
   customerId: true,
-  items: { select: { roastBatchId: true, quantity: true } },
+  items: { select: { roastBatchId: true, roasterInventoryId: true, quantity: true } },
 } satisfies Prisma.SaleOrderSelect
 
 // GET /api/sale-orders/:id
@@ -64,8 +68,8 @@ export async function GET(
 }
 
 // PUT /api/sale-orders/:id - Edit a sale: customer, date, currency, notes,
-// status, or all of its lines. The roasts' sold kg follow in the same
-// transaction (Cancelled holds nothing).
+// status, or all of its lines. The roasts' sold kg and the stock rows' green
+// kg follow in the same transaction (Cancelled holds nothing).
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -92,6 +96,8 @@ export async function PUT(
     // SECURITY: Ownership — one Roaster cannot edit another Roaster's sale.
     requireOwnership(user, existing.createdBy, ['Admin'])
 
+    // A sellerId in the body is stripped: a sale's owner never changes, so an
+    // Admin's edit keeps selling from the owner's roasts and stock.
     const parsed = updateSaleOrderSchema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json({ error: firstIssueMessage(parsed.error) }, { status: 400 })
@@ -151,7 +157,8 @@ export async function PUT(
 
     let newRows: PricedSaleLine[] | null = null
     if (input.items !== undefined) {
-      if (existing.items.some((item) => item.roastBatchId == null)) {
+      // Older lines have neither a roast nor a stock row, so their kg can't be moved.
+      if (existing.items.some((item) => item.roastBatchId == null && item.roasterInventoryId == null)) {
         return NextResponse.json(
           {
             error:
@@ -161,12 +168,18 @@ export async function PUT(
         )
       }
 
-      const batchIds = input.items.map((item) => item.roastBatchId)
-      const batches = await prisma.roastBatch.findMany({
-        where: { id: { in: batchIds } },
-        select: saleBatchSelect,
-      })
-      // Admins too: the roasts on a sale always belong to its owner.
+      const batchIds = input.items.flatMap((item) => (item.roastBatchId ? [item.roastBatchId] : []))
+      const stockIds = input.items.flatMap((item) => (item.roasterInventoryId ? [item.roasterInventoryId] : []))
+      const [batches, stock] = await Promise.all([
+        batchIds.length
+          ? prisma.roastBatch.findMany({ where: { id: { in: batchIds } }, select: saleBatchSelect })
+          : Promise.resolve([]),
+        stockIds.length
+          ? prisma.roasterInventoryItem.findMany({ where: { id: { in: stockIds } }, select: saleStockSelect })
+          : Promise.resolve([]),
+      ])
+      // Admins too: the roasts and stock rows on a sale always belong to its
+      // owner (createdBy), whoever edits it.
       const checked = checkSaleBatches(
         batchIds,
         batches,
@@ -176,8 +189,17 @@ export async function PUT(
       if ('error' in checked) {
         return NextResponse.json({ error: checked.error.message }, { status: checked.error.status })
       }
+      const checkedStock = checkSaleStock(
+        stockIds,
+        stock,
+        existing.createdBy,
+        'Every green bean lot on a sale must come from the stock of the roaster who recorded the sale.',
+      )
+      if ('error' in checkedStock) {
+        return NextResponse.json({ error: checkedStock.error.message }, { status: checkedStock.error.status })
+      }
 
-      const priced = priceLines(input.items, checked.batchById)
+      const priced = priceLines(input.items, checked.batchById, checkedStock.stockById)
       newRows = priced.rows
       header.totalAmount = priced.totalAmount
     }
@@ -186,6 +208,8 @@ export async function PUT(
     // editing a cancelled sale's lines (no stock either way).
     const oldRes = reservationsByBatch(existing.status, existing.items)
     const newRes = reservationsByBatch(input.status ?? existing.status, newRows ?? existing.items)
+    const oldGreen = reservationsByInventory(existing.status, existing.items)
+    const newGreen = reservationsByInventory(input.status ?? existing.status, newRows ?? existing.items)
 
     const result = await prisma.$transaction(async (tx) => {
       // First statement: the guarded header update locks the sale row, so the
@@ -206,7 +230,9 @@ export async function PUT(
         })
       }
 
+      // Roasts first, then stock rows: the same lock order as every other sale write.
       const affected = await applyReservationChange(tx, oldRes, newRes)
+      const affectedInventory = await applyGreenReservationChange(tx, oldGreen, newGreen, existing.createdBy)
 
       const saleOrder = await tx.saleOrder.findUnique({
         where: { id },
@@ -215,12 +241,13 @@ export async function PUT(
       if (!saleOrder) {
         throw new SaleChangedError()
       }
-      return { saleOrder, affected }
+      return { saleOrder, affected, affectedInventory }
     }, SALE_TX_OPTIONS)
 
     return NextResponse.json({
       saleOrder: serializeSaleOrder(result.saleOrder),
       affectedRoastBatches: result.affected,
+      affectedInventoryItems: result.affectedInventory,
       message: 'Sale updated',
     })
   } catch (error) {
@@ -233,7 +260,7 @@ export async function PUT(
 }
 
 // DELETE /api/sale-orders/:id - Remove a sale. Its kg go back to the roasts
-// (none for a cancelled sale) and its invoices go with it.
+// and stock rows (none for a cancelled sale) and its invoices go with it.
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -283,12 +310,19 @@ export async function DELETE(
         reservationsByBatch(existing.status, existing.items),
         new Map(),
       )
-      return { deletedInvoices: invoices.count, affected }
+      const affectedInventory = await applyGreenReservationChange(
+        tx,
+        reservationsByInventory(existing.status, existing.items),
+        new Map(),
+        existing.createdBy,
+      )
+      return { deletedInvoices: invoices.count, affected, affectedInventory }
     }, SALE_TX_OPTIONS)
 
     return NextResponse.json({
       message: 'Sale deleted',
       affectedRoastBatches: result.affected,
+      affectedInventoryItems: result.affectedInventory,
       deletedInvoices: result.deletedInvoices,
     })
   } catch (error) {

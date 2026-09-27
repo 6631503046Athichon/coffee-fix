@@ -1,7 +1,7 @@
 /**
- * PUT / DELETE /api/roast-batches/[id]
- * Ownership checks and the inventory bookkeeping that goes with correcting
- * or removing a roast.
+ * POST /api/roast-batches and PUT / DELETE /api/roast-batches/[id]
+ * Ownership checks and the inventory bookkeeping that goes with logging,
+ * correcting or removing a roast.
  */
 
 import { describe, test, expect, jest, beforeEach } from '@jest/globals'
@@ -12,8 +12,10 @@ const mockPrisma: any = {
     findUnique: jest.fn(),
     updateMany: jest.fn(async () => ({ count: 1 })),
     delete: jest.fn(),
+    create: jest.fn(),
   },
   roasterInventoryItem: {
+    findUnique: jest.fn(),
     updateMany: jest.fn(async () => ({ count: 1 })),
     update: jest.fn(async () => ({ id: 'inv-1', claimedWeightKg: 50, remainingWeightKg: 30 })),
   },
@@ -65,6 +67,7 @@ jest.mock('@/lib/middleware', () => ({
 const roaster = { id: 'roaster-1', roles: ['Roaster'], isSuperAdmin: false }
 const otherRoaster = { id: 'roaster-2', roles: ['Roaster'], isSuperAdmin: false }
 const admin = { id: 'admin-1', roles: ['Admin'], isSuperAdmin: false }
+const superAdmin = { id: 'super-1', roles: [], isSuperAdmin: true }
 
 const existingUpdatedAt = new Date('2026-09-20T10:00:00.000Z')
 const existingRoast = {
@@ -477,6 +480,83 @@ describe('roast batch edit and delete', () => {
       const response = await DELETE(deleteRequest(), routeParams)
       expect(response.status).toBe(404)
       expect(mockPrisma.roasterInventoryItem.update).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('POST /api/roast-batches', () => {
+    // roaster-1's stock row.
+    const stock = {
+      id: 'inv-1',
+      roasterId: 'roaster-1',
+      greenBeanLotId: 'lot-1',
+      claimedWeightKg: 50,
+      remainingWeightKg: 30,
+    }
+    const postRequest = (over: Record<string, unknown> = {}) =>
+      new NextRequest('http://localhost:3001/api/roast-batches', {
+        method: 'POST',
+        body: JSON.stringify({
+          roasterInventoryId: 'inv-1',
+          greenBeanLotId: 'lot-1',
+          batchSizeKg: 10,
+          yieldPercentage: 85,
+          roastedWeightKg: 8.5,
+          roastProfileNotes: 'No notes',
+          ...over,
+        }),
+      })
+
+    beforeEach(() => {
+      mockPrisma.roasterInventoryItem.findUnique.mockResolvedValue(stock)
+      mockPrisma.roastBatch.create.mockResolvedValue({ id: 'roast-1' })
+    })
+
+    test("a roaster's roast of their own stock is theirs", async () => {
+      mockAuthUser = roaster
+      const { POST } = await import('@/app/api/roast-batches/route')
+      const response = await POST(postRequest())
+      expect(response.status).toBe(201)
+      expect(mockPrisma.roasterInventoryItem.updateMany).toHaveBeenCalledWith({
+        where: { id: 'inv-1', remainingWeightKg: { gte: 10 } },
+        data: { remainingWeightKg: { decrement: 10 } },
+      })
+      expect(mockPrisma.roastBatch.create.mock.calls[0][0].data).toMatchObject({
+        roasterId: 'roaster-1',
+        roasterInventoryId: 'inv-1',
+        batchSizeKg: 10,
+      })
+    })
+
+    test.each([
+      ['an Admin', admin],
+      ['a super admin', superAdmin],
+    ])("%s roasting a roaster's stock records the roast under that roaster", async (_who, user) => {
+      mockAuthUser = user
+      const { POST } = await import('@/app/api/roast-batches/route')
+      const response = await POST(postRequest())
+      expect(response.status).toBe(201)
+      // The beans come out of the roaster's row and the roast lands in their
+      // Roast Logbook, where they can edit, delete and sell it.
+      expect(mockPrisma.roasterInventoryItem.updateMany.mock.calls[0][0].where.id).toBe('inv-1')
+      expect(mockPrisma.roastBatch.create.mock.calls[0][0].data.roasterId).toBe('roaster-1')
+    })
+
+    test("an Admin roasting their own stock keeps the roast", async () => {
+      mockAuthUser = admin
+      mockPrisma.roasterInventoryItem.findUnique.mockResolvedValueOnce({ ...stock, roasterId: 'admin-1' })
+      const { POST } = await import('@/app/api/roast-batches/route')
+      const response = await POST(postRequest())
+      expect(response.status).toBe(201)
+      expect(mockPrisma.roastBatch.create.mock.calls[0][0].data.roasterId).toBe('admin-1')
+    })
+
+    test("403 when a roaster roasts someone else's stock", async () => {
+      mockAuthUser = otherRoaster
+      const { POST } = await import('@/app/api/roast-batches/route')
+      const response = await POST(postRequest())
+      expect(response.status).toBe(403)
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+      expect(mockPrisma.roastBatch.create).not.toHaveBeenCalled()
     })
   })
 })

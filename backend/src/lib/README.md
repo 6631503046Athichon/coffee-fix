@@ -72,18 +72,33 @@ flow forces a change).
 ## `documentNumbers.ts`
 Sale-order and invoice number formatting.
 
-## `saleOrders.ts` — selling roasted coffee
+## `saleOrders.ts` — selling roasted coffee and green beans
 Type-only imports, so routes and tests can use it without mocks.
 - `saleOrderInclude` / `serializeSaleOrder(o)` and `roastSummarySelect` /
   `serializeRoastSummary(b)` — the sale JSON every sale route returns
-- `priceLines(items, batchById)` — server-side line amounts (kg to 3 dp, money
-  to 2 dp); client subtotals are never read
+- `greenStockSelect` / `serializeGreenStock(row)` — a stock row
+  (`RoasterInventoryItem`) as a green-bean sale line and
+  `roaster-inventory/sellable` show it; `lotFacts(lot)` gives the grade,
+  variety and process both summaries share
+- `priceLines(items, batchById, stockById)` — server-side line amounts (kg to
+  3 dp, money to 2 dp); client subtotals are never read, and the lot and grade
+  come from the roast or the stock row
+- `checkSaleBatches` / `checkSaleStock` — every roast and stock row on a sale
+  exists and belongs to the sale's owner (`createdBy`). On create the owner is
+  the caller, or the roaster an Admin names in `sellerId`; an Admin never sells
+  another roaster's coffee in their own name
 - `reservationsByBatch(status, lines)` + `applyReservationChange(tx, old, new)` —
   move `RoastBatch.soldWeightKg` with one guarded SQL `UPDATE` per roast, in id
   order, inside the sale's transaction. Throws `StockError` when a roast has
   too little left
+- `reservationsByInventory(status, lines)` +
+  `applyGreenReservationChange(tx, old, new, ownerId)` — take and return
+  `RoasterInventoryItem.remainingWeightKg` with one guarded raw `UPDATE` per
+  stock row, after the roasts; never bumps `updatedAt`; throws
+  `GreenStockError`
 - `isAdminUser`, `canSeeSales`, `roastBatchLabel` (same as the frontend's
-  `toRoastBatchId`), `firstIssueMessage`, `saleErrorResponse`
+  `toRoastBatchId`), `roaLabel` (same as the frontend's `toRoaId`),
+  `firstIssueMessage`, `saleErrorResponse`
 
 ---
 
@@ -100,3 +115,4 @@ Type-only imports, so routes and tests can use it without mocks.
 | Insert with a `displayId` | `withDisplayIdRetry(() => …)` from `./utils` |
 | Query the DB | `prisma` from `./prisma` |
 | Change a roast's sold kg | `applyReservationChange` from `./saleOrders` (never write `soldWeightKg` directly) |
+| Take or return green kg for a sale | `applyGreenReservationChange` from `./saleOrders` (never write `remainingWeightKg` from a sale route directly) |

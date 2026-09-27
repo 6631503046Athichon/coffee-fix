@@ -2,7 +2,7 @@
 
 Single source of truth: `schema.prisma`. Seed in `seed.ts`.
 
-Schema changes ship as hand-written SQL in `prisma/sql/` (`001_…`, `002_…`),
+Schema changes ship as hand-written SQL in `prisma/sql/` (`001_…`, `002_…`, `003_…`),
 because deploys run `prisma generate` and never push the schema. Apply a file
 to the database **before** deploying the backend that reads it, from
 `backend/`:
@@ -69,7 +69,7 @@ batch. A green bean withdrawal inherits from its green bean lot.
 ### Roaster
 | Model | Purpose |
 |---|---|
-| `RoasterInventoryItem` | unroasted green inventory, internal or external |
+| `RoasterInventoryItem` | unroasted green inventory, internal or external. Green-bean sale lines that are not Cancelled take their kg straight out of `remainingWeightKg` (guarded SQL in the sale-order routes) |
 | `RoastBatch` | individual roast batch tied to inventory. `soldWeightKg` = roasted kg held by sales that are not Cancelled; written only by the sale-order routes through a guarded SQL `UPDATE`, so it never passes `roastedWeightKg`. Left to sell = `roastedWeightKg - soldWeightKg` |
 
 ### Sales
@@ -77,7 +77,7 @@ batch. A green bean withdrawal inherits from its green bean lot.
 |---|---|
 | `Customer` | sale customer (B2B or retail). Shared by every roaster |
 | `SaleOrder` | order header, `status: SaleOrderStatus`, owner `createdBy`. `customerName`, `customerPhone`, `customerAddress` are snapshots taken when the sale is recorded or its customer changes, so the receipt never changes afterwards |
-| `SaleOrderItem` | order line. `roastBatchId` = the roast it was sold from (null on older green-bean lines, which are read-only); `greenBeanLotId` is copied from the roast and `lotGrade` is a snapshot of its grade |
+| `SaleOrderItem` | order line. `roastBatchId` = the roast it was sold from, or `roasterInventoryId` = the seller's stock row a green-bean line came from, never both (CHECK in `sql/003`). Lines with neither are older green-bean lines, which are read-only; `greenBeanLotId` is copied from the roast or stock row and `lotGrade` is a snapshot of its grade |
 | `Invoice` | invoice header, `status: InvoiceStatus` |
 | `InvoiceItem` | invoice line items |
 | `PricingHistory` | append-only price snapshots |
