@@ -337,6 +337,59 @@ describe('Sale customer picker', () => {
   })
 })
 
+describe('Withdraw Stock roaster and total', () => {
+  const stockLot: GreenBeanLot = {
+    id: 'gbl-1', displayId: 'GBL-2026-1', sourceType: GreenBeanSourceType.Internal,
+    grade: 'Grade A', initialWeightKg: 50, currentWeightKg: 40,
+    availabilityStatus: 'Available', cuppingScores: [], withdrawalHistory: [],
+  }
+  const users = [
+    { id: 'r-1', name: 'Hill Roastery', roles: [UserRole.Roaster] },
+    { id: 'p-2', name: 'Other Processor', roles: [UserRole.Processor] },
+  ]
+  const form = () => screen.getByRole('button', { name: 'Save' }).closest('form')!
+  const setAmount = (kg: string) =>
+    fireEvent.change(form().querySelector('[name="amountKg"]')!, { target: { value: kg } })
+
+  beforeEach(() => vi.clearAllMocks())
+
+  it('requires a target roaster for Roasting Stock and sends it', async () => {
+    vi.mocked(createWithdrawal).mockResolvedValue({ greenBeanLot: { ...stockLot, currentWeightKg: 35 } })
+    render(
+      <Harness initial={{ ...INITIAL_APP_DATA, greenBeanLots: [stockLot], users }} refreshData={async () => {}} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Roast' }))
+    setAmount('5')
+    fireEvent.submit(form())
+    expect(screen.getByText('กรุณาเลือก Roaster ที่ต้องการส่ง stock ให้')).toBeInTheDocument()
+    expect(createWithdrawal).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select Roaster...' }))
+    expect(screen.queryByRole('button', { name: 'Other Processor' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Hill Roastery' }))
+    fireEvent.submit(form())
+
+    await waitFor(() => expect(createWithdrawal).toHaveBeenCalledTimes(1))
+    expect(createWithdrawal).toHaveBeenCalledWith('gbl-1', {
+      amountKg: 5, withdrawalType: 'Roasting Stock', purpose: 'Roasting Stock', targetRoasterId: 'r-1',
+    })
+  }, 15000)
+
+  it('shows the Sale total in the picked currency', () => {
+    render(<Harness initial={{ ...INITIAL_APP_DATA, greenBeanLots: [stockLot] }} refreshData={async () => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sale' }))
+    setAmount('5')
+    expect(screen.queryByText('Total')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Price per kg'), { target: { value: '180.5' } })
+    expect(screen.getByText('Total').nextElementSibling).toHaveTextContent('902.50 THB')
+    fireEvent.click(screen.getByRole('button', { name: 'THB' }))
+    fireEvent.click(screen.getByRole('button', { name: 'USD' }))
+    expect(screen.getByText('Total').nextElementSibling).toHaveTextContent('902.50 USD')
+  }, 15000)
+})
+
 describe('Cherry lot edit and delete', () => {
   const cherryLot: HarvestLot = {
     ...lot, farmId: 'farm-1', farmPlotLocation: 'Plot A', cropYearId: 'cy-2026',

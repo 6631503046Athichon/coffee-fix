@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import {
   Coffee,
   Box,
@@ -57,7 +57,14 @@ import {
   Pagination,
   hasGradePriceError,
   parseGradePrice,
+  WithdrawDetailsFields,
+  useWithdrawDetails,
+  withdrawDetailsError,
+  buildWithdrawDetailsPayload,
+  withdrawSaleTotal,
+  formatWithdrawTotal,
 } from './workbench'
+import type { WithdrawalType } from './workbench'
 import {
   formatGreenBeanId,
   formatHarvestLotId,
@@ -94,8 +101,6 @@ const gradeSplitRowProblem = (
 }
 
 const PROCESS_TYPES = ['Honey', 'Natural', 'Washed'] as const
-
-type WithdrawalType = 'Sale' | 'Sample' | 'Export' | 'Roasting Stock' | 'Other'
 
 // Withdrawal-type config mirrors the Workbench Withdraw Stock modal:
 // each option is an icon-card with its own active colour. Order is
@@ -199,6 +204,9 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   })
   const [withdrawError, setWithdrawError] = useState<string | null>(null)
   const [withdrawSubmitting, setWithdrawSubmitting] = useState(false)
+  // Sale customer/price/address and the Roasting Stock roaster: the same
+  // fields, checks and payload as the Workbench's Withdraw Stock.
+  const withdrawDetails = useWithdrawDetails()
 
   // ── History modal state ────────────────────────────────────────
   // View-only modal showing the full provenance of a green-bean bucket:
@@ -548,52 +556,105 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     setWithdrawBucket(b)
     setWithdrawForm({ amount: '', type: 'Sale', purpose: '' })
     setWithdrawError(null)
+    // A cancelled Sale must not carry its customer or price to the next bucket.
+    withdrawDetails.reset()
   }
 
   const submitWithdraw = async () => {
     if (!withdrawBucket) return
+    const bucket = withdrawBucket
     const amt = parseFloat(withdrawForm.amount)
     if (isNaN(amt) || amt <= 0) {
       setWithdrawError('Amount must be greater than 0.')
       return
     }
-    if (amt > withdrawBucket.totalWeight + 0.01) {
+    if (amt > bucket.totalWeight + 0.01) {
       setWithdrawError(
-        `Amount exceeds available ${withdrawBucket.totalWeight.toFixed(2)} kg.`,
+        `Amount exceeds available ${bucket.totalWeight.toFixed(2)} kg.`,
       )
       return
     }
-    if (!withdrawForm.purpose.trim()) {
-      setWithdrawError('Purpose is required.')
+    // Checked before the first lot is drawn, so a refused Sale or Roast
+    // leaves every lot untouched.
+    const detailsError = withdrawDetailsError(
+      withdrawForm.type,
+      withdrawDetails.details,
+    )
+    if (detailsError) {
+      setWithdrawError(detailsError)
       return
     }
+    // Purpose is optional, as in the Workbench: left empty it is the type.
+    const purpose = withdrawForm.purpose.trim() || withdrawForm.type
+    // Every per-lot withdrawal carries the same sale / roaster fields, so each
+    // lot's record names the customer and price, or pushes to the roaster.
+    const details = buildWithdrawDetailsPayload(
+      withdrawForm.type,
+      withdrawDetails.details,
+    )
 
     setWithdrawSubmitting(true)
-    let drawn = 0
+    setWithdrawError(null)
+    const taken = new Map<string, number>()
     let remaining = amt
     try {
-      for (const gbl of withdrawBucket.sources) {
+      for (const gbl of bucket.sources) {
         if (remaining <= 0) break
         const take = Math.min(remaining, gbl.currentWeightKg ?? 0)
         if (take <= 0) continue
         await createGBLWithdrawal(gbl.id, {
           amountKg: take,
           withdrawalType: withdrawForm.type,
-          purpose: withdrawForm.purpose,
+          purpose,
+          ...details,
         })
-        drawn += take
-        remaining -= take
+        taken.set(gbl.id, take)
+        // Kept at the backend's 6-decimal precision: plain float subtraction
+        // (49.1 - 30.2 - 18.9 = 3.6e-15) would leave a crumb above 0 and send
+        // one more, near-zero withdrawal carrying the Sale or roaster fields.
+        remaining = Math.round((remaining - take) * 1e6) / 1e6
       }
+    } catch (e: any) {
+      const drawn = amt - remaining
+      const reason = e?.message || 'Withdrawal failed.'
+      if (drawn <= 0) {
+        setWithdrawError(reason)
+      } else {
+        // The earlier lots are already drawn and stay drawn. Take them out of
+        // this popup and leave only the rest to withdraw, so Save again
+        // carries on from the lot that failed instead of repeating them.
+        const left = parseFloat(remaining.toFixed(3))
+        setWithdrawBucket({
+          ...bucket,
+          totalWeight: Math.max(0, bucket.totalWeight - drawn),
+          sources: bucket.sources
+            .map((g) => ({
+              ...g,
+              currentWeightKg:
+                (g.currentWeightKg ?? 0) - (taken.get(g.id) ?? 0),
+            }))
+            .filter((g) => g.currentWeightKg > 0),
+        })
+        setWithdrawForm((f) => ({ ...f, amount: String(left) }))
+        setWithdrawError(
+          `Withdrew ${drawn.toFixed(2)} of ${amt.toFixed(2)} kg. The other ${left.toFixed(2)} kg were not withdrawn: ${reason}`,
+        )
+        void refreshData()
+      }
+      setWithdrawSubmitting(false)
+      return
+    }
+    try {
       addToast({
         type: 'success',
-        message: `Withdrew ${drawn.toFixed(2)} kg of ${withdrawBucket.processType} · ${withdrawBucket.grade}.`,
+        message: `Withdrew ${(amt - remaining).toFixed(2)} kg of ${bucket.processType} · ${bucket.grade}.`,
       })
       await refreshData()
       setWithdrawBucket(null)
-    } catch (e: any) {
+    } catch (e) {
       setWithdrawError(
-        e?.message ||
-          `Withdrew ${drawn.toFixed(2)} of ${amt.toFixed(2)} kg before failure.`,
+        (e instanceof Error && e.message) ||
+          'Withdrawn, but the page could not reload.',
       )
     } finally {
       setWithdrawSubmitting(false)
@@ -1190,11 +1251,20 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         const after = Math.max(0, before - amtNum)
         const remainPct = before > 0 ? Math.max(0, (after / before) * 100) : 0
         const isOver = amtNum > before + 0.01
+        // The whole amount's value, although it is drawn over several lots.
+        const saleTotal = withdrawSaleTotal(
+          withdrawForm.type,
+          amtNum,
+          withdrawDetails.details,
+        )
         return (
           <Modal
             title="Withdraw Stock"
             subtitle={`${withdrawBucket.processType} · ${withdrawBucket.grade}`}
             onClose={() => setWithdrawBucket(null)}
+            // Closed mid-way, a later lot's failure would reopen it (or take
+            // over another bucket's popup) with the rest of this withdrawal.
+            closeDisabled={withdrawSubmitting}
             accent="indigoSolid"
             icon={Minus}
             context={[
@@ -1238,6 +1308,12 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                 })}
               </div>
             </div>
+
+            {/* Sale / Roasting Stock fields (shared with the Workbench) */}
+            <WithdrawDetailsFields
+              type={withdrawForm.type}
+              {...withdrawDetails.fieldsProps}
+            />
 
             {/* Amount + Purpose side-by-side (col-span 2 + 3) */}
             <div className="grid grid-cols-5 gap-3">
@@ -1317,9 +1393,24 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                     </p>
                   </div>
                 </div>
-                <div className="text-[10px] text-gray-400">
-                  drawn FIFO from {withdrawBucket.sources.length} lot
-                  {withdrawBucket.sources.length !== 1 ? 's' : ''}
+                <div className="text-right">
+                  {saleTotal !== null && (
+                    <>
+                      <span className="text-gray-400 text-[10px] uppercase tracking-wider">
+                        Total
+                      </span>
+                      <p className="font-bold text-blue-600">
+                        {formatWithdrawTotal(
+                          saleTotal,
+                          withdrawDetails.details.currency,
+                        )}
+                      </p>
+                    </>
+                  )}
+                  <p className="text-[10px] text-gray-400">
+                    drawn FIFO from {withdrawBucket.sources.length} lot
+                    {withdrawBucket.sources.length !== 1 ? 's' : ''}
+                  </p>
                 </div>
               </div>
             </div>
@@ -1334,6 +1425,9 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
           </Modal>
         )
       })()}
+      {/* "+ New customer" from the Sale fields; its overlay sits above the
+          Withdraw Stock popup. */}
+      {withdrawDetails.newCustomerModal}
 
       {/* ── History Modal — full provenance of a green-bean bucket ──
           Shows each source GBL, the parchment lot it was hulled from,
@@ -1884,6 +1978,8 @@ const Modal: React.FC<{
   icon?: IconType
   context?: { label: string; value: string }[]
   size?: 'md' | 'lg'
+  /** Disables the header X, e.g. while a save is still running. */
+  closeDisabled?: boolean
 }> = ({
   title,
   subtitle,
@@ -1893,6 +1989,7 @@ const Modal: React.FC<{
   icon: Icon,
   context,
   size = 'md',
+  closeDisabled = false,
 }) => {
   const a = ACCENT[accent]
   // Default 'md' = max-w-2xl matches the Workbench modal width so the modal
@@ -1947,7 +2044,9 @@ const Modal: React.FC<{
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 flex-shrink-0"
+              disabled={closeDisabled}
+              aria-label="Close"
+              className="p-1.5 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 disabled:pointer-events-none flex-shrink-0"
             >
               <X className="h-4 w-4" />
             </button>
@@ -1975,12 +2074,24 @@ const Field: React.FC<{
   </div>
 )
 
-const ErrorBanner: React.FC<{ message: string }> = ({ message }) => (
-  <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-    <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
-    <p className="text-xs text-red-800 font-medium">{message}</p>
-  </div>
-)
+const ErrorBanner: React.FC<{ message: string }> = ({ message }) => {
+  const ref = useRef<HTMLDivElement>(null)
+  // The banner sits at the top of a popup body that scrolls on a phone, so a
+  // refused Save pressed at the bottom would otherwise show nothing.
+  useEffect(() => {
+    ref.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [message])
+  return (
+    <div
+      ref={ref}
+      role="alert"
+      className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-md px-3 py-2"
+    >
+      <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+      <p className="text-xs text-red-800 font-medium">{message}</p>
+    </div>
+  )
+}
 
 const ModalFooter: React.FC<{
   onCancel: () => void

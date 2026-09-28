@@ -10,13 +10,16 @@ import {
   ProcessingBatchStatus,
   UserRole,
 } from '../../types'
-import type { AppData, GreenBeanLot, HarvestLot, ParchmentLot } from '../../types'
+import type { AppData, Customer, GreenBeanLot, HarvestLot, ParchmentLot, User } from '../../types'
 import { addProcessingBatch } from '../../services/processing/processingBatchService'
+import { createWithdrawal } from '../../services/lots/greenBeanLotService'
+import { addCustomer } from '../../services/sales/customerService'
 import {
   createParchmentWithdrawal,
   getAllParchmentLots,
 } from '../../services/lots/parchmentLotService'
 import ParchmentTab from './ParchmentTab'
+import { ROASTER_REQUIRED_MESSAGE } from './workbench'
 
 vi.mock('../../services/processing/processingBatchService', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../services/processing/processingBatchService')>(),
@@ -27,6 +30,16 @@ vi.mock('../../services/lots/parchmentLotService', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../services/lots/parchmentLotService')>(),
   createParchmentWithdrawal: vi.fn(),
   getAllParchmentLots: vi.fn(),
+}))
+
+vi.mock('../../services/lots/greenBeanLotService', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../services/lots/greenBeanLotService')>(),
+  createWithdrawal: vi.fn(),
+}))
+
+vi.mock('../../services/sales/customerService', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../services/sales/customerService')>(),
+  addCustomer: vi.fn(),
 }))
 
 const cherry: HarvestLot = {
@@ -50,16 +63,18 @@ const newLot = (id: string, displayId: string, grade: string, kg: number, price?
   }),
 })
 
-function Harness({ refreshData, onData }: {
+function Harness({ refreshData, onData, initial, roles = [UserRole.Processor] }: {
   refreshData: () => Promise<void>
   onData?: (data: AppData) => void
+  initial?: Partial<AppData>
+  roles?: UserRole[]
 }) {
-  const [data, setData] = useState<AppData>({ ...INITIAL_APP_DATA, harvestLots: [cherry] })
+  const [data, setData] = useState<AppData>({ ...INITIAL_APP_DATA, harvestLots: [cherry], ...initial })
   useEffect(() => { onData?.(data) }, [data, onData])
   return (
     <DataContext.Provider value={{ data, setData, refreshData, isEditing: false, setIsEditing: () => {} }}>
       <ToastProvider>
-        <ParchmentTab currentUser={{ id: 'processor', name: 'Processor', roles: [UserRole.Processor] }} />
+        <ParchmentTab currentUser={{ id: 'processor', name: 'Processor', roles }} />
       </ToastProvider>
     </DataContext.Provider>
   )
@@ -242,5 +257,245 @@ describe('Process & Grade price', () => {
     fireEvent.change(price(1), { target: { value: '180.5' } })
     expect(saveButton()).toBeEnabled()
     expect(valueLine()).toHaveTextContent('14,440.00 THB value')
+  }, 15000)
+})
+
+describe('Green bean Withdraw Stock', () => {
+  // One Washed · Grade A bucket over two lots; FIFO draws the older one first.
+  const washed: ParchmentLot = {
+    ...newParchment, id: 'pl-w', displayId: 'PL-2026-3', processType: 'Washed',
+    currentWeightKg: 0, status: 'Hulled',
+  }
+  const stockLot = (id: string, displayId: string, kg: number, createdAt: string): GreenBeanLot => ({
+    ...newLot(id, displayId, 'Grade A', kg), parchmentLotId: 'pl-w', createdAt,
+  })
+  const older = stockLot('gbl-a', 'GBL-2026-60', 6, '2026-09-01T00:00:00Z')
+  const newer = stockLot('gbl-b', 'GBL-2026-61', 10, '2026-09-05T00:00:00Z')
+  const cafe: Customer = { id: 'c-1', name: 'Cafe Doi', type: 'Retailer', address: '12 Nimman Rd' }
+  // Shaped like an Admin's user list: deactivated accounts included, newest first.
+  const users: User[] = [
+    { id: 'r-3', name: 'Zeta Roasters', roles: [UserRole.Roaster], isActive: true },
+    { id: 'r-2', name: 'Old Roastery', roles: [UserRole.Roaster], isActive: false },
+    { id: 'r-1', name: 'Hill Roastery', roles: [UserRole.Roaster], isActive: true },
+    { id: 'p-2', name: 'Other Processor', roles: [UserRole.Processor], isActive: true },
+  ]
+  const stock: Partial<AppData> = {
+    harvestLots: [], parchmentLots: [washed], greenBeanLots: [newer, older], customers: [cafe], users,
+  }
+
+  // The popup's own box, so role queries do not walk the whole page.
+  const popup = () => screen.getByText('Withdraw Stock').closest('.rounded-2xl') as HTMLElement
+  const openWithdraw = (type?: string) => {
+    fireEvent.click(screen.getByText('Withdraw', { selector: 'button' }))
+    if (type) fireEvent.click(within(popup()).getByRole('button', { name: type }))
+  }
+  const amount = () => within(popup()).getByPlaceholderText('0.0') as HTMLInputElement
+  const save = () => fireEvent.click(within(popup()).getByText('Save', { selector: 'button' }))
+  const pick = (current: string, option: string) => {
+    fireEvent.click(within(popup()).getByRole('button', { name: current }))
+    fireEvent.click(within(popup()).getByRole('button', { name: option }))
+  }
+  const drawn = (lot: GreenBeanLot, kg: number) => ({ greenBeanLot: { ...lot, currentWeightKg: kg } })
+
+  beforeEach(() => vi.clearAllMocks())
+
+  it('asks for the Sale customer, address and price and sends them on every FIFO lot', async () => {
+    vi.mocked(createWithdrawal)
+      .mockResolvedValueOnce(drawn(older, 0))
+      .mockResolvedValueOnce(drawn(newer, 8))
+    const refreshData = vi.fn(async () => {})
+    render(<Harness refreshData={refreshData} initial={stock} />)
+    openWithdraw() // Sale is the default type here
+
+    // The Workbench's Sale fields: customer picker with + New customer, address, price and currency.
+    const group = within(popup()).getByRole('group', { name: 'Customer' })
+    expect(within(group).getByRole('button', { name: 'New customer' })).not.toHaveClass('bg-blue-600')
+    pick('Select customer...', 'Cafe Doi (Retailer)')
+    const address = within(popup()).getByLabelText('Delivery Address') as HTMLInputElement
+    expect(address.value).toBe('12 Nimman Rd')
+    expect(within(popup()).getByRole('button', { name: 'THB' })).toBeInTheDocument()
+    fireEvent.change(within(popup()).getByLabelText('Price per kg'), { target: { value: '180' } })
+    fireEvent.change(amount(), { target: { value: '8' } })
+
+    // The live total is for the whole amount, not one lot's share.
+    expect(within(popup()).getByText('Total').nextElementSibling).toHaveTextContent('1,440.00 THB')
+    save()
+
+    await waitFor(() => expect(createWithdrawal).toHaveBeenCalledTimes(2))
+    const sale = {
+      withdrawalType: 'Sale', purpose: 'Sale', salePrice: 180, currency: 'THB',
+      customerName: 'Cafe Doi', deliveryAddress: '12 Nimman Rd',
+    }
+    expect(vi.mocked(createWithdrawal).mock.calls).toEqual([
+      ['gbl-a', { amountKg: 6, ...sale }],
+      ['gbl-b', { amountKg: 2, ...sale }],
+    ])
+    await waitFor(() => expect(screen.queryByText('Withdraw Stock')).not.toBeInTheDocument())
+    expect(refreshData).toHaveBeenCalledTimes(1)
+  }, 15000)
+
+  it('+ New customer saves, lists and picks the customer without withdrawing', async () => {
+    vi.mocked(addCustomer).mockResolvedValue({
+      id: 'c-9', name: 'Hill Roasters', type: 'Roaster', address: '9 Doi Rd',
+    })
+    const onData = vi.fn()
+    render(<Harness refreshData={async () => {}} onData={onData} initial={{ ...stock, customers: [] }} />)
+    openWithdraw()
+    expect(within(popup()).getByRole('button', { name: 'No customers yet' })).toBeDisabled()
+    const newCustomer = within(popup()).getByRole('button', { name: 'New customer' })
+    expect(newCustomer).toHaveClass('bg-blue-600')
+    fireEvent.click(newCustomer)
+
+    const dialog = screen.getByRole('dialog', { name: 'Create New Customer' })
+    fireEvent.change(within(dialog).getByLabelText('Customer Name *'), { target: { value: 'Hill Roasters' } })
+    fireEvent.change(within(dialog).getByPlaceholderText('123 Main St, City, Country'), {
+      target: { value: '9 Doi Rd' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create Customer' }))
+
+    expect(await within(popup()).findByRole('button', { name: 'Hill Roasters (Roaster)' })).toBeEnabled()
+    expect((within(popup()).getByLabelText('Delivery Address') as HTMLInputElement).value).toBe('9 Doi Rd')
+    await waitFor(() => expect(onData.mock.lastCall![0].customers).toEqual([
+      { id: 'c-9', name: 'Hill Roasters', type: 'Roaster', address: '9 Doi Rd' },
+    ]))
+    expect(createWithdrawal).not.toHaveBeenCalled()
+  }, 15000)
+
+  it('requires a target roaster for Roast and pushes every FIFO lot to it, for an Admin too', async () => {
+    vi.mocked(createWithdrawal)
+      .mockResolvedValueOnce(drawn(older, 0))
+      .mockResolvedValueOnce(drawn(newer, 8))
+    render(<Harness refreshData={async () => {}} initial={stock} roles={[UserRole.Admin]} />)
+    openWithdraw('Roast')
+    expect(within(popup()).queryByLabelText('Price per kg')).not.toBeInTheDocument()
+    fireEvent.change(amount(), { target: { value: '8' } })
+    fireEvent.change(within(popup()).getByPlaceholderText('e.g., Order #123, Sample roast...'), {
+      target: { value: 'Batch 12' },
+    })
+
+    // Refused before any lot is drawn, instead of the backend's 400.
+    save()
+    expect(within(popup()).getByText(ROASTER_REQUIRED_MESSAGE)).toBeInTheDocument()
+    expect(createWithdrawal).not.toHaveBeenCalled()
+
+    const group = within(popup()).getByRole('group', { name: /Target Roaster/ })
+    fireEvent.click(within(group).getByRole('button', { name: 'Select Roaster...' }))
+    // Only active users with the Roaster role are offered, by name.
+    expect(within(group).getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Select Roaster...', 'Hill Roastery', 'Zeta Roasters',
+    ])
+    fireEvent.click(within(group).getByRole('button', { name: 'Hill Roastery' }))
+    save()
+
+    await waitFor(() => expect(createWithdrawal).toHaveBeenCalledTimes(2))
+    const roast = { withdrawalType: 'Roasting Stock', purpose: 'Batch 12', targetRoasterId: 'r-1' }
+    expect(vi.mocked(createWithdrawal).mock.calls).toEqual([
+      ['gbl-a', { amountKg: 6, ...roast }],
+      ['gbl-b', { amountKg: 2, ...roast }],
+    ])
+  }, 15000)
+
+  it('brings a refused Save\'s error into view, since the Sale fields make the popup scroll on a phone', () => {
+    // jsdom has no scrollIntoView.
+    const original = Element.prototype.scrollIntoView
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    try {
+      render(<Harness refreshData={async () => {}} initial={stock} />)
+      openWithdraw()
+      save()
+      const banner = within(popup()).getByRole('alert')
+      expect(banner).toHaveTextContent('Amount must be greater than 0.')
+      expect(scrollIntoView.mock.contexts).toContain(banner)
+      expect(createWithdrawal).not.toHaveBeenCalled()
+    } finally {
+      Element.prototype.scrollIntoView = original
+    }
+  })
+
+  it('stops at the lot that completes the amount instead of drawing a float crumb from the next', async () => {
+    // 49.1 - 30.2 - 18.9 is 3.6e-15 in floats, not 0.
+    const lots = [
+      stockLot('gbl-1', 'GBL-2026-71', 30.2, '2026-09-01T00:00:00Z'),
+      stockLot('gbl-2', 'GBL-2026-72', 18.9, '2026-09-02T00:00:00Z'),
+      stockLot('gbl-3', 'GBL-2026-73', 10, '2026-09-03T00:00:00Z'),
+    ]
+    vi.mocked(createWithdrawal).mockResolvedValue(drawn(lots[0], 0))
+    render(<Harness refreshData={async () => {}} initial={{ ...stock, greenBeanLots: lots }} roles={[UserRole.Admin]} />)
+    openWithdraw('Roast')
+    pick('Select Roaster...', 'Hill Roastery')
+    fireEvent.change(amount(), { target: { value: '49.1' } })
+    save()
+
+    await waitFor(() => expect(screen.queryByText('Withdraw Stock')).not.toBeInTheDocument())
+    const roast = { withdrawalType: 'Roasting Stock', purpose: 'Roasting Stock', targetRoasterId: 'r-1' }
+    expect(vi.mocked(createWithdrawal).mock.calls).toEqual([
+      ['gbl-1', { amountKg: 30.2, ...roast }],
+      ['gbl-2', { amountKg: 18.9, ...roast }],
+    ])
+  }, 15000)
+
+  it('cannot be closed while the lots are still being drawn', async () => {
+    let finish: (value: Awaited<ReturnType<typeof createWithdrawal>>) => void = () => {}
+    vi.mocked(createWithdrawal)
+      .mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+      .mockResolvedValueOnce(drawn(newer, 8))
+    render(<Harness refreshData={async () => {}} initial={stock} />)
+    openWithdraw('Sample')
+    fireEvent.change(amount(), { target: { value: '8' } })
+    const close = within(popup()).getByRole('button', { name: 'Close' })
+    expect(close).toBeEnabled()
+    save()
+
+    // Both ways out stay shut until every lot is drawn.
+    await waitFor(() => expect(close).toBeDisabled())
+    expect(within(popup()).getByText('Cancel', { selector: 'button' })).toBeDisabled()
+    fireEvent.click(close)
+    expect(screen.getByText('Withdraw Stock')).toBeInTheDocument()
+
+    finish(drawn(older, 0))
+    await waitFor(() => expect(screen.queryByText('Withdraw Stock')).not.toBeInTheDocument())
+    expect(createWithdrawal).toHaveBeenCalledTimes(2)
+  }, 15000)
+
+  it('starts the next withdrawal without the last customer, price or address', () => {
+    render(<Harness refreshData={async () => {}} initial={stock} />)
+    openWithdraw()
+    pick('Select customer...', 'Cafe Doi (Retailer)')
+    fireEvent.change(within(popup()).getByLabelText('Price per kg'), { target: { value: '180' } })
+    fireEvent.click(within(popup()).getByText('Cancel', { selector: 'button' }))
+
+    openWithdraw()
+    expect(within(popup()).getByRole('button', { name: 'Select customer...' })).toBeInTheDocument()
+    expect((within(popup()).getByLabelText('Delivery Address') as HTMLInputElement).value).toBe('')
+    expect((within(popup()).getByLabelText('Price per kg') as HTMLInputElement).value).toBe('')
+  })
+
+  it('reports how much was drawn when a later lot fails, and Save again draws only the rest', async () => {
+    vi.mocked(createWithdrawal)
+      .mockResolvedValueOnce(drawn(older, 0))
+      .mockRejectedValueOnce(new Error('Insufficient weight available'))
+      .mockResolvedValueOnce(drawn(newer, 8))
+    const refreshData = vi.fn(async () => {})
+    render(<Harness refreshData={refreshData} initial={stock} />)
+    openWithdraw('Sample')
+    fireEvent.change(amount(), { target: { value: '8' } })
+    save()
+
+    expect(await within(popup()).findByText(
+      'Withdrew 6.00 of 8.00 kg. The other 2.00 kg were not withdrawn: Insufficient weight available',
+    )).toBeInTheDocument()
+    expect(createWithdrawal).toHaveBeenCalledTimes(2)
+    // The drawn lot leaves the popup and the page reloads its figures.
+    expect(amount().value).toBe('2')
+    expect(within(popup()).getByText('drawn FIFO from 1 lot')).toBeInTheDocument()
+    expect(refreshData).toHaveBeenCalledTimes(1)
+
+    save()
+    await waitFor(() => expect(createWithdrawal).toHaveBeenCalledTimes(3))
+    expect(vi.mocked(createWithdrawal).mock.calls[2]).toEqual([
+      'gbl-b', { amountKg: 2, withdrawalType: 'Sample', purpose: 'Sample' },
+    ])
+    await waitFor(() => expect(screen.queryByText('Withdraw Stock')).not.toBeInTheDocument())
   }, 15000)
 })
