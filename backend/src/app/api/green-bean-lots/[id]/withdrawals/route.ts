@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma'
 import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { safeParseFloat } from '@/lib/utils'
+import { isActiveRoaster, INVALID_TARGET_ROASTER_MESSAGE } from '@/lib/targetRoaster'
 
 // POST /api/green-bean-lots/:id/withdrawals - Create withdrawal
 export async function POST(
@@ -11,7 +12,9 @@ export async function POST(
 ) {
   try {
     const user = await requireAuth(request)
-    // SECURITY: Only Processor, Roaster, and Admin can create withdrawals
+    // SECURITY: Only Processor, Roaster, and Admin can create withdrawals.
+    // A Roaster passes here only for lots they created (green beans they
+    // bought); the ownership check below refuses everyone else's.
     requireRole(user, ['Processor', 'Roaster', 'Admin'])
     // Per-user write limiter against retry-loop / scripted abuse.
     const limited = await rateLimit(request, {
@@ -57,8 +60,12 @@ export async function POST(
       )
     }
 
-    // SECURITY: Only the lot creator (or Admin/Roaster) can draw down the lot.
-    requireOwnership(user, lot.createdById, ['Admin', 'Roaster'])
+    // SECURITY: Only the lot creator (or Admin / super admin) can draw down
+    // the lot, whatever the withdrawal type. A Roaster takes stock from
+    // someone else's lot through POST /api/roaster-inventory (the claim),
+    // which checks the lot is Available; this route would let them skip that
+    // and record a Sale on a lot that is not theirs.
+    requireOwnership(user, lot.createdById, ['Admin'])
 
     const amount = safeParseFloat(amountKg);
     if (amount === null || amount <= 0) {
@@ -71,6 +78,15 @@ export async function POST(
     if (amount > lot.currentWeightKg) {
       return NextResponse.json(
         { error: 'Insufficient weight available' },
+        { status: 400 }
+      )
+    }
+
+    // The kg go into this user's inventory, so it must be a roaster who can
+    // open it (see lib/targetRoaster).
+    if (targetRoasterId && !(await isActiveRoaster(targetRoasterId))) {
+      return NextResponse.json(
+        { error: INVALID_TARGET_ROASTER_MESSAGE },
         { status: 400 }
       )
     }

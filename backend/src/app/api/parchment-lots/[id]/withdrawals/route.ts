@@ -10,6 +10,7 @@ import {
   nextDisplayIds,
   withDisplayIdRetry,
 } from '@/lib/utils'
+import { isActiveRoaster, INVALID_TARGET_ROASTER_MESSAGE } from '@/lib/targetRoaster'
 
 // POST /api/parchment-lots/:id/withdrawals - Create withdrawal
 export async function POST(
@@ -66,14 +67,11 @@ export async function POST(
     }
 
     // SECURITY: Only the Processor who created the parent ProcessingBatch
-    // (or Admin) can draw down this lot. The Roaster bypass is limited to
-    // RoastingStock; any other type (Hull & Grade above all, which creates
-    // green bean lots owned by the caller) needs real ownership.
-    requireOwnership(
-      user,
-      lot.processingBatch?.createdById,
-      withdrawalType === 'RoastingStock' ? ['Admin', 'Roaster'] : ['Admin']
-    )
+    // (or Admin / super admin) can draw down this lot, whatever the
+    // withdrawal type. RoastingStock included: it takes the kg off the lot
+    // without giving the roaster any inventory, so letting a Roaster draw it
+    // on someone else's lot only destroys stock.
+    requireOwnership(user, lot.processingBatch?.createdById, ['Admin'])
 
     const amount = safeParseFloat(amountKg)
     if (amount === null || amount <= 0) {
@@ -86,6 +84,14 @@ export async function POST(
     if (amount > lot.currentWeightKg) {
       return NextResponse.json(
         { error: 'Insufficient weight available' },
+        { status: 400 }
+      )
+    }
+
+    // The withdrawal row names this user as the roaster the kg went to.
+    if (targetRoasterId && !(await isActiveRoaster(targetRoasterId))) {
+      return NextResponse.json(
+        { error: INVALID_TARGET_ROASTER_MESSAGE },
         { status: 400 }
       )
     }

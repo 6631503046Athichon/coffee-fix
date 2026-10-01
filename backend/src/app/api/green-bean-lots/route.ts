@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 import { validateBody, createGreenBeanLotSchema } from '@/lib/validations'
 import { nextDisplayId, withDisplayIdRetry } from '@/lib/utils'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request)
     // SECURITY: Processors and Admins create internal lots; Roasters can add
-    // purchased external lots from the Roaster Workbench.
+    // purchased external lots from the Roaster Workbench (checked below).
     requireRole(user, ['Processor', 'Roaster', 'Admin'])
     const limited = await rateLimit(request, {
       ...RATE_LIMITS.WRITE_LOT,
@@ -127,6 +127,29 @@ export async function POST(request: NextRequest) {
       currency,
     } = validation.data
     const processorScore = (validation.data as { processorScore?: unknown }).processorScore
+
+    // SECURITY: The caller becomes this lot's owner (createdById) and can
+    // then sell or roast it. So a lot that names a parchment lot must name
+    // one the caller processed (parchmentLot -> processingBatch.createdById);
+    // Admin and super admin may name any. Otherwise anyone could mint stock
+    // that traces back to another processor's batch and farm. Internal lots
+    // come out of processing; a Roaster adds the External lots they buy.
+    if (sourceType === 'Internal') {
+      requireRole(user, ['Processor', 'Admin'])
+    }
+    if (parchmentLotId) {
+      const parchmentLot = await prisma.parchmentLot.findUnique({
+        where: { id: parchmentLotId },
+        select: { processingBatch: { select: { createdById: true } } },
+      })
+      if (!parchmentLot) {
+        return NextResponse.json(
+          { error: 'Parchment lot not found' },
+          { status: 404 },
+        )
+      }
+      requireOwnership(user, parchmentLot.processingBatch?.createdById, ['Admin'])
+    }
 
     // Prisma JSON fields cannot serialize nested undefined values from optional form fields.
     const cleanExternalSource = externalSource

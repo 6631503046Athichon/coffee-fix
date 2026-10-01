@@ -440,7 +440,9 @@ describe('green bean lot pricing', () => {
       expect(txMock.pricingHistory.create).not.toHaveBeenCalled()
     })
 
-    test('a Roaster may still draw RoastingStock', async () => {
+    // RoastingStock on parchment takes the kg off the lot and gives the
+    // roaster no inventory, so it is the lot owner's (or an Admin's) call.
+    test("403 when a Roaster draws RoastingStock on a processor's parchment lot", async () => {
       mockAuthUser = roaster
       const { POST } = await import('@/app/api/parchment-lots/[id]/withdrawals/route')
       const response = await POST(
@@ -456,8 +458,10 @@ describe('green bean lot pricing', () => {
         parchmentParams,
       )
 
-      expect(response.status).toBe(201)
-      expect(txMock.greenBeanLot.create).not.toHaveBeenCalled()
+      expect(response.status).toBe(403)
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+      expect(txMock.parchmentLot.updateMany).not.toHaveBeenCalled()
+      expect(txMock.parchmentWithdrawal.create).not.toHaveBeenCalled()
     })
 
     test.each([-10, '150abc', 220.555, '220.555'])('400 for a hull price of %p, before anything is written', async (price) => {

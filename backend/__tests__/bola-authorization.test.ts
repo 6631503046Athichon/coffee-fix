@@ -322,7 +322,10 @@ describe('BOLA Authorization Tests', () => {
       expect(mockRequireRole).toHaveBeenCalledWith(mockAuthUser, ['Processor', 'Roaster', 'Admin'])
     })
 
-    test('should succeed for Roaster role', async () => {
+    // A Roaster used to skip the ownership check here and could record a
+    // Sale on any processor's lot. Roasters take stock through the claim
+    // route (POST /api/roaster-inventory) instead.
+    test("should return 403 for a Roaster on another user's lot", async () => {
       mockAuthUser = {
         id: 'roaster-123',
         name: 'Roaster User',
@@ -334,6 +337,42 @@ describe('BOLA Authorization Tests', () => {
       mockPrisma.greenBeanLot.findUnique.mockResolvedValueOnce({
         id: 'lot-123',
         currentWeightKg: 100,
+        createdById: 'processor-123',
+      })
+
+      const { POST } = await import('@/app/api/green-bean-lots/[id]/withdrawals/route')
+
+      const request = new NextRequest(
+        'http://localhost:3001/api/green-bean-lots/lot-123/withdrawals',
+        {
+          method: 'POST',
+          body: JSON.stringify({ amountKg: 10, withdrawalType: 'Sale', purpose: 'Customer Order' }),
+        },
+      )
+
+      const params = Promise.resolve({ id: 'lot-123' })
+      const response = await POST(request, { params })
+
+      expect(response.status).toBe(403)
+      expect(mockRequireOwnership).toHaveBeenCalledWith(mockAuthUser, 'processor-123', ['Admin'])
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+      expect(mockPrisma.greenBeanLot.updateMany).not.toHaveBeenCalled()
+      expect(mockPrisma.greenBeanWithdrawal.create).not.toHaveBeenCalled()
+    })
+
+    test('should succeed for the Processor who created the lot', async () => {
+      mockAuthUser = {
+        id: 'processor-123',
+        name: 'Processor User',
+        roles: ['Processor'],
+        isActive: true,
+        isSuperAdmin: false,
+      }
+
+      mockPrisma.greenBeanLot.findUnique.mockResolvedValueOnce({
+        id: 'lot-123',
+        currentWeightKg: 100,
+        createdById: 'processor-123',
       })
 
       mockPrisma.greenBeanLot.findUnique.mockResolvedValueOnce({
@@ -357,6 +396,7 @@ describe('BOLA Authorization Tests', () => {
 
       expect(response.status).toBe(201)
       expect(mockRequireRole).toHaveBeenCalledWith(mockAuthUser, ['Processor', 'Roaster', 'Admin'])
+      expect(mockRequireOwnership).toHaveBeenCalledWith(mockAuthUser, 'processor-123', ['Admin'])
     })
   })
 
