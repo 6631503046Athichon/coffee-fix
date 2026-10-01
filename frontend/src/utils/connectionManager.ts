@@ -11,10 +11,8 @@
  */
 
 // Production: same-origin /api (Vercel proxies to the backend, keeps auth
-// cookie first-party). Dev: local backend. Mirrors services/api.ts.
-const API_BASE_URL = import.meta.env.PROD
-  ? '/api'
-  : import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+// cookie first-party). Dev: local backend. Shared with services/api.ts.
+import { API_BASE_URL } from '../services/apiBaseUrl'
 
 /** Duration (ms) after the first failure during which all API calls are suppressed. */
 const SUPPRESS_WINDOW_MS = 30_000

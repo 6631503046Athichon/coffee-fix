@@ -105,6 +105,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...createValidFarmData(),
           ownerId: FARMER_ID_1,
@@ -148,6 +149,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createValidFarmData()),
       })
 
@@ -182,6 +184,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...createValidFarmData(),
           ownerId: otherUserId,
@@ -212,6 +215,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           // Missing required fields: farmName, location
           latitude: 20.0836,
@@ -254,6 +258,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createValidFarmData({ farmName: 'Admin Farm' })),
       })
 
@@ -300,6 +305,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...createValidFarmData({ farmName: 'Farm for Another User' }),
           ownerId: targetUserId,
@@ -349,6 +355,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createValidFarmData()),
       })
 
@@ -381,6 +388,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...createValidFarmData(),
           googleMapsUrl: 'not-a-valid-url',
@@ -411,6 +419,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createValidFarmData()),
       })
 
@@ -438,6 +447,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createValidFarmData()),
       })
 
@@ -465,6 +475,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createValidFarmData()),
       })
 
@@ -492,6 +503,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createValidFarmData()),
       })
 
@@ -533,6 +545,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createValidFarmData({ farmName: 'SuperAdmin Farm' })),
       })
 
@@ -573,6 +586,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...createValidFarmData({ farmName: 'SuperAdmin Farm 2' }),
           ownerId: targetUserId,
@@ -596,6 +610,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createValidFarmData()),
       })
 
@@ -635,6 +650,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createValidFarmData({ farmName: 'Multi Role Farm' })),
       })
 
@@ -673,6 +689,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...createValidFarmData({ farmName: 'Admin Multi Farm' }),
           // ownerId omitted - should default to userId
@@ -710,6 +727,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...createValidFarmData(),
           ownerId: 'not-a-valid-uuid', // Invalid UUID format
@@ -730,6 +748,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createValidFarmData()),
       })
 
@@ -748,6 +767,7 @@ describe('Farm Creation Role-Based Authorization', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createValidFarmData()),
       })
 

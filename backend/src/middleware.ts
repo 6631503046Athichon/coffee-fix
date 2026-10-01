@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { checkRequestContentType, checkRequestOrigin } from '@/lib/csrf'
 
 // Build an exact-match allowlist of permitted browser origins.
 //
@@ -21,6 +22,20 @@ const isOriginAllowed = (origin: string | null): boolean => {
   return ALLOWED_ORIGINS.has(origin)
 }
 
+const ALLOW_METHODS = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+const ALLOW_HEADERS =
+  'Content-Type, Authorization, X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version'
+
+function applyCorsHeaders(response: NextResponse, allowedOrigin: string): NextResponse {
+  if (allowedOrigin) {
+    response.headers.set('Access-Control-Allow-Origin', allowedOrigin)
+  }
+  response.headers.set('Access-Control-Allow-Credentials', 'true')
+  response.headers.set('Access-Control-Allow-Methods', ALLOW_METHODS)
+  response.headers.set('Access-Control-Allow-Headers', ALLOW_HEADERS)
+  return response
+}
+
 export function middleware(request: NextRequest) {
   const origin = request.headers.get('origin')
 
@@ -31,9 +46,8 @@ export function middleware(request: NextRequest) {
   // Handle preflight requests
   if (request.method === 'OPTIONS') {
     const headers: Record<string, string> = {
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
-      'Access-Control-Allow-Headers':
-        'Content-Type, Authorization, X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version',
+      'Access-Control-Allow-Methods': ALLOW_METHODS,
+      'Access-Control-Allow-Headers': ALLOW_HEADERS,
       'Access-Control-Allow-Credentials': 'true',
       'Access-Control-Max-Age': '86400',
     }
@@ -43,23 +57,16 @@ export function middleware(request: NextRequest) {
     return new NextResponse(null, { status: 200, headers })
   }
 
-  // Handle actual requests - clone response and add CORS headers
-  const response = NextResponse.next()
-
-  if (allowedOrigin) {
-    response.headers.set('Access-Control-Allow-Origin', allowedOrigin)
+  // CSRF: refuse state-changing requests another site made the browser send,
+  // and bodies that aren't declared JSON (see lib/csrf.ts). Rejections still
+  // carry the CORS headers so an allowed origin can read the error.
+  const rejected = checkRequestOrigin(request) ?? checkRequestContentType(request)
+  if (rejected) {
+    return applyCorsHeaders(rejected, allowedOrigin)
   }
-  response.headers.set('Access-Control-Allow-Credentials', 'true')
-  response.headers.set(
-    'Access-Control-Allow-Methods',
-    'GET, POST, PUT, DELETE, OPTIONS, PATCH',
-  )
-  response.headers.set(
-    'Access-Control-Allow-Headers',
-    'Content-Type, Authorization, X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version',
-  )
 
-  return response
+  // Handle actual requests - clone response and add CORS headers
+  return applyCorsHeaders(NextResponse.next(), allowedOrigin)
 }
 
 // Apply middleware to API routes only

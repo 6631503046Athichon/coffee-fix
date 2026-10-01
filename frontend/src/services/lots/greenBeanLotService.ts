@@ -1,5 +1,6 @@
 import { GreenBeanLot, RoasterInventoryItem } from "../../types";
 import { api } from "../api";
+import { API_BASE_URL } from "../apiBaseUrl";
 import { handleApiErrorWithFallback } from "../../utils/errorHandler";
 
 // Backend-shaped payloads. Fields are intentionally typed loose because the
@@ -328,10 +329,7 @@ export const getQRCodeUrl = (
   format: 'png' | 'svg' = 'png',
   size: number = 200
 ): string => {
-  const baseUrl = import.meta.env.PROD
-    ? '/api'
-    : import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-  return `${baseUrl}/green-bean-lots/${lotId}/qr?format=${format}&size=${size}`;
+  return `${API_BASE_URL}/green-bean-lots/${lotId}/qr?format=${format}&size=${size}`;
 };
 
 const getFrontendBaseUrl = (): string => {
@@ -391,10 +389,7 @@ export const getTracePreviewData = async (lotId: string): Promise<PublicTraceDat
  * Fetch public traceability data (no auth required)
  */
 export const getPublicTraceData = async (publicId: string): Promise<PublicTraceData> => {
-  const baseUrl = import.meta.env.PROD
-    ? '/api'
-    : import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-  const response = await fetch(`${baseUrl}/trace/${publicId}`);
+  const response = await fetch(`${API_BASE_URL}/trace/${publicId}`);
 
   if (!response.ok) {
     throw new Error('Lot not found');

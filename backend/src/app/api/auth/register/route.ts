@@ -6,6 +6,7 @@ import { hashPassword, generateToken } from '@/lib/auth'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { validateBody, createUserSchema } from '@/lib/validations'
+import { AUTH_COOKIE_NAME, authCookieOptions } from '@/lib/authCookie'
 
 // Tighten the shared createUserSchema for the admin-register endpoint:
 //   - require a password (createUserSchema makes it optional for auto-gen
@@ -126,14 +127,8 @@ export async function POST(request: NextRequest) {
     // Set HTTP-only cookie. maxAge matches JWT_EXPIRES_IN ('24h') in
     // lib/auth.ts — keeping them aligned means the cookie doesn't outlive the
     // token it carries (which would just lead to confusing 401s after expiry).
-    const isProduction = process.env.NODE_ENV === 'production'
-    response.cookies.set('auth-token', token, {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? 'none' : 'lax',
-      maxAge: 60 * 60 * 24, // 24h, matches JWT_EXPIRES_IN
-      path: '/',
-    })
+    // Other attributes (SameSite=Lax etc.) come from lib/authCookie.ts.
+    response.cookies.set(AUTH_COOKIE_NAME, token, authCookieOptions(60 * 60 * 24)) // 24h, matches JWT_EXPIRES_IN
 
     return response
   } catch (error) {

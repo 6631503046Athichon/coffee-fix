@@ -67,6 +67,7 @@ describe('Farm Creation API Integration', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           farmName: 'Test Farm',
           location: 'Test Location',
@@ -121,6 +122,7 @@ describe('Farm Creation API Integration', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           farmName: 'Test Farm',
           location: 'Test Location',
@@ -166,6 +168,7 @@ describe('Farm Creation API Integration', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           farmName: 'Test Farm',
           location: 'Test Location',
@@ -214,6 +217,7 @@ describe('Farm Creation API Integration', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           farmName: 'Test Farm',
           location: 'Test Location',
@@ -259,6 +263,7 @@ describe('Farm Creation API Integration', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           farmName: 'Test Farm',
           location: 'Test Location',
@@ -285,6 +290,7 @@ describe('Farm Creation API Integration', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           farmName: 'Test Farm',
           location: 'Test Location',
@@ -312,6 +318,7 @@ describe('Farm Creation API Integration', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           farmName: 'Test Farm',
           location: 'Test Location',
@@ -339,6 +346,7 @@ describe('Farm Creation API Integration', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           farmName: 'Test Farm',
           location: 'Test Location',
@@ -366,6 +374,7 @@ describe('Farm Creation API Integration', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           farmName: 'Test Farm',
           location: 'Test Location',
@@ -393,6 +402,7 @@ describe('Farm Creation API Integration', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           farmName: 'Test Farm',
           location: 'Test Location',
@@ -440,6 +450,7 @@ describe('Farm Creation API Integration', () => {
 
       const request = new NextRequest('http://localhost:3001/api/farms', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           farmName: 'Doi Chang Coffee Farm',
           location: 'Chiang Rai, Thailand',

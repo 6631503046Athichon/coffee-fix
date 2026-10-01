@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ZodSchema, ZodError } from 'zod';
+import { isJsonContentType, unsupportedMediaType } from '../csrf';
 
 export interface ValidationSuccess<T> {
   success: true;
@@ -16,11 +17,18 @@ export type ValidationResult<T> = ValidationSuccess<T> | ValidationFailure;
 /**
  * Validates request body against a Zod schema.
  * Returns typed data if valid, or a formatted error response.
+ *
+ * The body must be declared JSON: anything else is refused with 415, so a
+ * cross-site text/plain or form POST can't be parsed as JSON here (CSRF).
  */
 export async function validateBody<T>(
   req: NextRequest,
   schema: ZodSchema<T>
 ): Promise<ValidationResult<T>> {
+  if (!isJsonContentType(req.headers.get('content-type'))) {
+    return { success: false, error: unsupportedMediaType() };
+  }
+
   try {
     const body = await req.json();
     const data = schema.parse(body);

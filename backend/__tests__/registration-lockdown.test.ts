@@ -54,6 +54,7 @@ describe('Registration Lock-Down', () => {
 
     const request = new NextRequest('http://localhost:3001/api/auth/register', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: 'test@example.com',
         password: 'password123',
@@ -86,6 +87,7 @@ describe('Registration Lock-Down', () => {
 
     const request = new NextRequest('http://localhost:3001/api/auth/register', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: 'test@example.com',
         password: 'password123',
@@ -137,6 +139,7 @@ describe('Registration Lock-Down', () => {
 
     const request = new NextRequest('http://localhost:3001/api/auth/register', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: 'test@example.com',
         password: 'password123',
@@ -185,6 +188,7 @@ describe('Registration Lock-Down', () => {
 
     const request = new NextRequest('http://localhost:3001/api/auth/register', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: 'test@example.com',
         password: 'password123',
@@ -225,6 +229,7 @@ describe('Registration Lock-Down', () => {
 
     const request = new NextRequest('http://localhost:3001/api/auth/register', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: 'test@example.com',
         password: 'password123',
@@ -266,6 +271,7 @@ describe('Registration Lock-Down', () => {
 
     const request = new NextRequest('http://localhost:3001/api/auth/register', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: 'test@example.com',
         password: 'password123',
@@ -293,6 +299,7 @@ describe('Registration Lock-Down', () => {
 
     const request = new NextRequest('http://localhost:3001/api/auth/register', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: 'test@example.com',
         password: 'short', // Less than 6 characters

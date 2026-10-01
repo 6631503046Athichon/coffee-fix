@@ -108,8 +108,10 @@ const farmer = { id: 'farmer-1', roles: ['Farmer'], isSuperAdmin: false }
 const ORDER_ID = 'e5dd3ab0-ad1b-4aaa-9b34-cea608765224'
 const CUSTOMER = 'c0a80121-7ac0-4e1c-9f3b-1a2b3c4d5e6f'
 
+// JSON bodies go out as application/json, like the SPA sends them —
+// validateBody refuses any other content type with 415.
 const request = (url: string, init?: ConstructorParameters<typeof NextRequest>[1]) =>
-  new NextRequest(`http://localhost:3001${url}`, init)
+  new NextRequest(`http://localhost:3001${url}`, { headers: { 'Content-Type': 'application/json' }, ...init })
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 
 const summaryRow = (id: string, roastedWeightKg: number | null, soldWeightKg: number) => ({

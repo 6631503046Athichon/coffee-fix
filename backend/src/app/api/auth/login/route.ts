@@ -4,6 +4,7 @@ import { verifyPassword, generateToken } from '@/lib/auth'
 import { handleApiError } from '@/lib/middleware'
 import { rateLimit, RATE_LIMITS, getClientIp } from '@/lib/rateLimit'
 import { validateBody, loginSchema } from '@/lib/validations'
+import { AUTH_COOKIE_NAME, authCookieOptions } from '@/lib/authCookie'
 
 export async function POST(request: NextRequest) {
   try {
@@ -134,27 +135,9 @@ export async function POST(request: NextRequest) {
       message: 'Login successful',
     })
 
-    // Set HTTP-only cookie
-    // For localhost with different ports, we need to handle it specially
-    const isProduction = process.env.NODE_ENV === 'production' || !!process.env.VERCEL || !!process.env.RAILWAY_ENVIRONMENT
-    const origin = request.headers.get('origin') || ''
-    // Check if frontend and backend are on different ports (localhost:5173 vs localhost:3001)
-    const isLocalhostDifferentPort = origin.includes('localhost') && !origin.includes(':3001')
-    const isCrossDomain = !!(origin && !origin.includes('localhost'))
-    
-    // For localhost with different ports, use 'lax' with secure: false
-    // For production cross-domain, use 'none' with secure: true
-    const shouldUseSecure = isProduction || (isCrossDomain && !isLocalhostDifferentPort)
-    const sameSiteValue = (isProduction || isCrossDomain) && !isLocalhostDifferentPort ? 'none' : 'lax'
-    
-    response.cookies.set('auth-token', token, {
-      httpOnly: true,
-      secure: shouldUseSecure, // false for localhost, true for production
-      sameSite: sameSiteValue, // 'lax' for localhost, 'none' for cross-domain production
-      maxAge: 60 * 60 * 24, // 1 day to match JWT 24h expiry
-      path: '/',
-      // Don't set domain for localhost - let browser handle it
-    })
+    // Set HTTP-only cookie: SameSite=Lax, Secure when deployed, no domain
+    // (see lib/authCookie.ts). 1 day to match JWT 24h expiry.
+    response.cookies.set(AUTH_COOKIE_NAME, token, authCookieOptions(60 * 60 * 24))
 
     return response
   } catch (error) {
