@@ -71,7 +71,10 @@ function Harness({ initial, refreshData, onData, roles = [UserRole.Processor], w
   )
 }
 
-describe('Record Process', () => {
+// Every test renders the whole workbench, which takes seconds under a full
+// parallel run, so these suites get the same 20 s budget as the other
+// heavy workbench tests.
+describe('Record Process', { timeout: 20000 }, () => {
   beforeEach(() => vi.clearAllMocks())
 
   it.each(['Workflow', 'Data Grid'])('hides an old partial lot with a batch in %s', (view) => {
@@ -105,7 +108,7 @@ describe('Record Process', () => {
   })
 })
 
-describe('Green bean price', () => {
+describe('Green bean price', { timeout: 20000 }, () => {
   const greenLot: GreenBeanLot = {
     id: 'gbl-1', displayId: 'GBL-2026-7', sourceType: GreenBeanSourceType.Internal,
     grade: 'Grade A', initialWeightKg: 50, currentWeightKg: 40,
@@ -156,7 +159,7 @@ describe('Green bean price', () => {
   })
 })
 
-describe('Sale customer picker', () => {
+describe('Sale customer picker', { timeout: 20000 }, () => {
   const stockLot: GreenBeanLot = {
     id: 'gbl-1', displayId: 'GBL-2026-1', sourceType: GreenBeanSourceType.Internal,
     grade: 'Grade A', initialWeightKg: 50, currentWeightKg: 40,
@@ -232,8 +235,7 @@ describe('Sale customer picker', () => {
       customerName: 'Cafe Doi',
       deliveryAddress: '12 Nimman Rd, back door',
     })
-    // Many re-renders of the whole workbench: ~3.5 s alone, more under a full parallel run.
-  }, 15000)
+  })
 
   it('New customer saves the customer, lists it and picks it without submitting the withdrawal', async () => {
     vi.mocked(addCustomer).mockResolvedValue({
@@ -337,7 +339,7 @@ describe('Sale customer picker', () => {
   })
 })
 
-describe('Withdraw Stock roaster and total', () => {
+describe('Withdraw Stock roaster and total', { timeout: 20000 }, () => {
   const stockLot: GreenBeanLot = {
     id: 'gbl-1', displayId: 'GBL-2026-1', sourceType: GreenBeanSourceType.Internal,
     grade: 'Grade A', initialWeightKg: 50, currentWeightKg: 40,
@@ -374,7 +376,7 @@ describe('Withdraw Stock roaster and total', () => {
     expect(createWithdrawal).toHaveBeenCalledWith('gbl-1', {
       amountKg: 5, withdrawalType: 'Roasting Stock', purpose: 'Roasting Stock', targetRoasterId: 'r-1',
     })
-  }, 15000)
+  })
 
   it('shows the Sale total in the picked currency', () => {
     render(<Harness initial={{ ...INITIAL_APP_DATA, greenBeanLots: [stockLot] }} refreshData={async () => {}} />)
@@ -387,10 +389,10 @@ describe('Withdraw Stock roaster and total', () => {
     fireEvent.click(screen.getByRole('button', { name: 'THB' }))
     fireEvent.click(screen.getByRole('button', { name: 'USD' }))
     expect(screen.getByText('Total').nextElementSibling).toHaveTextContent('902.50 USD')
-  }, 15000)
+  })
 })
 
-describe('Cherry lot edit and delete', () => {
+describe('Cherry lot edit and delete', { timeout: 20000 }, () => {
   const cherryLot: HarvestLot = {
     ...lot, farmId: 'farm-1', farmPlotLocation: 'Plot A', cropYearId: 'cy-2026',
     farm: { id: 'farm-1', farmName: 'Doi Farm' },
@@ -534,7 +536,7 @@ describe('Cherry lot edit and delete', () => {
   })
 })
 
-describe('Hull & Grade price', () => {
+describe('Hull & Grade price', { timeout: 20000 }, () => {
   const parchment: ParchmentLot = {
     id: 'pl-1', displayId: 'PL-2026-3', sourceType: ParchmentSourceType.Internal,
     initialWeightKg: 100, currentWeightKg: 100, moistureContent: 11,
@@ -595,7 +597,7 @@ describe('Hull & Grade price', () => {
     for (const hint of within(form).getAllByText('(optional)')) {
       expect(hint.parentElement).toHaveTextContent('Price / kg (optional)')
     }
-  }, 15000)
+  })
 
   it('sends a typed price as gradedLots[i].price, closes before the reload, and shows the priced lots on their cards', async () => {
     vi.mocked(createParchmentWithdrawal).mockResolvedValue({
@@ -695,5 +697,5 @@ describe('Hull & Grade price', () => {
     expect(form).toHaveTextContent('Ready to confirm')
     expect(valueLine(form)).toHaveTextContent('14,440.00 THB value')
     expect(valueLine(form)).not.toHaveTextContent('grades priced')
-  }, 15000)
+  })
 })
