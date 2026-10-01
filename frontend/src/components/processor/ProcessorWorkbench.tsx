@@ -220,11 +220,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   // the Parchment page's Withdraw Stock.
   const withdrawDetails = useWithdrawDetails();
 
-  // Score Modal State
-  const [scoringMode, setScoringMode] = useState<"simple" | "detailed">(
-    "simple",
-  );
-  const [simpleQcScore, setSimpleQcScore] = useState("");
+  // Score Modal State (SCA form only; the one-number Simple Score is gone)
   const [notes, setNotes] = useState("");
   const [sensoryScores, setSensoryScores] =
     useState<Record<string, ScoreInput>>(initialSensoryScores);
@@ -418,12 +414,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   );
 
   const resetAllScoreForms = useCallback(() => {
-    setSimpleQcScore("");
     setNotes("");
     setSensoryScores(initialSensoryScores);
     setCupScores(initialCupScores);
     setDefects({ numCups: "0", intensity: 2 });
-    setScoringMode("simple");
   }, []);
 
   useEffect(() => {
@@ -439,10 +433,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             (s) => s.judgeId === processorUser.id,
           );
           if (scoreEntry) {
-            setNotes(scoreEntry.notes);
             // Check if it's a detailed score
             if (Object.keys(scoreEntry.scores).length > 1) {
-              setScoringMode("detailed");
+              setNotes(scoreEntry.notes);
               const newSensoryScores = { ...initialSensoryScores };
               SCA_SENSORY_ATTRIBUTES.forEach((attr) => {
                 if (scoreEntry.scores[attr] !== undefined) {
@@ -463,9 +456,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               setCupScores(newCupScores);
               // Note: Defects are not saved in the score object, so they reset. This is a simplification.
             } else {
-              // It's a simple score
-              setScoringMode("simple");
-              setSimpleQcScore(scoreEntry.totalScore.toString());
+              // An old one-number Simple score ({ Overall: total }) has no
+              // SCA breakdown, so the SCA form opens empty rather than
+              // reading the total as the Overall attribute. Its notes still
+              // load, and the header keeps showing the stored total.
+              resetAllScoreForms();
+              setNotes(scoreEntry.notes);
             }
             return;
           }
@@ -508,69 +504,48 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       return;
     }
 
-    let totalScore: number;
-    let scoresToSave: { [attribute: string]: number };
+    let isValid = true;
+    const tempSensoryScores = { ...sensoryScores };
+    SCA_SENSORY_ATTRIBUTES.forEach((attr) => {
+      const result = validateScore(tempSensoryScores[attr].value);
+      tempSensoryScores[attr] = {
+        ...tempSensoryScores[attr],
+        error: result.error,
+      };
+      if (result.error) isValid = false;
+    });
+    setSensoryScores(tempSensoryScores);
+    if (!isValid)
+      return alert("Please correct the errors in the detailed scores.");
 
-    if (scoringMode === "simple") {
-      totalScore = parseFloat(simpleQcScore);
-      if (isNaN(totalScore) || totalScore < 0 || totalScore > 100) {
-        alert("Please enter a valid score between 0 and 100.");
-        return;
+    const totalScore = detailedCalculations.finalScore;
+    const scoresToSave: { [attribute: string]: number } = {};
+    SCA_SENSORY_ATTRIBUTES.forEach((attr) => {
+      scoresToSave[attr] = parseFloat(sensoryScores[attr].value);
+    });
+    SCA_CUP_ATTRIBUTES.forEach((attr) => {
+      scoresToSave[attr] = cupScores[attr] * 2;
+    });
+
+    const fieldMap: Record<string, keyof CuppingDetailUpdate> = {
+      "Fragrance/Aroma": "cuppingFragrance",
+      Flavor: "cuppingFlavor",
+      Aftertaste: "cuppingAftertaste",
+      Acidity: "cuppingAcidity",
+      Body: "cuppingBody",
+      Balance: "cuppingBalance",
+      Overall: "cuppingOverall",
+      Uniformity: "cuppingUniformity",
+      "Clean Cup": "cuppingCleanCup",
+      Sweetness: "cuppingSweetness",
+    };
+    const cuppingDetailUpdate: CuppingDetailUpdate = {};
+    Object.entries(fieldMap).forEach(([label, field]) => {
+      const value = scoresToSave[label];
+      if (typeof value === "number" && !Number.isNaN(value)) {
+        cuppingDetailUpdate[field] = value;
       }
-      scoresToSave = { Overall: totalScore };
-    } else {
-      // detailed mode
-      let isValid = true;
-      const tempSensoryScores = { ...sensoryScores };
-      SCA_SENSORY_ATTRIBUTES.forEach((attr) => {
-        const result = validateScore(tempSensoryScores[attr].value);
-        tempSensoryScores[attr] = {
-          ...tempSensoryScores[attr],
-          error: result.error,
-        };
-        if (result.error) isValid = false;
-      });
-      setSensoryScores(tempSensoryScores);
-      if (!isValid)
-        return alert("Please correct the errors in the detailed scores.");
-
-      totalScore = detailedCalculations.finalScore;
-      scoresToSave = {};
-      SCA_SENSORY_ATTRIBUTES.forEach((attr) => {
-        scoresToSave[attr] = parseFloat(sensoryScores[attr].value);
-      });
-      SCA_CUP_ATTRIBUTES.forEach((attr) => {
-        scoresToSave[attr] = cupScores[attr] * 2;
-      });
-    }
-
-    const cuppingDetailUpdate: CuppingDetailUpdate | undefined =
-      scoringMode === "detailed"
-        ? (() => {
-            const fieldMap: Record<string, keyof CuppingDetailUpdate> = {
-              "Fragrance/Aroma": "cuppingFragrance",
-              Flavor: "cuppingFlavor",
-              Aftertaste: "cuppingAftertaste",
-              Acidity: "cuppingAcidity",
-              Body: "cuppingBody",
-              Balance: "cuppingBalance",
-              Overall: "cuppingOverall",
-              Uniformity: "cuppingUniformity",
-              "Clean Cup": "cuppingCleanCup",
-              Sweetness: "cuppingSweetness",
-            };
-
-            const details: CuppingDetailUpdate = {};
-            Object.entries(fieldMap).forEach(([label, field]) => {
-              const value = scoresToSave[label];
-              if (typeof value === "number" && !Number.isNaN(value)) {
-                details[field] = value;
-              }
-            });
-
-            return details;
-          })()
-        : undefined;
+    });
 
     setData((prev) => {
       const qcSessionId = `CS-QC-${processorUser.id}`;
@@ -660,7 +635,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             ...gbl,
             cuppingScores: newCuppingScores,
             processorScore: totalScore,
-            ...(cuppingDetailUpdate || {}),
+            ...cuppingDetailUpdate,
           };
         }
         return gbl;
@@ -3823,223 +3798,165 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   </div>
                 </div>
 
-                {/* Scoring Mode Toggle */}
-                <div className="flex bg-gray-100 p-1 rounded-lg mb-5 w-full sm:w-2/3 mx-auto">
-                  <button
-                    type="button"
-                    onClick={() => setScoringMode("simple")}
-                    className={`w-1/2 py-2 text-sm font-semibold rounded-md transition-all ${scoringMode === "simple" ? "bg-white shadow-md text-amber-600" : "text-gray-600 hover:text-gray-900"}`}
-                  >
-                    Simple Score
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setScoringMode("detailed")}
-                    className={`w-1/2 py-2 text-sm font-semibold rounded-md transition-all ${scoringMode === "detailed" ? "bg-white shadow-md text-amber-600" : "text-gray-600 hover:text-gray-900"}`}
-                  >
-                    Detailed (SCA)
-                  </button>
-                </div>
-
-                {scoringMode === "simple" ? (
-                  <div className="max-w-md mx-auto">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      <div className="flex items-center gap-2 justify-center">
-                        <Star className="h-4 w-4 text-amber-600" />
-                        Total Score (0-100)
-                      </div>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        step="0.25"
-                        min="0"
-                        max="100"
-                        value={simpleQcScore}
-                        onChange={(e) => setSimpleQcScore(e.target.value)}
-                        required
-                        placeholder="Enter score"
-                        className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-lg font-semibold text-center focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm transition-all"
-                      />
-                      {parseFloat(simpleQcScore) >= 80 && (
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                          <Star className="h-6 w-6 text-yellow-500 fill-yellow-500" />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  <div>
+                    {SCA_SENSORY_ATTRIBUTES.map((attr) => {
+                      const { value, error } = sensoryScores[attr];
+                      return (
+                        <div key={attr} className="mb-2">
+                          <label
+                            htmlFor={attr}
+                            className="block text-sm font-medium text-gray-700 mb-1"
+                          >
+                            {attr}
+                          </label>
+                          <input
+                            type="number"
+                            id={attr}
+                            min="1"
+                            max="10"
+                            step="0.25"
+                            value={value}
+                            onChange={(e) =>
+                              setSensoryScores((prev) => ({
+                                ...prev,
+                                [attr]: {
+                                  ...prev[attr],
+                                  value: e.target.value,
+                                },
+                              }))
+                            }
+                            onBlur={() =>
+                              setSensoryScores((prev) => ({
+                                ...prev,
+                                [attr]: {
+                                  ...prev[attr],
+                                  error: validateScore(value).error,
+                                },
+                              }))
+                            }
+                            className={`w-full p-2 border rounded-md shadow-sm text-sm text-center ${error ? "border-red-500" : "border-gray-300"}`}
+                          />
+                          {error && (
+                            <p className="text-xs text-red-600 mt-1">{error}</p>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2 text-center">
-                      Score from 0 to 100 (increments of 0.25)
-                      {parseFloat(simpleQcScore) >= 80 && (
-                        <span className="text-yellow-600 font-semibold ml-2">
-                          ⭐ Excellent Quality!
-                        </span>
-                      )}
-                    </p>
+                      );
+                    })}
                   </div>
-                ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div>
-                      {SCA_SENSORY_ATTRIBUTES.map((attr) => {
-                        const { value, error } = sensoryScores[attr];
-                        return (
-                          <div key={attr} className="mb-2">
-                            <label
-                              htmlFor={attr}
-                              className="block text-sm font-medium text-gray-700 mb-1"
-                            >
+                  <div>
+                    {SCA_CUP_ATTRIBUTES.map((attr) => {
+                      const count = cupScores[attr];
+                      return (
+                        <div key={attr} className="mb-4">
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="text-sm font-medium text-gray-700">
                               {attr}
                             </label>
-                            <input
-                              type="number"
-                              id={attr}
-                              min="1"
-                              max="10"
-                              step="0.25"
-                              value={value}
-                              onChange={(e) =>
-                                setSensoryScores((prev) => ({
-                                  ...prev,
-                                  [attr]: {
-                                    ...prev[attr],
-                                    value: e.target.value,
-                                  },
-                                }))
-                              }
-                              onBlur={() =>
-                                setSensoryScores((prev) => ({
-                                  ...prev,
-                                  [attr]: {
-                                    ...prev[attr],
-                                    error: validateScore(value).error,
-                                  },
-                                }))
-                              }
-                              className={`w-full p-2 border rounded-md shadow-sm text-sm text-center ${error ? "border-red-500" : "border-gray-300"}`}
-                            />
-                            {error && (
-                              <p className="text-xs text-red-600 mt-1">
-                                {error}
-                              </p>
-                            )}
+                            <span className="text-lg font-bold text-gray-800">
+                              {count * 2}
+                            </span>
                           </div>
-                        );
-                      })}
-                    </div>
-                    <div>
-                      {SCA_CUP_ATTRIBUTES.map((attr) => {
-                        const count = cupScores[attr];
-                        return (
-                          <div key={attr} className="mb-4">
-                            <div className="flex justify-between items-center mb-1">
-                              <label className="text-sm font-medium text-gray-700">
-                                {attr}
-                              </label>
-                              <span className="text-lg font-bold text-gray-800">
-                                {count * 2}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {Array.from({ length: 5 }).map((_, i) => (
-                                <button
-                                  type="button"
-                                  key={`${attr}-rating-${i + 1}`}
-                                  onClick={() =>
-                                    setCupScores((prev) => ({
-                                      ...prev,
-                                      [attr]: i + 1,
-                                    }))
-                                  }
-                                  className={`flex-1 h-8 rounded-md border transition-colors ${i < count ? "bg-indigo-600 border-indigo-600" : "bg-white border-gray-400 hover:border-indigo-500"}`}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                      <div className="mt-6 p-4 bg-gray-50 rounded-lg border">
-                        <label className="text-sm font-medium text-gray-700">
-                          Defects (subtract)
-                        </label>
-                        <div className="flex items-center gap-4 mt-2">
-                          <div>
-                            <label className="text-xs"># of cups</label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={defects.numCups}
-                              onChange={(e) =>
-                                setDefects({
-                                  ...defects,
-                                  numCups: e.target.value,
-                                })
-                              }
-                              className="w-20 p-2 border rounded-md shadow-sm text-sm"
-                            />
-                          </div>
-                          <span>&times;</span>
-                          <div className="flex gap-2">
-                            <label className="flex items-center text-sm gap-1">
-                              <input
-                                type="radio"
-                                name="intensity"
-                                value="2"
-                                checked={defects.intensity === 2}
-                                onChange={() =>
-                                  setDefects({ ...defects, intensity: 2 })
+                          <div className="flex items-center gap-2">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <button
+                                type="button"
+                                key={`${attr}-rating-${i + 1}`}
+                                onClick={() =>
+                                  setCupScores((prev) => ({
+                                    ...prev,
+                                    [attr]: i + 1,
+                                  }))
                                 }
-                              />{" "}
-                              Taint
-                            </label>
-                            <label className="flex items-center text-sm gap-1">
-                              <input
-                                type="radio"
-                                name="intensity"
-                                value="4"
-                                checked={defects.intensity === 4}
-                                onChange={() =>
-                                  setDefects({ ...defects, intensity: 4 })
-                                }
-                              />{" "}
-                              Fault
-                            </label>
+                                className={`flex-1 h-8 rounded-md border transition-colors ${i < count ? "bg-indigo-600 border-indigo-600" : "bg-white border-gray-400 hover:border-indigo-500"}`}
+                              />
+                            ))}
                           </div>
-                          <span>=</span>
-                          <span className="text-2xl font-bold text-red-600">
-                            {detailedCalculations.defectsTotal}
-                          </span>
                         </div>
+                      );
+                    })}
+                    <div className="mt-6 p-4 bg-gray-50 rounded-lg border">
+                      <label className="text-sm font-medium text-gray-700">
+                        Defects (subtract)
+                      </label>
+                      <div className="flex items-center gap-4 mt-2">
+                        <div>
+                          <label className="text-xs"># of cups</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={defects.numCups}
+                            onChange={(e) =>
+                              setDefects({
+                                ...defects,
+                                numCups: e.target.value,
+                              })
+                            }
+                            className="w-20 p-2 border rounded-md shadow-sm text-sm"
+                          />
+                        </div>
+                        <span>&times;</span>
+                        <div className="flex gap-2">
+                          <label className="flex items-center text-sm gap-1">
+                            <input
+                              type="radio"
+                              name="intensity"
+                              value="2"
+                              checked={defects.intensity === 2}
+                              onChange={() =>
+                                setDefects({ ...defects, intensity: 2 })
+                              }
+                            />{" "}
+                            Taint
+                          </label>
+                          <label className="flex items-center text-sm gap-1">
+                            <input
+                              type="radio"
+                              name="intensity"
+                              value="4"
+                              checked={defects.intensity === 4}
+                              onChange={() =>
+                                setDefects({ ...defects, intensity: 4 })
+                              }
+                            />{" "}
+                            Fault
+                          </label>
+                        </div>
+                        <span>=</span>
+                        <span className="text-2xl font-bold text-red-600">
+                          {detailedCalculations.defectsTotal}
+                        </span>
                       </div>
-                      <div className="mt-6 p-4 bg-indigo-50 rounded-lg border border-indigo-200 space-y-2">
-                        <div className="flex justify-between items-baseline">
-                          <span className="font-semibold text-gray-600">
-                            Subtotal
-                          </span>
-                          <span className="font-bold text-xl text-gray-800">
-                            {detailedCalculations.subtotal.toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-baseline">
-                          <span className="font-semibold text-red-600">
-                            Defects
-                          </span>
-                          <span className="font-bold text-xl text-red-600">
-                            &minus;{" "}
-                            {detailedCalculations.defectsTotal.toFixed(2)}
-                          </span>
-                        </div>
-                        <hr className="border-gray-300" />
-                        <div className="flex justify-between items-center pt-2">
-                          <span className="text-xl font-bold text-indigo-800">
-                            Final Score
-                          </span>
-                          <span className="text-4xl font-extrabold text-indigo-600">
-                            {detailedCalculations.finalScore.toFixed(2)}
-                          </span>
-                        </div>
+                    </div>
+                    <div className="mt-6 p-4 bg-indigo-50 rounded-lg border border-indigo-200 space-y-2">
+                      <div className="flex justify-between items-baseline">
+                        <span className="font-semibold text-gray-600">
+                          Subtotal
+                        </span>
+                        <span className="font-bold text-xl text-gray-800">
+                          {detailedCalculations.subtotal.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-baseline">
+                        <span className="font-semibold text-red-600">
+                          Defects
+                        </span>
+                        <span className="font-bold text-xl text-red-600">
+                          &minus; {detailedCalculations.defectsTotal.toFixed(2)}
+                        </span>
+                      </div>
+                      <hr className="border-gray-300" />
+                      <div className="flex justify-between items-center pt-2">
+                        <span className="text-xl font-bold text-indigo-800">
+                          Final Score
+                        </span>
+                        <span className="text-4xl font-extrabold text-indigo-600">
+                          {detailedCalculations.finalScore.toFixed(2)}
+                        </span>
                       </div>
                     </div>
                   </div>
-                )}
+                </div>
 
                 {/* Tasting Notes */}
                 <div className="mt-6">

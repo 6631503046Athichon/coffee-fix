@@ -5,10 +5,10 @@ import { INITIAL_APP_DATA } from '../../constants'
 import { DataContext } from '../../hooks/useDataContext'
 import { ToastProvider } from '../../contexts/ToastContext'
 import ToastContainer from '../common/ToastContainer'
-import { GreenBeanSourceType, ParchmentSourceType, ProcessingBatchStatus, UserRole } from '../../types'
-import type { AppData, Customer, GreenBeanLot, HarvestLot, ParchmentLot, ProcessType } from '../../types'
+import { CuppingSessionType, GreenBeanSourceType, ParchmentSourceType, ProcessingBatchStatus, SCA_SENSORY_ATTRIBUTES, UserRole } from '../../types'
+import type { AppData, CuppingSession, Customer, GreenBeanLot, HarvestLot, ParchmentLot, ProcessType } from '../../types'
 import { addProcessingBatch } from '../../services/processing/processingBatchService'
-import { createWithdrawal, updateGreenBeanLotPrice } from '../../services/lots/greenBeanLotService'
+import { createWithdrawal, updateGreenBeanLotPrice, updateGreenBeanLotScore } from '../../services/lots/greenBeanLotService'
 import { addCustomer } from '../../services/sales/customerService'
 import { deleteHarvestLot, updateHarvestLotDetails } from '../../services/lots/harvestLotService'
 import { createParchmentWithdrawal } from '../../services/lots/parchmentLotService'
@@ -22,6 +22,7 @@ vi.mock('../../services/processing/processingBatchService', async (importOrigina
 vi.mock('../../services/lots/greenBeanLotService', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../services/lots/greenBeanLotService')>(),
   updateGreenBeanLotPrice: vi.fn(),
+  updateGreenBeanLotScore: vi.fn(),
   createWithdrawal: vi.fn(),
 }))
 
@@ -864,5 +865,137 @@ describe('Process type colours', { timeout: 20000 }, () => {
     expect(processLine).toHaveClass('text-gray-900')
     expect(processLine).not.toHaveClass('text-amber-700')
     expect(processLine.querySelector('span.rounded-full')).toHaveClass('bg-blue-500')
+  })
+})
+
+describe('QC Score', { timeout: 20000 }, () => {
+  const scoredLot = (score?: number): GreenBeanLot => ({
+    id: 'gbl-1', displayId: 'GBL-2026-1', sourceType: GreenBeanSourceType.Internal,
+    grade: 'Grade A', initialWeightKg: 50, currentWeightKg: 40,
+    availabilityStatus: 'Available', withdrawalHistory: [],
+    cuppingScores: score === undefined ? [] : [{ sessionId: 'CS-QC-processor', score }],
+  })
+  // The processor's own QC session holding one stored score for gbl-1.
+  const qcSession = (scores: Record<string, number>, totalScore: number, notes: string): CuppingSession => ({
+    id: 'CS-QC-processor', name: "Processor's Internal QC", date: '2026-09-01',
+    type: CuppingSessionType.QC, status: 'Finalized',
+    judges: [{ id: 'processor', name: 'Processor', role: UserRole.Processor }],
+    samples: [{
+      id: 'S1', blindCode: 'gbl-1', greenBeanLotId: 'gbl-1',
+      submitterInfo: { name: 'Farmer' }, originInfo: { farm: 'N/A' }, lotInfo: { process: 'Washed' },
+    }],
+    scores: { S1: [{ judgeId: 'processor', judgeName: 'Processor', scores, notes, totalScore }] },
+  })
+  const openQcScore = () => {
+    fireEvent.click(screen.getAllByRole('button', { name: 'QC Score' })[0])
+    return screen.getByRole('heading', { name: 'QC Score' }).closest('div.rounded-2xl') as HTMLElement
+  }
+  const currentScore = (modal: HTMLElement) =>
+    within(modal).getByText('Current Score').nextElementSibling as HTMLElement
+
+  beforeEach(() => vi.clearAllMocks())
+
+  it('opens straight on the SCA form with no Simple Score option', () => {
+    render(<Harness initial={{ ...INITIAL_APP_DATA, greenBeanLots: [scoredLot()] }} refreshData={async () => {}} />)
+    const modal = openQcScore()
+
+    for (const attr of SCA_SENSORY_ATTRIBUTES) {
+      expect(within(modal).getByLabelText(attr)).toHaveValue(null)
+    }
+    expect(within(modal).getByText('Final Score')).toBeInTheDocument()
+    expect(within(modal).queryByText('Simple Score')).not.toBeInTheDocument()
+    expect(within(modal).queryByText('Detailed (SCA)')).not.toBeInTheDocument()
+    expect(within(modal).queryByText('Total Score (0-100)')).not.toBeInTheDocument()
+    expect(within(modal).getByRole('button', { name: 'Save Score' })).toBeInTheDocument()
+    expect(within(modal).getByText('Tasting Notes & Comments')).toBeInTheDocument()
+  })
+
+  it('saves the detailed SCA scores, total and per-attribute fields', async () => {
+    vi.mocked(updateGreenBeanLotScore).mockResolvedValue(scoredLot(86))
+    const onData = vi.fn()
+    render(
+      <Harness
+        initial={{ ...INITIAL_APP_DATA, greenBeanLots: [scoredLot()] }}
+        refreshData={async () => {}}
+        onData={onData}
+      />,
+    )
+    const modal = openQcScore()
+    for (const attr of SCA_SENSORY_ATTRIBUTES) {
+      fireEvent.change(within(modal).getByLabelText(attr), { target: { value: '8' } })
+    }
+    fireEvent.change(within(modal).getByPlaceholderText(/Describe flavor notes/), { target: { value: 'Stone fruit' } })
+    // 7 x 8 sensory + 3 x 10 cups, no defects.
+    expect(within(modal).getByText('Final Score').nextElementSibling).toHaveTextContent('86.00')
+    fireEvent.click(within(modal).getByRole('button', { name: 'Save Score' }))
+
+    await waitFor(() => expect(updateGreenBeanLotScore).toHaveBeenCalledTimes(1))
+    expect(updateGreenBeanLotScore).toHaveBeenCalledWith('gbl-1', 86, {
+      cuppingFragrance: 8, cuppingFlavor: 8, cuppingAftertaste: 8, cuppingAcidity: 8,
+      cuppingBody: 8, cuppingBalance: 8, cuppingOverall: 8,
+      cuppingUniformity: 10, cuppingCleanCup: 10, cuppingSweetness: 10,
+    })
+    expect(screen.queryByRole('heading', { name: 'QC Score' })).not.toBeInTheDocument()
+
+    await waitFor(() => expect(onData.mock.lastCall![0].greenBeanLots[0].processorScore).toBe(86))
+    const stored = onData.mock.lastCall![0].cuppingSessions[0].scores.S1[0]
+    expect(stored).toMatchObject({ judgeId: 'processor', notes: 'Stone fruit', totalScore: 86 })
+    expect(Object.keys(stored.scores)).toHaveLength(10)
+    expect(stored.scores).toMatchObject({ 'Fragrance/Aroma': 8, Overall: 8, 'Clean Cup': 10 })
+  })
+
+  it('opens an old one-number Simple score on an empty SCA form and keeps its total in the header', () => {
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    render(
+      <Harness
+        initial={{
+          ...INITIAL_APP_DATA,
+          greenBeanLots: [scoredLot(84)],
+          cuppingSessions: [qcSession({ Overall: 84 }, 84, 'Old simple note')],
+        }}
+        refreshData={async () => {}}
+      />,
+    )
+    const modal = openQcScore()
+
+    // The 84 total is not read as the 1-10 Overall attribute.
+    for (const attr of SCA_SENSORY_ATTRIBUTES) {
+      expect(within(modal).getByLabelText(attr)).toHaveValue(null)
+    }
+    expect(within(modal).getByPlaceholderText(/Describe flavor notes/)).toHaveValue('Old simple note')
+    expect(currentScore(modal)).toHaveTextContent('84.00')
+    expect(within(modal).queryByText('Simple Score')).not.toBeInTheDocument()
+
+    // Saving the empty form is refused; the old score is not overwritten.
+    fireEvent.click(within(modal).getByRole('button', { name: 'Save Score' }))
+    expect(alert).toHaveBeenCalledWith('Please correct the errors in the detailed scores.')
+    expect(updateGreenBeanLotScore).not.toHaveBeenCalled()
+    alert.mockRestore()
+  })
+
+  it('prefills a stored detailed score as before', () => {
+    const scores = {
+      'Fragrance/Aroma': 8.5, Flavor: 8, Aftertaste: 7.75, Acidity: 8, Body: 7.5, Balance: 8, Overall: 8,
+      Uniformity: 10, 'Clean Cup': 8, Sweetness: 10,
+    }
+    render(
+      <Harness
+        initial={{
+          ...INITIAL_APP_DATA,
+          greenBeanLots: [scoredLot(83.75)],
+          cuppingSessions: [qcSession(scores, 83.75, 'Detailed note')],
+        }}
+        refreshData={async () => {}}
+      />,
+    )
+    const modal = openQcScore()
+
+    expect(within(modal).getByLabelText('Fragrance/Aroma')).toHaveValue(8.5)
+    expect(within(modal).getByLabelText('Aftertaste')).toHaveValue(7.75)
+    expect(within(modal).getByLabelText('Overall')).toHaveValue(8)
+    expect(within(modal).getByPlaceholderText(/Describe flavor notes/)).toHaveValue('Detailed note')
+    // Clean Cup 8 = four good cups; the form total matches the stored one.
+    expect(within(modal).getByText('Clean Cup').nextElementSibling).toHaveTextContent('8')
+    expect(within(modal).getByText('Final Score').nextElementSibling).toHaveTextContent('83.75')
   })
 })
