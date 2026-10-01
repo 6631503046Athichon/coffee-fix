@@ -55,6 +55,13 @@ import {
   GradeSplitValue,
   ModalPortal,
   Pagination,
+  ProcessTypeChips,
+  ProcessTypePill,
+  // Shape of the process-type pills here (shared with the admin colour
+  // preview); the colour is the one the admin gave the type.
+  PARCHMENT_PILL_SHAPE,
+  defaultProcessTypeName,
+  processTypeColors,
   hasGradePriceError,
   parseGradePrice,
   WithdrawDetailsFields,
@@ -100,7 +107,8 @@ const gradeSplitRowProblem = (
   return null
 }
 
-const PROCESS_TYPES = ['Honey', 'Natural', 'Washed'] as const
+// A new Process & Grade starts on Honey when the admin list offers it.
+const PREFERRED_PROCESS_TYPE = 'Honey'
 
 // Withdrawal-type config mirrors the Workbench Withdraw Stock modal:
 // each option is an icon-card with its own active colour. Order is
@@ -356,7 +364,10 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   const openProcess = (lot: HarvestLot) => {
     setProcessLot(lot)
     setProcessForm({
-      processType: 'Honey',
+      processType: defaultProcessTypeName(
+        data.processTypes,
+        PREFERRED_PROCESS_TYPE,
+      ),
       // Default to harvest lot's crop year if it has one, else the current
       // crop year — saves the operator from picking it manually.
       cropYearId:
@@ -388,6 +399,10 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     if (!processLot || processSubmitting) return
 
     // ── Stage 1 validation: process info ──────────────────────────
+    if (!processForm.processType.trim()) {
+      setProcessError('Pick a process type.')
+      return
+    }
     const weight = parseFloat(processForm.parchmentWeightKg)
     const moisture = parseFloat(processForm.moistureContent)
     if (isNaN(weight) || weight <= 0) {
@@ -810,7 +825,11 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                     ) : (
                       <ChevronDown className="h-4 w-4 text-gray-400" />
                     )}
-                    <ProcessTypePill type={type} />
+                    <ProcessTypePill
+                      type={type}
+                      processTypes={data.processTypes}
+                      className={PARCHMENT_PILL_SHAPE}
+                    />
                     <span className="text-xs text-gray-400">
                       · {buckets.length} grade
                       {buckets.length !== 1 ? 's' : ''}
@@ -825,14 +844,18 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                     {buckets.map((b) => (
                       <div
                         key={b.grade}
-                        className="group bg-white border border-gray-200 border-l-4 border-l-teal-500 rounded-xl p-4 hover:shadow-md hover:border-l-teal-600 hover:-translate-y-0.5 transition-all flex flex-col"
+                        className={`group bg-white border border-gray-200 border-l-4 ${processTypeColors(data.processTypes, b.processType).accent} rounded-xl p-4 hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col`}
                       >
                         {/* Header — Grade label + Process pill */}
                         <div className="flex items-center justify-between mb-3 gap-2">
                           <h3 className="text-sm font-bold text-gray-900 truncate">
                             {b.grade}
                           </h3>
-                          <ProcessTypePill type={b.processType} />
+                          <ProcessTypePill
+                            type={b.processType}
+                            processTypes={data.processTypes}
+                            className={PARCHMENT_PILL_SHAPE}
+                          />
                         </div>
 
                         {/* Hero weight */}
@@ -958,24 +981,13 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             />
 
             <Field label="Process Type">
-              <div className="grid grid-cols-3 gap-2">
-                {PROCESS_TYPES.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() =>
-                      setProcessForm((f) => ({ ...f, processType: t }))
-                    }
-                    className={`px-3 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
-                      processForm.processType === t
-                        ? 'bg-green-600 text-white border-green-600 shadow-lg'
-                        : 'bg-white text-gray-700 border-gray-200 hover:border-green-400 hover:bg-green-50'
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
+              <ProcessTypeChips
+                value={processForm.processType}
+                onChange={(t) =>
+                  setProcessForm((f) => ({ ...f, processType: t }))
+                }
+                processTypes={data.processTypes}
+              />
             </Field>
 
             {data.cropYears.length > 0 && (
@@ -1784,26 +1796,6 @@ const Section: React.FC<{
     </section>
   )
 }
-
-// Process-type pill — solid coloured background + border so each process
-// (Honey/Natural/Washed) is visually distinguishable at a glance without
-// needing the operator to read the label closely.
-const PROCESS_PILL: Record<string, string> = {
-  Honey: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-  Natural: 'bg-orange-100 text-orange-800 border-orange-200',
-  Washed: 'bg-sky-100 text-sky-800 border-sky-200',
-}
-
-const ProcessTypePill: React.FC<{ type: string }> = ({ type }) => (
-  <span
-    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
-      PROCESS_PILL[type] ||
-      'bg-violet-100 text-violet-800 border-violet-200'
-    }`}
-  >
-    {type}
-  </span>
-)
 
 // Per-tone palette for the modal pipeline indicator. Active = filled,
 // pending = outlined-grey. Keeps the indicator readable without competing

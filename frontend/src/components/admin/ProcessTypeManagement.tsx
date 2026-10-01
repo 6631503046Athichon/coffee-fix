@@ -1,68 +1,178 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { ProcessType } from '../../types';
 import { addProcessType, updateProcessType, deleteProcessType, processTypeNameExists } from '../../services/processing/processTypeService';
-import { Plus, Edit, Trash2, CheckCircle, XCircle, AlertCircle, X, Save, Coffee, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Edit, Trash2, Check, CheckCircle, XCircle, AlertCircle, X, Save, Coffee, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  PROCESS_TYPE_COLORS,
+  PROCESS_TYPE_PICKER_HUES,
+  processTypeDotCheck,
+  processTypeHue,
+  processTypeHueLabel,
+  processTypeKey,
+  processTypeScheme,
+  similarProcessTypeHues,
+  suggestProcessTypeHue,
+  type ProcessTypeHue,
+} from '../processor/workbench/processTypeColors';
+import { ProcessTypeChip } from '../processor/workbench/ProcessTypeChips';
+import ProcessTypePill, { PARCHMENT_PILL_SHAPE } from '../processor/workbench/ProcessTypePill';
 
-// Predefined color schemes for process types
-const COLOR_SCHEMES = [
-  {
-    name: 'Blue',
-    borderColor: 'border-l-blue-500',
-    iconBg: 'bg-blue-100',
-    iconColor: 'text-blue-600',
-    badgeColor: 'bg-blue-100 text-blue-700 border-blue-200'
-  },
-  {
-    name: 'Amber',
-    borderColor: 'border-l-amber-500',
-    iconBg: 'bg-amber-100',
-    iconColor: 'text-amber-600',
-    badgeColor: 'bg-amber-100 text-amber-700 border-amber-200'
-  },
-  {
-    name: 'Yellow',
-    borderColor: 'border-l-yellow-500',
-    iconBg: 'bg-yellow-100',
-    iconColor: 'text-yellow-600',
-    badgeColor: 'bg-yellow-100 text-yellow-700 border-yellow-200'
-  },
-  {
-    name: 'Green',
-    borderColor: 'border-l-green-500',
-    iconBg: 'bg-green-100',
-    iconColor: 'text-green-600',
-    badgeColor: 'bg-green-100 text-green-700 border-green-200'
-  },
-  {
-    name: 'Purple',
-    borderColor: 'border-l-purple-500',
-    iconBg: 'bg-purple-100',
-    iconColor: 'text-purple-600',
-    badgeColor: 'bg-purple-100 text-purple-700 border-purple-200'
-  },
-  {
-    name: 'Pink',
-    borderColor: 'border-l-pink-500',
-    iconBg: 'bg-pink-100',
-    iconColor: 'text-pink-600',
-    badgeColor: 'bg-pink-100 text-pink-700 border-pink-200'
-  },
-  {
-    name: 'Indigo',
-    borderColor: 'border-l-indigo-500',
-    iconBg: 'bg-indigo-100',
-    iconColor: 'text-indigo-600',
-    badgeColor: 'bg-indigo-100 text-indigo-700 border-indigo-200'
-  },
-  {
-    name: 'Teal',
-    borderColor: 'border-l-teal-500',
-    iconBg: 'bg-teal-100',
-    iconColor: 'text-teal-600',
-    badgeColor: 'bg-teal-100 text-teal-700 border-teal-200'
-  },
-];
+type UsedByHue = Partial<Record<ProcessTypeHue, string[]>>;
+
+/** Which colours the given process types use: hue -> their names. */
+const usedHues = (types: ProcessType[], excludeId?: string): UsedByHue => {
+  const map: UsedByHue = {};
+  for (const type of types) {
+    if (type.id === excludeId) continue;
+    const hue = processTypeHue(type.colorScheme);
+    map[hue] = [...(map[hue] ?? []), type.name];
+  }
+  return map;
+};
+
+const isUsedHue = (usedBy: UsedByHue, hue: ProcessTypeHue) => (usedBy[hue]?.length ?? 0) > 0;
+
+/**
+ * The colour a new process type starts on: far-apart colours first, skipping
+ * any that is in use or looks like one in use (red, the error colour, last).
+ */
+const defaultHue = (usedBy: UsedByHue): ProcessTypeHue =>
+  suggestProcessTypeHue(PROCESS_TYPE_PICKER_HUES.filter(hue => isUsedHue(usedBy, hue)));
+
+/** The look-alike colours other types use, as `Sky (Lactic)`. */
+const similarInUse = (hue: ProcessTypeHue, usedBy: UsedByHue): string[] =>
+  similarProcessTypeHues(hue)
+    .filter(similar => isUsedHue(usedBy, similar))
+    .map(similar => `${processTypeHueLabel(similar)} (${(usedBy[similar] ?? []).join(', ')})`);
+
+interface ColorSwatchPickerProps {
+  value: ProcessTypeHue;
+  onChange: (hue: ProcessTypeHue) => void;
+  usedBy: UsedByHue;
+  labelledBy: string;
+}
+
+/**
+ * One round swatch per colour (a radio group: arrow keys, Home and End move
+ * the choice). Every swatch keeps its 500 shade, the one dots and card edges
+ * use, so the choice compares with its neighbours; the chosen one gets a dark
+ * ring and a check. A small dark dot marks a colour another process type
+ * already uses; it stays selectable. The tooltip also names look-alike
+ * colours in use.
+ */
+const ColorSwatchPicker: React.FC<ColorSwatchPickerProps> = ({ value, onChange, usedBy, labelledBy }) => {
+  const swatchRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const last = PROCESS_TYPE_PICKER_HUES.length - 1;
+    let next: number;
+    switch (e.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+        next = index === last ? 0 : index + 1;
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        next = index === 0 ? last : index - 1;
+        break;
+      case 'Home':
+        next = 0;
+        break;
+      case 'End':
+        next = last;
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+    onChange(PROCESS_TYPE_PICKER_HUES[next]);
+    swatchRefs.current[next]?.focus();
+  };
+
+  return (
+    <div role="radiogroup" aria-labelledby={labelledBy} className="grid w-max grid-cols-6 gap-2.5 p-1.5">
+      {PROCESS_TYPE_PICKER_HUES.map((hue, index) => {
+        const colors = PROCESS_TYPE_COLORS[hue];
+        const label = processTypeHueLabel(hue);
+        const users = usedBy[hue] ?? [];
+        const similar = similarInUse(hue, usedBy);
+        const notes = [
+          users.length > 0 ? `used by ${users.join(', ')}` : '',
+          similar.length > 0 ? `looks like ${similar.join(', ')}` : '',
+        ].filter(Boolean);
+        const isSelected = hue === value;
+        return (
+          <button
+            key={hue}
+            ref={el => { swatchRefs.current[index] = el; }}
+            type="button"
+            role="radio"
+            aria-checked={isSelected}
+            aria-label={label}
+            title={notes.length > 0 ? `${label} — ${notes.join('; ')}` : label}
+            tabIndex={isSelected ? 0 : -1}
+            data-hue={hue}
+            onClick={() => onChange(hue)}
+            onKeyDown={e => handleKeyDown(e, index)}
+            className={`relative flex h-8 w-8 items-center justify-center rounded-full border border-transparent transition-shadow focus:outline-none ${colors.dot} ${
+              isSelected
+                ? 'ring-2 ring-gray-900 ring-offset-2 focus-visible:ring-4'
+                : `focus-visible:ring-2 focus-visible:ring-offset-2 ${colors.focusRing}`
+            }`}
+          >
+            {isSelected && <Check className={`h-4 w-4 ${processTypeDotCheck(hue)}`} aria-hidden="true" />}
+            {users.length > 0 && (
+              <span
+                data-testid="swatch-used-marker"
+                aria-hidden="true"
+                className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-gray-800"
+              />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+/**
+ * The chosen colour as the processor pages will show it, on the same white:
+ * chip, selected chip, the table badge and the Parchment page badge.
+ */
+const ColorPreview: React.FC<{ hue: ProcessTypeHue; name: string; usedBy: string[]; similarTo: string[] }> = ({
+  hue,
+  name,
+  usedBy,
+  similarTo,
+}) => {
+  const label = name.trim() || 'Process type';
+  return (
+    <div data-testid="process-type-color-preview" className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white p-3">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+        Preview · <span className="normal-case">{processTypeHueLabel(hue)}</span>
+      </p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-1">
+        <ProcessTypeChip name={label} hue={hue} selected={false} />
+        <ProcessTypeChip name={label} hue={hue} selected />
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <ProcessTypePill
+          type={label}
+          hue={hue}
+          className="inline-block max-w-full px-2 py-0.5 rounded-full text-xs font-medium border break-words"
+        />
+        <ProcessTypePill type={label} hue={hue} className={`${PARCHMENT_PILL_SHAPE} max-w-full break-words`} />
+      </div>
+      {usedBy.length > 0 && (
+        <p className="mt-2 text-xs text-gray-500">Also used by {usedBy.join(', ')}</p>
+      )}
+      {similarTo.length > 0 && (
+        <p className="mt-2 text-xs text-gray-500">Looks like {similarTo.join(', ')}</p>
+      )}
+    </div>
+  );
+};
 
 const PAGE_SIZE = 10;
 
@@ -70,10 +180,10 @@ const ProcessTypeManagement: React.FC = () => {
   const { data, setData } = useDataContext();
   const [showModal, setShowModal] = useState(false);
   const [editingType, setEditingType] = useState<ProcessType | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{ name: string; description: string; hue: ProcessTypeHue; isActive: boolean }>({
     name: '',
     description: '',
-    colorScheme: COLOR_SCHEMES[0],
+    hue: 'blue',
     isActive: true,
   });
   const [showSuccess, setShowSuccess] = useState(false);
@@ -82,28 +192,46 @@ const ProcessTypeManagement: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
+  // The colours the other process types already use (the one being edited excluded).
+  const usedByHue = useMemo(
+    () => usedHues(data.processTypes, editingType?.id),
+    [data.processTypes, editingType],
+  );
+
+  // Records keep the process-type name they were saved with, and the processor
+  // pages find a record's colour by that name. Renaming a type in use leaves
+  // those records on the old name, so they lose this colour and show gray.
+  const renamedInUse = useMemo(() => {
+    const oldKey = processTypeKey(editingType?.name);
+    const newKey = processTypeKey(formData.name);
+    if (!oldKey || !newKey || newKey === oldKey) return 0;
+    const usesOld = (name: unknown) => processTypeKey(name) === oldKey;
+    return (
+      data.processingBatches.filter(batch => usesOld(batch.processType)).length +
+      data.parchmentLots.filter(lot => usesOld(lot.processType)).length +
+      data.greenBeanLots.filter(lot => usesOld(lot.externalSource?.processType)).length
+    );
+  }, [editingType, formData.name, data.processingBatches, data.parchmentLots, data.greenBeanLots]);
+
   const resetForm = () => {
-    setFormData({ name: '', description: '', colorScheme: COLOR_SCHEMES[0], isActive: true });
+    setFormData({ name: '', description: '', hue: 'blue', isActive: true });
     setEditingType(null);
     setErrorMessage('');
   };
 
   const openAddModal = () => {
     resetForm();
+    setFormData(prev => ({ ...prev, hue: defaultHue(usedHues(data.processTypes)) }));
     setShowModal(true);
   };
 
   const openEditModal = (processType: ProcessType) => {
     setEditingType(processType);
-    // Find matching color scheme or use first one
-    const matchingScheme = COLOR_SCHEMES.find(
-      scheme => scheme.borderColor === processType.colorScheme.borderColor
-    ) || COLOR_SCHEMES[0];
-
     setFormData({
       name: processType.name,
       description: processType.description || '',
-      colorScheme: matchingScheme,
+      // Any stored scheme (old or new shape) resolves to its colour; unknown is gray.
+      hue: processTypeHue(processType.colorScheme),
       isActive: processType.isActive,
     });
     setErrorMessage('');
@@ -134,7 +262,7 @@ const ProcessTypeManagement: React.FC = () => {
           ...editingType,
           name: formData.name.trim(),
           description: formData.description.trim() || undefined,
-          colorScheme: formData.colorScheme,
+          colorScheme: processTypeScheme(formData.hue),
           isActive: formData.isActive,
         });
 
@@ -147,7 +275,7 @@ const ProcessTypeManagement: React.FC = () => {
         const created = await addProcessType({
           name: formData.name.trim(),
           description: formData.description.trim() || undefined,
-          colorScheme: formData.colorScheme,
+          colorScheme: processTypeScheme(formData.hue),
           isActive: formData.isActive,
         });
 
@@ -336,12 +464,16 @@ const ProcessTypeManagement: React.FC = () => {
                       <span className="text-sm text-gray-700">{type.description || '-'}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-1 h-8 rounded ${type.colorScheme.borderColor.replace('border-l-', 'bg-')}`}></div>
-                        <div className={`px-3 py-1 rounded-full text-xs font-semibold border ${type.colorScheme.badgeColor}`}>
-                          {type.name}
-                        </div>
-                      </div>
+                      {(() => {
+                        const hue = processTypeHue(type.colorScheme);
+                        return (
+                          <div className="flex items-center gap-2">
+                            <div className={`w-1 h-8 rounded ${PROCESS_TYPE_COLORS[hue].dot}`}></div>
+                            <ProcessTypePill type={type.name} hue={hue} />
+                            <span className="text-xs text-gray-500">{processTypeHueLabel(hue)}</span>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {type.createdDate}
@@ -484,6 +616,16 @@ const ProcessTypeManagement: React.FC = () => {
                     required
                     className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   />
+                  {editingType && renamedInUse > 0 && (
+                    <p data-testid="rename-in-use-warning" className="mt-2 flex items-start gap-1.5 text-xs text-amber-700">
+                      <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                      <span>
+                        {renamedInUse === 1 ? '1 existing record still uses' : `${renamedInUse} existing records still use`}{' '}
+                        {`"${editingType.name}".`} They keep that name, so after renaming they no longer match this type
+                        and show in gray.
+                      </span>
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -500,27 +642,30 @@ const ProcessTypeManagement: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-3">
-                    Color Scheme <span className="text-red-500">*</span>
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {COLOR_SCHEMES.map((scheme) => (
-                      <button
-                        key={scheme.name}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, colorScheme: scheme })}
-                        className={`p-3 rounded-lg border-2 transition-all ${
-                          formData.colorScheme.name === scheme.name
-                            ? 'border-blue-500 ring-2 ring-blue-200'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <div className={`w-full h-8 rounded ${scheme.iconBg} flex items-center justify-center`}>
-                          <Coffee className={`h-5 w-5 ${scheme.iconColor}`} />
-                        </div>
-                        <p className="text-xs font-medium text-gray-600 mt-1 text-center">{scheme.name}</p>
-                      </button>
-                    ))}
+                  <p id="process-type-color-label" className="text-sm font-semibold text-gray-700 mb-2">
+                    Color <span className="text-red-500">*</span>
+                  </p>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                    <div className="flex-shrink-0">
+                      <ColorSwatchPicker
+                        value={formData.hue}
+                        onChange={hue => setFormData(prev => ({ ...prev, hue }))}
+                        usedBy={usedByHue}
+                        labelledBy="process-type-color-label"
+                      />
+                      {Object.values(usedByHue).some(names => (names?.length ?? 0) > 0) && (
+                        <p className="mt-1 flex items-center gap-1.5 px-1 text-xs text-gray-500">
+                          <span aria-hidden="true" className="h-2 w-2 rounded-full bg-gray-800" />
+                          Used by another type
+                        </p>
+                      )}
+                    </div>
+                    <ColorPreview
+                      hue={formData.hue}
+                      name={formData.name}
+                      usedBy={usedByHue[formData.hue] ?? []}
+                      similarTo={similarInUse(formData.hue, usedByHue)}
+                    />
                   </div>
                 </div>
 

@@ -10,7 +10,7 @@ import {
   ProcessingBatchStatus,
   UserRole,
 } from '../../types'
-import type { AppData, Customer, GreenBeanLot, HarvestLot, ParchmentLot, User } from '../../types'
+import type { AppData, Customer, GreenBeanLot, HarvestLot, ParchmentLot, ProcessType, User } from '../../types'
 import { addProcessingBatch } from '../../services/processing/processingBatchService'
 import { createWithdrawal } from '../../services/lots/greenBeanLotService'
 import { addCustomer } from '../../services/sales/customerService'
@@ -498,4 +498,82 @@ describe('Green bean Withdraw Stock', () => {
     ])
     await waitFor(() => expect(screen.queryByText('Withdraw Stock')).not.toBeInTheDocument())
   }, 15000)
+})
+
+describe('Process type colours', () => {
+  const processType = (name: string, hue: string, isActive = true): ProcessType => ({
+    id: `pt-${name}`, name, createdDate: '2026-09-01', isActive,
+    colorScheme: {
+      borderColor: `border-l-${hue}-500`, iconBg: `bg-${hue}-100`, iconColor: `text-${hue}-600`,
+      badgeColor: `bg-${hue}-100 text-${hue}-700 border-${hue}-200`,
+    },
+  })
+  // Honey is switched off by the admin; Anaerobic is a newer type.
+  const processTypes = [
+    processType('Washed', 'blue'), processType('Natural', 'yellow'),
+    processType('Honey', 'amber', false), processType('Anaerobic', 'purple'),
+  ]
+  const chipGroup = () => document.querySelector('[role="group"][aria-label="Process type"]') as HTMLElement
+
+  beforeEach(() => vi.clearAllMocks())
+
+  it('offers the admin process types as coloured chips and sends the picked name', async () => {
+    vi.mocked(addProcessingBatch).mockRejectedValue(new Error('stop here'))
+    render(<Harness refreshData={async () => {}} initial={{ processTypes }} />)
+    openProcess()
+
+    const chips = within(chipGroup()).getAllByRole('button')
+    expect(chips.map((b) => b.textContent)).toEqual(['Washed', 'Natural', 'Anaerobic'])
+    // Honey is not offered any more, so the first type is picked.
+    expect(chips[0]).toHaveAttribute('aria-pressed', 'true')
+    expect(chips[0]).toHaveClass('bg-blue-600', 'text-white')
+    expect(chips[2]).toHaveClass('bg-purple-50', 'text-purple-800')
+
+    fireEvent.click(chips[2])
+    expect(chips[2]).toHaveAttribute('aria-pressed', 'true')
+    expect(chips[0]).toHaveAttribute('aria-pressed', 'false')
+    fireEvent.change(weight(1), { target: { value: '60' } })
+    fireEvent.click(saveButton())
+
+    await waitFor(() => expect(addProcessingBatch).toHaveBeenCalledTimes(1))
+    expect(addProcessingBatch).toHaveBeenCalledWith(expect.objectContaining({ processType: 'Anaerobic' }))
+  }, 15000)
+
+  it('still starts on Honey with the classic types while the list is empty', async () => {
+    vi.mocked(addProcessingBatch).mockRejectedValue(new Error('stop here'))
+    render(<Harness refreshData={async () => {}} />)
+    openProcess()
+    const chips = within(chipGroup()).getAllByRole('button')
+    expect(chips.map((b) => b.textContent)).toEqual(['Honey', 'Natural', 'Washed'])
+    expect(chips[0]).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.change(weight(1), { target: { value: '60' } })
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(addProcessingBatch).toHaveBeenCalledWith(expect.objectContaining({ processType: 'Honey' })))
+  }, 15000)
+
+  it('colours the green bean group, card and pill with the admin colour, inactive types included', () => {
+    const lot = (id: string, parchmentLotId: string): GreenBeanLot => ({
+      ...newLot(id, `GBL-${id}`, 'Grade A', 10), parchmentLotId,
+    })
+    const parchment = (id: string, processType: string): ParchmentLot => ({
+      ...newParchment, id, processType, currentWeightKg: 0, status: 'Hulled',
+    })
+    render(
+      <Harness
+        refreshData={async () => {}}
+        initial={{
+          harvestLots: [], processTypes,
+          parchmentLots: [parchment('pl-w', 'Washed'), parchment('pl-h', 'Honey')],
+          greenBeanLots: [lot('w', 'pl-w'), lot('h', 'pl-h')],
+        }}
+      />,
+    )
+    const [washedHeader, washedCard] = screen.getAllByText('Washed', { selector: 'span' })
+    expect(washedHeader).toHaveClass('bg-blue-100', 'text-blue-700', 'border-blue-200')
+    expect(washedCard).toHaveClass('bg-blue-100')
+    expect(washedCard.closest('.border-l-4')).toHaveClass('border-l-blue-500')
+    const [honeyHeader, honeyCard] = screen.getAllByText('Honey', { selector: 'span' })
+    expect(honeyHeader).toHaveClass('bg-amber-100', 'text-amber-700')
+    expect(honeyCard.closest('.border-l-4')).toHaveClass('border-l-amber-500')
+  })
 })

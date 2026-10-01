@@ -122,13 +122,19 @@ import {
   findCurrentCropYearId,
   getHarvestLotCherryWeight,
   getReadyHarvestLots,
-  processTypeChipClass,
   validateScore,
   initialSensoryScores,
   initialCupScores,
   ModalPortal,
   DebouncedSearchInput,
-  ProcessTypeDropdown,
+  ProcessTypeChips,
+  ProcessTypePill,
+  ProcessTypeDot,
+  defaultProcessTypeName,
+  processTypeChoices,
+  processTypeColors,
+  processTypeFilterNames,
+  processTypeKey,
   GradeDropdown,
   CropYearChips,
   KanbanCard,
@@ -158,6 +164,10 @@ import type {
 interface ProcessorWorkbenchProps {
   currentUser: User;
 }
+
+// Record Process starts on Washed while the admin list is still empty (not
+// loaded yet), as it always has; once loaded, on the first active type.
+const EMPTY_LIST_PROCESS_TYPE = "Washed";
 
 const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   currentUser,
@@ -289,33 +299,22 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
   // (Removed) Top-of-workbench stat tiles were deprecated; relying on detailed sections below.
 
-  // Get process types for dropdown with safe mock baseline
-  const processTypeOptions = useMemo(() => {
-    const BASE_OPTIONS = [
-      { value: "Washed", label: "Washed Process" },
-      { value: "Natural", label: "Natural Process" },
-      { value: "Honey", label: "Honey Process" },
-    ];
+  // Process types Record Process offers: the active admin types in list
+  // order (the classic three only while the list has not loaded).
+  const processTypeOptions = useMemo(
+    () => processTypeChoices(data.processTypes).map((choice) => choice.name),
+    [data.processTypes],
+  );
 
-    const activeTypes = data.processTypes.filter((pt) => pt.isActive);
-    const options = activeTypes.map((pt) => ({
-      value: pt.name,
-      label: `${pt.name} Process`,
-    }));
-
-    // If nothing is active/loaded yet, use the mock baseline
-    if (options.length === 0) return BASE_OPTIONS;
-
-    // Ensure the three defaults are always present (mock safety net)
-    const existing = new Set(options.map((o) => o.value.toLowerCase()));
-    BASE_OPTIONS.forEach((base) => {
-      if (!existing.has(base.value.toLowerCase())) {
-        options.push(base);
-      }
-    });
-
-    return options;
-  }, [data.processTypes]);
+  // Parchment grid filter: every admin type plus any other value on a lot.
+  const parchmentProcessFilterOptions = useMemo(
+    () =>
+      processTypeFilterNames(
+        data.processTypes,
+        data.parchmentLots.map((p) => p.processType),
+      ).map((name) => ({ value: name, label: name })),
+    [data.processTypes, data.parchmentLots],
+  );
 
   // Stable row id helper for editor lists (graded lots). Using the
   // array index as a React key here loses input focus when rows are
@@ -358,22 +357,19 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   }, [gradedLots]);
 
   // Process Type Selection State - initialize with first active process type
-  const [selectedProcessType, setSelectedProcessType] = useState<string>(() => {
-    const activeTypes = data.processTypes.filter((pt) => pt.isActive);
-    if (activeTypes.length > 0) {
-      return activeTypes[0].name;
-    }
-    return "Washed"; // Default fallback
-  });
+  const [selectedProcessType, setSelectedProcessType] = useState<string>(() =>
+    defaultProcessTypeName(
+      data.processTypes,
+      data.processTypes.length === 0 ? EMPTY_LIST_PROCESS_TYPE : undefined,
+    ),
+  );
 
   // Update selectedProcessType when processTypeOptions changes (ensures it's always valid)
   useEffect(() => {
     if (processTypeOptions.length > 0) {
-      const isCurrentValid = processTypeOptions.some(
-        (opt) => opt.value === selectedProcessType,
-      );
+      const isCurrentValid = processTypeOptions.includes(selectedProcessType);
       if (!isCurrentValid) {
-        setSelectedProcessType(processTypeOptions[0].value);
+        setSelectedProcessType(processTypeOptions[0]);
       }
     }
   }, [processTypeOptions, selectedProcessType]);
@@ -1430,8 +1426,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
     // Apply process type filter
     if (parchmentProcessFilter !== "all") {
+      const filterKey = processTypeKey(parchmentProcessFilter);
       filtered = filtered.filter(
-        (p) => p.processType === parchmentProcessFilter,
+        (p) => processTypeKey(p.processType) === filterKey,
       );
     }
 
@@ -1989,9 +1986,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 <Select
                   options={[
                     { value: "all", label: "All Process" },
-                    { value: "Washed", label: "Washed" },
-                    { value: "Natural", label: "Natural" },
-                    { value: "Honey", label: "Honey" },
+                    ...parchmentProcessFilterOptions,
                   ]}
                   value={parchmentProcessFilter}
                   onChange={(v) => {
@@ -2101,11 +2096,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       {p.moistureContent ?? 0}%
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${processTypeChipClass(p.processType)}`}
-                      >
-                        {p.processType}
-                      </span>
+                      <ProcessTypePill
+                        type={p.processType}
+                        processTypes={data.processTypes}
+                      />
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className="inline-flex items-center gap-1.5 text-xs text-gray-600">
@@ -2254,9 +2248,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                         {s.parchmentDisplayId}
                                       </td>
                                       <td className="px-4 py-2 whitespace-nowrap">
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${processTypeChipClass(s.processType)}`}>
-                                          {s.processType}
-                                        </span>
+                                        <ProcessTypePill
+                                          type={s.processType}
+                                          processTypes={data.processTypes}
+                                        />
                                       </td>
                                       <td className="px-4 py-2 whitespace-nowrap text-sm font-semibold text-gray-900">
                                         {s.weightKg.toFixed(2)} kg
@@ -2761,10 +2756,15 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               const sourceLot = p.harvestLotId
                 ? data.harvestLots.find((h) => h.id === p.harvestLotId)
                 : undefined;
+              // The left edge is the process-type colour, as on the Parchment page.
+              const edgeClass =
+                p.status === "Hulled"
+                  ? "border-l-gray-300"
+                  : processTypeColors(data.processTypes, p.processType).accent;
               return (
                 <div
                   key={p.id}
-                  className={`bg-white border-l-4 ${p.status === "Hulled" ? "border-l-gray-300" : "border-l-amber-500"} rounded-lg p-3 border border-gray-200 hover:shadow-md transition-all`}
+                  className={`bg-white border-l-4 ${edgeClass} rounded-lg p-3 border border-gray-200 hover:shadow-md transition-all`}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2 min-w-0">
@@ -2798,14 +2798,17 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   </div>
 
                   <div className="text-xs space-y-1.5 text-gray-500 mb-3">
-                    <div className="flex justify-between items-center">
-                      <span className="flex items-center gap-1.5">
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="flex items-center gap-1.5 flex-shrink-0">
                         <Coffee className="h-3 w-3" />
                         Process
                       </span>
-                      <span className="font-medium text-gray-900">
-                        {p.processType}
-                      </span>
+                      {/* No nowrap here: a long name wraps inside the narrow column. */}
+                      <ProcessTypePill
+                        type={p.processType}
+                        processTypes={data.processTypes}
+                        className="inline-block min-w-0 max-w-full px-2 py-0.5 rounded-full text-xs font-medium border text-right break-words"
+                      />
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="flex items-center gap-1.5">
@@ -3198,10 +3201,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
                           Process Type
                         </label>
-                        <ProcessTypeDropdown
+                        <ProcessTypeChips
                           value={selectedProcessType}
                           onChange={setSelectedProcessType}
-                          processTypes={processTypeOptions}
+                          processTypes={data.processTypes}
                         />
                         <input type="hidden" name="processType" value={selectedProcessType} />
                       </div>
@@ -4131,7 +4134,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                 Process
                               </p>
-                              <p className="font-semibold text-gray-900">
+                              <p className="font-semibold text-gray-900 flex items-center gap-1.5">
+                                <ProcessTypeDot
+                                  type={externalSource.processType}
+                                  processTypes={data.processTypes}
+                                />
                                 {externalSource.processType}
                               </p>
                             </div>
@@ -4190,7 +4197,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                   Process
                                 </p>
-                                <p className="text-xl font-bold text-amber-700">
+                                <p className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                                  <ProcessTypeDot
+                                    type={sourceParchment.processType}
+                                    processTypes={data.processTypes}
+                                  />
                                   {sourceParchment.processType}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-1">

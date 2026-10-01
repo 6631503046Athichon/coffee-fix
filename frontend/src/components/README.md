@@ -33,7 +33,8 @@ Wired against `services/auth/authService.ts` and `AuthContext`.
 
 ## `admin/`
 - `ActivityTypeManagement.tsx` — CRUD for `ActivityType` reference list
-- `ProcessTypeManagement.tsx` — CRUD for `ProcessType` reference list
+- `ProcessTypeManagement.tsx` — CRUD for `ProcessType` reference list; colour is an
+  18-swatch picker (17 hues + gray) with a live chip/pill preview, from `processor/workbench/processTypeColors.ts`
 
 ## `farmer/`
 - `FarmerDashboard.tsx` — landing page for Farmer role
@@ -50,9 +51,10 @@ Wired against `services/auth/authService.ts` and `AuthContext`.
 - `ParchmentTab.tsx` — parchment stock view
 - `InvoiceReceipt.tsx` — invoice printout
 - `processor/workbench/` — `KanbanCard`, `KanbanColumn`, `Pagination`,
-  `DebouncedSearchInput`, `GradeDropdown`, `ProcessTypeDropdown`, `CropYearChips`,
-  `ModalPortal`, `GradePriceInput` / `GradeSplitValue` / `gradePrice.ts` (optional
-  Price / kg on every grade-split row, total value line), `scoring.ts`, `constants.ts`
+  `DebouncedSearchInput`, `GradeDropdown`, `ProcessTypeChips` / `ProcessTypePill` /
+  `processTypeColors.ts` (process-type colours from the admin Process Types list),
+  `CropYearChips`, `ModalPortal`, `GradePriceInput` / `GradeSplitValue` / `gradePrice.ts`
+  (optional Price / kg on every grade-split row, total value line), `scoring.ts`, `constants.ts`
 - `processor/modals/` — `CompleteBatchModal`, `HullAndGradeModal`,
   `ParchmentWithdrawModal`, `StartProcessingModal`
 

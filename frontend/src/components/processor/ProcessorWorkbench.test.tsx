@@ -6,7 +6,7 @@ import { DataContext } from '../../hooks/useDataContext'
 import { ToastProvider } from '../../contexts/ToastContext'
 import ToastContainer from '../common/ToastContainer'
 import { GreenBeanSourceType, ParchmentSourceType, ProcessingBatchStatus, UserRole } from '../../types'
-import type { AppData, Customer, GreenBeanLot, HarvestLot, ParchmentLot } from '../../types'
+import type { AppData, Customer, GreenBeanLot, HarvestLot, ParchmentLot, ProcessType } from '../../types'
 import { addProcessingBatch } from '../../services/processing/processingBatchService'
 import { createWithdrawal, updateGreenBeanLotPrice } from '../../services/lots/greenBeanLotService'
 import { addCustomer } from '../../services/sales/customerService'
@@ -697,5 +697,172 @@ describe('Hull & Grade price', { timeout: 20000 }, () => {
     expect(form).toHaveTextContent('Ready to confirm')
     expect(valueLine(form)).toHaveTextContent('14,440.00 THB value')
     expect(valueLine(form)).not.toHaveTextContent('grades priced')
+  })
+})
+
+describe('Process type colours', { timeout: 20000 }, () => {
+  const processType = (name: string, hue: string, isActive = true): ProcessType => ({
+    id: `pt-${name}`, name, createdDate: '2026-09-01', isActive,
+    colorScheme: {
+      borderColor: `border-l-${hue}-500`, iconBg: `bg-${hue}-100`, iconColor: `text-${hue}-600`,
+      badgeColor: `bg-${hue}-100 text-${hue}-700 border-${hue}-200`,
+    },
+  })
+  const processTypes = [
+    processType('Natural', 'yellow'), processType('Washed', 'blue'),
+    processType('Honey', 'amber', false), processType('Anaerobic', 'purple'),
+  ]
+  const parchment = (id: string, displayId: string, type: string): ParchmentLot => ({
+    id, displayId, sourceType: ParchmentSourceType.Internal,
+    initialWeightKg: 50, currentWeightKg: 40, moistureContent: 11,
+    processType: type, status: 'AwaitingHulling', withdrawalHistory: [],
+  })
+  const chipGroup = () => document.querySelector('[role="group"][aria-label="Process type"]') as HTMLElement
+
+  beforeEach(() => vi.clearAllMocks())
+
+  it('Record Process offers the active admin types as chips and sends the picked name', async () => {
+    vi.mocked(addProcessingBatch).mockResolvedValue({ ...batch, processType: 'Anaerobic' })
+    render(
+      <Harness
+        initial={{ ...INITIAL_APP_DATA, harvestLots: [lot], processTypes }}
+        refreshData={() => new Promise<void>(() => {})}
+      />,
+    )
+    fireEvent.click(screen.getByText('Record Process', { selector: 'button' }))
+
+    const chips = within(chipGroup()).getAllByRole('button')
+    expect(chips.map((b) => b.textContent)).toEqual(['Natural', 'Washed', 'Anaerobic'])
+    expect(chips[0]).toHaveAttribute('aria-pressed', 'true')
+    expect(chips[0]).toHaveClass('bg-yellow-700', 'text-white')
+    fireEvent.click(chips[2])
+    expect(chips[2]).toHaveAttribute('aria-pressed', 'true')
+    expect(chips[2]).toHaveClass('bg-purple-600')
+
+    const form = chipGroup().closest('form')!
+    expect(form.querySelector<HTMLInputElement>('input[name="processType"]')!.value).toBe('Anaerobic')
+    fireEvent.change(form.querySelector('[name="parchmentWeightKg"]')!, { target: { value: '80' } })
+    fireEvent.change(form.querySelector('[name="moistureContent"]')!, { target: { value: '11' } })
+    fireEvent.submit(form)
+
+    await waitFor(() => expect(addProcessingBatch).toHaveBeenCalledTimes(1))
+    expect(addProcessingBatch).toHaveBeenCalledWith(expect.objectContaining({ processType: 'Anaerobic' }))
+  })
+
+  it('colours the data grid pills with the admin colour and filters by any admin type', () => {
+    render(
+      <Harness
+        initial={{
+          ...INITIAL_APP_DATA, processTypes,
+          parchmentLots: [
+            parchment('pl-a', 'PL-2026-1', 'Anaerobic'),
+            parchment('pl-w', 'PL-2026-2', 'Washed'),
+            parchment('pl-x', 'PL-2026-3', 'Wet-Hulled'),
+          ],
+        }}
+        refreshData={async () => {}}
+      />,
+    )
+    fireEvent.click(screen.getByText('Data Grid').closest('button')!)
+    const section = screen.getByText('2 · Parchment Stock').closest('div.shadow-sm') as HTMLElement
+    const rowOf = (displayId: string) => within(section).getByText(displayId).closest('tr') as HTMLElement
+    expect(within(rowOf('PL-2026-1')).getByText('Anaerobic')).toHaveClass('bg-purple-100', 'text-purple-700', 'border-purple-200')
+    expect(within(rowOf('PL-2026-2')).getByText('Washed')).toHaveClass('bg-blue-100', 'text-blue-700')
+    expect(within(rowOf('PL-2026-3')).getByText('Wet-Hulled')).toHaveClass('bg-gray-100')
+
+    // The process filter lists every admin type and other values on the lots.
+    const select = within(section).getByText('All Process').closest('div.relative') as HTMLElement
+    fireEvent.click(within(select).getByText('All Process'))
+    const options = within(select).getAllByRole('button').map((b) => b.textContent).filter((t) => t !== 'All Process')
+    expect(options).toEqual(expect.arrayContaining(['Natural', 'Washed', 'Honey', 'Anaerobic', 'Wet-Hulled']))
+    fireEvent.click(within(select).getByText('Anaerobic', { selector: 'button' }))
+    expect(within(section).getByText('PL-2026-1')).toBeInTheDocument()
+    expect(within(section).queryByText('PL-2026-2')).not.toBeInTheDocument()
+  })
+
+  it('Record Process starts on Washed, as before, while the admin list is empty', async () => {
+    vi.mocked(addProcessingBatch).mockResolvedValue(batch)
+    render(
+      <Harness
+        initial={{ ...INITIAL_APP_DATA, harvestLots: [lot] }}
+        refreshData={() => new Promise<void>(() => {})}
+      />,
+    )
+    fireEvent.click(screen.getByText('Record Process', { selector: 'button' }))
+
+    expect(within(chipGroup()).getAllByRole('button').map((b) => b.textContent)).toEqual(['Honey', 'Natural', 'Washed'])
+    expect(within(chipGroup()).getByRole('button', { name: 'Washed' })).toHaveAttribute('aria-pressed', 'true')
+    const form = chipGroup().closest('form')!
+    expect(form.querySelector<HTMLInputElement>('input[name="processType"]')!.value).toBe('Washed')
+    fireEvent.change(form.querySelector('[name="parchmentWeightKg"]')!, { target: { value: '80' } })
+    fireEvent.change(form.querySelector('[name="moistureContent"]')!, { target: { value: '11' } })
+    fireEvent.submit(form)
+
+    await waitFor(() => expect(addProcessingBatch).toHaveBeenCalledTimes(1))
+    expect(addProcessingBatch).toHaveBeenCalledWith(expect.objectContaining({ processType: 'Washed' }))
+  })
+
+  it('edges each workflow parchment card in its process-type colour, gray once hulled', () => {
+    render(
+      <Harness
+        initial={{
+          ...INITIAL_APP_DATA, processTypes,
+          parchmentLots: [
+            parchment('pl-a', 'PL-2026-1', 'Anaerobic'),
+            parchment('pl-x', 'PL-2026-3', 'Wet-Hulled'),
+            { ...parchment('pl-h', 'PL-2026-4', 'Washed'), status: 'Hulled' },
+          ],
+        }}
+        refreshData={async () => {}}
+      />,
+    )
+    const column = screen.getByText('2 · Parchment Stock').closest('div.shadow-sm') as HTMLElement
+    const cardOf = (displayId: string) => within(column).getByText(displayId).closest('.border-l-4') as HTMLElement
+    // Not the old fixed amber stage edge, which is now Honey's colour.
+    expect(cardOf('PL-2026-1')).toHaveClass('border-l-purple-500')
+    expect(cardOf('PL-2026-1')).not.toHaveClass('border-l-amber-500')
+    expect(cardOf('PL-2026-3')).toHaveClass('border-l-gray-400')
+    expect(cardOf('PL-2026-4')).toHaveClass('border-l-gray-300')
+    expect(cardOf('PL-2026-4')).not.toHaveClass('border-l-blue-500')
+  })
+
+  it('lets a long process name wrap on the narrow workflow parchment card', () => {
+    render(
+      <Harness
+        initial={{ ...INITIAL_APP_DATA, processTypes, parchmentLots: [parchment('pl-a', 'PL-2026-1', 'Anaerobic')] }}
+        refreshData={async () => {}}
+      />,
+    )
+    const column = screen.getByText('2 · Parchment Stock').closest('div.shadow-sm') as HTMLElement
+    const pill = within(column).getByText('Anaerobic')
+    expect(pill).toHaveClass('bg-purple-100', 'text-purple-700', 'border-purple-200', 'break-words', 'min-w-0')
+    expect(pill).not.toHaveClass('whitespace-nowrap')
+    // The label beside it keeps its width; the pill is the part that wraps.
+    expect(within(pill.parentElement!).getByText('Process')).toHaveClass('flex-shrink-0')
+  })
+
+  it('shows the source parchment process in neutral text beside its colour dot', () => {
+    const green: GreenBeanLot = {
+      id: 'gbl-1', displayId: 'GBL-2026-1', sourceType: GreenBeanSourceType.Internal,
+      parchmentLotId: 'pl-w', grade: 'Grade A', initialWeightKg: 50, currentWeightKg: 40,
+      availabilityStatus: 'Available', cuppingScores: [], withdrawalHistory: [],
+    }
+    render(
+      <Harness
+        initial={{
+          ...INITIAL_APP_DATA, processTypes,
+          parchmentLots: [{ ...parchment('pl-w', 'PL-2026-2', 'Washed'), currentWeightKg: 0, status: 'Hulled' }],
+          greenBeanLots: [green],
+        }}
+        refreshData={async () => {}}
+      />,
+    )
+    fireEvent.click(screen.getAllByTitle('Source')[0])
+    const modal = screen.getByText('Green Bean Source').closest('div.rounded-2xl') as HTMLElement
+    const processLine = within(modal).getByText('Process').nextElementSibling as HTMLElement
+    expect(processLine).toHaveTextContent('Washed')
+    expect(processLine).toHaveClass('text-gray-900')
+    expect(processLine).not.toHaveClass('text-amber-700')
+    expect(processLine.querySelector('span.rounded-full')).toHaveClass('bg-blue-500')
   })
 })
