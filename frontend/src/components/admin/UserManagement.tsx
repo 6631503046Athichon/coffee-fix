@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import CreateUserModal from '@/components/admin/modals/CreateUserModal';
 import EditUserModal from '@/components/admin/modals/EditUserModal';
 import TransferOwnershipModal from '@/components/admin/modals/TransferOwnershipModal';
+import { ModalPortal } from '@/components/common/ModalPortal';
 
 // Custom Dropdown Component
 interface DropdownOption {
@@ -579,78 +580,80 @@ const UserManagement: React.FC = () => {
 
             {/* Reset Password Modal */}
             {resetPasswordUser && (
-                <div className="fixed inset-0 z-50 overflow-y-auto">
-                    <div className="flex min-h-screen items-center justify-center p-4">
-                        <div className="fixed inset-0 bg-black/50" />
-                        <div className="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-                            <h3 className="text-lg font-bold text-gray-900 mb-4">
-                                Reset Password for {resetPasswordUser.name}
-                            </h3>
+                <ModalPortal>
+                    <div className="fixed inset-0 z-50 overflow-y-auto">
+                        <div className="flex min-h-screen items-center justify-center p-4">
+                            <div className="fixed inset-0 bg-black/50" />
+                            <div className="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+                                <h3 className="text-lg font-bold text-gray-900 mb-4">
+                                    Reset Password for {resetPasswordUser.name}
+                                </h3>
 
-                            {!newPassword ? (
-                                <div className="space-y-4">
-                                    <p className="text-sm text-gray-600">
-                                        This will generate a new password for <strong>{resetPasswordUser.username}</strong>.
-                                        The user will be required to change it on next login.
-                                    </p>
-                                    <div className="flex justify-end gap-3">
-                                        <button
-                                            onClick={() => setResetPasswordUser(null)}
-                                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            onClick={handleResetPassword}
-                                            className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700"
-                                        >
-                                            Reset Password
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                                        <p className="text-sm font-semibold text-green-800 mb-2">
-                                            Password reset successfully!
+                                {!newPassword ? (
+                                    <div className="space-y-4">
+                                        <p className="text-sm text-gray-600">
+                                            This will generate a new password for <strong>{resetPasswordUser.username}</strong>.
+                                            The user will be required to change it on next login.
                                         </p>
-                                        <div className="bg-white rounded p-3">
-                                            <p className="text-xs text-gray-500 mb-1">New Password:</p>
-                                            <div className="flex items-center gap-2">
-                                                <code className="flex-1 text-sm font-mono bg-gray-100 px-2 py-1 rounded">
-                                                    {newPassword}
-                                                </code>
-                                                <button
-                                                    onClick={() => {
-                                                        navigator.clipboard.writeText(newPassword);
-                                                        alert('Password copied!');
-                                                    }}
-                                                    className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
-                                                >
-                                                    Copy
-                                                </button>
-                                            </div>
+                                        <div className="flex justify-end gap-3">
+                                            <button
+                                                onClick={() => setResetPasswordUser(null)}
+                                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                onClick={handleResetPassword}
+                                                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700"
+                                            >
+                                                Reset Password
+                                            </button>
                                         </div>
-                                        <p className="text-xs text-amber-700 mt-2">
-                                            ⚠️ Save this password! It won't be shown again.
-                                        </p>
                                     </div>
-                                    <div className="flex justify-end">
-                                        <button
-                                            onClick={() => {
-                                                setResetPasswordUser(null);
-                                                setNewPassword('');
-                                            }}
-                                            className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
-                                        >
-                                            Done
-                                        </button>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                            <p className="text-sm font-semibold text-green-800 mb-2">
+                                                Password reset successfully!
+                                            </p>
+                                            <div className="bg-white rounded p-3">
+                                                <p className="text-xs text-gray-500 mb-1">New Password:</p>
+                                                <div className="flex items-center gap-2">
+                                                    <code className="flex-1 text-sm font-mono bg-gray-100 px-2 py-1 rounded">
+                                                        {newPassword}
+                                                    </code>
+                                                    <button
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(newPassword);
+                                                            alert('Password copied!');
+                                                        }}
+                                                        className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                                                    >
+                                                        Copy
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <p className="text-xs text-amber-700 mt-2">
+                                                ⚠️ Save this password! It won't be shown again.
+                                            </p>
+                                        </div>
+                                        <div className="flex justify-end">
+                                            <button
+                                                onClick={() => {
+                                                    setResetPasswordUser(null);
+                                                    setNewPassword('');
+                                                }}
+                                                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                                            >
+                                                Done
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
+                </ModalPortal>
             )}
         </div>
     );

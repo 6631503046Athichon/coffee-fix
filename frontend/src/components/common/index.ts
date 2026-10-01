@@ -2,6 +2,8 @@
 export { Modal } from './Modal';
 export type { ModalProps } from './Modal';
 
+export { ModalPortal } from './ModalPortal';
+
 export { Button } from './Button';
 export type { ButtonProps } from './Button';
 

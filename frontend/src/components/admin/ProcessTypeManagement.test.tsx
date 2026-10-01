@@ -325,3 +325,27 @@ describe('ProcessTypeManagement edit', { timeout: 20000 }, () => {
     expect(screen.getByTestId('rename-in-use-warning')).toHaveTextContent('1 existing record still uses "Washed".');
   });
 });
+
+// Rendered in place, the page's space-y-6 gave the popup's fixed backdrop a
+// 24px top margin and left an undimmed strip across the top of the screen.
+describe('ProcessTypeManagement popup', { timeout: 20000 }, () => {
+  const bodyOverlays = () => Array.from(document.body.children).filter(el => el.matches('.fixed.inset-0'));
+
+  it('renders the add and edit popups on <body>, outside the spaced page', () => {
+    const { container } = renderPage();
+    expect(container.firstElementChild).toHaveClass('space-y-6');
+
+    fireEvent.click(screen.getByRole('button', { name: /Add Process Type/ }));
+    expect(bodyOverlays()).toHaveLength(1);
+    expect(bodyOverlays()[0]).toHaveTextContent('Add Process Type');
+    expect(container.querySelector('.fixed.inset-0')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(bodyOverlays()).toHaveLength(0);
+
+    fireEvent.click(within(rowOf('Washed')).getByRole('button', { name: /Edit/ }));
+    expect(bodyOverlays()).toHaveLength(1);
+    expect(bodyOverlays()[0]).toHaveTextContent('Edit Process Type');
+    expect(bodyOverlays()[0]).toContainElement(swatchGroup());
+    expect(container.querySelector('.fixed.inset-0')).toBeNull();
+  });
+});

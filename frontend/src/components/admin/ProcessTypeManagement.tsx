@@ -17,6 +17,7 @@ import {
 } from '../processor/workbench/processTypeColors';
 import { ProcessTypeChip } from '../processor/workbench/ProcessTypeChips';
 import ProcessTypePill, { PARCHMENT_PILL_SHAPE } from '../processor/workbench/ProcessTypePill';
+import { ModalPortal } from '../common/ModalPortal';
 
 type UsedByHue = Partial<Record<ProcessTypeHue, string[]>>;
 
@@ -562,151 +563,155 @@ const ProcessTypeManagement: React.FC = () => {
         )}
       </div>
 
-      {/* Add/Edit Modal */}
+      {/* Add/Edit Modal. Portalled to <body>: rendered in place, the page's
+          space-y-6 gave the fixed backdrop a 24px top margin, leaving an
+          undimmed strip across the top of the screen. */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-gray-100 max-h-[90vh] overflow-y-auto">
-            <form onSubmit={handleSubmit} className="p-6">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-3 bg-blue-100 rounded-lg">
-                    <Coffee className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-900">
-                      {editingType ? 'Edit Process Type' : 'Add Process Type'}
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      {editingType ? 'Update process type details' : 'Create a new coffee processing method'}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowModal(false);
-                    resetForm();
-                  }}
-                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <X className="h-5 w-5 text-gray-500" />
-                </button>
-              </div>
-
-              {/* Error Message */}
-              {errorMessage && (
-                <div className="mb-4 flex items-start gap-2 bg-red-50 text-red-700 px-4 py-3 rounded-lg border border-red-200">
-                  <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                  <span className="text-sm font-semibold">{errorMessage}</span>
-                </div>
-              )}
-
-              {/* Form Fields */}
-              <div className="space-y-4 mb-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Process Type Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g., Washed, Natural, Honey, Anaerobic"
-                    required
-                    className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  />
-                  {editingType && renamedInUse > 0 && (
-                    <p data-testid="rename-in-use-warning" className="mt-2 flex items-start gap-1.5 text-xs text-amber-700">
-                      <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" aria-hidden="true" />
-                      <span>
-                        {renamedInUse === 1 ? '1 existing record still uses' : `${renamedInUse} existing records still use`}{' '}
-                        {`"${editingType.name}".`} They keep that name, so after renaming they no longer match this type
-                        and show in gray.
-                      </span>
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Description <span className="text-gray-400 font-normal">(Optional)</span>
-                  </label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Brief description of this processing method"
-                    rows={3}
-                    className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-none"
-                  />
-                </div>
-
-                <div>
-                  <p id="process-type-color-label" className="text-sm font-semibold text-gray-700 mb-2">
-                    Color <span className="text-red-500">*</span>
-                  </p>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-                    <div className="flex-shrink-0">
-                      <ColorSwatchPicker
-                        value={formData.hue}
-                        onChange={hue => setFormData(prev => ({ ...prev, hue }))}
-                        usedBy={usedByHue}
-                        labelledBy="process-type-color-label"
-                      />
-                      {Object.values(usedByHue).some(names => (names?.length ?? 0) > 0) && (
-                        <p className="mt-1 flex items-center gap-1.5 px-1 text-xs text-gray-500">
-                          <span aria-hidden="true" className="h-2 w-2 rounded-full bg-gray-800" />
-                          Used by another type
-                        </p>
-                      )}
+        <ModalPortal>
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-gray-100 max-h-[90vh] overflow-y-auto">
+              <form onSubmit={handleSubmit} className="p-6">
+                {/* Modal Header */}
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-blue-100 rounded-lg">
+                      <Coffee className="h-6 w-6 text-blue-600" />
                     </div>
-                    <ColorPreview
-                      hue={formData.hue}
-                      name={formData.name}
-                      usedBy={usedByHue[formData.hue] ?? []}
-                      similarTo={similarInUse(formData.hue, usedByHue)}
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">
+                        {editingType ? 'Edit Process Type' : 'Add Process Type'}
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        {editingType ? 'Update process type details' : 'Create a new coffee processing method'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowModal(false);
+                      resetForm();
+                    }}
+                    className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    <X className="h-5 w-5 text-gray-500" />
+                  </button>
+                </div>
+
+                {/* Error Message */}
+                {errorMessage && (
+                  <div className="mb-4 flex items-start gap-2 bg-red-50 text-red-700 px-4 py-3 rounded-lg border border-red-200">
+                    <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm font-semibold">{errorMessage}</span>
+                  </div>
+                )}
+
+                {/* Form Fields */}
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Process Type Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="e.g., Washed, Natural, Honey, Anaerobic"
+                      required
+                      className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    />
+                    {editingType && renamedInUse > 0 && (
+                      <p data-testid="rename-in-use-warning" className="mt-2 flex items-start gap-1.5 text-xs text-amber-700">
+                        <AlertCircle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                        <span>
+                          {renamedInUse === 1 ? '1 existing record still uses' : `${renamedInUse} existing records still use`}{' '}
+                          {`"${editingType.name}".`} They keep that name, so after renaming they no longer match this type
+                          and show in gray.
+                        </span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Description <span className="text-gray-400 font-normal">(Optional)</span>
+                    </label>
+                    <textarea
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      placeholder="Brief description of this processing method"
+                      rows={3}
+                      className="block w-full border border-gray-300 rounded-lg shadow-sm py-2.5 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-none"
                     />
                   </div>
+
+                  <div>
+                    <p id="process-type-color-label" className="text-sm font-semibold text-gray-700 mb-2">
+                      Color <span className="text-red-500">*</span>
+                    </p>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                      <div className="flex-shrink-0">
+                        <ColorSwatchPicker
+                          value={formData.hue}
+                          onChange={hue => setFormData(prev => ({ ...prev, hue }))}
+                          usedBy={usedByHue}
+                          labelledBy="process-type-color-label"
+                        />
+                        {Object.values(usedByHue).some(names => (names?.length ?? 0) > 0) && (
+                          <p className="mt-1 flex items-center gap-1.5 px-1 text-xs text-gray-500">
+                            <span aria-hidden="true" className="h-2 w-2 rounded-full bg-gray-800" />
+                            Used by another type
+                          </p>
+                        )}
+                      </div>
+                      <ColorPreview
+                        hue={formData.hue}
+                        name={formData.name}
+                        usedBy={usedByHue[formData.hue] ?? []}
+                        similarTo={similarInUse(formData.hue, usedByHue)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="isActive"
+                      checked={formData.isActive}
+                      onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="isActive" className="text-sm font-medium text-gray-700">
+                      Active (available for selection in processor)
+                    </label>
+                  </div>
                 </div>
 
+                {/* Action Buttons */}
                 <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    id="isActive"
-                    checked={formData.isActive}
-                    onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="isActive" className="text-sm font-medium text-gray-700">
-                    Active (available for selection in processor)
-                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowModal(false);
+                      resetForm();
+                    }}
+                    className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  >
+                    <Save className="h-4 w-4" />
+                    {isSubmitting ? 'Saving...' : editingType ? 'Update' : 'Create'}
+                  </button>
                 </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowModal(false);
-                    resetForm();
-                  }}
-                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                >
-                  <Save className="h-4 w-4" />
-                  {isSubmitting ? 'Saving...' : editingType ? 'Update' : 'Create'}
-                </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
     </div>
   );
