@@ -16,6 +16,49 @@ declare global {
   }
 }
 
+// Farm fields are user-entered, so the popup is built from DOM nodes with
+// textContent and an addEventListener click handler. Never hand Leaflet an
+// HTML string here: it would be parsed with innerHTML and run any markup a
+// farm owner stored in a name, location, owner or variety.
+const buildFarmPopup = (farm: Farm, onViewDetails: () => void): HTMLElement => {
+  const element = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string) => {
+    const node = document.createElement(tag);
+    node.className = className;
+    return node;
+  };
+  const labelledRow = (label: string, value: string) => {
+    const row = element('p', 'farm-popup-row');
+    const strong = document.createElement('strong');
+    strong.textContent = label;
+    row.append(strong, ` ${value}`);
+    return row;
+  };
+
+  const root = element('div', 'farm-popup');
+
+  const title = element('h3', 'farm-popup-title');
+  title.textContent = farm.name || farm.location;
+  root.appendChild(title);
+
+  root.appendChild(labelledRow('Location:', farm.location));
+  root.appendChild(labelledRow('Owner:', farm.ownerName || farm.farmerName));
+  if (farm.varieties && farm.varieties.length > 0) {
+    root.appendChild(labelledRow('Varieties:', farm.varieties.join(', ')));
+  }
+
+  const gps = element('p', 'farm-popup-gps');
+  gps.textContent = `GPS: ${farm.latitude?.toFixed(4)}, ${farm.longitude?.toFixed(4)}`;
+  root.appendChild(gps);
+
+  const button = element('button', 'farm-popup-details');
+  button.type = 'button';
+  button.textContent = 'ดูรายละเอียด Farm';
+  button.addEventListener('click', onViewDetails);
+  root.appendChild(button);
+
+  return root;
+};
+
 const FarmMapView: React.FC<FarmMapViewProps> = ({
   farms,
   selectedFarmId,
@@ -75,58 +118,9 @@ const FarmMapView: React.FC<FarmMapViewProps> = ({
 
   // Create popup content with navigation button
   const createPopupContent = useCallback((farm: Farm) => {
-    return `
-      <div style="padding: 8px; min-width: 220px;">
-        <h3 style="margin: 0 0 8px 0; font-weight: bold; font-size: 14px; color: #111827;">
-          ${farm.name || farm.location}
-        </h3>
-        <p style="margin: 4px 0; font-size: 12px; color: #6b7280;">
-          <strong>Location:</strong> ${farm.location}
-        </p>
-        <p style="margin: 4px 0; font-size: 12px; color: #6b7280;">
-          <strong>Owner:</strong> ${farm.ownerName || farm.farmerName}
-        </p>
-        ${farm.varieties && farm.varieties.length > 0 ? `
-          <p style="margin: 4px 0; font-size: 12px; color: #6b7280;">
-            <strong>Varieties:</strong> ${farm.varieties.join(', ')}
-          </p>
-        ` : ''}
-        <p style="margin: 4px 0; font-size: 11px; color: #9ca3af;">
-          GPS: ${farm.latitude?.toFixed(4)}, ${farm.longitude?.toFixed(4)}
-        </p>
-        <button
-          onclick="window.dispatchEvent(new CustomEvent('navigateToFarm', { detail: '${farm.id}' }))"
-          style="
-            margin-top: 8px;
-            width: 100%;
-            padding: 6px 12px;
-            background-color: #3b82f6;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 500;
-            cursor: pointer;
-          "
-          onmouseover="this.style.backgroundColor='#2563eb'"
-          onmouseout="this.style.backgroundColor='#3b82f6'"
-        >
-          ดูรายละเอียด Farm
-        </button>
-      </div>
-    `;
-  }, []);
-
-  // Listen for navigation events from popup
-  useEffect(() => {
-    const handleNavigate = (event: CustomEvent) => {
-      const farmId = event.detail;
-      navigate(`/farmer-farms/edit/${farmId}`);
-    };
-    window.addEventListener('navigateToFarm', handleNavigate as EventListener);
-    return () => {
-      window.removeEventListener('navigateToFarm', handleNavigate as EventListener);
-    };
+    return buildFarmPopup(farm, () => {
+      navigate(`/farmer-farms/edit/${encodeURIComponent(farm.id)}`);
+    });
   }, [navigate]);
 
   // Initialize map when container becomes available.
@@ -298,6 +292,41 @@ const FarmMapView: React.FC<FarmMapViewProps> = ({
         }
         .leaflet-popup-content {
           margin: 0;
+        }
+        .leaflet-popup-content .farm-popup {
+          padding: 8px;
+          min-width: 220px;
+        }
+        .leaflet-popup-content .farm-popup-title {
+          margin: 0 0 8px 0;
+          font-weight: bold;
+          font-size: 14px;
+          color: #111827;
+        }
+        .leaflet-popup-content .farm-popup-row {
+          margin: 4px 0;
+          font-size: 12px;
+          color: #6b7280;
+        }
+        .leaflet-popup-content .farm-popup-gps {
+          margin: 4px 0;
+          font-size: 11px;
+          color: #9ca3af;
+        }
+        .leaflet-popup-content .farm-popup-details {
+          margin-top: 8px;
+          width: 100%;
+          padding: 6px 12px;
+          background-color: #3b82f6;
+          color: white;
+          border: none;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+        }
+        .leaflet-popup-content .farm-popup-details:hover {
+          background-color: #2563eb;
         }
       `}</style>
     </div>
