@@ -72,6 +72,7 @@ import {
   formatWithdrawTotal,
 } from './workbench'
 import type { WithdrawalType } from './workbench'
+import { isInProcessorStock } from './workbench/stockAccess'
 import {
   formatGreenBeanId,
   formatHarvestLotId,
@@ -161,7 +162,6 @@ const WITHDRAWAL_TYPE_CONFIG: {
 // ─────────────────────────────────────────────────────────────────────
 
 const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
-  void currentUser
   const { data, setData, refreshData } = useDataContext()
   // One row per grade, so the admin-managed grade list caps the rows.
   const gradeNames = useGradeNames()
@@ -296,16 +296,24 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
 
   // Section 3: green-bean buckets — one row per (processType, grade) with
   // summed weight + FIFO-sorted sources for the withdraw flow.
+  // Only lots this user may draw from (see isInProcessorStock): a bucket's
+  // Withdraw takes from its lots without naming them, so another
+  // processor's lot would refuse it (403) on every retry, and an Admin would
+  // silently drain a roaster's purchased lot. The KPI total follows.
   const greenBeanBuckets = useMemo<Bucket[]>(() => {
     const map = new Map<string, Bucket>()
     for (const gbl of data.greenBeanLots) {
       if (gbl.availabilityStatus !== 'Available') continue
       if ((gbl.currentWeightKg ?? 0) <= 0) continue
+      if (!isInProcessorStock(currentUser, gbl)) continue
       const parchment = gbl.parchmentLotId
         ? data.parchmentLots.find((p) => p.id === gbl.parchmentLotId)
         : undefined
+      // The parchment lot nested in the lot covers one that is not in the
+      // loaded parchment list, so the lot does not fall into "Unknown".
       const processType =
         parchment?.processType ??
+        gbl.parchmentProcessType ??
         (typeof gbl.externalSource === 'object' && gbl.externalSource
           ? (gbl.externalSource as { processType?: string }).processType
           : undefined) ??
@@ -332,7 +340,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
           new Date(b.createdAt || 0).getTime(),
       ),
     }))
-  }, [data.greenBeanLots, data.parchmentLots])
+  }, [data.greenBeanLots, data.parchmentLots, currentUser])
 
   const greenBeanByType = useMemo(() => {
     const byType = new Map<string, Bucket[]>()

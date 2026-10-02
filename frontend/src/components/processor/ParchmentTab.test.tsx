@@ -55,7 +55,7 @@ const newParchment: ParchmentLot = {
 }
 
 const newLot = (id: string, displayId: string, grade: string, kg: number, price?: number): GreenBeanLot => ({
-  id, displayId, sourceType: GreenBeanSourceType.Internal,
+  id, displayId, sourceType: GreenBeanSourceType.Internal, createdById: 'processor',
   parchmentLotId: 'pl-new', grade, initialWeightKg: kg, currentWeightKg: kg,
   availabilityStatus: 'Available', cuppingScores: [], withdrawalHistory: [],
   ...(price !== undefined && {
@@ -575,5 +575,81 @@ describe('Process type colours', () => {
     const [honeyHeader, honeyCard] = screen.getAllByText('Honey', { selector: 'span' })
     expect(honeyHeader).toHaveClass('bg-amber-100', 'text-amber-700')
     expect(honeyCard.closest('.border-l-4')).toHaveClass('border-l-amber-500')
+  })
+})
+
+describe('Green-bean stock holds only lots the user may draw from (F12)', () => {
+  const washed: ParchmentLot = {
+    ...newParchment, id: 'pl-w', displayId: 'PL-2026-3', processType: 'Washed',
+    currentWeightKg: 0, status: 'Hulled',
+  }
+  const lot = (id: string, kg: number, createdAt: string, extra: Partial<GreenBeanLot>): GreenBeanLot => ({
+    ...newLot(id, `GBL-${id}`, 'Grade A', kg), parchmentLotId: 'pl-w', createdAt, ...extra,
+  })
+  // Oldest first, so a FIFO draw reaches the lots this user may not touch first.
+  const roasters = lot('roaster', 20, '2026-08-01T00:00:00Z', {
+    createdById: 'r-1', sourceType: GreenBeanSourceType.External, parchmentLotId: undefined,
+    externalSource: {
+      originName: 'Doi Chang Co-op', variety: 'Catimor', processType: 'Washed',
+      purchaseDate: '2026-07-30', pricePerKg: 300, currency: 'THB',
+    },
+  })
+  const noCreator = lot('legacy', 3, '2026-08-15T00:00:00Z', { createdById: undefined })
+  const otherProcessors = lot('other', 10, '2026-09-01T00:00:00Z', { createdById: 'p-2' })
+  const mine = lot('mine', 6, '2026-09-05T00:00:00Z', {})
+  const stock: Partial<AppData> = {
+    harvestLots: [], parchmentLots: [washed],
+    greenBeanLots: [mine, otherProcessors, noCreator, roasters],
+  }
+
+  const kpi = (label: string) =>
+    screen.getByText(label, { selector: 'p.uppercase' }).nextElementSibling as HTMLElement
+  const popup = () => screen.getByText('Withdraw Stock').closest('.rounded-2xl') as HTMLElement
+  const withdraw = async (kg: string) => {
+    fireEvent.click(screen.getByText('Withdraw', { selector: 'button' }))
+    fireEvent.click(within(popup()).getByRole('button', { name: 'Sample' }))
+    fireEvent.change(within(popup()).getByPlaceholderText('0.0'), { target: { value: kg } })
+    fireEvent.click(within(popup()).getByText('Save', { selector: 'button' }))
+    await waitFor(() => expect(screen.queryByText('Withdraw Stock')).not.toBeInTheDocument())
+  }
+  const drawnIds = () => vi.mocked(createWithdrawal).mock.calls.map(([id]) => id)
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(createWithdrawal).mockImplementation(async (id) => ({
+      greenBeanLot: { ...mine, id, currentWeightKg: 0 },
+    }))
+  })
+
+  it('a Processor sees and draws only their own lots, so the draw never hits a 403', async () => {
+    render(<Harness refreshData={async () => {}} initial={stock} />)
+    expect(kpi('Green Bean')).toHaveTextContent(/^6\s*kg$/)
+    expect(screen.getByText('from 1 source')).toBeInTheDocument()
+
+    await withdraw('6')
+    expect(drawnIds()).toEqual(['mine'])
+  }, 15000)
+
+  it('an Admin draws from every processor lot but never a roaster\'s purchased External lot', async () => {
+    render(<Harness refreshData={async () => {}} initial={stock} roles={[UserRole.Admin]} />)
+    expect(kpi('Green Bean')).toHaveTextContent(/^19\s*kg$/)
+    expect(screen.getByText('from 3 sources')).toBeInTheDocument()
+
+    await withdraw('19')
+    expect(drawnIds()).toEqual(['legacy', 'other', 'mine'])
+  }, 15000)
+
+  it('a lot whose parchment lot is not loaded groups under its nested process type, not Unknown', () => {
+    const natural = lot('natural', 8, '2026-09-10T00:00:00Z', {
+      parchmentLotId: 'pl-not-loaded', parchmentProcessType: 'Natural',
+    })
+    render(
+      <Harness
+        refreshData={async () => {}}
+        initial={{ harvestLots: [], parchmentLots: [], greenBeanLots: [natural] }}
+      />,
+    )
+    expect(screen.getAllByText('Natural', { selector: 'span' }).length).toBeGreaterThan(0)
+    expect(screen.queryByText('Unknown', { selector: 'span' })).not.toBeInTheDocument()
   })
 })

@@ -8,7 +8,7 @@ import ToastContainer from '../common/ToastContainer'
 import { CuppingSessionType, GreenBeanSourceType, ParchmentSourceType, ProcessingBatchStatus, SCA_SENSORY_ATTRIBUTES, UserRole } from '../../types'
 import type { AppData, CuppingSession, Customer, GreenBeanLot, HarvestLot, ParchmentLot, ProcessType } from '../../types'
 import { addProcessingBatch } from '../../services/processing/processingBatchService'
-import { createWithdrawal, updateGreenBeanLotPrice, updateGreenBeanLotScore } from '../../services/lots/greenBeanLotService'
+import { createWithdrawal, updateGreenBeanLotAvailability, updateGreenBeanLotPrice, updateGreenBeanLotScore } from '../../services/lots/greenBeanLotService'
 import { addCustomer } from '../../services/sales/customerService'
 import { deleteHarvestLot, updateHarvestLotDetails } from '../../services/lots/harvestLotService'
 import { createParchmentWithdrawal } from '../../services/lots/parchmentLotService'
@@ -23,6 +23,7 @@ vi.mock('../../services/lots/greenBeanLotService', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../services/lots/greenBeanLotService')>(),
   updateGreenBeanLotPrice: vi.fn(),
   updateGreenBeanLotScore: vi.fn(),
+  updateGreenBeanLotAvailability: vi.fn(),
   createWithdrawal: vi.fn(),
 }))
 
@@ -111,7 +112,7 @@ describe('Record Process', { timeout: 20000 }, () => {
 
 describe('Green bean price', { timeout: 20000 }, () => {
   const greenLot: GreenBeanLot = {
-    id: 'gbl-1', displayId: 'GBL-2026-7', sourceType: GreenBeanSourceType.Internal,
+    id: 'gbl-1', displayId: 'GBL-2026-7', sourceType: GreenBeanSourceType.Internal, createdById: 'processor',
     grade: 'Grade A', initialWeightKg: 50, currentWeightKg: 40,
     availabilityStatus: 'Available', cuppingScores: [],
     withdrawalHistory: [{ amountKg: 10, withdrawalType: 'Sample', purpose: 'Sample', date: '2026-09-01' }],
@@ -162,7 +163,7 @@ describe('Green bean price', { timeout: 20000 }, () => {
 
 describe('Sale customer picker', { timeout: 20000 }, () => {
   const stockLot: GreenBeanLot = {
-    id: 'gbl-1', displayId: 'GBL-2026-1', sourceType: GreenBeanSourceType.Internal,
+    id: 'gbl-1', displayId: 'GBL-2026-1', sourceType: GreenBeanSourceType.Internal, createdById: 'processor',
     grade: 'Grade A', initialWeightKg: 50, currentWeightKg: 40,
     availabilityStatus: 'Available', cuppingScores: [], withdrawalHistory: [],
   }
@@ -342,7 +343,7 @@ describe('Sale customer picker', { timeout: 20000 }, () => {
 
 describe('Withdraw Stock roaster and total', { timeout: 20000 }, () => {
   const stockLot: GreenBeanLot = {
-    id: 'gbl-1', displayId: 'GBL-2026-1', sourceType: GreenBeanSourceType.Internal,
+    id: 'gbl-1', displayId: 'GBL-2026-1', sourceType: GreenBeanSourceType.Internal, createdById: 'processor',
     grade: 'Grade A', initialWeightKg: 50, currentWeightKg: 40,
     availabilityStatus: 'Available', cuppingScores: [], withdrawalHistory: [],
   }
@@ -561,7 +562,7 @@ describe('Hull & Grade price', { timeout: 20000 }, () => {
     fireEvent.click(within(form).getByText(grade, { selector: 'button' }))
   }
   const gbl = (id: string, displayId: string, grade: string, kg: number, price?: number): GreenBeanLot => ({
-    id, displayId, sourceType: GreenBeanSourceType.Internal,
+    id, displayId, sourceType: GreenBeanSourceType.Internal, createdById: 'processor',
     parchmentLotId: 'pl-1', grade, initialWeightKg: kg, currentWeightKg: kg,
     availabilityStatus: 'Available', cuppingScores: [], withdrawalHistory: [],
     ...(price !== undefined && {
@@ -844,7 +845,7 @@ describe('Process type colours', { timeout: 20000 }, () => {
 
   it('shows the source parchment process in neutral text beside its colour dot', () => {
     const green: GreenBeanLot = {
-      id: 'gbl-1', displayId: 'GBL-2026-1', sourceType: GreenBeanSourceType.Internal,
+      id: 'gbl-1', displayId: 'GBL-2026-1', sourceType: GreenBeanSourceType.Internal, createdById: 'processor',
       parchmentLotId: 'pl-w', grade: 'Grade A', initialWeightKg: 50, currentWeightKg: 40,
       availabilityStatus: 'Available', cuppingScores: [], withdrawalHistory: [],
     }
@@ -870,7 +871,7 @@ describe('Process type colours', { timeout: 20000 }, () => {
 
 describe('QC Score', { timeout: 20000 }, () => {
   const scoredLot = (score?: number): GreenBeanLot => ({
-    id: 'gbl-1', displayId: 'GBL-2026-1', sourceType: GreenBeanSourceType.Internal,
+    id: 'gbl-1', displayId: 'GBL-2026-1', sourceType: GreenBeanSourceType.Internal, createdById: 'processor',
     grade: 'Grade A', initialWeightKg: 50, currentWeightKg: 40,
     availabilityStatus: 'Available', withdrawalHistory: [],
     cuppingScores: score === undefined ? [] : [{ sessionId: 'CS-QC-processor', score }],
@@ -1002,7 +1003,7 @@ describe('QC Score', { timeout: 20000 }, () => {
 
 describe('Withdrawal history invoice', { timeout: 20000 }, () => {
   const saleLot = (sale: Record<string, unknown>): GreenBeanLot => ({
-    id: 'gbl-1', displayId: 'GBL-2026-9', sourceType: GreenBeanSourceType.Internal,
+    id: 'gbl-1', displayId: 'GBL-2026-9', sourceType: GreenBeanSourceType.Internal, createdById: 'processor',
     grade: 'Grade A', initialWeightKg: 50, currentWeightKg: 45,
     availabilityStatus: 'Available', cuppingScores: [],
     withdrawalHistory: [{ amountKg: 5, withdrawalType: 'Sale', purpose: 'Sale', date: '2026-09-20', ...sale }],
@@ -1024,5 +1025,111 @@ describe('Withdrawal history invoice', { timeout: 20000 }, () => {
     openHistory(saleLot({ purpose: 'Sold to a cafe', saleDetailsHidden: true }))
     expect(screen.getByText('Sold to a cafe')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Invoice' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Withdraw, Set price, QC Score and the availability switch only on lots the user may manage (F12)', { timeout: 20000 }, () => {
+  const greenLot = (id: string, n: number, extra: Partial<GreenBeanLot>): GreenBeanLot => ({
+    id, displayId: `GBL-2026-${n}`, sourceType: GreenBeanSourceType.Internal,
+    grade: 'Grade A', initialWeightKg: 50, currentWeightKg: 40,
+    availabilityStatus: 'Available', cuppingScores: [], withdrawalHistory: [],
+    ...extra,
+  })
+  const mine = greenLot('gbl-mine', 1, { createdById: 'processor' })
+  const otherProcessors = greenLot('gbl-other', 2, { createdById: 'p-2' })
+  const roasters = greenLot('gbl-roaster', 3, {
+    createdById: 'r-1', sourceType: GreenBeanSourceType.External, pricePerKg: 300, currency: 'THB',
+    externalSource: {
+      originName: 'Doi Chang Co-op', variety: 'Catimor', processType: 'Washed',
+      purchaseDate: '2026-07-30', pricePerKg: 300, currency: 'THB',
+    },
+  })
+  const noCreator = greenLot('gbl-legacy', 4, {})
+  const initial = { ...INITIAL_APP_DATA, greenBeanLots: [mine, otherProcessors, roasters, noCreator] }
+  const others = [2, 3, 4]
+
+  beforeEach(() => vi.clearAllMocks())
+
+  it('a Processor gets them on their own lot only, in the workflow cards and the data grid', () => {
+    render(<Harness initial={initial} refreshData={async () => {}} />)
+    // Every lot is still listed; only the actions are left off.
+    for (const n of [1, ...others]) {
+      expect(screen.getAllByText(`GBL-2026-${n}`).length).toBeGreaterThan(0)
+    }
+    expect(screen.getAllByRole('button', { name: 'Withdraw' })).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Set price of GBL-2026-1' })).toBeInTheDocument()
+    for (const n of others) {
+      expect(screen.queryByRole('button', { name: `Set price of GBL-2026-${n}` })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: `Edit price of GBL-2026-${n}` })).not.toBeInTheDocument()
+    }
+    // The roaster's price still shows, read-only.
+    expect(screen.getByText(/300\.00 THB\/kg/)).toBeInTheDocument()
+
+    // QC Score and the Available/Withdrawn switch save through the same
+    // owner-only routes: the other lots show their status, not a switch.
+    expect(screen.getAllByRole('button', { name: 'QC Score' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Available' })).toHaveLength(1)
+    expect(screen.getAllByText('Available', { selector: 'span' })).toHaveLength(others.length)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
+    expect(screen.getAllByRole('button', { name: 'Withdraw' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Price' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'QC Score' })).toHaveLength(1)
+  })
+
+  it('a Processor gets QC Score, Price and Withdraw in the parchment\'s split history on their own lot only', () => {
+    const parchment: ParchmentLot = {
+      id: 'pl-1', displayId: 'PL-2026-3', sourceType: ParchmentSourceType.Internal,
+      initialWeightKg: 100, currentWeightKg: 20, moistureContent: 11,
+      processType: 'Washed', status: 'AwaitingHulling', withdrawalHistory: [],
+    }
+    const split = [
+      { ...mine, parchmentLotId: 'pl-1' },
+      { ...otherProcessors, parchmentLotId: 'pl-1' },
+    ]
+    render(<Harness initial={{ ...INITIAL_APP_DATA, parchmentLots: [parchment], greenBeanLots: split }} refreshData={async () => {}} />)
+
+    fireEvent.click(screen.getByTitle('View history'))
+    const popup = screen.getByText('Green Bean Split History').closest('div.rounded-2xl') as HTMLElement
+    expect(within(popup).getByText('GBL-2026-2')).toBeInTheDocument()
+    expect(within(popup).getAllByTitle('QC Score')).toHaveLength(1)
+    expect(within(popup).getAllByTitle('Withdraw')).toHaveLength(1)
+    expect(within(popup).getAllByText('Price', { selector: 'button' })).toHaveLength(1)
+  })
+
+  it('the Processor\'s own availability switch still works', async () => {
+    vi.mocked(updateGreenBeanLotAvailability).mockResolvedValue({ ...mine, availabilityStatus: 'Withdrawn' })
+    render(<Harness initial={initial} refreshData={async () => {}} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Available' }))
+
+    await waitFor(() => expect(updateGreenBeanLotAvailability).toHaveBeenCalledWith('gbl-mine', 'Withdrawn'))
+    expect(await screen.findByRole('button', { name: 'Withdrawn' })).toBeInTheDocument()
+  })
+
+  it('the one Withdraw opens Withdraw Stock for the Processor\'s own lot', () => {
+    render(<Harness initial={initial} refreshData={async () => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
+    expect(screen.getByText('Lot #GBL-2026-1')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['an Admin', [UserRole.Admin]],
+    ['an Admin who is also a Processor', [UserRole.Processor, UserRole.Admin]],
+  ])('%s gets them on every lot', (_who, roles) => {
+    render(<Harness initial={initial} refreshData={async () => {}} roles={roles} />)
+    expect(screen.getAllByRole('button', { name: 'Withdraw' })).toHaveLength(4)
+    for (const n of [1, 2, 4]) {
+      expect(screen.getByRole('button', { name: `Set price of GBL-2026-${n}` })).toBeInTheDocument()
+    }
+    expect(screen.getByRole('button', { name: 'Edit price of GBL-2026-3' })).toBeInTheDocument()
+
+    expect(screen.getAllByRole('button', { name: 'QC Score' })).toHaveLength(4)
+    expect(screen.getAllByRole('button', { name: 'Available' })).toHaveLength(4)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
+    expect(screen.getAllByRole('button', { name: 'Withdraw' })).toHaveLength(4)
+    expect(screen.getAllByRole('button', { name: 'Price' })).toHaveLength(4)
+    expect(screen.getAllByRole('button', { name: 'QC Score' })).toHaveLength(4)
   })
 })

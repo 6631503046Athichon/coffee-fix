@@ -8,6 +8,7 @@ import CreateUserModal from '@/components/admin/modals/CreateUserModal';
 import EditUserModal from '@/components/admin/modals/EditUserModal';
 import TransferOwnershipModal from '@/components/admin/modals/TransferOwnershipModal';
 import { ModalPortal } from '@/components/common/ModalPortal';
+import DebouncedSearchInput from '@/components/processor/workbench/DebouncedSearchInput';
 
 // Custom Dropdown Component
 interface DropdownOption {
@@ -130,7 +131,12 @@ const UserManagement: React.FC = () => {
         setCurrentPage(1);
     }, [searchTerm, roleFilter, statusFilter]);
 
+    // Numbers each load so a slow, older search cannot overwrite the rows of
+    // a newer one that answered first.
+    const latestFetch = useRef(0);
+
     const fetchUsers = async () => {
+        const fetchId = ++latestFetch.current;
         try {
             setLoading(true);
             setError('');
@@ -140,8 +146,10 @@ const UserManagement: React.FC = () => {
                 role: roleFilter || undefined,
                 status: statusFilter || undefined,
             });
+            if (fetchId !== latestFetch.current) return;
             setUsers(response);
         } catch (err: any) {
+            if (fetchId !== latestFetch.current) return;
             console.error('Error fetching users:', err);
             
             // Provide more specific error messages
@@ -166,7 +174,7 @@ const UserManagement: React.FC = () => {
             setError(errorMessage);
             setUsers([]);
         } finally {
-            setLoading(false);
+            if (fetchId === latestFetch.current) setLoading(false);
         }
     };
 
@@ -238,17 +246,6 @@ const UserManagement: React.FC = () => {
         return colors[role] || 'bg-gray-100 text-gray-700 border-gray-200';
     };
 
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center min-h-screen">
-                <div className="text-center">
-                    <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-gray-600">Loading users...</p>
-                </div>
-            </div>
-        );
-    }
-
     const superAdmin = users.find((u) => u.isSuperAdmin);
     const currentSuperAdmin = currentUser?.isSuperAdmin ? currentUser : superAdmin || null;
 
@@ -292,11 +289,12 @@ const UserManagement: React.FC = () => {
                     {/* Search Input */}
                     <div className="flex-1 relative">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                        <input
-                            type="text"
+                        {/* Owns what is typed and searches 300 ms after the last key, so the
+                            box keeps focus and one search runs per pause, not per letter. */}
+                        <DebouncedSearchInput
                             placeholder="Search by name, email, or username..."
                             value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onSearch={setSearchTerm}
                             className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:bg-white focus:outline-none focus:border-indigo-500 transition-all duration-200 placeholder-gray-400"
                         />
                     </div>
@@ -355,8 +353,14 @@ const UserManagement: React.FC = () => {
                 {(searchTerm || roleFilter || statusFilter) && (
                     <div className="mt-4 pt-4 border-t border-gray-100">
                         <div className="flex items-center gap-2 text-sm">
-                            <span className="font-semibold text-indigo-600">{users.length}</span>
-                            <span className="text-gray-500">user{users.length !== 1 ? 's' : ''} found</span>
+                            {loading ? (
+                                <span className="text-gray-500">Searching...</span>
+                            ) : (
+                                <>
+                                    <span className="font-semibold text-indigo-600">{users.length}</span>
+                                    <span className="text-gray-500">user{users.length !== 1 ? 's' : ''} found</span>
+                                </>
+                            )}
                             {searchTerm && (
                                 <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md text-xs font-medium">
                                     "{searchTerm}"
@@ -436,7 +440,18 @@ const UserManagement: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {users.length === 0 ? (
+                            {/* The spinner stays inside the table: a full-page loading screen
+                                unmounted the search box and dropped its focus on every search. */}
+                            {loading ? (
+                                <tr>
+                                    <td colSpan={6} className="px-4 py-12 text-center">
+                                        <div role="status" className="flex flex-col items-center gap-3">
+                                            <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                                            <p className="text-sm text-gray-600">Loading users...</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : users.length === 0 ? (
                                 <tr>
                                     <td colSpan={6} className="px-4 py-12 text-center">
                                         <UsersIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
@@ -524,7 +539,7 @@ const UserManagement: React.FC = () => {
                     </table>
                 </div>
                 {/* Pagination */}
-                {users.length > PAGE_SIZE && (
+                {!loading && users.length > PAGE_SIZE && (
                     <div className="flex justify-center items-center px-4 py-3 bg-gray-50 border-t border-gray-200">
                         <div className="flex items-center gap-1">
                             <button

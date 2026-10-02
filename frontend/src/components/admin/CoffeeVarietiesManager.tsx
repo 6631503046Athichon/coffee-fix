@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Leaf, Plus, Edit, Trash2, Search, X, AlertCircle, ChevronDown } from 'lucide-react';
 import { getAllCoffeeVarieties, addCoffeeVariety, updateCoffeeVariety, deleteCoffeeVariety, CoffeeVariety } from '@/services/reference/coffeeVarietyService';
 import { ModalPortal } from '@/components/common/ModalPortal';
+import DebouncedSearchInput from '@/components/processor/workbench/DebouncedSearchInput';
 
 const SPECIES_OPTIONS = ['Arabica', 'Robusta', 'Liberica', 'Excelsa'];
 
@@ -104,7 +105,12 @@ const CoffeeVarietiesManager: React.FC = () => {
     fetchVarieties();
   }, [searchTerm, speciesFilter]);
 
+  // Numbers each load so a slow, older search cannot overwrite the cards of
+  // a newer one that answered first.
+  const latestFetch = useRef(0);
+
   const fetchVarieties = async () => {
+    const fetchId = ++latestFetch.current;
     try {
       setLoading(true);
       setError('');
@@ -114,13 +120,15 @@ const CoffeeVarietiesManager: React.FC = () => {
       if (speciesFilter) filters.species = speciesFilter;
 
       const result = await getAllCoffeeVarieties(Object.keys(filters).length > 0 ? filters : undefined);
+      if (fetchId !== latestFetch.current) return;
       setVarieties(result);
     } catch (err) {
+      if (fetchId !== latestFetch.current) return;
       console.error('Error fetching varieties:', err);
       setError('Failed to load coffee varieties.');
       setVarieties([]);
     } finally {
-      setLoading(false);
+      if (fetchId === latestFetch.current) setLoading(false);
     }
   };
 
@@ -233,17 +241,6 @@ const CoffeeVarietiesManager: React.FC = () => {
     return colors[species] || 'bg-gray-100 text-gray-700 border-gray-200';
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-green-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading coffee varieties...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div>
       {/* Header */}
@@ -273,11 +270,12 @@ const CoffeeVarietiesManager: React.FC = () => {
         <div className="flex flex-wrap gap-4 items-center">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input
-              type="text"
+            {/* Owns what is typed and searches 300 ms after the last key, so the
+                box keeps focus and one search runs per pause, not per letter. */}
+            <DebouncedSearchInput
               placeholder="Search varieties..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onSearch={setSearchTerm}
               className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-green-100 focus:border-green-500 transition-all"
             />
           </div>
@@ -308,62 +306,71 @@ const CoffeeVarietiesManager: React.FC = () => {
         </div>
       )}
 
-      {/* Varieties Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {varieties.map((variety) => (
-          <div
-            key={variety.id}
-            className={`bg-white rounded-xl p-5 shadow-sm border ${
-              variety.isActive ? 'border-gray-200' : 'border-gray-300 bg-gray-50'
-            }`}
-          >
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">{variety.name}</h3>
-                <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full border ${getSpeciesBadgeColor(variety.species)}`}>
-                  {variety.species}
+      {/* The spinner stays in the list area: a full-page loading screen
+          unmounted the search box and dropped its focus on every search. */}
+      {loading ? (
+        <div role="status" className="flex flex-col items-center gap-3 py-12">
+          <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-sm text-gray-600">Loading coffee varieties...</p>
+        </div>
+      ) : (
+        /* Varieties Grid */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {varieties.map((variety) => (
+            <div
+              key={variety.id}
+              className={`bg-white rounded-xl p-5 shadow-sm border ${
+                variety.isActive ? 'border-gray-200' : 'border-gray-300 bg-gray-50'
+              }`}
+            >
+              <div className="flex justify-between items-start mb-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">{variety.name}</h3>
+                  <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full border ${getSpeciesBadgeColor(variety.species)}`}>
+                    {variety.species}
+                  </span>
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => handleOpenModal(variety)}
+                    className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(variety)}
+                    className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              {variety.origin && (
+                <p className="text-sm text-gray-600 mb-1">
+                  <span className="font-medium">Origin:</span> {variety.origin}
+                </p>
+              )}
+              {variety.altitude && (
+                <p className="text-sm text-gray-600 mb-1">
+                  <span className="font-medium">Altitude:</span> {variety.altitude}
+                </p>
+              )}
+              {variety.characteristics && (
+                <p className="text-sm text-gray-500 mt-2 line-clamp-2">
+                  {variety.characteristics}
+                </p>
+              )}
+
+              {!variety.isActive && (
+                <span className="inline-block mt-2 px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-600 rounded">
+                  Inactive
                 </span>
-              </div>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => handleOpenModal(variety)}
-                  className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded"
-                >
-                  <Edit className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => handleDelete(variety)}
-                  className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
+              )}
             </div>
-
-            {variety.origin && (
-              <p className="text-sm text-gray-600 mb-1">
-                <span className="font-medium">Origin:</span> {variety.origin}
-              </p>
-            )}
-            {variety.altitude && (
-              <p className="text-sm text-gray-600 mb-1">
-                <span className="font-medium">Altitude:</span> {variety.altitude}
-              </p>
-            )}
-            {variety.characteristics && (
-              <p className="text-sm text-gray-500 mt-2 line-clamp-2">
-                {variety.characteristics}
-              </p>
-            )}
-
-            {!variety.isActive && (
-              <span className="inline-block mt-2 px-2 py-0.5 text-xs font-medium bg-gray-200 text-gray-600 rounded">
-                Inactive
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {varieties.length === 0 && !loading && (
         <div className="text-center py-12">

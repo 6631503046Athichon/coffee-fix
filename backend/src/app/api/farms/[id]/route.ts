@@ -191,6 +191,22 @@ export async function PUT(
   }
 }
 
+const FARM_HAS_RECORDS_ERROR =
+  'This farm still has records linked to it. Delete or move them first, then delete the farm.'
+
+// What keeps a farm from being deleted: deleting it would clear the farm from
+// its harvest lots and GAP logs (they would drop out of the owner's views)
+// and delete its soil analyses with it. Its weather records, fetched or typed
+// in, are deleted with the farm. This applies to Admins too.
+type FarmTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
+async function countFarmRecords(db: FarmTx, farmId: string) {
+  const harvestLots = await db.harvestLot.count({ where: { farmId } })
+  const gapLogs = await db.gAPLogEntry.count({ where: { farmId } })
+  const soilAnalyses = await db.soilAnalysis.count({ where: { farmId } })
+  return { harvestLots, gapLogs, soilAnalyses }
+}
+
 // DELETE /api/farms/:id
 export async function DELETE(
   request: NextRequest,
@@ -219,17 +235,38 @@ export async function DELETE(
       )
     }
 
-    // Cascade delete: ลบ weather records ที่เกี่ยวข้องก่อน
-    await prisma.weatherRecord.deleteMany({
-      where: { farmId: id },
+    // Count and delete in one transaction that first locks the farm row. A
+    // lot, GAP log or soil analysis being linked to the farm holds a key-share
+    // lock on that row until it commits, so the lock waits for it and the
+    // counts below see it; one linked after the lock waits for the delete and
+    // then fails on the missing farm. Without the lock, a record committed
+    // between the count and the delete would lose its farm.
+    const outcome = await prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "Farm" WHERE "id" = ${id} FOR UPDATE`
+      if (locked.length === 0) return { status: 'missing' as const }
+
+      const dependents = await countFarmRecords(tx, id)
+      if (Object.values(dependents).some(count => count > 0)) {
+        return { status: 'linked' as const, dependents }
+      }
+
+      // The weather goes first in case the database lacks the cascade.
+      await tx.weatherRecord.deleteMany({ where: { farmId: id } })
+      await tx.farm.delete({ where: { id } })
+      return { status: 'deleted' as const }
     })
 
-    // จากนั้นลบ farm
-    await prisma.farm.delete({
-      where: { id },
-    })
+    if (outcome.status === 'missing') {
+      return NextResponse.json({ error: 'Farm not found' }, { status: 404 })
+    }
+    if (outcome.status === 'linked') {
+      return NextResponse.json(
+        { error: FARM_HAS_RECORDS_ERROR, dependents: outcome.dependents },
+        { status: 409 }
+      )
+    }
 
-    return NextResponse.json({ message: 'Farm and related weather records deleted successfully' })
+    return NextResponse.json({ message: 'Farm deleted successfully' })
   } catch (error) {
     return handleApiError(error)
   }

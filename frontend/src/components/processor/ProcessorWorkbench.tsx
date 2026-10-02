@@ -160,6 +160,7 @@ import type {
   ScoreInput,
   WithdrawalType,
 } from "./workbench";
+import { canManageGreenBeanLot } from "./workbench/stockAccess";
 
 interface ProcessorWorkbenchProps {
   currentUser: User;
@@ -183,6 +184,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     currentUser.roles?.some(
       (role) => role === UserRole.Processor || role === UserRole.Admin,
     ) ?? false;
+  // Withdraw, Set price, QC Score and the Available/Withdrawn switch only
+  // where the backend allows them: the lot's creator or an Admin. Another
+  // processor's lot (or a roaster's) is still listed, without those
+  // controls, instead of refusing with a 403.
+  const canManageLot = (lot: GreenBeanLot) =>
+    canManageGreenBeanLot(currentUser, lot);
   const greenBeanStockRef = useRef<HTMLDivElement>(null);
 
   // Modal States
@@ -2486,6 +2493,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           >
                             <History className="h-4 w-4" />
                           </button>
+                          {canManageLot(g) && (
+                            <>
                           <button
                             onClick={() => setScoringLot(g)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 border border-gray-200 transition-colors"
@@ -2510,6 +2519,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             <PlayCircle size={14} />
                             Withdraw
                           </button>
+                            </>
+                          )}
                               </>
                             );
                           })()}
@@ -2942,16 +2953,30 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       >
                         <History className="h-3.5 w-3.5" />
                       </button>
-                      <button
-                        onClick={() => handleToggleAvailability(g.id)}
-                        disabled={g.currentWeightKg <= 0}
-                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${g.availabilityStatus === "Available" ? "bg-teal-50 text-teal-700 hover:bg-teal-100" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
-                      >
+                      {/* The switch saves through the same owner-only PUT
+                          as the price, so on another user's lot the status
+                          shows without it. */}
+                      {canManageLot(g) ? (
+                        <button
+                          onClick={() => handleToggleAvailability(g.id)}
+                          disabled={g.currentWeightKg <= 0}
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${g.availabilityStatus === "Available" ? "bg-teal-50 text-teal-700 hover:bg-teal-100" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${g.availabilityStatus === "Available" ? "bg-teal-500" : "bg-gray-400"}`}
+                          ></span>
+                          {g.availabilityStatus}
+                        </button>
+                      ) : (
                         <span
-                          className={`w-1.5 h-1.5 rounded-full ${g.availabilityStatus === "Available" ? "bg-teal-500" : "bg-gray-400"}`}
-                        ></span>
-                        {g.availabilityStatus}
-                      </button>
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${g.availabilityStatus === "Available" ? "bg-teal-50 text-teal-700" : "bg-gray-100 text-gray-600"}`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${g.availabilityStatus === "Available" ? "bg-teal-500" : "bg-gray-400"}`}
+                          ></span>
+                          {g.availabilityStatus}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -2985,17 +3010,19 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               {" "}· {(g.pricePerKg * (g.currentWeightKg ?? 0)).toFixed(2)} total
                             </span>
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => setPricingLot(g)}
-                            className="p-0.5 rounded text-gray-400 hover:text-blue-600 hover:bg-gray-100 transition-colors flex-shrink-0"
-                            title="Edit price"
-                            aria-label={`Edit price of ${formatGreenBeanId(g)}`}
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </button>
+                          {canManageLot(g) && (
+                            <button
+                              type="button"
+                              onClick={() => setPricingLot(g)}
+                              className="p-0.5 rounded text-gray-400 hover:text-blue-600 hover:bg-gray-100 transition-colors flex-shrink-0"
+                              title="Edit price"
+                              aria-label={`Edit price of ${formatGreenBeanId(g)}`}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                          )}
                         </span>
-                      ) : (
+                      ) : canManageLot(g) ? (
                         <button
                           type="button"
                           onClick={() => setPricingLot(g)}
@@ -3004,6 +3031,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         >
                           Set price
                         </button>
+                      ) : (
+                        <span className="text-gray-400">-</span>
                       )}
                     </div>
                     <div className="flex justify-between items-center">
@@ -3024,23 +3053,25 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => setScoringLot(g)}
-                      className="flex-1 py-2 text-xs font-medium rounded-md text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 transition-colors inline-flex items-center justify-center gap-1.5"
-                    >
-                      <Star size={14} />
-                      QC Score
-                    </button>
-                    <button
-                      onClick={() => openModal("withdrawStock", g)}
-                      disabled={g.availabilityStatus === "Withdrawn"}
-                      className="flex-1 py-2 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm transition-all inline-flex items-center justify-center gap-1.5"
-                    >
-                      <PlayCircle size={14} />
-                      Withdraw
-                    </button>
-                  </div>
+                  {canManageLot(g) && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setScoringLot(g)}
+                        className="flex-1 py-2 text-xs font-medium rounded-md text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 transition-colors inline-flex items-center justify-center gap-1.5"
+                      >
+                        <Star size={14} />
+                        QC Score
+                      </button>
+                      <button
+                        onClick={() => openModal("withdrawStock", g)}
+                        disabled={g.availabilityStatus === "Withdrawn"}
+                        className="flex-1 py-2 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm transition-all inline-flex items-center justify-center gap-1.5"
+                      >
+                        <PlayCircle size={14} />
+                        Withdraw
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })
@@ -4391,6 +4422,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                           History
                                         </button>
                                       )}
+                                    {canManageLot(g) && (
+                                      <>
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -4428,6 +4461,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                       <Download className="h-3.5 w-3.5" />
                                       Withdraw
                                     </button>
+                                      </>
+                                    )}
                                   </div>
                                 </div>
                               );

@@ -3,6 +3,7 @@
  */
 
 import type { HarvestLot } from "../../types";
+import { toDateOnly } from "../../utils/dateOnly";
 
 // Farm transformations
 export const transformFarmFromBackend = (farm: any) => {
@@ -100,11 +101,13 @@ export const transformFarmToBackend = (farmData: any) => {
 };
 
 // Soil Analysis transformations
+// Dates come back as ISO datetimes; forms and DatePicker work in YYYY-MM-DD
+// (the Thai calendar day, see toDateOnly), so they are normalised here.
 export const transformSoilAnalysisFromBackend = (analysis: any) => ({
   id: analysis.id,
   farmId: analysis.farmId,
   farmPlotLocation: analysis.farmPlotLocation,
-  testDate: analysis.testDate,
+  testDate: toDateOnly(analysis.testDate),
   labName: analysis.labName || undefined,
   certificateNumber: analysis.certificateNumber || undefined,
   pH: analysis.pH,
@@ -130,6 +133,14 @@ export const transformSoilAnalysisFromBackend = (analysis: any) => ({
   updatedAt: analysis.updatedAt,
 });
 
+// A number as the string the backend parses, or undefined (so the key is
+// dropped from the request) when there is no number.
+const optionalNumberString = (value: unknown): string | undefined => {
+  if (value === null || value === undefined || value === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed.toString() : undefined;
+};
+
 export const transformSoilAnalysisToBackend = (analysisData: any) => ({
   farmId: analysisData.farmId,
   farmPlotLocation: analysisData.farmPlotLocation || "",
@@ -139,7 +150,9 @@ export const transformSoilAnalysisToBackend = (analysisData: any) => ({
   pH: analysisData.pH?.toString() || "0",
   phosphorus: analysisData.phosphorus?.toString() || "0",
   potassium: analysisData.potassium?.toString() || "0",
-  nitrogen: analysisData.nitrogen?.toString() || "0",
+  // Not every lab report has nitrogen, so the form may leave it blank. Blank
+  // is left out rather than sent as "0": an edit then keeps the stored value.
+  nitrogen: optionalNumberString(analysisData.nitrogen),
   calcium: analysisData.calcium?.toString() || "0",
   magnesium: analysisData.magnesium?.toString() || "0",
   organicMatter: analysisData.organicMatter?.toString() || null,
@@ -159,7 +172,7 @@ export const transformWeatherRecordFromBackend = (record: any) => ({
   id: record.id,
   farmId: record.farmId,
   farmPlotLocation: record.farmPlotLocation,
-  recordDate: record.recordDate,
+  recordDate: toDateOnly(record.recordDate),
   temperatureMin: record.temperatureMin,
   temperatureMax: record.temperatureMax,
   temperatureAvg: record.temperatureAvg,
@@ -190,10 +203,11 @@ export const transformGAPLogFromBackend = (log: any) => ({
   farmId: log.farmId || undefined,
   farmPlotLocation: log.farmPlotLocation,
   activityType: log.activityTypeName || log.activityType?.name || "",
-  date: log.date,
+  date: toDateOnly(log.date),
   productUsed: log.productUsed,
   quantity: log.quantity,
   notes: log.notes || undefined,
+  createdBy: log.createdBy || log.createdByUser?.id || undefined,
   createdAt: log.createdAt,
   updatedAt: log.updatedAt,
 });
@@ -232,6 +246,7 @@ export const transformHarvestLotFromBackend = (lot: any) => ({
   status: (HARVEST_STATUS_MAP[lot.status as keyof typeof HARVEST_STATUS_MAP] ||
     lot.status) as "Ready for Processing" | "Complete",
   cropYearId: lot.cropYearId || undefined,
+  createdById: lot.createdById || undefined,
   createdAt: lot.createdAt,
   updatedAt: lot.updatedAt,
 });

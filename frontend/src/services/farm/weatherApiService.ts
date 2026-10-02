@@ -1,3 +1,5 @@
+import { todayDateOnly } from '../../utils/dateOnly';
+
 /**
  * Weather API Service
  * Uses Open-Meteo API to fetch weather data (free, no API key required)
@@ -100,8 +102,8 @@ export const fetchWeatherData = async (
     const temperatureMax = data.daily.temperature_2m_max[0];
     const rainfall = data.daily.rain_sum[0] || 0;
 
-    // Get today's date in ISO format
-    const recordDate = new Date().toISOString().substring(0, 10);
+    // Today's date (the viewer's calendar day, as the form's date picker uses)
+    const recordDate = todayDateOnly();
 
     return {
       temperatureMin: parseFloat(temperatureMin.toFixed(1)),

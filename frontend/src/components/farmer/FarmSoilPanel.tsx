@@ -7,6 +7,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Farm, SoilAnalysis, UserRole } from '../../types';
 import { generateSoilAnalysisId } from '../../utils/idGenerator';
 import { formatDateDisplay } from '../../utils/formatters';
+import { canManageFarm } from '../../utils/farmAccess';
+import { todayDateOnly } from '../../utils/dateOnly';
 import { addSoilAnalysis, deleteSoilAnalysis, updateSoilAnalysis } from '../../services/farm/soilAnalysisService';
 import { generateSoilRecommendations, extractSoilDataFromImage } from '../../services/external/geminiService';
 
@@ -34,7 +36,7 @@ export type SoilFormState = {
 
 const createEmptySoilForm = (defaults: Partial<SoilFormState> = {}): SoilFormState => ({
   farmPlotLocation: '',
-  testDate: new Date().toISOString().substring(0, 10),
+  testDate: todayDateOnly(),
   labName: '',
   certificateNumber: '',
   pH: '',
@@ -349,6 +351,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
     }
 
     const optionalNumericFields: Array<{ key: keyof SoilFormState; label: string }> = [
+      { key: 'nitrogen', label: 'ไนโตรเจน (N)' },
       { key: 'organicMatter', label: 'อินทรีย์วัตถุ (OM)' },
       { key: 'sulfur', label: 'กำมะถัน (S)' },
       { key: 'zinc', label: 'สังกะสี (Zn)' },
@@ -373,6 +376,16 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
       parsedOptional[field.key] = parsed;
     }
 
+    // Nitrogen is optional on the form, but the database needs a number and
+    // 0 means "no reading". A blank on a new analysis is left out (stored as
+    // 0). On an edit the field opens with the stored reading, so a blank
+    // there means the user cleared it: send 0, or the backend would keep the
+    // old value. A record with no reading is left as it is.
+    const editedAnalysis = editingSoilId
+      ? data.soilAnalyses.find(analysis => analysis.id === editingSoilId)
+      : undefined;
+    const nitrogen = parsedOptional.nitrogen ?? (editedAnalysis?.nitrogen ? 0 : undefined);
+
     try {
       const analysisData: Partial<SoilAnalysis> = {
         farmId: farm.id,
@@ -383,7 +396,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
         pH: parsedRequired.pH,
         phosphorus: parsedRequired.phosphorus,
         potassium: parsedRequired.potassium,
-        nitrogen: parsedRequired.nitrogen,
+        nitrogen,
         calcium: parsedRequired.calcium,
         magnesium: parsedRequired.magnesium,
         organicMatter: parsedOptional.organicMatter,
@@ -710,6 +723,17 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
             <div className="border-t border-gray-200 pt-4">
               <p className="text-sm font-semibold text-gray-800 mb-3">ค่าสารอาหารเพิ่มเติม (ไม่จำเป็น)</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Total N is a small percentage (0.12, 0.085), so any
+                    decimal is allowed instead of 0.1 steps. */}
+                <Input
+                  label="ไนโตรเจน (%)"
+                  type="number"
+                  step="any"
+                  value={soilForm.nitrogen}
+                  onChange={event => handleSoilFieldChange('nitrogen', event.target.value)}
+                  fullWidth
+                  disabled={isSubmitting}
+                />
                 <Input 
                   label="อินทรีย์วัตถุ (%)" 
                   type="number" 
@@ -957,6 +981,8 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                             >
                               <Edit3 className="h-4 w-4" />
                             </button>
+                            {/* Deleting stays with the farm's owner and Admins; a collaborator records and corrects */}
+                            {canManageFarm(currentUser, farm) && (
                             <button
                               type="button"
                               onClick={event => {
@@ -968,6 +994,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
+                            )}
                           </div>
                         </td>
                       </tr>

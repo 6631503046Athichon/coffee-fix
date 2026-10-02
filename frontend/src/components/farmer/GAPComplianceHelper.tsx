@@ -2,7 +2,7 @@
 import * as React from 'react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Farm, GAPLogEntry, UserRole } from '../../types';
+import { Farm, GAPLogEntry } from '../../types';
 import { PlusCircle, Filter, FileText, Printer, X, CheckCircle, Edit, Trash2, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
 import Select from '../common/Select';
@@ -15,6 +15,9 @@ import { Alert } from '../common/Alert';
 import { generateGAPLogId } from '../../utils/idGenerator';
 import { addGAPLog, deleteGAPLog, updateGAPLog } from '../../services/farm/gapLogService';
 import { csvDate, csvFilename, downloadCsv } from '../../utils/exportCSV';
+import { formatDateDisplay } from '../../utils/formatters';
+import { todayDateOnly } from '../../utils/dateOnly';
+import { canRemoveGapLog, isAdminUser, isFarmMember } from '../../utils/farmAccess';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -28,7 +31,7 @@ const GAPComplianceHelper: React.FC = () => {
 
     const [selectedFarmId, setSelectedFarmId] = React.useState('');
     const [activityType, setActivityType] = React.useState<string>(defaultActivityType);
-    const [date, setDate] = React.useState(new Date().toISOString().substring(0, 10));
+    const [date, setDate] = React.useState(todayDateOnly());
     const [productUsed, setProductUsed] = React.useState('');
     const [quantity, setQuantity] = React.useState('');
     const [notes, setNotes] = React.useState('');
@@ -46,7 +49,7 @@ const GAPComplianceHelper: React.FC = () => {
     const reportContentRef = React.useRef<HTMLDivElement>(null);
     const formRef = React.useRef<HTMLDivElement>(null);
 
-    const isAdmin = currentUser?.roles?.includes(UserRole.Admin) ?? false;
+    const isAdmin = isAdminUser(currentUser);
 
     const farmMap = React.useMemo(() => {
         const map = new Map<string, Farm>();
@@ -54,13 +57,13 @@ const GAPComplianceHelper: React.FC = () => {
         return map;
     }, [data.farms]);
 
-    // Get farms aligned with Farm Management (admins see all)
+    // Get farms aligned with Farm Management (admins see all): the ones the
+    // user owns or collaborates on, since a collaborator records GAP
+    // activities on a shared farm too
     const accessibleFarms = React.useMemo(() => {
         if (!currentUser) return [];
         if (isAdmin) return data.farms;
-        return data.farms.filter(
-            farm => farm.ownerUserId === currentUser.id || farm.farmerName === currentUser.name,
-        );
+        return data.farms.filter(farm => isFarmMember(currentUser, farm));
     }, [currentUser, data.farms, isAdmin]);
 
     const buildFarmLabel = React.useCallback((farm: Farm) => {
@@ -92,6 +95,15 @@ const GAPComplianceHelper: React.FC = () => {
         },
         [accessibleFarms],
     );
+
+    // Deleting a log, or moving it to another farm, is for an Admin, the
+    // farm's owner, or whoever recorded it; other collaborators correct it in
+    // place (the backend refuses the rest).
+    const canRemoveLog = React.useCallback(
+        (log: GAPLogEntry) => canRemoveGapLog(currentUser, log, data.farms),
+        [currentUser, data.farms],
+    );
+    const farmLocked = !!editingLog?.farmId && !canRemoveLog(editingLog);
 
     const canViewLog = React.useCallback(
         (log: GAPLogEntry) => {
@@ -201,7 +213,7 @@ const GAPComplianceHelper: React.FC = () => {
             // Reset form only on success
             setSelectedFarmId('');
             setActivityType(defaultActivityType);
-            setDate(new Date().toISOString().substring(0, 10));
+            setDate(todayDateOnly());
             setProductUsed('');
             setQuantity('');
             setNotes('');
@@ -251,7 +263,7 @@ const GAPComplianceHelper: React.FC = () => {
         setEditingLog(null);
         setSelectedFarmId('');
         setActivityType(defaultActivityType);
-        setDate(new Date().toISOString().substring(0, 10));
+        setDate(todayDateOnly());
         setProductUsed('');
         setQuantity('');
         setNotes('');
@@ -436,7 +448,7 @@ const GAPComplianceHelper: React.FC = () => {
                                     onChange={(v) => setSelectedFarmId((v as string) || '')}
                                     options={farmOptions}
                                     placeholder={farmOptions.length ? 'Select farm...' : 'No farms available'}
-                                    disabled={!farmOptions.length}
+                                    disabled={!farmOptions.length || farmLocked}
                                     colorTheme="emerald"
                                 />
                             </div>
@@ -587,7 +599,7 @@ const GAPComplianceHelper: React.FC = () => {
                                                 <div className="font-semibold text-gray-900">{primaryLabel}</div>
                                                 {secondaryLabel && <div className="text-xs text-gray-500 mt-0.5">{secondaryLabel}</div>}
                                             </td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{new Date(log.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{formatDateDisplay(log.date, { year: 'numeric', month: 'short', day: 'numeric' }, '', 'th-TH')}</td>
                                             <td className="px-4 py-3 whitespace-nowrap">
                                                 <Badge variant="primary">
                                                     {log.activityType}
@@ -613,6 +625,7 @@ const GAPComplianceHelper: React.FC = () => {
                                                     >
                                                         <Edit className="h-4 w-4" />
                                                     </button>
+                                                    {canRemoveLog(log) && (
                                                     <button
                                                         onClick={() => handleDelete(log.id)}
                                                         className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
@@ -620,6 +633,7 @@ const GAPComplianceHelper: React.FC = () => {
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -799,7 +813,7 @@ const GAPComplianceHelper: React.FC = () => {
                                                         {typeLogs.map((log, idx) => (
                                                             <tr key={log.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                                                                 <td className="px-4 py-2 border-b border-gray-200 text-gray-500 text-xs">{idx + 1}</td>
-                                                                <td className="px-4 py-2 border-b border-gray-200 text-gray-700">{new Date(log.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+                                                                <td className="px-4 py-2 border-b border-gray-200 text-gray-700">{formatDateDisplay(log.date, { year: 'numeric', month: 'short', day: 'numeric' }, '', 'th-TH')}</td>
                                                                 <td className="px-4 py-2 border-b border-gray-200 text-gray-800">
                                                                     {log.productUsed}
                                                                     {section.isOther && (

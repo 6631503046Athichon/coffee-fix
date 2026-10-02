@@ -1,12 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PlusCircle, Sprout, MapPin, Leaf, Coffee, Search, ShieldCheck, Layers3, Compass, X, MoreVertical, Edit3, Microscope, Trash2, Cloud, Map as MapIcon, Users } from 'lucide-react';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Farm, UserRole } from '../../types';
+import { Farm } from '../../types';
 import { Button, Input, Modal, StatCard } from '../common';
 import Select from '../common/Select';
-import { deleteFarm } from '../../services/farm/farmService';
+import { deleteFarm, FarmDependents, FarmHasRecordsError } from '../../services/farm/farmService';
+import { canManageFarm, isAdminUser, isFarmMember } from '../../utils/farmAccess';
 import { formatDateDisplay } from '../../utils/formatters';
 import FarmSoilPanel from './FarmSoilPanel';
 import FarmWeatherPanel from './FarmWeatherPanel';
@@ -35,16 +36,16 @@ const FarmManagement: React.FC = () => {
 	// View mode: 'cards' or 'map'
 	const [viewMode, setViewMode] = useState<'cards' | 'map'>('cards');
 
-	const isAdminView = currentUser?.roles?.includes(UserRole.Admin) ?? false;
+	const isAdminView = isAdminUser(currentUser);
+	// Edit and delete the farm: its owner or an Admin only (a collaborator
+	// records soil, weather and GAP data). Stable, for the map's popups.
+	const canEditFarm = useCallback((farm: Farm) => canManageFarm(currentUser, farm), [currentUser]);
 
+	// Farms the user owns or collaborates on, by id (Admin sees all)
 	const scopedFarms = useMemo(() => {
 		if (!currentUser) return data.farms;
 		if (isAdminView) return data.farms;
-		return data.farms.filter(
-			farm => farm.ownerUserId === currentUser.id
-				|| farm.farmerName === currentUser.name
-				|| (farm.collaborators ?? []).some(c => c.userId === currentUser.id),
-		);
+		return data.farms.filter(farm => isFarmMember(currentUser, farm));
 	}, [currentUser, data.farms, isAdminView]);
 
 	const varietyOptions = useMemo(() => {
@@ -163,26 +164,32 @@ const FarmManagement: React.FC = () => {
 
 
 
-	// Check farm related data
+	// What is linked to the farm, by farmId (the backend checks the same and
+	// answers 409 if this list was out of date). Location text is not used:
+	// it changes when the farm is edited.
 	const checkFarmRelatedData = (farm: Farm) => {
 		const relatedData = {
-			harvestLots: data.harvestLots.filter(
-				lot => lot.farmPlotLocation === farm.location || lot.farmPlotLocation.includes(farm.location)
-			),
-			soilAnalyses: data.soilAnalyses.filter(analysis => analysis.farmId === farm.id),
-			weatherRecords: data.weatherRecords.filter(record => record.farmId === farm.id),
-			gapLogs: data.gapLogs.filter(
-				log => log.farmId === farm.id || log.farmPlotLocation === farm.location || log.farmPlotLocation.includes(farm.location)
-			),
+			harvestLots: data.harvestLots.filter(lot => lot.farmId === farm.id).length,
+			soilAnalyses: data.soilAnalyses.filter(analysis => analysis.farmId === farm.id).length,
+			gapLogs: data.gapLogs.filter(log => log.farmId === farm.id).length,
+			// Weather records จะถูกลบอัตโนมัติ (cascade delete) ไม่ต้อง block
+			weatherRecords: data.weatherRecords.filter(record => record.farmId === farm.id).length,
 		};
 
-		// Weather records จะถูกลบอัตโนมัติ (cascade delete) ไม่ต้อง block
 		const hasRelatedData =
-			relatedData.harvestLots.length > 0 ||
-			relatedData.soilAnalyses.length > 0 ||
-			relatedData.gapLogs.length > 0;
+			relatedData.harvestLots > 0 ||
+			relatedData.soilAnalyses > 0 ||
+			relatedData.gapLogs > 0;
 
 		return { relatedData, hasRelatedData };
+	};
+
+	const describeRelatedData = (counts: FarmDependents) => {
+		const parts = [];
+		if (counts.harvestLots > 0) parts.push(`Harvest Lots (${counts.harvestLots})`);
+		if (counts.soilAnalyses > 0) parts.push(`Soil Analyses (${counts.soilAnalyses})`);
+		if (counts.gapLogs > 0) parts.push(`GAP Logs (${counts.gapLogs})`);
+		return `Cannot delete farm because it has related data. Please delete the following first: ${parts.join(', ')}`;
 	};
 
 	const handleOpenDeleteModal = (farm: Farm) => {
@@ -202,19 +209,12 @@ const FarmManagement: React.FC = () => {
 		const { relatedData, hasRelatedData } = checkFarmRelatedData(farmToDelete);
 
 		if (hasRelatedData) {
-			const parts = [];
-			if (relatedData.harvestLots.length > 0) parts.push(`Harvest Lots (${relatedData.harvestLots.length})`);
-			if (relatedData.soilAnalyses.length > 0) parts.push(`Soil Analyses (${relatedData.soilAnalyses.length})`);
-			if (relatedData.gapLogs.length > 0) parts.push(`GAP Logs (${relatedData.gapLogs.length})`);
-			setToast({
-				type: 'error',
-				message: `Cannot delete farm because it has related data. Please delete the following first: ${parts.join(', ')}`,
-			});
+			setToast({ type: 'error', message: describeRelatedData(relatedData) });
 			handleCloseDeleteModal();
 			return;
 		}
 
-		// Delete farm (weather records will be cascade deleted by backend)
+		// Delete farm (its weather records are deleted with it)
 		try {
 			await deleteFarm(farmToDelete.id);
 			setData(prev => ({
@@ -225,8 +225,13 @@ const FarmManagement: React.FC = () => {
 			setToast({ type: 'success', message: 'Farm deleted successfully' });
 			handleCloseDeleteModal();
 		} catch (error) {
-			console.error('Failed to delete farm:', error);
-			setToast({ type: 'error', message: 'Failed to delete farm' });
+			// The backend found records this page had not loaded (409)
+			if (!(error instanceof FarmHasRecordsError)) console.error('Failed to delete farm:', error);
+			const message = error instanceof FarmHasRecordsError
+				? describeRelatedData(error.dependents)
+				: (error instanceof Error && error.message ? error.message : 'Failed to delete farm');
+			setToast({ type: 'error', message });
+			handleCloseDeleteModal();
 		}
 	};
 
@@ -372,6 +377,7 @@ const FarmManagement: React.FC = () => {
 						selectedFarmId={selectedFarmId}
 						onFarmClick={(farm) => setSelectedFarmId(farm.id)}
 						height="800px"
+						canEditFarm={canEditFarm}
 					/>
 				</div>
 			) : (
@@ -422,6 +428,8 @@ const FarmManagement: React.FC = () => {
 									<div className="p-2.5 bg-emerald-50 rounded-full">
 										<MapPin className="h-4 w-4 text-emerald-600" />
 									</div>
+									{/* Edit and delete the farm: its owner or an Admin only (a collaborator records soil, weather and GAP data) */}
+									{canManageFarm(currentUser, farm) && (
 									<div className="relative">
 										<button
 											type="button"
@@ -470,6 +478,7 @@ const FarmManagement: React.FC = () => {
 											</div>
 										)}
 									</div>
+									)}
 								</div>
 							</div>
 							<div className="space-y-3 text-sm text-gray-600">
@@ -602,27 +611,27 @@ const FarmManagement: React.FC = () => {
 											Please delete the following data before deleting the farm:
 										</p>
 										<ul className="space-y-2 text-sm text-amber-800">
-											{relatedData.harvestLots.length > 0 && (
+											{relatedData.harvestLots > 0 && (
 												<li className="flex items-center gap-2">
 													<span className="w-2 h-2 bg-amber-500 rounded-full"></span>
 													<span>
-														<strong>Harvest Lots:</strong> {relatedData.harvestLots.length} entries
+														<strong>Harvest Lots:</strong> {relatedData.harvestLots} entries
 													</span>
 												</li>
 											)}
-											{relatedData.soilAnalyses.length > 0 && (
+											{relatedData.soilAnalyses > 0 && (
 												<li className="flex items-center gap-2">
 													<span className="w-2 h-2 bg-amber-500 rounded-full"></span>
 													<span>
-														<strong>Soil Analyses:</strong> {relatedData.soilAnalyses.length} entries
+														<strong>Soil Analyses:</strong> {relatedData.soilAnalyses} entries
 													</span>
 												</li>
 											)}
-											{relatedData.gapLogs.length > 0 && (
+											{relatedData.gapLogs > 0 && (
 												<li className="flex items-center gap-2">
 													<span className="w-2 h-2 bg-amber-500 rounded-full"></span>
 													<span>
-														<strong>GAP Logs:</strong> {relatedData.gapLogs.length} entries
+														<strong>GAP Logs:</strong> {relatedData.gapLogs} entries
 													</span>
 												</li>
 											)}
@@ -639,10 +648,10 @@ const FarmManagement: React.FC = () => {
 									<p className="text-sm text-gray-700">
 										Are you sure you want to delete this farm? This action cannot be undone.
 									</p>
-									{relatedData.weatherRecords.length > 0 && (
+									{relatedData.weatherRecords > 0 && (
 										<div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
 											<p className="text-sm text-blue-700">
-												<strong>Note:</strong> {relatedData.weatherRecords.length} weather records จะถูกลบโดยอัตโนมัติ
+												<strong>Note:</strong> {relatedData.weatherRecords} weather records จะถูกลบโดยอัตโนมัติ
 											</p>
 										</div>
 									)}

@@ -16,4 +16,6 @@ export interface GAPLogEntry {
   productUsed: string;
   quantity: string;
   notes?: string;
+  /** User id of whoever recorded it (none on some older logs) */
+  createdBy?: string;
 }

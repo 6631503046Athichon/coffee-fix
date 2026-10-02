@@ -8,6 +8,8 @@ interface FarmMapViewProps {
   selectedFarmId?: string | null;
   onFarmClick?: (farm: Farm) => void;
   height?: string;
+  /** Whether the viewer may open the farm's edit form. Without it, every farm's popup links there. */
+  canEditFarm?: (farm: Farm) => boolean;
 }
 
 declare global {
@@ -20,7 +22,7 @@ declare global {
 // textContent and an addEventListener click handler. Never hand Leaflet an
 // HTML string here: it would be parsed with innerHTML and run any markup a
 // farm owner stored in a name, location, owner or variety.
-const buildFarmPopup = (farm: Farm, onViewDetails: () => void): HTMLElement => {
+const buildFarmPopup = (farm: Farm, onViewDetails?: () => void): HTMLElement => {
   const element = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string) => {
     const node = document.createElement(tag);
     node.className = className;
@@ -50,11 +52,13 @@ const buildFarmPopup = (farm: Farm, onViewDetails: () => void): HTMLElement => {
   gps.textContent = `GPS: ${farm.latitude?.toFixed(4)}, ${farm.longitude?.toFixed(4)}`;
   root.appendChild(gps);
 
-  const button = element('button', 'farm-popup-details');
-  button.type = 'button';
-  button.textContent = 'ดูรายละเอียด Farm';
-  button.addEventListener('click', onViewDetails);
-  root.appendChild(button);
+  if (onViewDetails) {
+    const button = element('button', 'farm-popup-details');
+    button.type = 'button';
+    button.textContent = 'ดูรายละเอียด Farm';
+    button.addEventListener('click', onViewDetails);
+    root.appendChild(button);
+  }
 
   return root;
 };
@@ -64,6 +68,7 @@ const FarmMapView: React.FC<FarmMapViewProps> = ({
   selectedFarmId,
   onFarmClick,
   height = '500px',
+  canEditFarm,
 }) => {
   const navigate = useNavigate();
   const mapRef = useRef<HTMLDivElement>(null);
@@ -116,12 +121,15 @@ const FarmMapView: React.FC<FarmMapViewProps> = ({
     });
   }, []);
 
-  // Create popup content with navigation button
+  // Create popup content with navigation button. The button opens the
+  // farm's edit form, so it is left off a farm the viewer may not edit (a
+  // collaborator's shared farm), where every save would be refused.
   const createPopupContent = useCallback((farm: Farm) => {
+    if (canEditFarm && !canEditFarm(farm)) return buildFarmPopup(farm);
     return buildFarmPopup(farm, () => {
       navigate(`/farmer-farms/edit/${encodeURIComponent(farm.id)}`);
     });
-  }, [navigate]);
+  }, [navigate, canEditFarm]);
 
   // Initialize map when container becomes available.
   useEffect(() => {

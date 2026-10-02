@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
-import { HarvestLot, User, UserRole } from '../../types';
+import { HarvestLot, User } from '../../types';
 import { Download, Filter, ChevronRight, ChevronLeft, Database, Edit, Trash2, Package, Lock, AlertTriangle } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
 import Select from '../common/Select';
@@ -20,6 +20,7 @@ import {
 } from '../../services/lots/harvestLotService';
 
 import { formatDateDisplay } from '../../utils/formatters';
+import { canManageHarvestLot, isAdminUser, ownHarvestLots } from '../../utils/farmAccess';
 
 // Removed inline CustomFilterDropdown in favor of shared Select
 
@@ -76,7 +77,14 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
     const [isDeleting, setIsDeleting] = useState(false);
 
     // Admin and super admin can do everything here.
-    const isAdmin = !!currentUser?.isSuperAdmin || (currentUser?.roles?.includes(UserRole.Admin) ?? false);
+    const isAdmin = isAdminUser(currentUser);
+
+    // Admin sees every lot; a farmer the lots on their own farms, matched by
+    // id so a renamed farmer or a farm given to someone else keeps its lots.
+    const myLots = useMemo(
+        () => (isAdmin ? data.harvestLots : ownHarvestLots(currentUser, data.harvestLots, data.farms)),
+        [isAdmin, currentUser, data.harvestLots, data.farms]
+    );
 
     // A lot is processed once a batch or parchment lot draws on it: its status
     // then stays Complete, its weight is locked (an Admin may correct it), and
@@ -117,29 +125,26 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
     ], [data.cropYears]);
 
     const uniqueYears = useMemo(() => {
-        const years = new Set(data.harvestLots.map(lot => new Date(lot.harvestDate).getFullYear().toString()));
+        const years = new Set(myLots.map(lot => new Date(lot.harvestDate).getFullYear().toString()));
         // fix: Explicitly type sort callback parameters to resolve TS error
         return ['All', ...Array.from(years).sort((a: string, b: string) => parseInt(b) - parseInt(a))];
-    }, [data.harvestLots]);
+    }, [myLots]);
 
     const uniquePlots = useMemo(() => {
-        const plots = new Set(data.harvestLots.map(lot => lot.farmPlotLocation));
+        const plots = new Set(myLots.map(lot => lot.farmPlotLocation));
         return ['All', ...Array.from(plots).sort()];
-    }, [data.harvestLots]);
+    }, [myLots]);
 
     const filteredLots = useMemo(() => {
-        return data.harvestLots
+        return myLots
             .filter(lot => {
-                // Filter by current user (farmers see only their own data, admins see all)
-                const userMatch = isAdmin || lot.farmerName === currentUser?.name;
-
                 const lotYear = new Date(lot.harvestDate).getFullYear().toString();
                 const yearMatch = yearFilter === 'All' || lotYear === yearFilter;
                 const plotMatch = plotFilter === 'All' || lot.farmPlotLocation === plotFilter;
-                return userMatch && yearMatch && plotMatch;
+                return yearMatch && plotMatch;
             })
             .sort((a, b) => new Date(b.harvestDate).getTime() - new Date(a.harvestDate).getTime());
-    }, [data.harvestLots, yearFilter, plotFilter, currentUser, isAdmin]);
+    }, [myLots, yearFilter, plotFilter]);
 
     // Reset page when filters change
     React.useEffect(() => {
@@ -338,9 +343,9 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
         downloadCsv(filename, headers, rows);
     };
 
-    const canEdit = (lot: HarvestLot) => {
-        return isAdmin || lot.farmerName === currentUser.name;
-    };
+    // An Admin, or the owner of the lot's farm (the backend's rule). Not the
+    // name on the lot, and not a collaborator on the farm.
+    const canEdit = (lot: HarvestLot) => canManageHarvestLot(currentUser, lot, data.farms);
     // A processed lot is part of the traceability chain: only an Admin may
     // delete it, and only with everything linked to it.
     const canDelete = (lot: HarvestLot) => canEdit(lot) && (isAdmin || !isProcessed(lot));

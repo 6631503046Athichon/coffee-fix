@@ -11,6 +11,12 @@ interface BackendGreenBeanLot {
   displayId?: string | null;
   sourceType?: string;
   parchmentLotId?: string | null;
+  createdById?: string | null;
+  // bulk-load nests the source parchment lot (with its batch).
+  parchmentLot?: {
+    processType?: string | null;
+    processingBatch?: { processType?: string | null } | null;
+  } | null;
   externalSource?: unknown;
   grade: string;
   initialWeightKg: number;
@@ -213,6 +219,13 @@ export function transformGreenBeanLotFromBackend(backendLot: BackendGreenBeanLot
     displayId: backendLot.displayId || undefined,
     sourceType: (backendLot.sourceType || "Internal") as GreenBeanLot['sourceType'],
     parchmentLotId: backendLot.parchmentLotId || undefined,
+    createdById: backendLot.createdById || undefined,
+    // Groups the lot by process type even when its parchment lot is not in
+    // the loaded parchment list.
+    parchmentProcessType:
+      backendLot.parchmentLot?.processType ||
+      backendLot.parchmentLot?.processingBatch?.processType ||
+      undefined,
     externalSource: backendLot.externalSource as GreenBeanLot['externalSource'],
     grade: backendLot.grade,
     initialWeightKg: backendLot.initialWeightKg,

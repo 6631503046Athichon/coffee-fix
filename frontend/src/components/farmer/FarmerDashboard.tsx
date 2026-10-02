@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { HarvestLot, Farm, CropYear, UserRole } from '../../types';
+import { HarvestLot, Farm, CropYear } from '../../types';
+import { isAdminUser, ownHarvestLots, ownsFarm } from '../../utils/farmAccess';
 import { BarChart, Weight, Wind, Award, MapPin, Leaf, TrendingUp, Clock, ArrowRight, ChevronRight, Flame, Droplets, FlaskConical } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
 import Select from '../common/Select';
@@ -43,15 +44,15 @@ const FarmerDashboard: React.FC = () => {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
 
-  // Only lots belonging to current user (name-based for now)
-  const isAdmin = currentUser?.roles?.includes(UserRole.Admin) || false;
+  const isAdmin = isAdminUser(currentUser);
 
+  // Admin sees all harvest lots; farmers see the lots on their own farms (by
+  // id, so a renamed farmer or a farm given to someone else keeps its lots)
   const myHarvestLots = useMemo(() => {
     if (!currentUser) return data.harvestLots;
-    // Admin sees all harvest lots; farmers see only their own lots
     if (isAdmin) return data.harvestLots;
-    return data.harvestLots.filter(hl => hl.farmerName === currentUser.name);
-  }, [data.harvestLots, currentUser, isAdmin]);
+    return ownHarvestLots(currentUser, data.harvestLots, data.farms);
+  }, [data.harvestLots, data.farms, currentUser, isAdmin]);
 
   const stats = useMemo(() => ({
     totalLots: myHarvestLots.length,
@@ -60,17 +61,12 @@ const FarmerDashboard: React.FC = () => {
     readyForProcessing: myHarvestLots.filter(l => l.status === 'Ready for Processing').length,
   }), [myHarvestLots]);
 
-  // Farms available to current user: owner match or legacy match by name; Admin sees all
+  // Farms the current user owns; Admin sees all
   const availableFarms = useMemo(() => {
     if (!currentUser) return data.farms;
-    const myId = currentUser.id;
-    const isAdmin = currentUser.roles?.includes(UserRole.Admin);
     if (isAdmin) return data.farms;
-    return data.farms.filter(f =>
-      f.ownerUserId === myId ||
-      f.farmerName === currentUser.name
-    );
-  }, [data.farms, currentUser]);
+    return data.farms.filter(f => ownsFarm(currentUser, f));
+  }, [data.farms, currentUser, isAdmin]);
 
   // Compute average cupping feedback per year (for this farmer), then pick max/min
   const feedbackYearExtremes = useMemo(() => {

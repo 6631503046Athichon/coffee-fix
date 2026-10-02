@@ -2,6 +2,7 @@
 // Kept framework-free so they can be unit-tested and reused without React.
 
 import type { ParchmentLot, GreenBeanLot, CropYear, HarvestLot, ProcessingBatch } from '../../../types'
+import { toDateOnly } from '../../../utils/dateOnly'
 
 export type ViewMode = 'kanban' | 'table'
 export type SortDirection = 'asc' | 'desc'
@@ -41,13 +42,19 @@ export const formatParchmentStatus = (status: string): string => {
  * Returns the id of the CropYear whose date range covers today, or an empty
  * string if no year matches. Used to pre-select the current year in dropdowns
  * and chip groups, and to flag the "Current" badge inside CropYearChips.
+ *
+ * Compares Thai calendar days, both ends inclusive, as the backend rolls the
+ * years over (lib/cropYears). The stored bounds are midnight UTC (1 October,
+ * 30 September), so comparing the current moment against them left a day
+ * with no current year: from 07:00 on 30 September to 07:00 on 1 October in
+ * Bangkok, and new batches and lots were filed with no crop year.
  */
-export const findCurrentCropYearId = (years: CropYear[]): string => {
-  const today = new Date()
+export const findCurrentCropYearId = (years: CropYear[], now: Date = new Date()): string => {
+  const today = toDateOnly(now)
   const match = years.find((y) => {
-    const start = new Date(y.startDate)
-    const end = new Date(y.endDate)
-    return today >= start && today <= end
+    const start = toDateOnly(y.startDate)
+    const end = toDateOnly(y.endDate)
+    return !!start && !!end && start <= today && today <= end
   })
   return match?.id ?? ''
 }

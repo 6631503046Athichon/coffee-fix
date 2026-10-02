@@ -11,6 +11,7 @@ import { addFarmCollaborator, removeFarmCollaborator } from '../../services/farm
 import { generateFarmId } from '../../utils/idGenerator';
 import { getActiveCoffeeVarieties, CoffeeVariety } from '../../services/reference/coffeeVarietyService';
 import { getAllUsers } from '../../services/auth/userService';
+import { canManageFarm } from '../../utils/farmAccess';
 
 type ParsedGoogleMaps = { lat: number; lng: number; placeName?: string } | null;
 
@@ -124,6 +125,10 @@ const AddFarmPage: React.FC = () => {
 
 	const isEditing = Boolean(farmId);
 	const editingFarm = farmId ? data.farms.find(f => f.id === farmId) : null;
+	// Only the farm's owner or an Admin may edit it (the backend refuses
+	// everyone else, collaborators included), so they get a notice, not a
+	// form whose every save fails.
+	const editNotAllowed = isEditing && !!editingFarm && !canManageFarm(currentUser, editingFarm);
 
 	// Fetch coffee varieties from API
 	useEffect(() => {
@@ -664,6 +669,27 @@ const AddFarmPage: React.FC = () => {
 		: toast.type === 'success'
 			? 'bg-green-50 border-green-200 text-green-800'
 			: 'bg-red-50 border-red-200 text-red-700';
+
+	if (editNotAllowed) {
+		return (
+			<div className="max-w-4xl mx-auto">
+				<div className="bg-white rounded-2xl p-6 shadow-sm border border-emerald-200 text-center space-y-4">
+					<p className="text-gray-700">
+						Only the farm&apos;s owner or an Admin can edit {editingFarm?.name || editingFarm?.location || 'this farm'}.
+						You can still record soil, weather and GAP data for it from Farm Management.
+					</p>
+					<Button
+						type="button"
+						variant="outline"
+						onClick={() => navigate('/farmer-farms')}
+						icon={<ArrowLeft className="h-4 w-4" />}
+					>
+						Back to Farm Management
+					</Button>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div className="max-w-4xl mx-auto">

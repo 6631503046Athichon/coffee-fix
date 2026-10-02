@@ -89,8 +89,18 @@ export function formatDateDisplay(
     return fallback;
   }
 
-  const parsed = date instanceof Date ? date : new Date(date);
-  if (Number.isNaN(parsed.getTime())) {
+  // A plain YYYY-MM-DD is a calendar day: read it as local midnight.
+  // new Date('2026-09-15') is UTC midnight, which west of UTC is still the
+  // 14th.
+  const plainDay = typeof date === 'string' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(date) : null;
+  const parsed = date instanceof Date
+    ? date
+    : plainDay
+      ? new Date(Number(plainDay[1]), Number(plainDay[2]) - 1, Number(plainDay[3]))
+      : new Date(date);
+  const rolledOver = !!plainDay
+    && (parsed.getMonth() !== Number(plainDay[2]) - 1 || parsed.getDate() !== Number(plainDay[3]));
+  if (Number.isNaN(parsed.getTime()) || rolledOver) {
     return fallback;
   }
 

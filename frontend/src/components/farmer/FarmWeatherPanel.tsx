@@ -4,7 +4,7 @@ import { Button, Input, Modal } from '../common';
 import Select from '../common/Select';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { Farm, WeatherRecord, UserRole } from '../../types';
+import { Farm, WeatherRecord } from '../../types';
 import {
   addWeatherRecord,
   updateWeatherRecord,
@@ -16,6 +16,8 @@ import { updateFarmWeatherSettings } from '../../services/farm/farmService';
 import DatePicker from '../common/DatePicker';
 import { formatDateDisplay } from '../../utils/formatters';
 import { csvDate, csvDateTime, csvFilename, downloadCsv } from '../../utils/exportCSV';
+import { canManageFarm, isAdminUser } from '../../utils/farmAccess';
+import { todayDateOnly } from '../../utils/dateOnly';
 
 interface FarmWeatherPanelProps {
   farm: Farm | null;
@@ -48,7 +50,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
   const { currentUser } = useAuth();
 
   // Form states
-  const [recordDate, setRecordDate] = useState(new Date().toISOString().substring(0, 10));
+  const [recordDate, setRecordDate] = useState(todayDateOnly());
   const [temperatureMin, setTemperatureMin] = useState('');
   const [temperatureMax, setTemperatureMax] = useState('');
   const [rainfall, setRainfall] = useState('');
@@ -66,7 +68,10 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
   // Auto-fetch states (from database via farm data)
   const [autoFetchEnabled, setAutoFetchEnabled] = useState(false);
   const [autoFetchInterval, setAutoFetchInterval] = useState(5); // minutes
-  const isAdmin = currentUser?.roles?.includes(UserRole.Admin) || false;
+  const isAdmin = isAdminUser(currentUser);
+  // A collaborator records and corrects weather on a shared farm; deleting a
+  // record stays with the farm's owner and Admins (the backend's rule).
+  const canDeleteRecords = canManageFarm(currentUser, farm);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -80,12 +85,10 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
   // auto-fetch records. Date inputs are YYYY-MM-DD (ISO date), inclusive
   // on both ends. Filter changes trigger a backend refetch (see effect
   // below) so the panel only ever loads what's in the visible range.
-  const todayIso = new Date().toISOString().substring(0, 10);
-  const thirtyDaysAgoIso = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 29);
-    return d.toISOString().substring(0, 10);
-  })();
+  // The viewer's calendar days, not UTC ones: before 07:00 in Thailand the
+  // UTC day is still yesterday, and today's records would be filtered out.
+  const todayIso = todayDateOnly();
+  const thirtyDaysAgoIso = todayDateOnly(29);
   const [filterStartDate, setFilterStartDate] = useState(thirtyDaysAgoIso);
   const [filterEndDate, setFilterEndDate] = useState(todayIso);
 
@@ -276,7 +279,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
   // needs to do; no browser-side service to keep in sync.
 
   const resetForm = () => {
-    setRecordDate(new Date().toISOString().substring(0, 10));
+    setRecordDate(todayDateOnly());
     setTemperatureMin('');
     setTemperatureMax('');
     setRainfall('');
@@ -309,7 +312,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
           setHumidity(weatherData.humidity.toString());
         }
         setNotes(`ดึงข้อมูลจาก Open-Meteo API เมื่อ ${new Date().toLocaleString('th-TH')}`);
-        setRecordDate(new Date().toISOString().substring(0, 10));
+        setRecordDate(todayDateOnly());
 
         setWeatherToast({ type: 'success', message: 'ดึงข้อมูลสำเร็จ กรุณากดบันทึกเพื่อยืนยัน' });
         setTimeout(() => setWeatherToast(null), 4000);
@@ -915,11 +918,8 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                   { label: '30 วันที่ผ่านมา', days: 29 },
                   { label: '90 วันที่ผ่านมา', days: 89 },
                 ] as const).map(p => {
-                  const end = new Date()
-                  const start = new Date()
-                  start.setDate(start.getDate() - p.days)
-                  const startIso = start.toISOString().substring(0, 10)
-                  const endIso = end.toISOString().substring(0, 10)
+                  const startIso = todayDateOnly(p.days)
+                  const endIso = todayDateOnly()
                   const isActive =
                     filterStartDate === startIso && filterEndDate === endIso
                   return (
@@ -995,6 +995,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                             >
                               <Edit3 className="h-4 w-4" />
                             </button>
+                            {canDeleteRecords && (
                             <button
                               type="button"
                               onClick={event => {
@@ -1006,6 +1007,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
+                            )}
                           </div>
                         </td>
                       </tr>

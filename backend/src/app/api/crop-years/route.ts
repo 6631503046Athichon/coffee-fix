@@ -2,72 +2,33 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { parseDateOnly } from '@/lib/utils'
-
-// Helper function to ensure 3 crop years exist: previous, current, next
-async function ensureCropYears() {
-  const now = new Date()
-  const currentYear = now.getFullYear()
-  const currentMonth = now.getMonth() + 1 // 1-12
-
-  // Determine the active crop year based on current date
-  // Crop year runs from October 1 to September 30
-  let activeCropYearStart: number
-  if (currentMonth >= 10) {
-    activeCropYearStart = currentYear
-  } else {
-    activeCropYearStart = currentYear - 1
-  }
-
-  // Create 3 crop years: previous, current, next
-  const offsets = [-1, 0, 1]
-  const cropYears = []
-
-  for (const offset of offsets) {
-    const yearStart = activeCropYearStart + offset
-    const yearEnd = yearStart + 1
-    const yearString = `${yearStart}/${yearEnd}`
-    const label = offset === -1 ? 'Previous' : offset === 0 ? 'Current' : 'Next'
-
-    const cropYear = await prisma.cropYear.upsert({
-      where: { year: yearString },
-      update: {
-        startDate: new Date(`${yearStart}-10-01`),
-        endDate: new Date(`${yearEnd}-09-30`),
-        description: `${label} crop year ${yearString}`,
-      },
-      create: {
-        year: yearString,
-        startDate: new Date(`${yearStart}-10-01`),
-        endDate: new Date(`${yearEnd}-09-30`),
-        description: `${label} crop year ${yearString}`,
-      },
-    })
-    cropYears.push(cropYear)
-  }
-
-  return cropYears
-}
+import { upkeepCropYears } from '@/lib/cropYears'
 
 // GET /api/crop-years - List all crop years (auto-creates if needed)
-// Login required: the call writes (upserts) crop years.
+// Login required: the call may write crop years.
 export async function GET(request: NextRequest) {
   try {
     await requireAuth(request)
 
-    // Ensure crop years exist before fetching (auto-creates if needed)
-    await ensureCropYears()
-
-    const cropYears = await prisma.cropYear.findMany({
-      orderBy: { startDate: 'desc' },
-      include: {
-        _count: {
-          select: {
-            harvestLots: true,
-            processingBatches: true,
+    const listCropYears = () =>
+      prisma.cropYear.findMany({
+        orderBy: { startDate: 'desc' },
+        include: {
+          _count: {
+            select: {
+              harvestLots: true,
+              processingBatches: true,
+            },
           },
         },
-      },
-    })
+      })
+
+    // Add a missing previous / current / next year and replace the old
+    // auto labels, then list again only if anything was written.
+    let cropYears = await listCropYears()
+    if (await upkeepCropYears(cropYears)) {
+      cropYears = await listCropYears()
+    }
 
     return NextResponse.json({ cropYears })
   } catch (error) {

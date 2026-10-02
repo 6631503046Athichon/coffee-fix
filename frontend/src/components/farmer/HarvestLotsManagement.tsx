@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { HarvestLot, UserRole } from '../../types';
+import { HarvestLot } from '../../types';
+import { isAdminUser, ownHarvestLots, ownsFarm } from '../../utils/farmAccess';
 import { ChevronRight, ArrowUp, ArrowDown, Coffee, PlusCircle, ChevronLeft } from 'lucide-react';
 import { PageHeader } from '../common/PageHeader';
 import { Button } from '../common/Button';
@@ -40,15 +41,15 @@ const HarvestLotsManagement: React.FC = () => {
     }
   };
   
-  // Only lots belonging to current user (name-based for now)
-  const isAdmin = currentUser?.roles?.includes(UserRole.Admin) || false;
+  const isAdmin = isAdminUser(currentUser);
 
+  // Admin sees all harvest lots; farmers see the lots on their own farms (by
+  // id, so a renamed farmer or a farm given to someone else keeps its lots)
   const myHarvestLots = useMemo(() => {
     if (!currentUser) return data.harvestLots;
-    // Admin sees all harvest lots; farmers see only their own lots
     if (isAdmin) return data.harvestLots;
-    return data.harvestLots.filter(hl => hl.farmerName === currentUser.name);
-  }, [data.harvestLots, currentUser, isAdmin]);
+    return ownHarvestLots(currentUser, data.harvestLots, data.farms);
+  }, [data.harvestLots, data.farms, currentUser, isAdmin]);
 
   const farmFilteredLots = useMemo(() => {
     return myHarvestLots.filter(lot => farmFilter === 'All' || lot.farmId === farmFilter);
@@ -106,14 +107,9 @@ const HarvestLotsManagement: React.FC = () => {
   // Get available farms for current user
   const availableFarms = useMemo(() => {
     if (!currentUser) return data.farms;
-    const myId = currentUser.id;
-    const isAdmin = currentUser.roles?.includes(UserRole.Admin);
     if (isAdmin) return data.farms;
-    return data.farms.filter(f =>
-      f.ownerUserId === myId ||
-      f.farmerName === currentUser.name
-    );
-  }, [data.farms, currentUser]);
+    return data.farms.filter(f => ownsFarm(currentUser, f));
+  }, [data.farms, currentUser, isAdmin]);
 
   const farmFilterOptions = useMemo(() => {
     const options = availableFarms.map((farm) => ({

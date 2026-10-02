@@ -173,7 +173,9 @@ const mockPrisma: any = {
   greenBeanLot: { findMany: jest.fn(async () => []) },
   roasterInventoryItem: { findMany: jest.fn(async () => []) },
   roastBatch: { findMany: jest.fn(async () => []) },
-  $transaction: jest.fn(async (ops: any[]) => Promise.all(ops)),
+  // DELETE /farms/:id locks the farm row in an interactive transaction.
+  $queryRaw: jest.fn(async (_sql: TemplateStringsArray, id: string) => (FARMS[id] ? [{ id }] : [])),
+  $transaction: jest.fn(async (ops: any) => (typeof ops === 'function' ? ops(mockPrisma) : Promise.all(ops))),
 }
 
 jest.mock('@/lib/prisma', () => ({

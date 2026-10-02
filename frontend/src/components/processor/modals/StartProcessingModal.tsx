@@ -2,6 +2,7 @@ import React from 'react';
 import { HarvestLot, CropYear } from '../../../types';
 import { PlayCircle, Scale, Droplet } from 'lucide-react';
 import DatePicker from '../../common/DatePicker';
+import { findCurrentCropYearId } from '../workbench/constants';
 
 // Custom Dropdown Component for Process Type Selection
 const ProcessTypeDropdown: React.FC<{
@@ -83,15 +84,9 @@ const CropYearChips: React.FC<{
   value: string;
   onChange: (value: string) => void;
 }> = ({ years, value, onChange }) => {
-  // หาปีปัจจุบันจาก today
-  const currentYearId = React.useMemo(() => {
-    const today = new Date();
-    return years.find(y => {
-      const start = new Date(y.startDate);
-      const end = new Date(y.endDate);
-      return today >= start && today <= end;
-    })?.id || '';
-  }, [years]);
+  // หาปีปัจจุบันจาก today (Thai calendar day, so 30 September and
+  // 1 October each have a current year)
+  const currentYearId = React.useMemo(() => findCurrentCropYearId(years), [years]);
 
   const baseChipClass = "relative flex items-center justify-center py-3 px-4 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer";
   const selectedClass = "bg-blue-600 text-white border-blue-600 shadow-lg";

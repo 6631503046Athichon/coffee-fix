@@ -8,6 +8,10 @@ export interface GreenBeanLot {
   displayId?: string;
   sourceType: GreenBeanSourceType;
   parchmentLotId?: string;
+  /** Who created the lot. Only they, or an Admin, may withdraw from it or price it. */
+  createdById?: string;
+  /** Process type of the parchment lot it was hulled from, as bulk-load nests it. */
+  parchmentProcessType?: string;
   /** External source details when sourceType is External */
   externalSource?: {
     originName: string; // Producer/Farm or Supplier

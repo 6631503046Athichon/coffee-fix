@@ -19,6 +19,8 @@ export interface HarvestLot {
   harvestDate: string;
   status: "Ready for Processing" | "Complete";
   cropYearId?: string;
+  /** The lot's owner (its farm's owner when it was recorded). Older lots have none: their farm's owner counts. */
+  createdById?: string;
   createdAt?: string;
   updatedAt?: string;
 }

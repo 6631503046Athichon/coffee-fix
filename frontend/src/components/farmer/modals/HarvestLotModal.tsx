@@ -3,6 +3,8 @@ import { useDataContext } from '../../../hooks/useDataContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useFormPersist } from '../../../hooks/useFormPersist';
 import { HarvestLot, Farm, CropYear, UserRole } from '../../../types';
+import { isAdminUser, ownsFarm } from '../../../utils/farmAccess';
+import { findCurrentCropYearId } from '../../processor/workbench/constants';
 import { Coffee } from 'lucide-react';
 import DatePicker from '../../common/DatePicker';
 import Select from '../../common/Select';
@@ -19,15 +21,9 @@ const ProductionYearChips: React.FC<{
   value: string;
   onChange: (value: string) => void;
 }> = ({ years, value, onChange }) => {
-  // หาปีปัจจุบันจาก today
-  const currentYearId = useMemo(() => {
-    const today = new Date();
-    return years.find(y => {
-      const start = new Date(y.startDate);
-      const end = new Date(y.endDate);
-      return today >= start && today <= end;
-    })?.id || '';
-  }, [years]);
+  // หาปีปัจจุบันจาก today (Thai calendar day, so 30 September and
+  // 1 October each have a current year)
+  const currentYearId = useMemo(() => findCurrentCropYearId(years), [years]);
 
   // Base styles for all chips
   const baseChipClass = "relative flex items-center justify-center py-3 px-4 rounded-xl border-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 cursor-pointer";
@@ -78,18 +74,15 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
 }) => {
   const { data, setData } = useDataContext();
   const { currentUser } = useAuth();
-  const isAdmin = currentUser?.roles?.includes(UserRole.Admin) || false;
+  const isAdmin = isAdminUser(currentUser);
 
-  // Get available farms (farms that user can access)
+  // The farms the user may record a lot on: any for an Admin, else the ones
+  // they own (the backend refuses a collaborator's shared farm).
   const availableFarms = React.useMemo(() => {
     if (!currentUser) return data.farms;
-    const isAdmin = currentUser.roles?.includes(UserRole.Admin);
     if (isAdmin) return data.farms;
-    return data.farms.filter(f =>
-      f.ownerUserId === currentUser.id ||
-      f.farmerName === currentUser.name
-    );
-  }, [data.farms, currentUser]);
+    return data.farms.filter(f => ownsFarm(currentUser, f));
+  }, [data.farms, currentUser, isAdmin]);
 
   // Filter farms that have varieties
   const farmsWithVarieties = React.useMemo(() => {
@@ -131,7 +124,21 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [selectedFarmerName, setSelectedFarmerName] = useState('');
+
+  // The lot belongs to its farm's owner (the backend records it as theirs),
+  // so the farmer named on it follows the farm. An Admin may pick another
+  // name, but the pick holds only for the farm it was made on, and the popup
+  // starts again from the owner each time it opens.
+  const [farmerPick, setFarmerPick] = useState<{ farmId: string; name: string } | null>(null);
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (wasOpen !== isOpen) {
+    setWasOpen(isOpen);
+    if (isOpen) setFarmerPick(null);
+  }
+  const selectedFarmerName = farmerPick && farmerPick.farmId === (selectedFarm?.id ?? '')
+    ? farmerPick.name
+    : selectedFarm?.farmerName?.trim() || '';
+
   const [formErrors, setFormErrors] = useState<{
     farm?: string;
     farmer?: string;
@@ -171,23 +178,10 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
       setFormErrors({});
       setSuccessMessage(null);
 
-      if (isAdmin) {
-        const farmerNames = farmerOptions.map(option => option.value as string);
-        const hasCurrentSelection = selectedFarmerName && farmerNames.includes(selectedFarmerName);
-        if (!hasCurrentSelection) {
-          const fallbackName = selectedFarm?.farmerName || farmerNames[0] || '';
-          setSelectedFarmerName(fallbackName);
-        }
-      }
-
       // Auto-select current production year as default
       if (data.cropYears.length > 0) {
-        const today = new Date();
-        const currentYear = data.cropYears.find(y => {
-          const start = new Date(y.startDate);
-          const end = new Date(y.endDate);
-          return today >= start && today <= end;
-        });
+        const currentYearId = findCurrentCropYearId(data.cropYears);
+        const currentYear = data.cropYears.find(y => y.id === currentYearId);
         // เลือก current year เป็นค่าเริ่มต้นเสมอ ถ้ายังไม่ได้เลือก หรือค่าเก่าไม่ตรงกับ crop year ที่มีอยู่
         const validSelection = cropYearId && data.cropYears.some(y => y.id === cropYearId);
         if (currentYear && !validSelection) {
@@ -195,7 +189,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         }
       }
     }
-  }, [isOpen, initialFarm, farmsWithVarieties, selectedFarmId, data.cropYears, isAdmin, farmerOptions, selectedFarmerName, selectedFarm?.farmerName]);
+  }, [isOpen, initialFarm, farmsWithVarieties, selectedFarmId, data.cropYears]);
 
   // Update form when selected farm changes (but keep restored data)
   const prevFarmIdRef = useRef<string | null>(null);
@@ -359,7 +353,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
     }
     // Return only varieties that are in the farm's varieties list (including custom varieties)
     return selectedFarm.varieties;
-  }, [selectedFarm?.varieties]);
+  }, [selectedFarm]);
 
   // Build farm label for dropdown
   const buildFarmLabel = (farm: Farm) => {
@@ -482,7 +476,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
             <Select
               value={selectedFarmerName}
               onChange={(v) => {
-                setSelectedFarmerName((v as string) || '');
+                setFarmerPick({ farmId: selectedFarm?.id ?? '', name: (v as string) || '' });
                 setFormErrors(prev => ({ ...prev, farmer: undefined }));
               }}
               options={farmerOptions}

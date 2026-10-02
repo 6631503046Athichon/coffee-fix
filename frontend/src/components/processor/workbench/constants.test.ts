@@ -1,5 +1,5 @@
-import type { HarvestLot } from '../../../types'
-import { getHarvestLotCherryWeight, getReadyHarvestLots } from './constants'
+import type { CropYear, HarvestLot } from '../../../types'
+import { findCurrentCropYearId, getHarvestLotCherryWeight, getReadyHarvestLots } from './constants'
 
 describe('getHarvestLotCherryWeight', () => {
   it('always shows the original cherry weight, never the old partial balance', () => {
@@ -40,5 +40,41 @@ describe('whole-lot availability', () => {
   it('keeps an unprocessed lot and hides Complete lots without loaded batch history', () => {
     expect(getReadyHarvestLots([lot], [])).toEqual([lot])
     expect(getReadyHarvestLots([{ ...lot, status: 'Complete' }], [])).toEqual([])
+  })
+})
+
+describe('findCurrentCropYearId', () => {
+  // As bulk-load sends them: 1 October to 30 September, midnight UTC.
+  const year = (start: number, bounds: Partial<CropYear> = {}): CropYear => ({
+    id: `cy-${start}`,
+    year: `${start}/${start + 1}`,
+    startDate: `${start}-10-01T00:00:00.000Z`,
+    endDate: `${start + 1}-09-30T00:00:00.000Z`,
+    ...bounds,
+  })
+  const years = [year(2027), year(2026), year(2025)]
+
+  it('keeps 2026/2027 current through all of 30 September in Bangkok', () => {
+    // 10:00 on 30 September in Bangkok, after the end bound's instant.
+    expect(findCurrentCropYearId(years, new Date('2027-09-30T03:00:00.000Z'))).toBe('cy-2026')
+    // 23:59 on 30 September in Bangkok.
+    expect(findCurrentCropYearId(years, new Date('2027-09-30T16:59:00.000Z'))).toBe('cy-2026')
+  })
+
+  it('makes 2027/2028 current from 00:00 on 1 October in Bangkok', () => {
+    // 00:30 on 1 October in Bangkok, before the start bound's instant.
+    expect(findCurrentCropYearId(years, new Date('2027-09-30T17:30:00.000Z'))).toBe('cy-2027')
+  })
+
+  it('reads bounds an Admin saved at 12:00 UTC as the same days', () => {
+    const edited = [year(2026, { startDate: '2026-10-01T12:00:00.000Z', endDate: '2027-10-15T12:00:00.000Z' })]
+    expect(findCurrentCropYearId(edited, new Date('2026-09-30T18:00:00.000Z'))).toBe('cy-2026')
+    expect(findCurrentCropYearId(edited, new Date('2027-10-15T16:00:00.000Z'))).toBe('cy-2026')
+    expect(findCurrentCropYearId(edited, new Date('2027-10-15T17:00:00.000Z'))).toBe('')
+  })
+
+  it('gives an empty string when no year covers today', () => {
+    expect(findCurrentCropYearId([year(2025)], new Date('2027-06-15T05:00:00.000Z'))).toBe('')
+    expect(findCurrentCropYearId([], new Date('2027-06-15T05:00:00.000Z'))).toBe('')
   })
 })

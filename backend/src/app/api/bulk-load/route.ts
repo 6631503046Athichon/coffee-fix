@@ -5,6 +5,7 @@ import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { serializeHarvestLot } from '@/lib/harvestLot'
 import { greenBeanLotForViewer } from '@/lib/withdrawalPrivacy'
 import { memberFarmIds } from '@/lib/farmAccess'
+import { upkeepCropYears } from '@/lib/cropYears'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,7 +47,15 @@ export async function GET(request: NextRequest) {
         ]
       }
 
-      const [farms, harvestLots, cropYears, processTypes, activityTypes, coffeeGrades, customers, users] = await Promise.all([
+      const listCropYears = () =>
+        prisma.cropYear.findMany({
+          orderBy: { startDate: 'desc' },
+          include: {
+            _count: { select: { harvestLots: true, processingBatches: true } },
+          },
+        })
+
+      const [farms, harvestLots, loadedCropYears, processTypes, activityTypes, coffeeGrades, customers, users] = await Promise.all([
         // Farms
         prisma.farm.findMany({
           where: farmsWhere,
@@ -73,12 +82,7 @@ export async function GET(request: NextRequest) {
         }),
 
         // Crop Years
-        prisma.cropYear.findMany({
-          orderBy: { startDate: 'desc' },
-          include: {
-            _count: { select: { harvestLots: true, processingBatches: true } },
-          },
-        }),
+        listCropYears(),
 
         // Process Types
         prisma.processType.findMany({
@@ -131,6 +135,23 @@ export async function GET(request: NextRequest) {
             }),
       ])
 
+      // Crop years roll over on 1 October (Thai date), and nothing else adds
+      // the new one: without it no crop year contains today and new lots
+      // save with no crop year. So phase 1, which every logged-in session
+      // loads, adds whichever of previous / current / next is missing,
+      // replaces the stale "Previous / Current / Next crop year" labels the
+      // old route left, and lists them again. Usually there is nothing to do
+      // and this costs no query. A failure keeps the list already loaded
+      // instead of failing phase 1.
+      let cropYears = loadedCropYears
+      try {
+        if (await upkeepCropYears(loadedCropYears)) {
+          cropYears = await listCropYears()
+        }
+      } catch (error) {
+        console.warn('bulk-load: could not update the crop years:', (error as Error)?.message)
+      }
+
       // Parse colorScheme for process types (safe per-item parsing)
       const parsedProcessTypes = processTypes.map(pt => ({
         ...pt,
@@ -180,11 +201,18 @@ export async function GET(request: NextRequest) {
         roasterWhere.roasterId = user.id
       }
 
+      // No row caps on soil, GAP, batches or parchment: the pages build their
+      // tables, reports and CSVs from these lists, so a cap hid older rows.
+      // Parchment past it could not be Hull & Graded, green beans from it
+      // grouped as "Unknown", batch ids were made up from row ids, and the
+      // GAP report silently left entries out. The scoping above bounds them.
+      // To keep the whole lists light, batches, parchment and green beans nest
+      // only what the client keeps: the frontend's transform*FromBackend
+      // dropped their other nested rows unread.
       const [soilAnalyses, weatherRecords, gapLogs, processingBatches, parchmentLots, greenBeanLots, roasterInventory, roastBatches] = await Promise.all([
         // Soil Analyses
         prisma.soilAnalysis.findMany({
           where: farmScopeWhere,
-          take: 100,
           include: {
             farm: { select: { id: true, farmName: true, location: true } },
             createdByUser: { select: { id: true, name: true } },
@@ -206,7 +234,6 @@ export async function GET(request: NextRequest) {
         // GAP Logs
         prisma.gAPLogEntry.findMany({
           where: farmScopeWhere,
-          take: 100,
           include: {
             farm: { select: { id: true, farmName: true, location: true } },
             activityType: { select: { id: true, name: true, description: true } },
@@ -218,19 +245,8 @@ export async function GET(request: NextRequest) {
         // Processing Batches
         prisma.processingBatch.findMany({
           where: processingScopeWhere,
-          take: 50,
           include: {
-            harvestLot: {
-              select: { id: true, farmerName: true, cherryVariety: true, weightKg: true },
-            },
-            cropYear: { select: { id: true, year: true } },
             dryingLogs: { orderBy: { date: 'desc' }, take: 10 },
-            parchmentLots: {
-              select: {
-                id: true, status: true, initialWeightKg: true,
-                currentWeightKg: true, moistureContent: true, processType: true,
-              },
-            },
           },
           orderBy: { createdAt: 'desc' },
         }),
@@ -238,10 +254,7 @@ export async function GET(request: NextRequest) {
         // Parchment Lots
         prisma.parchmentLot.findMany({
           where: parchmentScopeWhere,
-          take: 100,
           include: {
-            processingBatch: { select: { id: true, processType: true, status: true } },
-            harvestLot: { select: { id: true, farmerName: true, cherryVariety: true } },
             physicalTestResults: true,
           },
           orderBy: { createdAt: 'desc' },
@@ -256,10 +269,12 @@ export async function GET(request: NextRequest) {
         prisma.greenBeanLot.findMany({
           where: greenBeanScopeWhere,
           include: {
+            // Only the process type: the Parchment page groups the lot by it
+            // even when its parchment lot is not in the parchment list.
             parchmentLot: {
-              include: {
-                processingBatch: { select: { id: true, processType: true } },
-                harvestLot: { select: { id: true, farmerName: true, cherryVariety: true } },
+              select: {
+                processType: true,
+                processingBatch: { select: { processType: true } },
               },
             },
             priceSetter: { select: { id: true, name: true } },
