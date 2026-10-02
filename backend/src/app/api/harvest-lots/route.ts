@@ -92,6 +92,11 @@ export async function POST(request: NextRequest) {
 
     const { farmerName, cherryVariety, weightKg, farmPlotLocation, harvestDate, status, cropYearId, farmId } = validation.data
 
+    // The lot belongs to its farm's owner, so a lot an Admin records for a
+    // farmer is the farmer's to edit and delete. Without a farm it belongs to
+    // whoever records it.
+    let ownerId = user.id
+
     // SECURITY: If farmId is provided, verify ownership before creating the lot.
     if (farmId) {
       const farm = await prisma.farm.findUnique({
@@ -107,6 +112,7 @@ export async function POST(request: NextRequest) {
       }
 
       requireOwnership(user, farm.ownerId, ['Admin'])
+      ownerId = farm.ownerId
     }
 
     // Validate cropYearId if provided
@@ -141,6 +147,7 @@ export async function POST(request: NextRequest) {
           status: status || 'ReadyForProcessing',
           cropYearId: validCropYearId,
           farmId: farmId || null,
+          createdById: ownerId,
         },
         include: {
           farm: {

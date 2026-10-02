@@ -125,7 +125,8 @@ export async function PUT(
     }
 
     // Owner reassignment - Admin only
-    if (ownerId !== undefined && ownerId !== farm.ownerId) {
+    const ownerChanges = ownerId !== undefined && ownerId !== farm.ownerId
+    if (ownerChanges) {
       if (!user.roles.includes('Admin') && !user.isSuperAdmin) {
         return NextResponse.json(
           { error: 'Only admin can change farm ownership' },
@@ -150,7 +151,7 @@ export async function PUT(
       }
     }
 
-    const updatedFarm = await prisma.farm.update({
+    const farmUpdate = prisma.farm.update({
       where: { id },
       data: updateData,
       include: {
@@ -168,6 +169,20 @@ export async function PUT(
         },
       },
     })
+
+    // A lot on a farm belongs to the farm's owner, and harvest-lots reads that
+    // owner from HarvestLot.createdById first. So the farm's lots change hands
+    // with it, in the same transaction, or the old owner would keep editing
+    // them while the new owner sees them but gets 403.
+    const updatedFarm = ownerChanges
+      ? (await prisma.$transaction([
+          farmUpdate,
+          prisma.harvestLot.updateMany({
+            where: { farmId: id },
+            data: { createdById: ownerId },
+          }),
+        ]))[0]
+      : await farmUpdate
 
     return NextResponse.json({ farm: updatedFarm })
   } catch (error) {

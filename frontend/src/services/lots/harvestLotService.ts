@@ -1,8 +1,10 @@
 import { HarvestLot } from '../../types';
 import { api } from '../api';
+import { isApiError } from '../apiError';
 import {
   transformHarvestLotFromBackend,
   transformHarvestLotToBackend,
+  transformHarvestLotUpdateToBackend,
 } from '../utils/transformers';
 import { handleApiError, handleApiErrorWithFallback } from '../../utils/errorHandler';
 
@@ -62,7 +64,9 @@ export const addHarvestLot = async (lotData: Partial<HarvestLot>): Promise<Harve
 };
 
 /**
- * Update an existing harvest lot
+ * Update an existing harvest lot. Sends only the fields given: the backend
+ * writes every key it receives, so a field left out must not be sent as a
+ * blank or zero default.
  */
 export const updateHarvestLot = async (
   lotId: string,
@@ -71,7 +75,7 @@ export const updateHarvestLot = async (
   try {
     const response = await api.put<{ harvestLot: any }>(
       `/harvest-lots/${lotId}`,
-      transformHarvestLotToBackend(lotData)
+      transformHarvestLotUpdateToBackend(lotData)
     );
     return transformHarvestLotFromBackend(response.harvestLot);
   } catch (error) {
@@ -101,11 +105,10 @@ const IF_UNPROCESSED = '?ifUnprocessed=1';
 
 /**
  * Update only a harvest lot's cherry details, and only while it is
- * unprocessed. updateHarvestLot runs the data through
- * transformHarvestLotToBackend, which fills in farmerName, status, cropYearId
- * and farmId defaults; a processor must not send those, so this sends only
- * the given ones of the four editable fields. Errors are rethrown untouched so
- * the caller can show the backend's own reason (e.g. the lot was processed).
+ * unprocessed. A processor may send only these four fields, so this keeps
+ * just the given ones of them (anything else in `details` is dropped).
+ * Errors are rethrown untouched so the caller can show the backend's own
+ * reason (e.g. the lot was processed).
  */
 export const updateHarvestLotDetails = async (
   lotId: string,
@@ -124,18 +127,72 @@ export const updateHarvestLotDetails = async (
   return transformHarvestLotFromBackend(response.harvestLot);
 };
 
+/** What the backend found linked to a processed lot it refused to delete. */
+export interface HarvestLotDependents {
+  processingBatches: number;
+  parchmentLots: number;
+  greenBeanLots: number;
+  withdrawals: number;
+}
+
+/**
+ * The backend refused to delete a harvest lot because it has been processed
+ * (409). `dependents` counts what deleting it with everything linked would
+ * remove; only an Admin may then ask for that (deleteHarvestLot cascade).
+ */
+export class HarvestLotProcessedError extends Error {
+  readonly dependents: HarvestLotDependents;
+
+  constructor(message: string, dependents: HarvestLotDependents) {
+    super(message);
+    this.name = 'HarvestLotProcessedError';
+    this.dependents = dependents;
+  }
+}
+
+const DEPENDENT_KEYS = ['processingBatches', 'parchmentLots', 'greenBeanLots', 'withdrawals'] as const;
+
+const readDependents = (error: unknown): HarvestLotDependents | null => {
+  if (!isApiError(error) || error.status !== 409) return null;
+  const raw = (error.data as { dependents?: unknown } | null)?.dependents;
+  if (!raw || typeof raw !== 'object') return null;
+  const counts = raw as Record<string, unknown>;
+  const dependents = {} as HarvestLotDependents;
+  for (const key of DEPENDENT_KEYS) {
+    const value = Number(counts[key] ?? 0);
+    dependents[key] = Number.isFinite(value) ? value : 0;
+  }
+  return dependents;
+};
+
 /**
  * Delete a harvest lot. With ifUnprocessed the backend deletes it only while
- * it is still unprocessed, whoever asks.
+ * it is still unprocessed, whoever asks. A processed lot is refused (409)
+ * unless an Admin passes cascade, which deletes it with its whole chain
+ * (batches, parchment lots, withdrawals, the green bean lots' source link).
+ * A 409 that lists what is linked is thrown as HarvestLotProcessedError.
+ * With cascade, `expected` is what the Admin was shown: if more is linked by
+ * now, the backend deletes nothing and answers with the new counts.
  */
 export const deleteHarvestLot = async (
   lotId: string,
-  options: { ifUnprocessed?: boolean } = {}
+  options: { ifUnprocessed?: boolean; cascade?: boolean; expected?: HarvestLotDependents } = {}
 ): Promise<void> => {
+  const { expected } = options;
+  const query = [
+    options.ifUnprocessed ? 'ifUnprocessed=1' : '',
+    options.cascade ? 'cascade=1' : '',
+    options.cascade && expected
+      ? `expect=${DEPENDENT_KEYS.map(key => expected[key]).join(',')}`
+      : '',
+  ].filter(Boolean).join('&');
   try {
-    await api.delete(`/harvest-lots/${lotId}${options.ifUnprocessed ? IF_UNPROCESSED : ''}`);
+    await api.delete(`/harvest-lots/${lotId}${query ? `?${query}` : ''}`);
   } catch (error) {
+    const dependents = readDependents(error);
+    if (dependents) {
+      throw new HarvestLotProcessedError((error as Error).message, dependents);
+    }
     throw new Error(handleApiError(error, 'delete harvest lot'));
   }
 };
-

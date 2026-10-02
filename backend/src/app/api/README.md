@@ -24,14 +24,14 @@ for the visual file tree.
 | Path | Purpose |
 |---|---|
 | `farms/route.ts` | list & create farms |
-| `farms/[id]/route.ts` | read / update / delete a farm |
+| `farms/[id]/route.ts` | read / update / delete a farm. An Admin's owner change also moves the farm's harvest lots (`createdById`) in the same transaction |
 | `farms/[id]/collaborators/route.ts` | manage farm collaborators (FarmCollaborator records) |
 
 ## Lots — traceability chain
 | Path | Purpose |
 |---|---|
-| `harvest-lots/route.ts` | list & create harvest lots |
-| `harvest-lots/[id]/route.ts` | read / update / delete a harvest lot |
+| `harvest-lots/route.ts` | list & create harvest lots. A new lot's `createdById` is its farm's owner (so a lot an Admin records belongs to the farmer), or the caller when there is no farm |
+| `harvest-lots/[id]/route.ts` | read / update / delete a harvest lot. Owner = `createdById ?? farm.ownerId`; owner and Admin take the owner path, a non-owner Processor the processor path (unprocessed lots only, `?ifUnprocessed=1` guard for the workbench). Owner PUT writes only the keys sent (`updateHarvestLotSchema`, unknown keys dropped); `farmId` null/empty = 400, moving to a farm the caller does not own = 403 (the lot then belongs to the new farm's owner); processed = a batch or parchment lot draws on it: its owner's different `weightKg` or `status` = 409, an Admin may correct `weightKg`, `status` back to Ready = 409 for everyone (a lot only marked Complete by hand is not locked). DELETE of a processed lot = 409 `{ error, dependents: { processingBatches, parchmentLots, greenBeanLots, withdrawals } }`; an Admin's `?cascade=1` deletes it with its whole chain (with `&expect=b,p,g,w`, the counts they saw: a mismatch = 409 with the new counts), anyone else's = 403 |
 | `parchment-lots/route.ts` | list & create parchment lots |
 | `parchment-lots/[id]/route.ts` | read / update / delete a parchment lot |
 | `parchment-lots/[id]/withdrawals/route.ts` | record parchment withdrawals (sale / sample / loss / roasting stock); Hull & Grade creates one green bean lot per graded row, takes an optional `gradedLots[i].price` (THB/kg, max 2 decimals, empty or 0 = no price; stamps priceSetDate/priceSetBy and writes a PricingHistory row) and returns the new lots as `greenBeanLots` |

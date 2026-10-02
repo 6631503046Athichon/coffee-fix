@@ -1,10 +1,9 @@
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useToggleScrollAnchor } from '../../hooks/useToggleScrollAnchor';
 import { ArrowLeft, User, MapPin, Weight, Calendar, Tag, Info, CheckCircle, Award, ExternalLink, Package, Coffee, Star } from 'lucide-react';
-import { updateHarvestLot } from '../../services/lots/harvestLotService';
 import { formatDateDisplay } from '../../utils/formatters';
 
 
@@ -57,7 +56,7 @@ type TimelineStepKey = 'harvested' | 'parchment' | 'greenBean' | 'qcScore';
 const HarvestLotDetail: React.FC = () => {
     const { lotId } = useParams<{ lotId: string }>();
     const navigate = useNavigate();
-    const { data, setData } = useDataContext();
+    const { data } = useDataContext();
     const [openStep, setOpenStep] = useState<TimelineStepKey | null>(null);
     // Only one step is open at a time, so opening a step can close a tall one
     // above it (Green Bean lists every lot). Keep the clicked title in place.
@@ -66,40 +65,18 @@ const HarvestLotDetail: React.FC = () => {
         rememberStepTitle(title);
         setOpenStep(prev => prev === step ? null : step);
     };
-    const isBindingFarmRef = useRef(false);
 
     const formatDate = (date?: string | Date | null) =>
         formatDateDisplay(date, undefined, 'N/A', 'en-US');
 
     const lot = data.harvestLots.find(h => h.id === lotId);
-    const plotLocation = lot?.farmPlotLocation?.trim().toLowerCase() || '';
+    // Read-only: show the farm the lot is stored on, never guess one. This
+    // page used to match a farm by plot-location text and save it onto the
+    // lot, which could attach the lot to another farmer's farm.
     const farm = lot?.farm
-        || data.farms.find(f => f.id === lot?.farmId)
-        || data.farms.find(f => {
-            if (!plotLocation) return false;
-            const farmName = (f.farmName || f.name || '').trim().toLowerCase();
-            const farmLocation = (f.location || '').trim().toLowerCase();
-            return farmName === plotLocation || farmLocation === plotLocation;
-        })
+        || (lot?.farmId ? data.farms.find(f => f.id === lot.farmId) : undefined)
         || null;
-
-    useEffect(() => {
-        if (!lot || !farm || lot.farmId || isBindingFarmRef.current) return;
-        isBindingFarmRef.current = true;
-        updateHarvestLot(lot.id, { farmId: farm.id })
-            .then(updated => {
-                setData(prev => ({
-                    ...prev,
-                    harvestLots: prev.harvestLots.map(h => h.id === updated.id ? updated : h),
-                }));
-            })
-            .catch(error => {
-                console.error('Failed to bind farm to harvest lot:', error);
-            })
-            .finally(() => {
-                isBindingFarmRef.current = false;
-            });
-    }, [farm, lot, setData]);
+    const farmLabel = farm?.farmName || farm?.name || (lot?.farmId ? 'N/A' : 'Not linked to a farm');
 
     if (!lot) {
         return (
@@ -170,7 +147,7 @@ const HarvestLotDetail: React.FC = () => {
                         </div>
                         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 divide-y md:divide-y-0">
                             <DetailItem icon={User} label="Farmer Name" value={lot.farmerName} />
-                            <DetailItem icon={MapPin} label="Farm Name" value={farm?.farmName || farm?.name || 'N/A'} />
+                            <DetailItem icon={MapPin} label="Farm Name" value={farmLabel} />
                             <DetailItem icon={Tag} label="Cherry Variety" value={lot.cherryVariety} />
                             <DetailItem icon={Weight} label="Weight (kg)" value={lot.weightKg} />
                             <DetailItem icon={MapPin} label="Farm Plot Location" value={lot.farmPlotLocation} />
@@ -212,7 +189,7 @@ const HarvestLotDetail: React.FC = () => {
                             onToggle={(el) => toggleStep('harvested', el)}
                             details={(
                                 <div className="space-y-1">
-                                    <div><span className="font-semibold">Farm:</span> {farm?.farmName || farm?.name || 'N/A'}</div>
+                                    <div><span className="font-semibold">Farm:</span> {farmLabel}</div>
                                     <div><span className="font-semibold">Farmer:</span> {lot.farmerName}</div>
                                     <div><span className="font-semibold">Location:</span> {lot.farmPlotLocation}</div>
                                     <div><span className="font-semibold">Weight:</span> {lot.weightKg} kg</div>

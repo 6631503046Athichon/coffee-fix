@@ -4,6 +4,7 @@ import { connectionManager } from '../utils/connectionManager'
 // the httpOnly auth cookie stays first-party); the local backend in dev.
 // See apiBaseUrl.ts.
 import { API_BASE_URL } from './apiBaseUrl'
+import { ApiError } from './apiError'
 
 export { API_BASE_URL }
 
@@ -95,15 +96,19 @@ async function request<T>(
       
       // Try to parse error response
       let errorMessage = `HTTP error! status: ${response.status}`
+      let errorData: unknown = null
       try {
         const error = await response.json()
+        errorData = error
         errorMessage = error.error || error.message || errorMessage
       } catch {
         // If response is not JSON, use status text
         errorMessage = response.statusText || errorMessage
       }
-      
-      throw new Error(errorMessage)
+
+      // Still an Error with the same message; status and body ride along
+      // for callers that need them (e.g. a 409 listing what is linked).
+      throw new ApiError(errorMessage, response.status, errorData)
     }
 
     return response.json()

@@ -50,7 +50,9 @@ const mockPrisma: any = {
   harvestLot: {
     findUnique: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
     delete: jest.fn(),
+    deleteMany: jest.fn(),
   },
   $transaction: jest.fn(async (callback: any) => {
     return await callback(mockPrisma)
@@ -113,6 +115,14 @@ jest.mock('@/lib/utils', () => ({
     return isNaN(parsed) ? null : parsed
   }),
 }))
+
+// What the harvest-lot routes read about a lot that has not been processed:
+// its weight and status may still change and it deletes without a cascade.
+const unprocessedHarvestLot = {
+  status: 'ReadyForProcessing',
+  weightKg: 150,
+  _count: { processingBatches: 0, parchmentLots: 0 },
+}
 
 describe('BOLA Authorization Tests', () => {
   beforeEach(() => {
@@ -747,19 +757,23 @@ describe('BOLA Authorization Tests', () => {
         isSuperAdmin: false,
       }
 
-      mockPrisma.harvestLot.findUnique.mockResolvedValueOnce({
-        id: 'lot-123',
-        createdById: 'farmer-123', // Same farmer
-      })
-
-      mockPrisma.harvestLot.update.mockResolvedValueOnce({
-        id: 'lot-123',
-        weightKg: 200,
-        status: 'ReadyForProcessing',
-        _count: { processingBatches: 0 },
-        farm: {},
-        cropYear: {},
-      })
+      // A weight change is written only while the lot is still unprocessed,
+      // then the lot is read back.
+      mockPrisma.harvestLot.findUnique
+        .mockResolvedValueOnce({
+          id: 'lot-123',
+          createdById: 'farmer-123', // Same farmer
+          ...unprocessedHarvestLot,
+        })
+        .mockResolvedValueOnce({
+          id: 'lot-123',
+          weightKg: 200,
+          status: 'ReadyForProcessing',
+          _count: { processingBatches: 0 },
+          farm: {},
+          cropYear: {},
+        })
+      mockPrisma.harvestLot.updateMany.mockResolvedValueOnce({ count: 1 })
 
       const { PUT } = await import('@/app/api/harvest-lots/[id]/route')
 
@@ -783,19 +797,23 @@ describe('BOLA Authorization Tests', () => {
         isSuperAdmin: false,
       }
 
-      mockPrisma.harvestLot.findUnique.mockResolvedValueOnce({
-        id: 'lot-123',
-        createdById: 'farmer-123', // Different user
-      })
-
-      mockPrisma.harvestLot.update.mockResolvedValueOnce({
-        id: 'lot-123',
-        weightKg: 200,
-        status: 'ReadyForProcessing',
-        _count: { processingBatches: 0 },
-        farm: {},
-        cropYear: {},
-      })
+      // A weight change is written only while the lot is still unprocessed,
+      // then the lot is read back.
+      mockPrisma.harvestLot.findUnique
+        .mockResolvedValueOnce({
+          id: 'lot-123',
+          createdById: 'farmer-123', // Different user
+          ...unprocessedHarvestLot,
+        })
+        .mockResolvedValueOnce({
+          id: 'lot-123',
+          weightKg: 200,
+          status: 'ReadyForProcessing',
+          _count: { processingBatches: 0 },
+          farm: {},
+          cropYear: {},
+        })
+      mockPrisma.harvestLot.updateMany.mockResolvedValueOnce({ count: 1 })
 
       const { PUT } = await import('@/app/api/harvest-lots/[id]/route')
 
@@ -846,9 +864,10 @@ describe('BOLA Authorization Tests', () => {
       mockPrisma.harvestLot.findUnique.mockResolvedValueOnce({
         id: 'lot-123',
         createdById: 'farmer-123',
+        ...unprocessedHarvestLot,
       })
 
-      mockPrisma.harvestLot.delete.mockResolvedValueOnce({})
+      mockPrisma.harvestLot.deleteMany.mockResolvedValueOnce({ count: 1 })
 
       const { DELETE } = await import('@/app/api/harvest-lots/[id]/route')
 
@@ -904,19 +923,23 @@ describe('BOLA Authorization Tests', () => {
         isSuperAdmin: true,
       }
 
-      mockPrisma.harvestLot.findUnique.mockResolvedValueOnce({
-        id: 'lot-123',
-        createdById: 'farmer-123', // Different user
-      })
-
-      mockPrisma.harvestLot.update.mockResolvedValueOnce({
-        id: 'lot-123',
-        weightKg: 200,
-        status: 'ReadyForProcessing',
-        _count: { processingBatches: 0 },
-        farm: {},
-        cropYear: {},
-      })
+      // A weight change is written only while the lot is still unprocessed,
+      // then the lot is read back.
+      mockPrisma.harvestLot.findUnique
+        .mockResolvedValueOnce({
+          id: 'lot-123',
+          createdById: 'farmer-123', // Different user
+          ...unprocessedHarvestLot,
+        })
+        .mockResolvedValueOnce({
+          id: 'lot-123',
+          weightKg: 200,
+          status: 'ReadyForProcessing',
+          _count: { processingBatches: 0 },
+          farm: {},
+          cropYear: {},
+        })
+      mockPrisma.harvestLot.updateMany.mockResolvedValueOnce({ count: 1 })
 
       const { PUT } = await import('@/app/api/harvest-lots/[id]/route')
 

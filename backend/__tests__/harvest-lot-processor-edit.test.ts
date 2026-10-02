@@ -1,6 +1,7 @@
 /**
  * Processors may edit and delete a farmer's cherry (harvest) lot while it is
- * unprocessed. Owner-farmer and Admin behaviour is unchanged.
+ * unprocessed. Owner farmers and Admins take the owner path instead (see
+ * harvest-lot-owner-edit.test.ts).
  */
 
 import { describe, test, expect, jest, beforeEach } from '@jest/globals'
@@ -15,6 +16,11 @@ const mockPrisma: any = {
     delete: jest.fn(),
     deleteMany: jest.fn(),
   },
+  // What a refused delete reports would be lost with a processed lot.
+  processingBatch: { count: jest.fn(async () => 1) },
+  parchmentLot: { count: jest.fn(async () => 1) },
+  greenBeanLot: { count: jest.fn(async () => 0) },
+  parchmentWithdrawal: { count: jest.fn(async () => 0) },
 }
 
 jest.mock('@/lib/prisma', () => ({
@@ -407,26 +413,64 @@ describe('Processor edits and deletes unprocessed cherry lots', () => {
     })
   })
 
-  describe('owner farmer and Admin keep the unrestricted path', () => {
-    test.each([
+  // The owner rules themselves are covered in harvest-lot-owner-edit.test.ts.
+  describe('owner farmer and Admin take the owner path, not the processor one', () => {
+    const ownerPathUsers: Array<[string, any]> = [
       ['owner Farmer', ownerFarmer],
       ['owner Farmer who is also a Processor', { ...ownerFarmer, roles: ['Farmer', 'Processor'] }],
       ['Admin', admin],
       ['Admin who is also a Processor', { ...admin, roles: ['Admin', 'Processor'] }],
       ['super admin', superAdmin],
-    ])('%s can change any field, even on a processed lot', async (_label, user) => {
-      mockAuthUser = user
-      mockLots({ access: { ...readyLot, status: 'Complete', _count: { processingBatches: 1, parchmentLots: 1 } } })
+    ]
+    const processedLot = { ...readyLot, status: 'Complete', _count: { processingBatches: 1, parchmentLots: 1 } }
 
-      const { status } = await put({ farmerName: 'Somchai K.', status: 'Complete', weightKg: 200 })
+    test.each(ownerPathUsers)('%s can change the farmer name of a processed lot', async (_label, user) => {
+      mockAuthUser = user
+      mockLots({ access: processedLot })
+
+      const { status } = await put({ farmerName: 'Somchai K.' })
 
       expect(status).toBe(200)
       expect(mockRequireOwnership).toHaveBeenCalledWith(user, OWNER_ID, ['Admin'])
       expect(mockPrisma.harvestLot.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: LOT_ID },
-          data: { farmerName: 'Somchai K.', status: 'Complete', weightKg: 200 },
+          data: { farmerName: 'Somchai K.' },
         }),
+      )
+      expect(mockPrisma.harvestLot.updateMany).not.toHaveBeenCalled()
+    })
+
+    test.each(ownerPathUsers.slice(0, 2))('%s cannot change the weight or status of a processed lot', async (_label, user) => {
+      mockAuthUser = user
+      mockLots({ access: processedLot })
+
+      const weight = await put({ farmerName: 'Somchai K.', weightKg: 200 })
+      const status = await put({ status: 'ReadyForProcessing' })
+
+      for (const response of [weight, status]) {
+        expect(response.status).toBe(409)
+        expect(response.data.error).toBe(
+          'This lot has already been processed, so its weight and status are locked',
+        )
+      }
+      expect(mockPrisma.harvestLot.update).not.toHaveBeenCalled()
+      expect(mockPrisma.harvestLot.updateMany).not.toHaveBeenCalled()
+    })
+
+    // Admins may correct the weight, but not the status (owner-edit tests).
+    test.each(ownerPathUsers.slice(2))('%s can correct the weight of a processed lot, not its status', async (_label, user) => {
+      mockAuthUser = user
+      mockLots({ access: processedLot })
+
+      const status = await put({ status: 'ReadyForProcessing' })
+      expect(status.status).toBe(409)
+      expect(status.data.error).toBe('This lot has a processing batch or parchment lot, so its status stays Complete')
+
+      const weight = await put({ farmerName: 'Somchai K.', weightKg: 200 })
+      expect(weight.status).toBe(200)
+      expect(mockPrisma.harvestLot.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: LOT_ID }, data: { farmerName: 'Somchai K.', weightKg: 200 } }),
       )
       expect(mockPrisma.harvestLot.updateMany).not.toHaveBeenCalled()
     })
@@ -434,15 +478,19 @@ describe('Processor edits and deletes unprocessed cherry lots', () => {
     test.each([
       ['owner Farmer', ownerFarmer],
       ['Admin', admin],
-    ])('%s deletes with a plain delete, even a processed lot', async (_label, user) => {
+    ])('%s gets 409 with the dependents instead of deleting a processed lot', async (_label, user) => {
       mockAuthUser = user
-      mockLots({ access: { ...readyLot, status: 'Complete', _count: { processingBatches: 1, parchmentLots: 0 } } })
+      mockLots({ access: processedLot })
 
-      const { status } = await del()
+      const { status, data } = await del()
 
-      expect(status).toBe(200)
+      expect(status).toBe(409)
+      expect(data).toEqual({
+        error: 'This lot has already been processed',
+        dependents: { processingBatches: 1, parchmentLots: 1, greenBeanLots: 0, withdrawals: 0 },
+      })
       expect(mockRequireOwnership).toHaveBeenCalledWith(user, OWNER_ID, ['Admin'])
-      expect(mockPrisma.harvestLot.delete).toHaveBeenCalledWith({ where: { id: LOT_ID } })
+      expect(mockPrisma.harvestLot.delete).not.toHaveBeenCalled()
       expect(mockPrisma.harvestLot.deleteMany).not.toHaveBeenCalled()
     })
   })

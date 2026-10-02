@@ -18,6 +18,22 @@ on them). Match Prisma's names (`<Model>_<field>_idx`, `<Model>_<field>_fkey`)
 so a later `db push` sees no drift. `npx prisma db push` is for a local
 database only. `npx prisma studio` inspects data.
 
+Data fixes ship the same way. `sql/004_harvest_lot_owner.sql` is one: no schema
+change, it fills `HarvestLot.createdById` with the farm's owner on lots that have
+none (older lots were all saved without it), then counts what is left. It can
+run before or after the deploy, because the backend already falls back to the
+farm's owner, and it is safe to re-run.
+
+Read-only reports live in `prisma/sql/checks/` and run with the same command;
+they only `SELECT`, so they are safe at any time.
+`checks/004_harvest_lot_damage_check.sql` lists the harvest lots the old edit
+bug may have blanked (no farm, weight 0, empty variety, farmer name or plot,
+or status back to Ready on a lot that already has a batch or parchment lot),
+newest change first, with whether each lot has batches. They are repaired in
+the Data Hub edit: an Admin can set any lot's farm, crop year, weight (also on
+a processed lot) and text fields; the owner can repair their own lots, except
+the weight of a processed one. Lots with no farm are visible to Admins only.
+
 ## Model index
 
 ### Identity & access
@@ -38,7 +54,7 @@ database only. `npx prisma studio` inspects data.
 ### Lots — the traceability spine
 | Model | Purpose |
 |---|---|
-| `HarvestLot` | raw cherry harvested from a farm. `createdById`, `farmId`. `weightKg` preserves the original input; old `remainingWeightKg` partial balances are ignored |
+| `HarvestLot` | raw cherry harvested from a farm. `createdById` = the owner (the farm's owner, also when an Admin records or moves the lot), `farmId` (required on edit: a lot stays on a farm). `weightKg` preserves the original input; old `remainingWeightKg` partial balances are ignored. A farm owner change in `farms/[id]` moves `createdById` of the farm's lots too. Once processed (any batch or parchment lot) its `status` stays `Complete`, only an Admin can correct its `weightKg`, and deleting it needs an Admin's `?cascade=1`; a lot only marked `Complete` by hand is not locked |
 | `ProcessingBatch` | wet-mill / processing batch. Consumes **one whole** `HarvestLot`: creating a batch flips the lot to `Complete`, deleting the last batch flips it back to `ReadyForProcessing`. `createdById` |
 | `DryingLogEntry` | per-batch drying log row |
 | `PhysicalTestResults` | one-to-one physical test on a processing batch |

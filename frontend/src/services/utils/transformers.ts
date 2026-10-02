@@ -2,6 +2,8 @@
  * Utility functions for transforming data between backend and frontend formats
  */
 
+import type { HarvestLot } from "../../types";
+
 // Farm transformations
 export const transformFarmFromBackend = (farm: any) => {
   const ownerNamesFromBackend = Array.isArray(farm.ownerNames)
@@ -252,3 +254,35 @@ export const transformHarvestLotToBackend = (lotData: any) => ({
       : null,
   farmId: lotData.farmId || null,
 });
+
+// For an edit: maps only the fields the caller gave, the same way as
+// transformHarvestLotToBackend, but never fills in a default for one left
+// out. The backend writes every key it receives, so a default here (blank
+// farmer, weight 0, no farm or crop year) would overwrite the stored value.
+export const transformHarvestLotUpdateToBackend = (
+  lotData: Partial<HarvestLot>
+): Record<string, unknown> => {
+  const payload: Record<string, unknown> = {};
+  if (lotData.farmerName !== undefined) payload.farmerName = lotData.farmerName;
+  if (lotData.cherryVariety !== undefined) payload.cherryVariety = lotData.cherryVariety;
+  // No `|| 0`: an unreadable weight goes as null so the backend refuses it.
+  if (lotData.weightKg !== undefined) payload.weightKg = Number(lotData.weightKg);
+  if (lotData.farmPlotLocation !== undefined) {
+    payload.farmPlotLocation = lotData.farmPlotLocation;
+  }
+  if (lotData.harvestDate !== undefined) payload.harvestDate = lotData.harvestDate;
+  if (lotData.status !== undefined) {
+    payload.status =
+      HARVEST_STATUS_REVERSE_MAP[
+        lotData.status as keyof typeof HARVEST_STATUS_REVERSE_MAP
+      ] || lotData.status;
+  }
+  if (lotData.cropYearId !== undefined) {
+    payload.cropYearId =
+      lotData.cropYearId && lotData.cropYearId.trim() !== ""
+        ? lotData.cropYearId
+        : null;
+  }
+  if (lotData.farmId !== undefined) payload.farmId = lotData.farmId || null;
+  return payload;
+};
