@@ -44,10 +44,28 @@ function setCachedUser(userId: string, user: AuthenticatedUser): void {
   authCache.set(userId, { user, expiresAt: Date.now() + AUTH_CACHE_TTL })
 }
 
+export interface RequireAuthOptions {
+  /**
+   * Let through an account that still has to replace the credentials the
+   * Admin gave it (any mustChange* flag set). Only the routes the first-login
+   * setup page needs pass this: /api/auth/me and /api/auth/first-login-update.
+   */
+  allowSetupPending?: boolean
+}
+
+/** Thrown for an account whose first-login setup is not done; answered with 403. */
+export const SETUP_REQUIRED_MESSAGE = 'First-login setup required'
+
 /**
- * Require authentication - throws error if not authenticated
+ * Require authentication - throws error if not authenticated.
+ * An account that still owes its first-login setup is refused (403) unless
+ * the route passes `allowSetupPending`, so the setup cannot be skipped by
+ * calling the API directly with the password the Admin handed out.
  */
-export async function requireAuth(request: NextRequest): Promise<AuthenticatedUser> {
+export async function requireAuth(
+  request: NextRequest,
+  options: RequireAuthOptions = {},
+): Promise<AuthenticatedUser> {
   const token = extractToken(request)
 
   if (!token) {
@@ -57,14 +75,14 @@ export async function requireAuth(request: NextRequest): Promise<AuthenticatedUs
   // Verify token
   const payload = verifyToken(token)
 
-  // Check cache first
+  // Check cache first. Only accounts with setup done are ever cached.
   const cachedUser = getCachedUser(payload.userId)
   if (cachedUser) {
     return cachedUser
   }
 
   // Get user from database (only on cache miss)
-  const user = await prisma.user.findUnique({
+  const row = await prisma.user.findUnique({
     where: { id: payload.userId },
     select: {
       id: true,
@@ -74,11 +92,24 @@ export async function requireAuth(request: NextRequest): Promise<AuthenticatedUs
       roles: true,
       isActive: true,
       isSuperAdmin: true,
+      mustChangePassword: true,
+      mustChangeUsername: true,
+      mustChangeEmail: true,
     },
   })
 
-  if (!user || !user.isActive) {
+  if (!row || !row.isActive) {
     throw new Error('User not found or inactive')
+  }
+
+  const { mustChangePassword, mustChangeUsername, mustChangeEmail, ...user } = row
+  if (mustChangePassword || mustChangeUsername || mustChangeEmail) {
+    // Not cached: the request after setup is saved must see the cleared
+    // flags at once, on whichever instance serves it.
+    if (!options.allowSetupPending) {
+      throw Object.assign(new Error(SETUP_REQUIRED_MESSAGE), { statusCode: 403 })
+    }
+    return user
   }
 
   // Cache the result
@@ -160,7 +191,8 @@ export function handleApiError(error: unknown): NextResponse {
     err?.message === 'Unauthorized' ||
     err?.message === 'Invalid or expired token' ||
     err?.message === 'Insufficient permissions' ||
-    err?.message === 'User not found or inactive'
+    err?.message === 'User not found or inactive' ||
+    err?.message === SETUP_REQUIRED_MESSAGE
 
   // Check for database connection / pool errors
   const isConnectionError =

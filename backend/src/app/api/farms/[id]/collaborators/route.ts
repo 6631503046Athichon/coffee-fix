@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, handleApiError } from '@/lib/middleware'
+import { isAdminUser } from '@/lib/saleOrders'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +20,7 @@ export async function GET(
     }
 
     // Owner, collaborator, or admin can view collaborators
-    const isAdmin = user.roles.includes('Admin')
+    const isAdmin = isAdminUser(user)
     if (!isAdmin && farm.ownerId !== user.id) {
       const isMember = await prisma.farmCollaborator.findUnique({
         where: { farmId_userId: { farmId: id, userId: user.id } },
@@ -58,7 +59,7 @@ export async function POST(
     }
 
     // Only owner or admin can add collaborators
-    const isAdmin = user.roles.includes('Admin')
+    const isAdmin = isAdminUser(user)
     if (!isAdmin && farm.ownerId !== user.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -114,7 +115,7 @@ export async function DELETE(
     }
 
     // Only owner or admin can remove collaborators
-    const isAdmin = user.roles.includes('Admin')
+    const isAdmin = isAdminUser(user)
     if (!isAdmin && farm.ownerId !== user.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }

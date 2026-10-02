@@ -26,10 +26,12 @@ export const updateInventorySchema = z.object({
 
 export const createRoastBatchSchema = z.object({
   roasterInventoryId: uuidSchema,
-  greenBeanLotId: uuidSchema,
+  // The roast's lot is always the stock row's lot; a different id is refused.
+  greenBeanLotId: uuidSchema.optional(),
   roastDate: dateStringSchema.optional(),
   batchSizeKg: positiveWeightSchema,
-  yieldPercentage: percentageSchema,
+  // Yield and weight loss are derived from the weights on the server.
+  yieldPercentage: percentageSchema.optional(),
   roastedWeightKg: positiveWeightSchema.optional().nullable(),
   weightLossPct: percentageSchema.optional().nullable(),
   roastLevel: roastLevelSchema.optional().nullable(),

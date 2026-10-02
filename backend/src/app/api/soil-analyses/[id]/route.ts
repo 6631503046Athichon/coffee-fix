@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { canUseFarm, farmMemberSelect } from '@/lib/farmAccess'
+import { isAdminUser } from '@/lib/saleOrders'
 import { parseDateOnly } from '@/lib/utils'
 
 // GET /api/soil-analyses/:id
@@ -10,8 +12,29 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
     const { id } = await params
+
+    // SECURITY: the same people who may edit it — Admins and the farm's
+    // current owner and collaborators.
+    const access = await prisma.soilAnalysis.findUnique({
+      where: { id },
+      select: {
+        farm: { select: farmMemberSelect(user.id) },
+      },
+    })
+    if (!access) {
+      return NextResponse.json(
+        { error: 'Soil analysis not found' },
+        { status: 404 }
+      )
+    }
+    if (!canUseFarm(user, access.farm)) {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
+      )
+    }
 
     const soilAnalysis = await prisma.soilAnalysis.findUnique({
       where: { id },
@@ -56,13 +79,14 @@ export async function PUT(
     requireRole(user, ['Farmer', 'Admin'])
     const { id } = await params
 
-    // SECURITY: Ownership — only the creator or farm owner (or Admin) can
-    // update soil analyses. Mirrors the DELETE handler's rule.
+    // SECURITY: Ownership — only the farm's owner or collaborators, or an
+    // Admin, can update soil analyses. Having recorded it is not enough: a
+    // farmhand the owner removed, or the owner before an Admin transferred
+    // the farm, keeps no access to the farm's analyses.
     const existingAnalysis = await prisma.soilAnalysis.findUnique({
       where: { id },
       select: {
-        createdBy: true,
-        farm: { select: { ownerId: true } },
+        farm: { select: farmMemberSelect(user.id) },
       },
     })
     if (!existingAnalysis) {
@@ -71,9 +95,7 @@ export async function PUT(
         { status: 404 }
       )
     }
-    const isCreator = existingAnalysis.createdBy === user.id
-    const isFarmOwner = existingAnalysis.farm?.ownerId === user.id
-    if (!user.roles.includes('Admin') && !user.isSuperAdmin && !isCreator && !isFarmOwner) {
+    if (!canUseFarm(user, existingAnalysis.farm)) {
       return NextResponse.json(
         { error: 'Forbidden' },
         { status: 403 }
@@ -185,8 +207,8 @@ export async function DELETE(
       )
     }
 
-    // Check permission - only farm owner or admin can delete
-    if (!user.roles.includes('Admin') && soilAnalysis.farm.ownerId !== user.id) {
+    // Check permission - only farm owner or admin (super admin included) can delete
+    if (!isAdminUser(user) && soilAnalysis.farm.ownerId !== user.id) {
       return NextResponse.json(
         { error: 'Forbidden' },
         { status: 403 }

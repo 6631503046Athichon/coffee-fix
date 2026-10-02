@@ -39,6 +39,7 @@ const mockTx: any = {
   roastBatch: {
     findUnique: jest.fn(),
     findMany: jest.fn(),
+    aggregate: jest.fn(),
   },
   roasterInventoryItem: {
     findUnique: jest.fn(),
@@ -1050,7 +1051,9 @@ describe('green bean sales', () => {
   })
 
   describe('PUT /api/roaster-inventory/[id]', () => {
+    // No roasts on the row: roasted kg are covered in roaster-inventory-claim.test.ts.
     const withStock = (held: number | null, claimed = 12, remaining = 8) => {
+      mockTx.roastBatch.aggregate.mockResolvedValue({ _sum: { batchSizeKg: null } })
       mockTx.saleOrderItem.aggregate.mockResolvedValue({ _sum: { quantity: held } })
       mockTx.roasterInventoryItem.findUnique.mockResolvedValue({ claimedWeightKg: claimed, remainingWeightKg: remaining })
     }
@@ -1100,7 +1103,7 @@ describe('green bean sales', () => {
       mockAuthUser = roaster
       withStock(4)
       const { PUT } = await import('@/app/api/roaster-inventory/[id]/route')
-      const response = await PUT(inventoryPut({ claimedWeightKg: 10 }), inventoryParams)
+      const response = await PUT(inventoryPut({ claimedWeightKg: 10, remainingWeightKg: 8 }), inventoryParams)
       expect(response.status).toBe(409)
       expect((await response.json()).error).toBe(
         'Remaining weight can be at most 6 kg because sales hold 4 kg of this lot.',
@@ -1121,7 +1124,7 @@ describe('green bean sales', () => {
 
     test.each([
       ['remaining above claimed', { remainingWeightKg: 13 }],
-      ['only claimed lowered below the current remaining', { claimedWeightKg: 5 }],
+      ['claimed lowered below an unchanged remaining', { claimedWeightKg: 5, remainingWeightKg: 8 }],
     ])('400 with no holds for %s', async (_name, body) => {
       mockAuthUser = roaster
       withStock(null)

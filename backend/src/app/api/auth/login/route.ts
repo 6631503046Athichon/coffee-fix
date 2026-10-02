@@ -66,15 +66,20 @@ export async function POST(request: NextRequest) {
 
     const { email, password } = validation.data
 
-    // Find user by email
-    const user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: email },
-          { username: email }, // Allow login with username too
-        ],
-      },
-    })
+    // The identifier is an email or a username. Usernames can no longer hold
+    // '@', so one with '@' matches emails only: an older username that equals
+    // someone's email cannot capture or block that person's sign-in.
+    // Setup and the user edit store usernames and emails in lowercase, so a
+    // miss on the exact text retries in lowercase ('Somchai_Farm' finds
+    // 'somchai_farm'); older mixed-case usernames still match exactly.
+    const isEmail = email.includes('@')
+    const findByIdentifier = (value: string) =>
+      prisma.user.findFirst({ where: isEmail ? { email: value } : { username: value } })
+    const lowered = email.trim().toLowerCase()
+    let user = await findByIdentifier(email)
+    if (!user && lowered !== email) {
+      user = await findByIdentifier(lowered)
+    }
 
     if (!user) {
       return NextResponse.json(

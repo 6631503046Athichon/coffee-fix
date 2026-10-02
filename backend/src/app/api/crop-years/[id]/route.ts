@@ -13,17 +13,11 @@ export async function GET(
     await requireAuth(request)
     const { id } = await params
 
+    // Counts only: the crop year's lots and batches belong to many farmers,
+    // and the harvest-lots and processing-batches routes scope who sees them.
     const cropYear = await prisma.cropYear.findUnique({
       where: { id },
       include: {
-        harvestLots: {
-          take: 10,
-          orderBy: { harvestDate: 'desc' },
-        },
-        processingBatches: {
-          take: 10,
-          orderBy: { createdAt: 'desc' },
-        },
         _count: {
           select: {
             harvestLots: true,

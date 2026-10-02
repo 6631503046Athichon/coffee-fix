@@ -49,9 +49,11 @@ async function ensureCropYears() {
 }
 
 // GET /api/crop-years - List all crop years (auto-creates if needed)
-// No auth required - crop years are public data
+// Login required: the call writes (upserts) crop years.
 export async function GET(request: NextRequest) {
   try {
+    await requireAuth(request)
+
     // Ensure crop years exist before fetching (auto-creates if needed)
     await ensureCropYears()
 

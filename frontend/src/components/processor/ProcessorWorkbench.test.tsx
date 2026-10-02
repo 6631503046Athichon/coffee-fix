@@ -999,3 +999,30 @@ describe('QC Score', { timeout: 20000 }, () => {
     expect(within(modal).getByText('Final Score').nextElementSibling).toHaveTextContent('83.75')
   })
 })
+
+describe('Withdrawal history invoice', { timeout: 20000 }, () => {
+  const saleLot = (sale: Record<string, unknown>): GreenBeanLot => ({
+    id: 'gbl-1', displayId: 'GBL-2026-9', sourceType: GreenBeanSourceType.Internal,
+    grade: 'Grade A', initialWeightKg: 50, currentWeightKg: 45,
+    availabilityStatus: 'Available', cuppingScores: [],
+    withdrawalHistory: [{ amountKg: 5, withdrawalType: 'Sale', purpose: 'Sale', date: '2026-09-20', ...sale }],
+  })
+
+  const openHistory = (lot: GreenBeanLot) => {
+    render(<Harness initial={{ ...INITIAL_APP_DATA, greenBeanLots: [lot] }} refreshData={async () => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
+    fireEvent.click(screen.getByRole('button', { name: 'View Withdrawal History' }))
+  }
+
+  it("offers the invoice on the owner's sale", () => {
+    openHistory(saleLot({ customerName: 'Cafe Doi', salePrice: 400, currency: 'THB', totalAmount: 2000 }))
+    expect(screen.getByRole('button', { name: 'Invoice' })).toBeInTheDocument()
+  })
+
+  it("offers no invoice on a sale the backend withheld (someone else's lot)", () => {
+    // Without the sale columns the invoice would be a blank INV-DRAFT at 0.00.
+    openHistory(saleLot({ purpose: 'Sold to a cafe', saleDetailsHidden: true }))
+    expect(screen.getByText('Sold to a cafe')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Invoice' })).not.toBeInTheDocument()
+  })
+})

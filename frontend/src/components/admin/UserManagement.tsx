@@ -173,9 +173,14 @@ const UserManagement: React.FC = () => {
     const handleResetPassword = async () => {
         if (!resetPasswordUser) return;
 
-        // Generate a random password
+        // Generate a random password. The backend's password policy needs an
+        // uppercase letter, a lowercase letter and a digit, so draw again
+        // until it has all three (about 1 draw in 7 misses one).
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
-        const generatedPassword = Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+        let generatedPassword = '';
+        while (!/[A-Z]/.test(generatedPassword) || !/[a-z]/.test(generatedPassword) || !/[0-9]/.test(generatedPassword)) {
+            generatedPassword = Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+        }
 
         try {
             await updateUser(resetPasswordUser.id, { password: generatedPassword });

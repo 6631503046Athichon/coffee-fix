@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { farmIdFilter, farmMemberSelect, requireFarmAccess } from '@/lib/farmAccess'
 import { parseDateOnly } from '@/lib/utils'
 
 // GET /api/soil-analyses - List all soil analyses
@@ -10,20 +11,12 @@ export async function GET(request: NextRequest) {
     const user = await requireAuth(request)
 
     const where: Prisma.SoilAnalysisWhereInput = {}
-    
-    // Filter by farmId if provided
-    const farmId = request.nextUrl.searchParams.get('farmId')
+
+    // Admins see every farm; everyone else only the farms they own or
+    // collaborate on, and only the requested one when ?farmId= is given.
+    const farmId = await farmIdFilter(user, request.nextUrl.searchParams.get('farmId'))
     if (farmId) {
       where.farmId = farmId
-    }
-
-    // Farmers can only see their own farms' soil analyses
-    if (user.roles.includes('Farmer') && !user.roles.includes('Admin')) {
-      const farms = await prisma.farm.findMany({
-        where: { ownerId: user.id },
-        select: { id: true },
-      })
-      where.farmId = { in: farms.map(f => f.id) }
     }
 
     const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '100', 10), 200)
@@ -97,10 +90,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // SECURITY: Verify the farm exists and is owned by the caller.
+    // SECURITY: Verify the farm exists and the caller owns it, collaborates
+    // on it, or is an Admin.
     const farm = await prisma.farm.findUnique({
       where: { id: farmId },
-      select: { ownerId: true },
+      select: farmMemberSelect(user.id),
     })
 
     if (!farm) {
@@ -110,7 +104,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    requireOwnership(user, farm.ownerId, ['Admin'])
+    requireFarmAccess(user, farm)
 
     const soilAnalysis = await prisma.soilAnalysis.create({
       data: {

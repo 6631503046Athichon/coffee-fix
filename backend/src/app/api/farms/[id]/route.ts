@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { isAdminUser } from '@/lib/saleOrders'
 
 // GET /api/farms/:id
 export async function GET(
@@ -43,7 +44,7 @@ export async function GET(
 
     // Check permission: owner, collaborator, or admin
     const isCollaborator = farm.collaborators.some((c: { userId: string }) => c.userId === user.id)
-    if (!user.roles.includes('Admin') && farm.ownerId !== user.id && !isCollaborator) {
+    if (!isAdminUser(user) && farm.ownerId !== user.id && !isCollaborator) {
       return NextResponse.json(
         { error: 'Forbidden' },
         { status: 403 }
@@ -77,7 +78,7 @@ export async function PUT(
     }
 
     // Check permission: owner or admin can edit (collaborators cannot change farm settings)
-    if (!user.roles.includes('Admin') && farm.ownerId !== user.id) {
+    if (!isAdminUser(user) && farm.ownerId !== user.id) {
       return NextResponse.json(
         { error: 'Forbidden' },
         { status: 403 }
@@ -127,7 +128,7 @@ export async function PUT(
     // Owner reassignment - Admin only
     const ownerChanges = ownerId !== undefined && ownerId !== farm.ownerId
     if (ownerChanges) {
-      if (!user.roles.includes('Admin') && !user.isSuperAdmin) {
+      if (!isAdminUser(user)) {
         return NextResponse.json(
           { error: 'Only admin can change farm ownership' },
           { status: 403 }
@@ -138,7 +139,7 @@ export async function PUT(
 
     // Weather auto-fetch settings - Admin only
     if (weatherAutoFetchEnabled !== undefined || weatherAutoFetchInterval !== undefined) {
-      if (!user.roles.includes('Admin') && !user.isSuperAdmin) {
+      if (!isAdminUser(user)) {
         return NextResponse.json(
           { error: 'Only admin can change weather auto-fetch settings' },
           { status: 403 }
@@ -211,7 +212,7 @@ export async function DELETE(
     }
 
     // Check permission: Admin หรือ owner ของ farm เท่านั้น
-    if (!user.roles.includes('Admin') && farm.ownerId !== user.id) {
+    if (!isAdminUser(user) && farm.ownerId !== user.id) {
       return NextResponse.json(
         { error: 'Forbidden' },
         { status: 403 }

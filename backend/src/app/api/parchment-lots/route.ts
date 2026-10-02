@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma, ParchmentLotStatus } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, requireOwnership, handleApiError } from '@/lib/middleware'
 import { nextDisplayId, safeParseFloat, withDisplayIdRetry } from '@/lib/utils'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
+import { parchmentLotForViewer } from '@/lib/withdrawalPrivacy'
 
 // GET /api/parchment-lots - List all parchment lots
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
 
     const where: Prisma.ParchmentLotWhereInput = {}
 
@@ -41,6 +42,8 @@ export async function GET(request: NextRequest) {
             id: true,
             processType: true,
             status: true,
+            // The lot's owner, for the withdrawal privacy check below.
+            createdById: true,
           },
         },
         harvestLot: {
@@ -56,7 +59,11 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ parchmentLots })
+    // Withdrawal sale details only for the lot's owner and Admin; see
+    // lib/withdrawalPrivacy.
+    return NextResponse.json({
+      parchmentLots: parchmentLots.map(lot => parchmentLotForViewer(user, lot)),
+    })
   } catch (error) {
     return handleApiError(error)
   }
@@ -80,9 +87,16 @@ export async function POST(request: NextRequest) {
     const isExternal = sourceType === 'External'
 
     // Validation
-    if (!isExternal && (!processingBatchId || !harvestLotId)) {
+    // External parchment is bought in: no batch or harvest lot stands behind it.
+    if (isExternal && (processingBatchId || harvestLotId)) {
       return NextResponse.json(
-        { error: 'Processing batch ID and harvest lot ID are required for internal parchment lots' },
+        { error: 'External parchment lots cannot name a processing batch or harvest lot' },
+        { status: 400 }
+      )
+    }
+    if (!isExternal && (!processingBatchId || typeof processingBatchId !== 'string')) {
+      return NextResponse.json(
+        { error: 'Processing batch ID is required for internal parchment lots' },
         { status: 400 }
       )
     }
@@ -91,6 +105,32 @@ export async function POST(request: NextRequest) {
         { error: 'Initial weight, moisture content, and process type are required' },
         { status: 400 }
       )
+    }
+
+    // SECURITY: internal parchment belongs to its processing batch's owner
+    // (parchmentLot -> processingBatch.createdById), so only that processor or
+    // an Admin may add it, and the harvest lot comes from the batch, never
+    // from the body.
+    let batchHarvestLotId: string | null = null
+    if (!isExternal) {
+      const batch = await prisma.processingBatch.findUnique({
+        where: { id: processingBatchId },
+        select: { createdById: true, harvestLotId: true },
+      })
+      if (!batch) {
+        return NextResponse.json(
+          { error: 'Processing batch not found' },
+          { status: 404 }
+        )
+      }
+      requireOwnership(user, batch.createdById, ['Admin'])
+      if (harvestLotId && harvestLotId !== batch.harvestLotId) {
+        return NextResponse.json(
+          { error: 'Harvest lot does not match the processing batch' },
+          { status: 400 }
+        )
+      }
+      batchHarvestLotId = batch.harvestLotId
     }
 
     const parsedInitialWeight = safeParseFloat(initialWeightKg)
@@ -131,8 +171,8 @@ export async function POST(request: NextRequest) {
       return prisma.parchmentLot.create({
         data: {
           displayId,
-          processingBatchId: processingBatchId || null,
-          harvestLotId: harvestLotId || null,
+          processingBatchId: isExternal ? null : processingBatchId,
+          harvestLotId: batchHarvestLotId,
           sourceType: isExternal ? 'External' : 'Internal',
           externalSource: isExternal && externalSource ? externalSource : undefined,
           initialWeightKg: parsedInitialWeight,

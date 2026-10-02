@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
+import { farmMemberSelect, requireFarmAccess } from '@/lib/farmAccess'
 
 // GET /api/weather-records/:id
 export async function GET(
@@ -9,8 +10,22 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
     const { id } = await params
+
+    // SECURITY: same scope as the list — Admins, or the farm's owner and
+    // collaborators.
+    const access = await prisma.weatherRecord.findUnique({
+      where: { id },
+      select: { farm: { select: farmMemberSelect(user.id) } },
+    })
+    if (!access) {
+      return NextResponse.json(
+        { error: 'Weather record not found' },
+        { status: 404 }
+      )
+    }
+    requireFarmAccess(user, access.farm)
 
     const weatherRecord = await prisma.weatherRecord.findUnique({
       where: { id },
@@ -54,10 +69,11 @@ export async function PUT(
     requireRole(user, ['Farmer', 'Admin'])
     const { id } = await params
 
-    // SECURITY: Load the record + farm owner for ownership check.
+    // SECURITY: Load the record + farm members. The farm's owner and
+    // collaborators (and Admins) may edit it.
     const existing = await prisma.weatherRecord.findUnique({
       where: { id },
-      include: { farm: { select: { ownerId: true } } },
+      include: { farm: { select: farmMemberSelect(user.id) } },
     })
 
     if (!existing) {
@@ -67,7 +83,7 @@ export async function PUT(
       )
     }
 
-    requireOwnership(user, existing.farm.ownerId, ['Admin'])
+    requireFarmAccess(user, existing.farm)
 
     const body = await request.json()
     const {

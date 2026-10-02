@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { isAdminUser } from '@/lib/saleOrders'
 import { validateBody, createFarmSchema } from '@/lib/validations'
 
 // This route depends on auth cookies/headers, so it must be dynamic.
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
     const user = await requireAuth(request)
 
     // Farmers can only see their own farms + farms they collaborate on, admins can see all
-    const isAdmin = user.roles.includes('Admin')
+    const isAdmin = isAdminUser(user)
     let where: Record<string, unknown> = {}
     if (!isAdmin) {
       where = {
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
     const finalOwnerId = ownerId || user.id
 
     // If not admin, can only create farms for themselves
-    if (!user.roles.includes('Admin') && finalOwnerId !== user.id) {
+    if (!isAdminUser(user) && finalOwnerId !== user.id) {
       return NextResponse.json(
         { error: 'Forbidden' },
         { status: 403 }

@@ -3,6 +3,8 @@ import prisma from '@/lib/prisma'
 import { requireAuth, handleApiError } from '@/lib/middleware'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { serializeHarvestLot } from '@/lib/harvestLot'
+import { greenBeanLotForViewer } from '@/lib/withdrawalPrivacy'
+import { memberFarmIds } from '@/lib/farmAccess'
 
 export const dynamic = 'force-dynamic'
 
@@ -151,24 +153,15 @@ export async function GET(request: NextRequest) {
 
     if (phase === '2') {
       // Phase 2: Secondary data
-      // Pre-fetch farm IDs once for farmer-scoped queries
-      let farmIds: string[] = []
-      if (isFarmer && !isAdmin) {
-        const farms = await prisma.farm.findMany({
-          where: {
-            OR: [
-              { ownerId: user.id },
-              { collaborators: { some: { userId: user.id } } },
-            ],
-          },
-          select: { id: true },
-        })
-        farmIds = farms.map(f => f.id)
-      }
+      // Farms the user owns or collaborates on, fetched once.
+      const farmIds = isAdmin ? [] : await memberFarmIds(user)
 
-      const farmScopeWhere = isFarmer && !isAdmin
-        ? { farmId: { in: farmIds } }
-        : {}
+      // Soil, weather and GAP records: every non-Admin sees only their own and
+      // shared farms' (lib/farmAccess, as the list and by-id routes do), staff
+      // roles included; nothing outside the farmer pages reads them.
+      const farmScopeWhere = isAdmin
+        ? {}
+        : { farmId: { in: farmIds } }
       const processingScopeWhere = isFarmer && !isAdmin
         ? { harvestLot: { farmId: { in: farmIds } } }
         : {}
@@ -328,7 +321,9 @@ export async function GET(request: NextRequest) {
         gapLogs,
         processingBatches,
         parchmentLots,
-        greenBeanLots,
+        // Withdrawal sale details (customer, address, price, invoice) only
+        // for the lot's owner and Admin; see lib/withdrawalPrivacy.
+        greenBeanLots: greenBeanLots.map(lot => greenBeanLotForViewer(user, lot)),
         roasterInventory,
         roastBatches,
       })

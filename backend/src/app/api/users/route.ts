@@ -166,8 +166,11 @@ export async function POST(request: NextRequest) {
         name,
         roles: roles || [],
         isActive: isActive !== undefined ? isActive : true,
-        // Only require changes for auto-generated credentials
-        mustChangePassword: autoGenerate,
+        // The Admin knows the password either way (generated, or typed in
+        // with autoGenerate: false, where only the 6-character minimum
+        // applies), so the user always replaces it at first login. Username
+        // and email changes are owed only for generated credentials.
+        mustChangePassword: true,
         mustChangeUsername: autoGenerate,
         mustChangeEmail: autoGenerate && !email, // Don't require email change if already provided
       },

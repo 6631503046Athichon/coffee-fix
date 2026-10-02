@@ -12,6 +12,7 @@ import { ToastProvider, useToast } from './contexts/ToastContext';
 import { connectionManager } from './utils/connectionManager';
 import { logger } from './utils/logger';
 import { getDashboardPathByRole } from './utils/routing';
+import { FIRST_LOGIN_SETUP_PATH, needsFirstLoginSetup } from './utils/firstLogin';
 import ToastContainer from './components/common/ToastContainer';
 import { getAllSaleOrders } from './services/sales/saleOrderService';
 import { getAllPricingHistory } from './services/sales/pricingHistoryService';
@@ -91,6 +92,9 @@ const RootRedirect: React.FC = () => {
   }
 
   if (isAuthenticated && currentUser) {
+    if (needsFirstLoginSetup(currentUser)) {
+      return <Navigate to={FIRST_LOGIN_SETUP_PATH} replace />;
+    }
     // Redirect to appropriate dashboard based on user role
     return <Navigate to={getDashboardPathByRole(currentUser.roles)} replace />;
   }
@@ -100,13 +104,38 @@ const RootRedirect: React.FC = () => {
 
 // First Login Setup Wrapper
 const FirstLoginSetupWrapper: React.FC = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, isAuthLoading } = useAuth();
+
+  // On a reload the session is still being restored: wait for it rather
+  // than sending a signed-in user to the login page.
+  if (isAuthLoading) {
+    return <RouteLoader />;
+  }
 
   if (!currentUser) {
     return <Navigate to="/login" replace />;
   }
 
+  // Setup already done: nothing to do here.
+  if (!needsFirstLoginSetup(currentUser)) {
+    return <Navigate to={getDashboardPathByRole(currentUser.roles)} replace />;
+  }
+
   return withRouteLoader(<FirstLoginSetup user={currentUser} />);
+};
+
+// Holds a user who still has to replace the credentials the Admin gave them
+// on the setup page: any other signed-in URL redirects there, so the setup
+// cannot be skipped by typing an address. Wraps ProtectedRoutes from outside
+// so its data loading never starts for such a user.
+const RequireFirstLoginDone: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentUser } = useAuth();
+
+  if (needsFirstLoginSetup(currentUser)) {
+    return <Navigate to={FIRST_LOGIN_SETUP_PATH} replace />;
+  }
+
+  return <>{children}</>;
 };
 
 // Listens for backend connection state changes and shows toast notifications
@@ -709,7 +738,7 @@ const App: React.FC = () => {
           {/* Root route - redirect to login if not authenticated */}
           <Route path="/" element={<RootRedirect />} />
           {/* Protected Routes - requires authentication */}
-          <Route path="/*" element={<ProtectedRoutes />} />
+          <Route path="/*" element={<RequireFirstLoginDone><ProtectedRoutes /></RequireFirstLoginDone>} />
           {/* 404 Fallback */}
           <Route path="*" element={
             <div className="min-h-screen bg-gray-100 flex items-center justify-center">

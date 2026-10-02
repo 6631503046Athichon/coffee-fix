@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
+import { z } from 'zod'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { hashPassword, verifyPassword } from '@/lib/auth'
+import { isAdminUser } from '@/lib/saleOrders'
+import { passwordSchema, updateUserSchema } from '@/lib/validations/user'
+
+// PUT body: the profile fields, a new password, and the current password a
+// user must give to change their own sign-in details. Usernames follow
+// usernameSchema (letters, digits, _ and - only), so one can never hold '@'
+// and match another user's email at sign-in.
+const updateUserBodySchema = z.object({
+  ...updateUserSchema.shape,
+  password: passwordSchema.optional(),
+  currentPassword: z.string().optional(),
+})
 
 // GET /api/users/:id
 export async function GET(
@@ -14,7 +27,7 @@ export async function GET(
     const currentUser = await requireAuth(request)
 
     // Users can view their own profile, admins can view any
-    if (currentUser.id !== id && !currentUser.roles.includes('Admin')) {
+    if (currentUser.id !== id && !isAdminUser(currentUser)) {
       return NextResponse.json(
         { error: 'Forbidden' },
         { status: 403 }
@@ -61,7 +74,7 @@ export async function PUT(
 
     // Users can update their own profile (limited fields), admins can update any
     const isOwnProfile = currentUser.id === id
-    const isAdmin = currentUser.roles.includes('Admin')
+    const isAdmin = isAdminUser(currentUser)
 
     if (!isOwnProfile && !isAdmin) {
       return NextResponse.json(
@@ -70,8 +83,52 @@ export async function PUT(
       )
     }
 
-    const body = await request.json()
-    const { name, email, username, roles, isActive, password, currentPassword } = body
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch {
+      body = null
+    }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json(
+        { error: 'Invalid JSON body' },
+        { status: 400 }
+      )
+    }
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        roles: true,
+        isSuperAdmin: true,
+      },
+    })
+
+    if (!targetUser) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    // The edit form sends the username and email back even when they are
+    // unchanged. Accounts made before these rules may hold values the schema
+    // now rejects, so an unchanged value is neither re-checked nor written.
+    const fields = { ...(body as Record<string, unknown>) }
+    if (fields.username === targetUser.username) delete fields.username
+    if (fields.email === targetUser.email) delete fields.email
+
+    const parsed = updateUserBodySchema.safeParse(fields)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? 'Invalid request' },
+        { status: 400 }
+      )
+    }
+    const { name, email, username, roles, isActive, password, currentPassword } = parsed.data
 
     // Duplicate email/username pre-flight check.
     //
@@ -135,9 +192,10 @@ export async function PUT(
         }
         const ok = await verifyPassword(currentPassword, me.password)
         if (!ok) {
+          // 400, not 401: the client treats any 401 as an expired session.
           return NextResponse.json(
             { error: 'Current password is incorrect' },
-            { status: 401 }
+            { status: 400 }
           )
         }
       }
@@ -146,7 +204,7 @@ export async function PUT(
       if (name !== undefined) updateData.name = name
       if (email !== undefined) updateData.email = email
       if (username !== undefined) updateData.username = username
-      if (password) {
+      if (password !== undefined) {
         updateData.password = await hashPassword(password)
       }
 
@@ -168,23 +226,6 @@ export async function PUT(
     }
 
     // Admin updates
-    // First, get the target user to check their role/permissions
-    const targetUser = await prisma.user.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        roles: true,
-        isSuperAdmin: true,
-      },
-    })
-
-    if (!targetUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
-    }
-
     // Check admin hierarchy - only Super Admin can modify other admins
     const targetIsAdmin = targetUser.roles.includes('Admin')
     const targetIsSuperAdmin = targetUser.isSuperAdmin
@@ -212,7 +253,7 @@ export async function PUT(
     if (username !== undefined) updateData.username = username
     if (roles !== undefined) updateData.roles = roles
     if (isActive !== undefined) updateData.isActive = isActive
-    if (password) {
+    if (password !== undefined) {
       updateData.password = await hashPassword(password)
       updateData.mustChangePassword = true
       // SECURITY: Never store plaintext passwords

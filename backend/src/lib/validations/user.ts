@@ -84,10 +84,13 @@ export const resetPasswordSchema = z.object({
   path: ['confirmPassword'],
 });
 
+// POST /api/auth/first-login-update. The client sends only the fields the
+// account still has to change; the route decides which ones are required.
 export const firstLoginUpdateSchema = z.object({
-  username: usernameSchema.optional(),
-  email: emailSchema.optional(),
-  newPassword: simplePasswordSchema.optional(),
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newUsername: usernameSchema.optional(),
+  newEmail: emailSchema.optional(),
+  newPassword: passwordSchema.optional(),
 });
 
 export const transferOwnershipSchema = z.object({

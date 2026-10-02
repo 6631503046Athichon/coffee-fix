@@ -484,11 +484,15 @@ describe('roast batch edit and delete', () => {
   })
 
   describe('POST /api/roast-batches', () => {
+    // Real v4 UUIDs: the create schema validates the ids.
+    const INV = '2c8e7d10-3f4a-4b5c-8d6e-7f8091a2b3c4'
+    const LOT = 'a3bb189e-8bf9-4888-9912-ace4e6543002'
+    const OTHER_LOT = 'b4cc29af-9c0a-4999-8a23-bdf5f7654113'
     // roaster-1's stock row.
     const stock = {
-      id: 'inv-1',
+      id: INV,
       roasterId: 'roaster-1',
-      greenBeanLotId: 'lot-1',
+      greenBeanLotId: LOT,
       claimedWeightKg: 50,
       remainingWeightKg: 30,
     }
@@ -496,8 +500,8 @@ describe('roast batch edit and delete', () => {
       new NextRequest('http://localhost:3001/api/roast-batches', {
         method: 'POST',
         body: JSON.stringify({
-          roasterInventoryId: 'inv-1',
-          greenBeanLotId: 'lot-1',
+          roasterInventoryId: INV,
+          greenBeanLotId: LOT,
           batchSizeKg: 10,
           yieldPercentage: 85,
           roastedWeightKg: 8.5,
@@ -517,13 +521,17 @@ describe('roast batch edit and delete', () => {
       const response = await POST(postRequest())
       expect(response.status).toBe(201)
       expect(mockPrisma.roasterInventoryItem.updateMany).toHaveBeenCalledWith({
-        where: { id: 'inv-1', remainingWeightKg: { gte: 10 } },
+        where: { id: INV, remainingWeightKg: { gte: 10 } },
         data: { remainingWeightKg: { decrement: 10 } },
       })
       expect(mockPrisma.roastBatch.create.mock.calls[0][0].data).toMatchObject({
         roasterId: 'roaster-1',
-        roasterInventoryId: 'inv-1',
+        roasterInventoryId: INV,
+        greenBeanLotId: LOT,
         batchSizeKg: 10,
+        roastedWeightKg: 8.5,
+        yieldPercentage: 85,
+        weightLossPct: 15,
       })
     })
 
@@ -537,7 +545,7 @@ describe('roast batch edit and delete', () => {
       expect(response.status).toBe(201)
       // The beans come out of the roaster's row and the roast lands in their
       // Roast Logbook, where they can edit, delete and sell it.
-      expect(mockPrisma.roasterInventoryItem.updateMany.mock.calls[0][0].where.id).toBe('inv-1')
+      expect(mockPrisma.roasterInventoryItem.updateMany.mock.calls[0][0].where.id).toBe(INV)
       expect(mockPrisma.roastBatch.create.mock.calls[0][0].data.roasterId).toBe('roaster-1')
     })
 
@@ -557,6 +565,149 @@ describe('roast batch edit and delete', () => {
       expect(response.status).toBe(403)
       expect(mockPrisma.$transaction).not.toHaveBeenCalled()
       expect(mockPrisma.roastBatch.create).not.toHaveBeenCalled()
+    })
+
+    test("400 when greenBeanLotId is not the stock row's lot, with no stock taken", async () => {
+      // It would log the roast on another owner's lot: on that lot's public
+      // trace, and as a roast that keeps the owner from deleting the lot.
+      mockAuthUser = roaster
+      const { POST } = await import('@/app/api/roast-batches/route')
+      const response = await POST(postRequest({ greenBeanLotId: OTHER_LOT }))
+      expect(response.status).toBe(400)
+      expect((await response.json()).error).toBe('Green bean lot does not match the roaster inventory item')
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+      expect(mockPrisma.roastBatch.create).not.toHaveBeenCalled()
+    })
+
+    test("the roast always takes the stock row's lot; greenBeanLotId may be left out", async () => {
+      mockAuthUser = admin
+      const { POST } = await import('@/app/api/roast-batches/route')
+      const response = await POST(postRequest({ greenBeanLotId: undefined }))
+      expect(response.status).toBe(201)
+      expect(mockPrisma.roastBatch.create.mock.calls[0][0].data.greenBeanLotId).toBe(LOT)
+    })
+
+    test('400 when the roasted weight is more than the batch, with no stock taken', async () => {
+      mockAuthUser = roaster
+      const { POST } = await import('@/app/api/roast-batches/route')
+      const response = await POST(postRequest({ roastedWeightKg: 25 }))
+      expect(response.status).toBe(400)
+      expect((await response.json()).error).toBe('Roasted weight cannot exceed batch size')
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+      expect(mockPrisma.roastBatch.create).not.toHaveBeenCalled()
+    })
+
+    test('a roasted weight equal to the batch, give or take float noise, is accepted', async () => {
+      mockAuthUser = roaster
+      const { POST } = await import('@/app/api/roast-batches/route')
+      // 0.3 - 0.1 is 0.19999999999999998.
+      const response = await POST(postRequest({ batchSizeKg: 0.3 - 0.1, roastedWeightKg: 0.2 }))
+      expect(response.status).toBe(201)
+      expect(mockPrisma.roastBatch.create.mock.calls[0][0].data).toMatchObject({
+        roastedWeightKg: 0.2,
+        yieldPercentage: 100,
+        weightLossPct: 0,
+      })
+    })
+
+    test('400 when the roasted weight is missing', async () => {
+      mockAuthUser = roaster
+      const { POST } = await import('@/app/api/roast-batches/route')
+      const response = await POST(postRequest({ roastedWeightKg: undefined }))
+      expect(response.status).toBe(400)
+      expect((await response.json()).error).toBe('Roasted weight is required')
+      expect(mockPrisma.roastBatch.create).not.toHaveBeenCalled()
+    })
+
+    test("yield and weight loss come from the weights, not the client's figures", async () => {
+      mockAuthUser = roaster
+      const { POST } = await import('@/app/api/roast-batches/route')
+      const response = await POST(
+        postRequest({ batchSizeKg: '12', roastedWeightKg: '10.2', yieldPercentage: 100, weightLossPct: 0 }),
+      )
+      expect(response.status).toBe(201)
+      expect(mockPrisma.roastBatch.create.mock.calls[0][0].data).toMatchObject({
+        batchSizeKg: 12,
+        roastedWeightKg: 10.2,
+        yieldPercentage: 85,
+        weightLossPct: 15,
+      })
+    })
+
+    test.each([
+      ['a junk batch size', { batchSizeKg: 'abc' }],
+      ['a negative batch size', { batchSizeKg: -1 }],
+      ['a junk roasted weight', { roastedWeightKg: 'abc' }],
+      ['a roast level outside the list', { roastLevel: 'Burnt' }],
+      ['a stock row id that is not a uuid', { roasterInventoryId: 'inv-1' }],
+    ])('400 for %s, before reading the stock row', async (_name, over) => {
+      mockAuthUser = roaster
+      const { POST } = await import('@/app/api/roast-batches/route')
+      const response = await POST(postRequest(over))
+      expect(response.status).toBe(400)
+      expect(mockPrisma.roasterInventoryItem.findUnique).not.toHaveBeenCalled()
+      expect(mockPrisma.roastBatch.create).not.toHaveBeenCalled()
+    })
+
+    test('the batch is stored and taken from stock in kg to 2 dp, as the PUT rounds it', async () => {
+      mockAuthUser = roaster
+      const { POST } = await import('@/app/api/roast-batches/route')
+      const response = await POST(postRequest({ batchSizeKg: 10.0051, roastedWeightKg: 8 }))
+      expect(response.status).toBe(201)
+      expect(mockPrisma.roasterInventoryItem.updateMany).toHaveBeenCalledWith({
+        where: { id: INV, remainingWeightKg: { gte: 10.01 } },
+        data: { remainingWeightKg: { decrement: 10.01 } },
+      })
+      expect(mockPrisma.roastBatch.create.mock.calls[0][0].data.batchSizeKg).toBe(10.01)
+    })
+
+    test('400 for a batch under 0.01 kg, which would round to nothing', async () => {
+      mockAuthUser = roaster
+      const { POST } = await import('@/app/api/roast-batches/route')
+      const response = await POST(postRequest({ batchSizeKg: 0.004, roastedWeightKg: 0.003 }))
+      expect(response.status).toBe(400)
+      expect((await response.json()).error).toBe('Batch size must be at least 0.01 kg')
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+    })
+
+    test('log, save unchanged and delete a roast: the stock ends where it started', async () => {
+      // Unrounded, 10.0051 kg came off the shelf, the edit rounded the batch
+      // to 10.01 without moving the 0.0049 kg, and the delete put back 10.01:
+      // green beans out of nothing on every round trip.
+      mockAuthUser = roaster
+      let remaining = 30
+      let row: any = null
+      mockPrisma.roasterInventoryItem.updateMany.mockImplementation(async ({ where, data }: any) => {
+        if (remaining < where.remainingWeightKg.gte) return { count: 0 }
+        remaining -= data.remainingWeightKg.decrement
+        return { count: 1 }
+      })
+      mockPrisma.roasterInventoryItem.update.mockImplementation(async ({ data }: any) => {
+        remaining += data.remainingWeightKg.increment
+        return { id: INV, claimedWeightKg: 50, remainingWeightKg: remaining }
+      })
+      mockPrisma.roastBatch.create.mockImplementation(async ({ data }: any) => {
+        row = { id: 'roast-1', updatedAt: existingUpdatedAt, soldWeightKg: 0, ...data }
+        return row
+      })
+      mockPrisma.roastBatch.findUnique.mockImplementation(async () => row)
+      mockPrisma.roastBatch.updateMany.mockImplementation(async ({ data }: any) => {
+        row = { ...row, ...data }
+        return { count: 1 }
+      })
+      mockPrisma.roastBatch.delete.mockImplementation(async () => row)
+      try {
+        const routes = await import('@/app/api/roast-batches/route')
+        const byId = await import('@/app/api/roast-batches/[id]/route')
+        expect((await routes.POST(postRequest({ batchSizeKg: 10.0051, roastedWeightKg: 8 }))).status).toBe(201)
+        expect((await byId.PUT(putRequest({}), routeParams)).status).toBe(200)
+        expect((await byId.DELETE(deleteRequest(), routeParams)).status).toBe(200)
+        expect(remaining).toBeCloseTo(30, 6)
+      } finally {
+        mockPrisma.roasterInventoryItem.update.mockImplementation(async () => ({
+          id: 'inv-1', claimedWeightKg: 50, remainingWeightKg: 30,
+        }))
+      }
     })
   })
 })

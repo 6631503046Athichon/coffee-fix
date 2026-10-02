@@ -51,6 +51,9 @@ export interface GreenBeanLot {
     invoiceNumber?: string; // Auto-generated for Sale type (e.g., "INV-2025-001")
     deliveryAddress?: string; // Optional delivery address for Sale type
     totalAmount?: number; // Calculated: amountKg * salePrice
+    // Set by the backend when the viewer does not own the lot: the sale
+    // columns above were withheld, so there is no invoice to show.
+    saleDetailsHidden?: boolean;
   }[];
   pricePerKg?: number;
   currency?: string;

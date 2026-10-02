@@ -4,11 +4,12 @@ import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/li
 import { validateBody, createGreenBeanLotSchema } from '@/lib/validations'
 import { nextDisplayId, withDisplayIdRetry } from '@/lib/utils'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
+import { greenBeanLotForViewer } from '@/lib/withdrawalPrivacy'
 
 // GET /api/green-bean-lots - List all green bean lots
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
 
     const where: Record<string, unknown> = {}
 
@@ -85,7 +86,8 @@ export async function GET(request: NextRequest) {
     ])
 
     return NextResponse.json({
-      greenBeanLots,
+      // Withdrawal sale details only for the lot's owner and Admin.
+      greenBeanLots: greenBeanLots.map(lot => greenBeanLotForViewer(user, lot)),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     })
   } catch (error) {

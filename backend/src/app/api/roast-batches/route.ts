@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
-import { isAdminUser } from '@/lib/saleOrders'
+import { safeParseFloat } from '@/lib/utils'
+import { createRoastBatchSchema } from '@/lib/validations/roasting'
+import { WEIGHT_EPSILON, isAdminUser, round2 } from '@/lib/saleOrders'
 
 // GET /api/roast-batches - List roast batches
 // Roasters see only their own batches (?roasterId is ignored for them);
@@ -62,22 +64,46 @@ export async function GET(request: NextRequest) {
 
 // POST /api/roast-batches - Create new roast batch
 // Roasters roast their own stock; Admins may roast anyone's, and the batch is
-// recorded under the stock's owner.
+// recorded under the stock's owner. The lot, yield and weight loss come from
+// the stock row and the weights, never from the body.
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request)
     requireRole(user, ['Roaster', 'Admin'])
 
-    const body = await request.json()
-    const { roasterInventoryId, greenBeanLotId, batchSizeKg, yieldPercentage, roastedWeightKg, weightLossPct, roastLevel, roastProfileNotes, flavorNotes } = body
-
-    // Validation
-    if (!roasterInventoryId || !greenBeanLotId || !batchSizeKg || !yieldPercentage || !roastProfileNotes) {
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    // Numbers may arrive as strings from a form; normalise before validating.
+    // A value that is present but not a number is an error, never "not provided".
+    const numeric = (value: unknown) => {
+      if (value === undefined || value === null) return value
+      return safeParseFloat(value) ?? NaN
+    }
+    // yieldPercentage and weightLossPct are not read: they are derived below.
+    const parsed = createRoastBatchSchema.safeParse({
+      roasterInventoryId: body.roasterInventoryId,
+      greenBeanLotId: body.greenBeanLotId ?? undefined,
+      batchSizeKg: numeric(body.batchSizeKg),
+      roastedWeightKg: numeric(body.roastedWeightKg),
+      roastLevel: body.roastLevel === '' ? null : body.roastLevel,
+      roastProfileNotes: body.roastProfileNotes ?? undefined,
+      flavorNotes: body.flavorNotes,
+    })
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Roaster inventory ID, green bean lot ID, batch size, yield percentage, and roast profile notes are required' },
+        { error: parsed.error.issues[0]?.message || 'Invalid roast batch data' },
         { status: 400 }
       )
     }
+    const input = parsed.data
+    const roasterInventoryId = input.roasterInventoryId
 
     // Verify roaster owns the inventory
     const inventory = await prisma.roasterInventoryItem.findUnique({
@@ -98,13 +124,49 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const amount = parseFloat(batchSizeKg)
-    if (!Number.isFinite(amount) || amount <= 0) {
+    // The roast is on the stock row's lot. Another id would put it on a lot
+    // the stock never came from (another owner's public trace, and a roast
+    // that blocks that owner from deleting their lot).
+    if (input.greenBeanLotId !== undefined && input.greenBeanLotId !== inventory.greenBeanLotId) {
+      return NextResponse.json(
+        { error: 'Green bean lot does not match the roaster inventory item' },
+        { status: 400 }
+      )
+    }
+
+    // Kg to 2 dp, as the Workbench sends them and as the roast PUT rounds
+    // them. A batch stored with more decimals would be rounded by its next
+    // edit without moving the difference, and its delete would then return
+    // more kg than this took: kg out of nothing, a little per round trip.
+    const amount = round2(input.batchSizeKg)
+    if (!Number.isFinite(amount)) {
       return NextResponse.json(
         { error: 'Invalid batch size' },
         { status: 400 }
       )
     }
+    if (amount < 0.01) {
+      return NextResponse.json(
+        { error: 'Batch size must be at least 0.01 kg' },
+        { status: 400 }
+      )
+    }
+
+    // Yield and weight loss are derived from the roasted weight (as the PUT
+    // does), so a roast cannot be logged without one.
+    if (input.roastedWeightKg == null) {
+      return NextResponse.json({ error: 'Roasted weight is required' }, { status: 400 })
+    }
+    const roastedKg = round2(input.roastedWeightKg)
+    // Roasting only loses weight; more out than in would be sellable roasted
+    // kg made from nothing.
+    if (roastedKg > amount + WEIGHT_EPSILON) {
+      return NextResponse.json(
+        { error: 'Roasted weight cannot exceed batch size' },
+        { status: 400 }
+      )
+    }
+    const yieldPct = round2((roastedKg / amount) * 100)
 
     if (amount > inventory.remainingWeightKg) {
       return NextResponse.json(
@@ -133,14 +195,14 @@ export async function POST(request: NextRequest) {
           data: {
             roasterId: inventory.roasterId,
             roasterInventoryId,
-            greenBeanLotId,
+            greenBeanLotId: inventory.greenBeanLotId,
             batchSizeKg: amount,
-            yieldPercentage: parseFloat(yieldPercentage),
-            roastedWeightKg: roastedWeightKg ? parseFloat(roastedWeightKg) : null,
-            weightLossPct: weightLossPct ? parseFloat(weightLossPct) : null,
-            roastLevel: roastLevel || null,
-            roastProfileNotes,
-            flavorNotes: flavorNotes || null,
+            yieldPercentage: yieldPct,
+            roastedWeightKg: roastedKg,
+            weightLossPct: round2(100 - yieldPct),
+            roastLevel: input.roastLevel ?? null,
+            roastProfileNotes: input.roastProfileNotes.trim() || 'No notes',
+            flavorNotes: input.flavorNotes?.trim() || null,
           },
         })
 

@@ -180,7 +180,7 @@ describe('Token Extraction Tests', () => {
           currentPassword: 'oldpassword',
           newUsername: 'newuser',
           newEmail: 'new@example.com',
-          newPassword: 'newpassword123',
+          newPassword: 'NewPassword123',
         }),
       })
 
@@ -232,7 +232,7 @@ describe('Token Extraction Tests', () => {
         },
         body: JSON.stringify({
           currentPassword: 'oldpassword',
-          newPassword: 'newpassword123',
+          newPassword: 'NewPassword123',
         }),
       })
 
@@ -250,7 +250,7 @@ describe('Token Extraction Tests', () => {
         method: 'POST',
         body: JSON.stringify({
           currentPassword: 'oldpassword',
-          newPassword: 'newpassword123',
+          newPassword: 'NewPassword123',
         }),
       })
 

@@ -12,6 +12,7 @@ import {
   currencySchema,
   greenBeanAvailabilityStatusSchema,
 } from "@/lib/validations/common";
+import { greenBeanLotForViewer } from "@/lib/withdrawalPrivacy";
 
 // GET /api/green-bean-lots/:id
 export async function GET(
@@ -19,7 +20,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    await requireAuth(request);
+    const user = await requireAuth(request);
     const { id } = await params;
 
     const greenBeanLot = await prisma.greenBeanLot.findUnique({
@@ -110,7 +111,11 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ greenBeanLot });
+    // Withdrawal sale details and other roasters' stock rows only for the
+    // lot's owner and Admin; see lib/withdrawalPrivacy.
+    return NextResponse.json({
+      greenBeanLot: greenBeanLotForViewer(user, greenBeanLot),
+    });
   } catch (error) {
     return handleApiError(error);
   }

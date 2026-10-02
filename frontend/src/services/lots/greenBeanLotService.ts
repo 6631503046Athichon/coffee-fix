@@ -52,6 +52,7 @@ interface BackendWithdrawal {
   invoiceNumber?: string;
   deliveryAddress?: string;
   totalAmount?: number;
+  saleDetailsHidden?: boolean;
 }
 
 interface BackendRoasterInventoryItem {

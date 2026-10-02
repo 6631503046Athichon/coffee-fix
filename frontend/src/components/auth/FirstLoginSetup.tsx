@@ -9,9 +9,22 @@ interface FirstLoginSetupProps {
   user: User
 }
 
+// Mirrors the backend's usernameSchema and passwordSchema
+// (backend/src/lib/validations/user.ts), so the form says what is wrong
+// before the request is sent.
+const USERNAME_PATTERN = /^[a-zA-Z0-9_-]{3,50}$/
+
+const passwordProblem = (password: string): string | null => {
+  if (password.length < 8) return 'Password must be at least 8 characters long'
+  if (!/[A-Z]/.test(password)) return 'Password must contain an uppercase letter'
+  if (!/[a-z]/.test(password)) return 'Password must contain a lowercase letter'
+  if (!/[0-9]/.test(password)) return 'Password must contain a number'
+  return null
+}
+
 export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
   const navigate = useNavigate()
-  const { setUser } = useAuth()
+  const { setUser, logout } = useAuth()
 
   const [currentPassword, setCurrentPassword] = useState('')
   const [newUsername, setNewUsername] = useState('')
@@ -39,6 +52,11 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
       return
     }
 
+    if (user.mustChangeUsername && !USERNAME_PATTERN.test(newUsername)) {
+      setError('Username must be 3-50 characters: letters, numbers, _ or - (no @ or spaces)')
+      return
+    }
+
     if (user.mustChangeEmail && !newEmail) {
       setError('Email is required')
       return
@@ -62,9 +80,16 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
       return
     }
 
-    if (user.mustChangePassword && newPassword.length < 8) {
-      setError('Password must be at least 8 characters long')
-      return
+    if (user.mustChangePassword) {
+      const problem = passwordProblem(newPassword)
+      if (problem) {
+        setError(problem)
+        return
+      }
+      if (newPassword === currentPassword) {
+        setError('New password must be different from the current password')
+        return
+      }
     }
 
     setLoading(true)
@@ -87,6 +112,13 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
     } finally {
       setLoading(false)
     }
+  }
+
+  // The rest of the app is closed until setup is done, so signing out
+  // happens here.
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login', { replace: true })
   }
 
   return (
@@ -140,13 +172,18 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
                 id="first-login-new-username"
                 type="text"
                 value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
+                // Shown exactly as it is saved: the backend stores usernames
+                // in lowercase, and sign-in is typed against what was shown.
+                onChange={(e) => setNewUsername(e.target.value.toLowerCase())}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
                 placeholder="Choose a unique username"
                 required
               />
               <p className="text-xs text-gray-500 mt-1">
-                Current: {user.username}
+                Current: {user.username}. 3-50 lowercase letters, numbers, _ or -.
               </p>
             </div>
           )}
@@ -161,7 +198,11 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
                 id="first-login-new-email"
                 type="email"
                 value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
+                // Saved in lowercase, so shown in lowercase.
+                onChange={(e) => setNewEmail(e.target.value.toLowerCase())}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
                 placeholder="your.email@example.com"
                 required
@@ -183,7 +224,7 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     className="w-full px-3 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
-                    placeholder="Minimum 8 characters"
+                    placeholder="8+ characters with A-Z, a-z and 0-9"
                     required
                   />
                   <button
@@ -235,6 +276,16 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
           <p className="text-sm text-blue-800">
             <strong>Note:</strong> You must complete this setup to access the system.
           </p>
+        </div>
+
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="text-sm text-gray-600 hover:text-gray-800 underline"
+          >
+            Sign out
+          </button>
         </div>
       </div>
     </div>

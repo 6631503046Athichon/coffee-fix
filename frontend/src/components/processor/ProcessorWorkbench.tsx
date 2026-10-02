@@ -4653,8 +4653,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               </div>
                             )}
 
-                            {/* Sale withdrawals link to their invoice */}
-                            {entry.withdrawalType === "Sale" && (
+                            {/* Sale withdrawals link to their invoice. Not on
+                                someone else's lot: the backend withheld the
+                                sale, so the invoice would be a blank draft. */}
+                            {entry.withdrawalType === "Sale" && !entry.saleDetailsHidden && (
                               <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2">
                                 <button
                                   type="button"

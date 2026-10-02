@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { farmIdFilter, farmMemberSelect, requireFarmAccess } from '@/lib/farmAccess'
 
 // GET /api/gap-logs - List all GAP logs
 export async function GET(request: NextRequest) {
@@ -9,9 +10,11 @@ export async function GET(request: NextRequest) {
     const user = await requireAuth(request)
 
     const where: Prisma.GAPLogEntryWhereInput = {}
-    
-    // Filter by farmId if provided
-    const farmId = request.nextUrl.searchParams.get('farmId')
+
+    // Admins see every log (legacy logs without a farm included); everyone
+    // else only the farms they own or collaborate on, and only the requested
+    // one when ?farmId= is given. No farms means no logs.
+    const farmId = await farmIdFilter(user, request.nextUrl.searchParams.get('farmId'))
     if (farmId) {
       where.farmId = farmId
     }
@@ -21,24 +24,6 @@ export async function GET(request: NextRequest) {
     if (activityTypeId) {
       where.activityTypeId = activityTypeId
     }
-
-    // Farmers can only see their own farms' GAP logs
-    // Admins can see all GAP logs
-    if (user.roles.includes('Farmer') && !user.roles.includes('Admin')) {
-      const farms = await prisma.farm.findMany({
-        where: { ownerId: user.id },
-        select: { id: true },
-      })
-      const farmIds = farms.map(f => f.id)
-      // Include logs with no farmId (legacy logs) only if user has farms
-      if (farmIds.length > 0) {
-        where.farmId = { in: farmIds }
-      } else {
-        // If user has no farms, only show logs with no farmId
-        where.farmId = null
-      }
-    }
-    // Admins see all logs (no filter applied)
 
     const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '100', 10), 200)
 
@@ -93,11 +78,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // SECURITY: If farmId is provided, verify ownership before creating.
+    // SECURITY: If farmId is provided, the caller must own the farm,
+    // collaborate on it, or be an Admin.
     if (farmId) {
       const farm = await prisma.farm.findUnique({
         where: { id: farmId },
-        select: { ownerId: true },
+        select: farmMemberSelect(user.id),
       })
 
       if (!farm) {
@@ -107,7 +93,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      requireOwnership(user, farm.ownerId, ['Admin'])
+      requireFarmAccess(user, farm)
     }
 
     // Get activity type to get the name
