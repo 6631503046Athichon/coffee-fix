@@ -2,7 +2,7 @@
 
 Single source of truth: `schema.prisma`. Seed in `seed.ts`.
 
-Schema changes ship as hand-written SQL in `prisma/sql/` (`001_…`, `002_…`, `003_…`),
+Schema changes ship as hand-written SQL in `prisma/sql/` (`001_…`, `002_…`, … `006_…`),
 because deploys run `prisma generate` and never push the schema. Apply a file
 to the database **before** deploying the backend that reads it, from
 `backend/`:
@@ -24,6 +24,45 @@ none (older lots were all saved without it), then counts what is left. It can
 run before or after the deploy, because the backend already falls back to the
 farm's owner, and it is safe to re-run.
 
+`sql/005_withdrawal_void.sql` (owner decision D7) adds nullable columns only, so
+the live backend keeps working once it has run; apply it **before** the backend
+that reads them, which fails on any withdrawal or green bean lot read until
+they exist:
+
+- `GreenBeanWithdrawal` and `ParchmentWithdrawal`: `voidedAt`, `voidedById`
+  (FK to `User`, `ON DELETE SET NULL`) and `voidReason`. A wrong withdrawal is
+  voided, never deleted or re-weighed: `POST /api/<green-bean-lots|parchment-lots>/:id/withdrawals/:withdrawalId/void`
+  puts its kg back on the lot in one transaction and keeps the row, marked.
+- `GreenBeanWithdrawal.targetRoasterId`: the roaster whose `RoasterInventoryItem`
+  the kg went into, so a void takes them back off that row (refused with 409
+  once the roaster's `remainingWeightKg` no longer holds them). An older
+  Roasting Stock row has it NULL; its void uses the lot's one stock row and is
+  refused when there are several or none.
+- `GreenBeanLot.parchmentWithdrawalId` (FK, `ON DELETE SET NULL`, indexed): the
+  Hull & Grade that made the lot. Voiding a Hull & Grade deletes the lots it
+  made, and is refused (409) if any of them was used in any way (withdrawn,
+  claimed, roasted, sold, invoiced, cupped, re-weighed, taken off the market or
+  given a trace QR). Lots hulled before 005 have it NULL and are matched by
+  parchment lot and creation time; when that is ambiguous the void is refused.
+- `ParchmentWithdrawal.invoiceNumber`, so both withdrawal kinds have the same
+  sale paperwork. `PATCH /api/<…>/withdrawals/:withdrawalId` edits only
+  `customerName`, `deliveryAddress`, `salePrice`, `currency` and
+  `invoiceNumber` in place; the server recomputes `totalAmount`.
+
+Every list returns the void columns. Non-owners see `voidedAt` and `voidedById`
+(see `lib/withdrawalPrivacy`); `voidReason` is free text, so it stays private
+with the sale. Anything that adds up withdrawals must skip rows with
+`voidedAt` set: their kg are already back on the lot.
+
+`sql/006_ai_rate_limit.sql` (owner decision D4) adds two nullable columns to
+`User`: `aiWindowStartedAt` and `aiWindowCalls`, the user's shared count of AI
+calls (`POST /api/ai/:feature`, `lib/aiRateLimit`). One guarded `UPDATE`
+starts a new one-minute window or adds a call while the user is under the
+limit, so every server instance shares it (the in-memory limiter counts per
+instance). Raw SQL, so `User.updatedAt` does not move. NULL means no calls
+yet. Apply it **before** the backend that reads them: until they exist, every
+`User` read fails, sign-in included.
+
 Read-only reports live in `prisma/sql/checks/` and run with the same command;
 they only `SELECT`, so they are safe at any time.
 `checks/004_harvest_lot_damage_check.sql` lists the harvest lots the old edit
@@ -39,7 +78,7 @@ the weight of a processed one. Lots with no farm are visible to Admins only.
 ### Identity & access
 | Model | Purpose |
 |---|---|
-| `User` | account, roles (`UserRole[]`), `isSuperAdmin`, must-change-* flags |
+| `User` | account, roles (`UserRole[]`), `isSuperAdmin`, must-change-* flags. `aiWindowStartedAt` / `aiWindowCalls` = the shared AI call count (`sql/006_ai_rate_limit`) |
 | `PasswordResetToken` | one-shot reset tokens for `auth/reset-password` |
 | `FarmCollaborator` | join row giving a non-owner user access to a farm |
 
@@ -59,9 +98,9 @@ the weight of a processed one. Lots with no farm are visible to Admins only.
 | `DryingLogEntry` | per-batch drying log row |
 | `PhysicalTestResults` | one-to-one physical test on a processing batch |
 | `ParchmentLot` | dried parchment output from a `ProcessingBatch` |
-| `ParchmentWithdrawal` | withdrawal from a parchment lot (sale / sample / loss) |
-| `GreenBeanLot` | hulled green bean output. Can come from a `ParchmentLot` or external import |
-| `GreenBeanWithdrawal` | withdrawal from a green bean lot |
+| `ParchmentWithdrawal` | withdrawal from a parchment lot (sale / sample / loss). `voidedAt` set = void: its kg are back on the lot and it counts for nothing (`sql/005`) |
+| `GreenBeanLot` | hulled green bean output. Can come from a `ParchmentLot` or external import. `parchmentWithdrawalId` = the Hull & Grade that made it (`sql/005`) |
+| `GreenBeanWithdrawal` | withdrawal from a green bean lot. `targetRoasterId` = the roaster whose stock got the kg; `voidedAt` set = void, as above (`sql/005`) |
 
 ### Ownership chain (used by `requireOwnership`)
 ```

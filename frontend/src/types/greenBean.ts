@@ -3,6 +3,43 @@ export enum GreenBeanSourceType {
   External = "External",
 }
 
+/** One withdrawal from a green-bean lot, as the backend lists it (newest first). */
+export interface GreenBeanWithdrawalRecord {
+  /** The backend row id, which Void and Edit need. Older fixtures leave it out. */
+  id?: string;
+  amountKg: number;
+  withdrawalType: "Sale" | "Roasting Stock" | "Sample" | "Export" | "Other";
+  // Legacy field / additional description. Withheld with the sale (see
+  // saleDetailsHidden) on someone else's lot: it can name the customer.
+  purpose?: string;
+  notes?: string; // Admin-editable notes
+  date: string;
+  withdrawnBy?: string; // User ID who performed withdrawal
+  withdrawnByName?: string; // User name for display
+  salePrice?: number; // Only for Sale type
+  currency?: string; // Only for Sale type (e.g., 'THB', 'USD')
+  customerName?: string; // Only for Sale type
+  invoiceNumber?: string; // Auto-generated for Sale type (e.g., "INV-2025-001")
+  deliveryAddress?: string; // Optional delivery address for Sale type
+  totalAmount?: number; // Calculated: amountKg * salePrice
+  /** The roaster whose stock a Roasting Stock withdrawal filled. Owner and Admin only. */
+  targetRoasterId?: string | null;
+  /** ISO timestamp the row was recorded at (a void checks an older push against it). */
+  createdAt?: string;
+  // Set by the backend when the viewer does not own the lot: the sale
+  // columns above were withheld, so there is no invoice to show.
+  saleDetailsHidden?: boolean;
+  /**
+   * When the withdrawal was voided (D7): its kg went back to the lot and it
+   * no longer counts, but the row stays in the history. Everyone sees it.
+   */
+  voidedAt?: string | null;
+  /** Who voided it. */
+  voidedById?: string | null;
+  /** Why, as typed. Withheld with the sale on someone else's lot. */
+  voidReason?: string | null;
+}
+
 export interface GreenBeanLot {
   id: string;
   displayId?: string;
@@ -12,6 +49,11 @@ export interface GreenBeanLot {
   createdById?: string;
   /** Process type of the parchment lot it was hulled from, as bulk-load nests it. */
   parchmentProcessType?: string;
+  /**
+   * The Hull & Grade (parchment withdrawal) that made the lot. Recorded since
+   * prisma/sql/005; voiding that Hull & Grade deletes the lot.
+   */
+  parchmentWithdrawalId?: string;
   /** External source details when sourceType is External */
   externalSource?: {
     originName: string; // Producer/Farm or Supplier
@@ -41,26 +83,7 @@ export interface GreenBeanLot {
   cuppingUniformity?: number;
   cuppingCleanCup?: number;
   cuppingSweetness?: number;
-  withdrawalHistory?: {
-    amountKg: number;
-    withdrawalType: "Sale" | "Roasting Stock" | "Sample" | "Export" | "Other";
-    // Legacy field / additional description. Withheld with the sale (see
-    // saleDetailsHidden) on someone else's lot: it can name the customer.
-    purpose?: string;
-    notes?: string; // Admin-editable notes
-    date: string;
-    withdrawnBy?: string; // User ID who performed withdrawal
-    withdrawnByName?: string; // User name for display
-    salePrice?: number; // Only for Sale type
-    currency?: string; // Only for Sale type (e.g., 'THB', 'USD')
-    customerName?: string; // Only for Sale type
-    invoiceNumber?: string; // Auto-generated for Sale type (e.g., "INV-2025-001")
-    deliveryAddress?: string; // Optional delivery address for Sale type
-    totalAmount?: number; // Calculated: amountKg * salePrice
-    // Set by the backend when the viewer does not own the lot: the sale
-    // columns above were withheld, so there is no invoice to show.
-    saleDetailsHidden?: boolean;
-  }[];
+  withdrawalHistory?: GreenBeanWithdrawalRecord[];
   pricePerKg?: number;
   currency?: string;
   priceSetDate?: string;

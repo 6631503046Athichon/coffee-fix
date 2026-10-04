@@ -56,13 +56,15 @@ export async function GET(
 }
 
 // PUT /api/customers/:id
+// Processors pick customers in the Withdraw Stock popup and may add one there,
+// so they may also correct one (D3). Deleting stays with Admin and Roaster.
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(request)
-    requireRole(user, ['Admin', 'Roaster'])
+    requireRole(user, ['Admin', 'Roaster', 'Processor'])
     const { id } = await params
 
     const validation = await validateBody(request, updateCustomerSchema)
@@ -104,6 +106,7 @@ export async function PUT(
 
 // DELETE /api/customers/:id
 // The address book is shared, so a customer anyone has sold to stays.
+// Processors may add and edit customers but not delete them.
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

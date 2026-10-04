@@ -72,7 +72,18 @@ import {
   formatWithdrawTotal,
 } from './workbench'
 import type { WithdrawalType } from './workbench'
-import { isInProcessorStock } from './workbench/stockAccess'
+import { canManageGreenBeanLot, isInProcessorStock } from './workbench/stockAccess'
+import { useWithdrawalCorrections } from './workbench/useWithdrawalCorrections'
+import {
+  VoidedNote,
+  VoidedTag,
+  WithdrawalRowActions,
+} from './workbench/WithdrawalCorrectionControls'
+import {
+  canEditWithdrawalSale,
+  canVoidWithdrawal,
+  isVoidedWithdrawal,
+} from './workbench/withdrawalCorrections'
 import {
   formatGreenBeanId,
   formatHarvestLotId,
@@ -222,6 +233,19 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   // (and farmer). Lets the operator answer "where did these beans come
   // from?" without leaving the page.
   const [historyBucket, setHistoryBucket] = useState<Bucket | null>(null)
+  // The bucket's lots as stored now, so a void or a sale edit made from the
+  // popup (merged into the app data) shows straight away.
+  const historySources = useMemo(
+    () =>
+      historyBucket
+        ? historyBucket.sources.map(
+            (s) => data.greenBeanLots.find((g) => g.id === s.id) ?? s,
+          )
+        : [],
+    [historyBucket, data.greenBeanLots],
+  )
+  // Void and Edit on the lots' withdrawals (D7), for each lot's owner or Admin.
+  const withdrawalCorrections = useWithdrawalCorrections()
 
   // Per-process-type collapse state — shared by Section 2 (Parchment) and
   // Section 3 (Green Bean) so both behave identically: chevron toggles a
@@ -1451,7 +1475,8 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
 
       {/* ── History Modal — full provenance of a green-bean bucket ──
           Shows each source GBL, the parchment lot it was hulled from,
-          and the originating harvest lot + farmer. View-only. */}
+          and the originating harvest lot + farmer. Its withdrawals get
+          Void and (a Sale) Edit for the lot's owner or Admin. */}
       {historyBucket && (
         <Modal
           title="Source History"
@@ -1462,16 +1487,18 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
           context={[
             {
               label: 'Total',
-              value: `${fmt(historyBucket.totalWeight)} kg`,
+              value: `${fmt(
+                historySources.reduce((sum, g) => sum + (g.currentWeightKg ?? 0), 0),
+              )} kg`,
             },
             {
               label: 'Sources',
-              value: `${historyBucket.sources.length}`,
+              value: `${historySources.length}`,
             },
           ]}
         >
           <div className="space-y-3">
-            {historyBucket.sources.map((gbl) => {
+            {historySources.map((gbl) => {
               const parchment = gbl.parchmentLotId
                 ? data.parchmentLots.find(
                     (p) => p.id === gbl.parchmentLotId,
@@ -1582,32 +1609,77 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                           Withdrawals ({gbl.withdrawalHistory.length})
                         </p>
                         <div className="space-y-1">
-                          {gbl.withdrawalHistory.map((w, i) => (
-                            <div
-                              // No backend id on these immutable records;
-                              // compose a content-stable key. Sort order
-                              // is fixed once written.
-                              key={`${gbl.id}-${w.date}-${w.withdrawalType}-${w.amountKg}-${i}`}
-                              className="text-[11px] flex items-center justify-between text-gray-600"
-                            >
-                              <span className="truncate">
-                                <span className="font-semibold">
-                                  {w.withdrawalType}
-                                </span>
-                                {w.purpose && ` · ${w.purpose}`}
-                              </span>
-                              <span className="text-gray-500 flex-shrink-0 ml-2">
-                                {fmt(w.amountKg)} kg
-                              </span>
-                            </div>
-                          ))}
+                          {gbl.withdrawalHistory.map((w, i) => {
+                            // A voided row stays, struck through, with its
+                            // reason; it no longer counts (D7).
+                            const voided = isVoidedWithdrawal(w)
+                            const managed = canManageGreenBeanLot(currentUser, gbl)
+                            const target = {
+                              kind: 'greenBean' as const,
+                              lot: gbl,
+                              withdrawal: w,
+                            }
+                            return (
+                              <div
+                                // Older records (and tests) may lack the
+                                // backend id; then compose a content-stable
+                                // key. Sort order is fixed once written.
+                                key={w.id ?? `${gbl.id}-${w.date}-${w.withdrawalType}-${w.amountKg}-${i}`}
+                                data-testid="source-withdrawal-row"
+                                className={`text-[11px] ${voided ? 'text-gray-400' : 'text-gray-600'}`}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="truncate">
+                                    <span className="font-semibold">
+                                      {w.withdrawalType}
+                                    </span>
+                                    {w.purpose && ` · ${w.purpose}`}
+                                  </span>
+                                  <span className="flex items-center gap-2 flex-shrink-0">
+                                    {voided && <VoidedTag />}
+                                    <span
+                                      className={
+                                        voided
+                                          ? 'text-gray-400 line-through'
+                                          : 'text-gray-500'
+                                      }
+                                    >
+                                      {fmt(w.amountKg)} kg
+                                    </span>
+                                    <WithdrawalRowActions
+                                      variant="compact"
+                                      onEdit={
+                                        canEditWithdrawalSale(managed, w)
+                                          ? () => withdrawalCorrections.openEdit(target)
+                                          : undefined
+                                      }
+                                      onVoid={
+                                        canVoidWithdrawal(managed, w)
+                                          ? () => withdrawalCorrections.openVoid(target)
+                                          : undefined
+                                      }
+                                    />
+                                  </span>
+                                </div>
+                                {voided && (
+                                  <VoidedNote
+                                    voidedAt={w.voidedAt}
+                                    voidedByName={
+                                      data.users.find((u) => u.id === w.voidedById)?.name
+                                    }
+                                    voidReason={w.voidReason}
+                                  />
+                                )}
+                              </div>
+                            )
+                          })}
                         </div>
                       </div>
                     )}
                 </div>
               )
             })}
-            {historyBucket.sources.length === 0 && (
+            {historySources.length === 0 && (
               <div className="text-center py-8 text-sm text-gray-400 italic">
                 No sources recorded.
               </div>
@@ -1615,6 +1687,8 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
           </div>
         </Modal>
       )}
+      {/* Void / Edit a withdrawal, above the Source History popup. */}
+      {withdrawalCorrections.modals}
 
       {/* Holds page height after a group collapses near the bottom; see
           useToggleScrollAnchor. Inline margin opts out of space-y-6. */}

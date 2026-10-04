@@ -1,4 +1,4 @@
-import { GreenBeanLot, RoasterInventoryItem } from "../../types";
+import { GreenBeanLot, GreenBeanWithdrawalRecord, RoasterInventoryItem } from "../../types";
 import { api } from "../api";
 import { API_BASE_URL } from "../apiBaseUrl";
 import { handleApiErrorWithFallback } from "../../utils/errorHandler";
@@ -12,6 +12,7 @@ interface BackendGreenBeanLot {
   sourceType?: string;
   parchmentLotId?: string | null;
   createdById?: string | null;
+  parchmentWithdrawalId?: string | null;
   // bulk-load nests the source parchment lot (with its batch).
   parchmentLot?: {
     processType?: string | null;
@@ -45,6 +46,7 @@ interface BackendGreenBeanLot {
 }
 
 interface BackendWithdrawal {
+  id?: string;
   amountKg: number;
   withdrawalType: string;
   // Absent when saleDetailsHidden: the backend withholds it with the sale.
@@ -59,7 +61,12 @@ interface BackendWithdrawal {
   invoiceNumber?: string;
   deliveryAddress?: string;
   totalAmount?: number;
+  targetRoasterId?: string | null;
   saleDetailsHidden?: boolean;
+  // Public; voidReason is withheld with the sale (see withdrawalPrivacy).
+  voidedAt?: string | null;
+  voidedById?: string | null;
+  voidReason?: string | null;
 }
 
 interface BackendRoasterInventoryItem {
@@ -179,6 +186,31 @@ export const updateGreenBeanLotPrice = async (
 };
 
 /**
+ * What a green-bean correction may change. The weight is the lot's whole
+ * weight (initialWeightKg): the kg left follows from it and from what was
+ * already withdrawn, sent to a roaster or sold, so it is never sent.
+ */
+export interface GreenBeanLotCorrection {
+  grade?: string;
+  initialWeightKg?: number;
+}
+
+/**
+ * Correct a green bean lot's grade or weight. The backend refuses (409) a
+ * weight below what already went out of the lot.
+ */
+export const updateGreenBeanLotDetails = async (
+  id: string,
+  changes: GreenBeanLotCorrection,
+): Promise<GreenBeanLot> => {
+  const response = await api.put<{ greenBeanLot: BackendGreenBeanLot }>(
+    `/green-bean-lots/${id}`,
+    changes,
+  );
+  return transformGreenBeanLotFromBackend(response.greenBeanLot);
+};
+
+/**
  * Fetch all green bean lots, optionally filtered by sourceType, availabilityStatus, or parchmentLotId
  */
 export const getAllGreenBeanLots = async (
@@ -209,11 +241,9 @@ export const getAllGreenBeanLots = async (
  * Transform green bean lot data from backend format to frontend format
  */
 export function transformGreenBeanLotFromBackend(backendLot: BackendGreenBeanLot): GreenBeanLot {
-  const withdrawalHistory = (backendLot.withdrawalHistory || []).map((w) => ({
-    ...w,
-    withdrawalType: WITHDRAWAL_TYPE_FROM_API[w.withdrawalType] || w.withdrawalType,
-    date: w.date ? new Date(w.date).toISOString().substring(0, 10) : w.date,
-  })) as unknown as GreenBeanLot['withdrawalHistory'];
+  const withdrawalHistory = (backendLot.withdrawalHistory || []).map(
+    transformGreenBeanWithdrawalFromBackend,
+  );
 
   return {
     id: backendLot.id,
@@ -221,6 +251,7 @@ export function transformGreenBeanLotFromBackend(backendLot: BackendGreenBeanLot
     sourceType: (backendLot.sourceType || "Internal") as GreenBeanLot['sourceType'],
     parchmentLotId: backendLot.parchmentLotId || undefined,
     createdById: backendLot.createdById || undefined,
+    parchmentWithdrawalId: backendLot.parchmentWithdrawalId || undefined,
     // Groups the lot by process type even when its parchment lot is not in
     // the loaded parchment list.
     parchmentProcessType:
@@ -280,6 +311,91 @@ const WITHDRAWAL_TYPE_TO_API: Record<string, string> = {
 // Map Prisma enum values → frontend display values
 const WITHDRAWAL_TYPE_FROM_API: Record<string, string> = {
   'RoastingStock': 'Roasting Stock',
+};
+
+/** One withdrawal row as the frontend shows it: display type, YYYY-MM-DD date. */
+export function transformGreenBeanWithdrawalFromBackend(
+  w: BackendWithdrawal,
+): GreenBeanWithdrawalRecord {
+  return {
+    ...w,
+    withdrawalType: WITHDRAWAL_TYPE_FROM_API[w.withdrawalType] || w.withdrawalType,
+    date: w.date ? new Date(w.date).toISOString().substring(0, 10) : w.date,
+  } as unknown as GreenBeanWithdrawalRecord;
+}
+
+/**
+ * What a withdrawal's in-place edit may change (D7): the sale paperwork only.
+ * null or an empty string clears a field. The kg, type and roaster never
+ * change in place: a wrong withdrawal is voided and recorded again. Only a
+ * Sale takes a price or currency; the backend works out the total.
+ */
+export interface WithdrawalSaleEdit {
+  customerName?: string | null;
+  deliveryAddress?: string | null;
+  salePrice?: number | null;
+  currency?: string | null;
+  invoiceNumber?: string | null;
+}
+
+/**
+ * Correct a green-bean withdrawal's customer, address, price, currency or
+ * invoice number. Owner and Admin only; a void withdrawal is refused (409).
+ */
+export const updateGreenBeanWithdrawal = async (
+  lotId: string,
+  withdrawalId: string,
+  changes: WithdrawalSaleEdit,
+): Promise<GreenBeanWithdrawalRecord> => {
+  const response = await api.patch<{ withdrawal: BackendWithdrawal }>(
+    `/green-bean-lots/${lotId}/withdrawals/${withdrawalId}`,
+    changes,
+  );
+  return transformGreenBeanWithdrawalFromBackend(response.withdrawal);
+};
+
+export interface VoidGreenBeanWithdrawalResult {
+  /** The lot with its kg back and its whole history (the void marked). */
+  greenBeanLot: GreenBeanLot;
+  withdrawal: GreenBeanWithdrawalRecord;
+  /** The roaster stock row the kg were taken back off, or null. */
+  roasterInventoryItem: RoasterInventoryItem | null;
+}
+
+/**
+ * Void a wrong green-bean withdrawal (D7). In one transaction the backend puts
+ * its kg back on the lot, takes them back off the roaster stock a Roasting
+ * Stock push filled (409 when the roaster already used them), and keeps the
+ * row in the history, marked void. A blank reason is sent as none.
+ */
+export const voidGreenBeanWithdrawal = async (
+  lotId: string,
+  withdrawalId: string,
+  reason?: string,
+): Promise<VoidGreenBeanWithdrawalResult> => {
+  const trimmed = reason?.trim();
+  const response = await api.post<{
+    greenBeanLot: BackendGreenBeanLot;
+    withdrawal: BackendWithdrawal;
+    roasterInventoryItem?: BackendRoasterInventoryItem | null;
+  }>(
+    `/green-bean-lots/${lotId}/withdrawals/${withdrawalId}/void`,
+    trimmed ? { reason: trimmed } : {},
+  );
+  const item = response.roasterInventoryItem;
+  return {
+    greenBeanLot: transformGreenBeanLotFromBackend(response.greenBeanLot),
+    withdrawal: transformGreenBeanWithdrawalFromBackend(response.withdrawal),
+    roasterInventoryItem: item
+      ? {
+          id: item.id,
+          roasterId: item.roasterId,
+          greenBeanLotId: item.greenBeanLotId,
+          claimedWeightKg: item.claimedWeightKg,
+          remainingWeightKg: item.remainingWeightKg,
+        }
+      : null,
+  };
 };
 
 /**

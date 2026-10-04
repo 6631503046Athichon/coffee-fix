@@ -4,7 +4,7 @@ import { requireAuth, handleApiError } from '@/lib/middleware'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { serializeHarvestLot } from '@/lib/harvestLot'
 import { greenBeanLotForViewer } from '@/lib/withdrawalPrivacy'
-import { memberFarmIds } from '@/lib/farmAccess'
+import { isFarmerOnly, memberFarmIds } from '@/lib/farmAccess'
 import { upkeepCropYears } from '@/lib/cropYears'
 
 export const dynamic = 'force-dynamic'
@@ -33,7 +33,9 @@ export async function GET(request: NextRequest) {
 
     // Pre-compute role checks
     const isAdmin = user.roles.includes('Admin') || user.isSuperAdmin
-    const isFarmer = user.roles.includes('Farmer')
+    // Narrowed to their own farms' lots: Farmers with no staff role only. A
+    // Farmer+Processor sees every lot, as any Processor does (D8).
+    const farmerScoped = isFarmerOnly(user)
     const isRoaster = user.roles.includes('Roaster')
     const isProcessor = user.roles.includes('Processor')
 
@@ -72,7 +74,7 @@ export async function GET(request: NextRequest) {
 
         // Harvest Lots
         prisma.harvestLot.findMany({
-          where: isFarmer && !isAdmin ? { farm: { ownerId: user.id } } : {},
+          where: farmerScoped ? { farm: { ownerId: user.id } } : {},
           include: {
             _count: { select: { processingBatches: true } },
             farm: { select: { id: true, farmName: true, location: true } },
@@ -183,13 +185,13 @@ export async function GET(request: NextRequest) {
       const farmScopeWhere = isAdmin
         ? {}
         : { farmId: { in: farmIds } }
-      const processingScopeWhere = isFarmer && !isAdmin
+      const processingScopeWhere = farmerScoped
         ? { harvestLot: { farmId: { in: farmIds } } }
         : {}
-      const parchmentScopeWhere = isFarmer && !isAdmin
+      const parchmentScopeWhere = farmerScoped
         ? { harvestLot: { farmId: { in: farmIds } } }
         : {}
-      const greenBeanScopeWhere = isFarmer && !isAdmin
+      const greenBeanScopeWhere = farmerScoped
         ? { parchmentLot: { harvestLot: { farmId: { in: farmIds } } } }
         : {}
 
@@ -262,7 +264,7 @@ export async function GET(request: NextRequest) {
 
         // Green Bean Lots
         // No `take` cap: Farmer-scoped queries are already bounded by the
-        // farm ownership filter above, and Admin/non-farmer callers are
+        // farm ownership filter above, and staff callers (Admin included) are
         // expected to see the full list on the dashboard. A misleading
         // `take: 50` here previously silently truncated farmer dashboards
         // once they had >50 lots across all their farms.
@@ -305,7 +307,10 @@ export async function GET(request: NextRequest) {
                   },
                 },
                 priceSetter: { select: { id: true, name: true } },
+                // The latest withdrawal names how the roaster got the lot; a
+                // voided one (D7) never happened, so it is left out.
                 withdrawalHistory: {
+                  where: { voidedAt: null },
                   orderBy: { createdAt: 'desc' as const },
                   take: 5,
                   select: { withdrawalType: true, amountKg: true, date: true, withdrawnByName: true },

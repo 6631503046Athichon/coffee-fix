@@ -5,6 +5,7 @@ import { requireAuth, requireOwnership, handleApiError } from '@/lib/middleware'
 import type { AuthenticatedUser } from '@/lib/middleware'
 import { parseStrictDateOnly, parseStrictNumber } from '@/lib/utils'
 import { serializeHarvestLot } from '@/lib/harvestLot'
+import { isFarmerOnly } from '@/lib/farmAccess'
 import {
   PROCESSOR_EDITABLE_HARVEST_LOT_FIELDS,
   processorUpdateHarvestLotSchema,
@@ -441,8 +442,9 @@ export async function GET(
     }
 
     // SECURITY: Farmers can only read their own harvest lots (the same owner
-    // as for edit and delete: createdById, or else the farm's owner).
-    if (user.roles.includes('Farmer') && !user.roles.includes('Admin')) {
+    // as for edit and delete: createdById, or else the farm's owner). A
+    // Farmer who also holds a staff role reads any lot, as that role does (D8).
+    if (isFarmerOnly(user)) {
       requireOwnership(user, harvestLot.createdById ?? harvestLot.farm?.ownerId, ['Admin'])
     }
 

@@ -65,19 +65,23 @@ const Sidebar: React.FC<SidebarProps> = ({
   onMobileClose,
 }) => {
   const normalizedRoles = currentUserRoles.map((role) => String(role).trim().toLowerCase())
-  const isRoasterOnly =
-    normalizedRoles.includes(UserRole.Roaster.toLowerCase()) &&
-    !normalizedRoles.includes(UserRole.Admin.toLowerCase())
-
-  // Keep the roaster workspace focused for non-admin roaster accounts
-  // (compared by href: several pages share a name, e.g. Quality Insights).
-  const visibleNavItems = isRoasterOnly
-    ? navItems.filter((item) => ROASTER_ONLY_HREFS.includes(item.href))
-    : navItems
+  const hasRole = (role: UserRole) => normalizedRoles.includes(String(role).toLowerCase())
+  const focusRoasterWorkspace = hasRole(UserRole.Roaster) && !hasRole(UserRole.Admin)
 
   // Filter nav items: show if user has ANY of the required roles.
-  const filteredNavItems = visibleNavItems.filter((item) =>
-    item.roles.some((role) => normalizedRoles.includes(String(role).toLowerCase())),
+  // Keep the roaster workspace focused for non-admin roaster accounts
+  // (compared by href: several pages share a name, e.g. Quality Insights):
+  // the Roaster role only grants the roaster pages. Pages the user's other
+  // roles grant stay, so a Farmer or Processor who also roasts keeps those
+  // sections (multi-role accounts, D8).
+  const filteredNavItems = navItems.filter((item) =>
+    item.roles.some((role) => {
+      if (!hasRole(role)) return false
+      if (focusRoasterWorkspace && role === UserRole.Roaster) {
+        return ROASTER_ONLY_HREFS.includes(item.href)
+      }
+      return true
+    }),
   )
 
   // Group items by section

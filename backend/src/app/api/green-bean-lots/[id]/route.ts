@@ -13,6 +13,15 @@ import {
   greenBeanAvailabilityStatusSchema,
 } from "@/lib/validations/common";
 import { greenBeanLotForViewer } from "@/lib/withdrawalPrivacy";
+import {
+  LOT_CHANGED,
+  LOT_CHANGED_MESSAGE,
+  belowOutMessage,
+  describeDependents,
+  hasDependents,
+  reweighLot,
+  type ReweighResult,
+} from "@/lib/lotCorrections";
 
 // GET /api/green-bean-lots/:id
 export async function GET(
@@ -248,6 +257,7 @@ export async function PUT(
       where: { id },
       select: {
         id: true,
+        initialWeightKg: true,
         currentWeightKg: true,
         availabilityStatus: true,
         createdById: true,
@@ -269,6 +279,7 @@ export async function PUT(
     const body = await request.json();
     const {
       grade,
+      initialWeightKg,
       currentWeightKg,
       availabilityStatus,
       pricePerKg,
@@ -276,22 +287,60 @@ export async function PUT(
       priceSetDate,
     } = body;
 
+    // The kg left follows from the lot weight and what was already withdrawn,
+    // sent to a roaster or sold, so it is never set directly: that would
+    // erase or invent stock with no record of it.
+    if (currentWeightKg !== undefined) {
+      return NextResponse.json(
+        {
+          error:
+            "The kg left follows from the lot weight and its withdrawals; send initialWeightKg to correct the weight",
+        },
+        { status: 400 },
+      );
+    }
+
     // Use UncheckedUpdateInput so we can assign scalar FKs (priceSetBy) directly
     // without needing a nested `connect`.
     const updateData: Prisma.GreenBeanLotUncheckedUpdateInput = {};
-    if (grade !== undefined) updateData.grade = grade;
-    let nextWeight = existingLot.currentWeightKg;
-    if (currentWeightKg !== undefined) {
-      const weight = safeParseFloat(currentWeightKg);
-      if (weight === null || weight < 0) {
+    if (grade !== undefined) {
+      const gradeName = typeof grade === "string" ? grade.trim() : "";
+      if (!gradeName || gradeName.length > 50) {
         return NextResponse.json(
-          { error: "Invalid currentWeightKg value" },
+          { error: "Grade is required and must be at most 50 characters" },
           { status: 400 },
         );
       }
-      nextWeight = weight;
-      updateData.currentWeightKg = weight;
+      updateData.grade = gradeName;
     }
+    // A weight correction re-weighs the lot: the kg left moves by the same
+    // amount, and the weight can never go below what already went out.
+    let reweigh: Extract<ReweighResult, { ok: true }> | null = null;
+    if (initialWeightKg !== undefined) {
+      const weight = parseStrictNumber(initialWeightKg);
+      if (weight === null || weight <= 0) {
+        return NextResponse.json(
+          { error: "Weight must be greater than 0" },
+          { status: 400 },
+        );
+      }
+      if (Math.abs(existingLot.initialWeightKg - weight) > 1e-9) {
+        const result = reweighLot(existingLot, weight);
+        if (!result.ok) {
+          return NextResponse.json(
+            {
+              error: belowOutMessage("green bean lot", result.outKg),
+              withdrawnKg: result.outKg,
+            },
+            { status: 409 },
+          );
+        }
+        reweigh = result;
+      }
+    }
+    const nextWeight = reweigh
+      ? reweigh.currentWeightKg
+      : existingLot.currentWeightKg;
     let parsedAvailability: "Available" | "Withdrawn" | undefined;
     if (availabilityStatus !== undefined) {
       const statusResult =
@@ -308,6 +357,9 @@ export async function PUT(
       updateData.availabilityStatus = 'Withdrawn';
     } else if (parsedAvailability !== undefined) {
       updateData.availabilityStatus = parsedAvailability;
+    } else if (reweigh && existingLot.currentWeightKg <= 0) {
+      // It was only Withdrawn because it ran out; the correction put kg back.
+      updateData.availabilityStatus = 'Available';
     }
 
     // Currency and priceSetDate describe a price, so they only change with
@@ -378,63 +430,92 @@ export async function PUT(
     // the update committed — if the audit insert failed, the price change
     // silently persisted with no history record. Wrapping both ensures the
     // price update rolls back together with the audit on any failure.
-    const updatedLot = await prisma.$transaction(async (tx) => {
-      const lot = await tx.greenBeanLot.update({
-        where: { id },
-        data: updateData,
-        include: {
-          parchmentLot: {
-            include: {
-              processingBatch: {
-                select: {
-                  id: true,
-                  processType: true,
-                },
-              },
-              harvestLot: {
-                select: {
-                  id: true,
-                  farmerName: true,
-                  cherryVariety: true,
-                },
-              },
+    // A weight correction goes first, guarded on the weights as read: a
+    // withdrawal in between makes it match nothing instead of being
+    // overwritten, and the whole edit is refused.
+    let updatedLot;
+    try {
+      updatedLot = await prisma.$transaction(async (tx) => {
+        if (reweigh) {
+          const guarded = await tx.greenBeanLot.updateMany({
+            where: {
+              id,
+              initialWeightKg: existingLot.initialWeightKg,
+              currentWeightKg: existingLot.currentWeightKg,
             },
-          },
-          priceSetter: {
-            select: {
-              id: true,
-              name: true,
+            data: {
+              initialWeightKg: reweigh.initialWeightKg,
+              currentWeightKg: reweigh.currentWeightKg,
             },
-          },
-          // Same shape as bulk-load, so a caller that swaps in the returned
-          // lot keeps its withdrawal history instead of wiping it.
-          withdrawalHistory: {
-            include: {
-              withdrawnByUser: {
-                select: { id: true, name: true },
-              },
-            },
-            orderBy: { date: "desc" },
-          },
-        },
-      });
+          });
+          if (guarded.count === 0) throw new Error(LOT_CHANGED);
+        }
 
-      // Every price set leaves an audit row, whether or not the caller sent
-      // a currency (it falls back to the lot's currency, then THB).
-      if (priceEntry) {
-        await tx.pricingHistory.create({
-          data: {
-            greenBeanLotId: id,
-            pricePerKg: priceEntry.pricePerKg,
-            currency: priceEntry.currency,
-            effectiveDate: priceEntry.effectiveDate,
-            setBy: user.id,
+        const lot = await tx.greenBeanLot.update({
+          where: { id },
+          data: updateData,
+          include: {
+            parchmentLot: {
+              include: {
+                processingBatch: {
+                  select: {
+                    id: true,
+                    processType: true,
+                  },
+                },
+                harvestLot: {
+                  select: {
+                    id: true,
+                    farmerName: true,
+                    cherryVariety: true,
+                  },
+                },
+              },
+            },
+            priceSetter: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            // Same shape as bulk-load, so a caller that swaps in the returned
+            // lot keeps its withdrawal history instead of wiping it.
+            withdrawalHistory: {
+              include: {
+                withdrawnByUser: {
+                  select: { id: true, name: true },
+                },
+              },
+              orderBy: { date: "desc" },
+            },
           },
         });
-      }
 
-      return lot;
-    });
+        // Every price set leaves an audit row, whether or not the caller sent
+        // a currency (it falls back to the lot's currency, then THB).
+        if (priceEntry) {
+          await tx.pricingHistory.create({
+            data: {
+              greenBeanLotId: id,
+              pricePerKg: priceEntry.pricePerKg,
+              currency: priceEntry.currency,
+              effectiveDate: priceEntry.effectiveDate,
+              setBy: user.id,
+            },
+          });
+        }
+
+        return lot;
+      });
+    } catch (error) {
+      if ((error as Error)?.message === LOT_CHANGED) {
+        return NextResponse.json(
+          { error: LOT_CHANGED_MESSAGE },
+          { status: 409 },
+        );
+      }
+      throw error;
+    }
 
     return NextResponse.json({ greenBeanLot: updatedLot });
   } catch (error) {
@@ -453,13 +534,26 @@ export async function DELETE(
     requireRole(user, ['Processor', 'Admin']);
     const { id } = await params;
 
-    // Check if lot exists
+    // Check if lot exists, with what depends on it
     const lot = await prisma.greenBeanLot.findUnique({
       where: { id },
-      include: {
-        roasterInventory: true,
-        // Only the count matters here.
-        roastBatches: { select: { id: true } },
+      select: {
+        createdById: true,
+        sourceType: true,
+        parchmentLotId: true,
+        parchmentWithdrawalId: true,
+        parchmentLot: { select: { displayId: true } },
+        _count: {
+          select: {
+            // A voided withdrawal (D7) never happened: it goes with the lot.
+            withdrawalHistory: { where: { voidedAt: null } },
+            roasterInventory: true,
+            roastBatches: true,
+            saleOrderItems: true,
+            invoiceItems: true,
+            cuppingSamples: true,
+          },
+        },
       },
     });
 
@@ -474,28 +568,83 @@ export async function DELETE(
     // (or Admin) can delete it.
     requireOwnership(user, lot.createdById, ['Admin']);
 
-    // Check if there are roaster inventory or roast batches linked
+    // A lot a Hull & Grade made holds that hull's parchment kg: deleting it
+    // would lose them, and the hull could no longer be voided (its lots are
+    // gone). Voiding the Hull & Grade removes the lots it made and puts the
+    // parchment back in one transaction (D7), so that is the way, for Admin
+    // too. Lots hulled before prisma/sql/005 have no link: an Internal lot
+    // with a parchment lot came from a hull.
     if (
-      (lot.roasterInventory && lot.roasterInventory.length > 0) ||
-      (lot.roastBatches && lot.roastBatches.length > 0)
+      lot.parchmentWithdrawalId ||
+      (lot.sourceType === 'Internal' && lot.parchmentLotId)
     ) {
+      const parchment = lot.parchmentLot?.displayId ?? 'its parchment lot';
       return NextResponse.json(
         {
           error:
-            "Cannot delete green bean lot with linked roaster inventory or roast batches.",
+            `This green bean lot was made by a Hull & Grade of parchment lot ${parchment}, so deleting it would lose those parchment kg. ` +
+            "Void that Hull & Grade in the parchment lot's withdrawal history instead: it removes the green bean lots it made and puts the parchment back.",
+          parchmentLotId: lot.parchmentLotId,
         },
-        { status: 400 },
+        { status: 409 },
       );
     }
 
-    // CuppingScore, GreenBeanWithdrawal, and PricingHistory all cascade on
-    // delete in the schema, so a single transactional delete is atomic — no
-    // separate deleteMany() calls are needed.
-    await prisma.$transaction(async (tx) => {
-      await tx.greenBeanLot.delete({
-        where: { id },
-      });
+    // Withdrawals (sales included) would cascade away with the lot, and
+    // roaster stock, roasts, sale and invoice lines and cupping samples
+    // would lose it, so a lot anything depends on is not deleted, for Admin
+    // too: the counts come back instead.
+    const dependents = {
+      withdrawals: lot._count?.withdrawalHistory ?? 0,
+      roasterInventory: lot._count?.roasterInventory ?? 0,
+      roastBatches: lot._count?.roastBatches ?? 0,
+      saleOrderItems: lot._count?.saleOrderItems ?? 0,
+      invoiceItems: lot._count?.invoiceItems ?? 0,
+      cuppingSamples: lot._count?.cuppingSamples ?? 0,
+    };
+    if (hasDependents(dependents)) {
+      return NextResponse.json(
+        {
+          error: `This green bean lot already has ${describeDependents(dependents)}, so it was not deleted`,
+          dependents,
+        },
+        { status: 409 },
+      );
+    }
+
+    // CuppingScore and PricingHistory cascade on delete in the schema. The
+    // delete repeats the "nothing depends on it" rule, so a withdrawal or
+    // claim that lands after the check above makes it match nothing.
+    const deleted = await prisma.greenBeanLot.deleteMany({
+      where: {
+        id,
+        withdrawalHistory: { none: { voidedAt: null } },
+        roasterInventory: { none: {} },
+        roastBatches: { none: {} },
+        saleOrderItems: { none: {} },
+        invoiceItems: { none: {} },
+        cuppingSamples: { none: {} },
+      },
     });
+    if (deleted.count === 0) {
+      const stillThere = await prisma.greenBeanLot.findUnique({
+        where: { id },
+        select: { id: true },
+      });
+      if (!stillThere) {
+        return NextResponse.json(
+          { error: "Green bean lot not found" },
+          { status: 404 },
+        );
+      }
+      return NextResponse.json(
+        {
+          error:
+            "This green bean lot was drawn from since you looked, so it was not deleted. Reload and try again.",
+        },
+        { status: 409 },
+      );
+    }
 
     return NextResponse.json({
       message: "Green bean lot deleted successfully",

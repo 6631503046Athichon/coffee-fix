@@ -36,6 +36,10 @@ const mockPrisma: any = {
   parchmentLot: {
     findMany: jest.fn(),
     create: jest.fn(),
+    count: jest.fn(),
+    deleteMany: jest.fn(),
+    updateMany: jest.fn(),
+    update: jest.fn(),
   },
   dryingLogEntry: {
     deleteMany: jest.fn(),
@@ -67,6 +71,9 @@ function resetMockPrisma() {
     id: 'pch-1',
     ...data,
   }))
+  mockPrisma.parchmentLot.count.mockImplementation(async () => 0)
+  mockPrisma.parchmentLot.deleteMany.mockImplementation(async () => ({ count: 0 }))
+  mockPrisma.parchmentLot.updateMany.mockImplementation(async () => ({ count: 1 }))
   mockPrisma.$transaction.mockImplementation(async (callback: any) => callback(mockPrisma))
 }
 resetMockPrisma()
@@ -333,7 +340,8 @@ describe('Processing batches — whole-lot consumption', () => {
           data: { parchmentWeightKg: 120 },
         }),
       )
-      expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+      // No parchment lot on this batch: nothing else is written.
+      expect(mockPrisma.parchmentLot.updateMany).not.toHaveBeenCalled()
       expect(mockPrisma.harvestLot.updateMany).not.toHaveBeenCalled()
       expect(mockPrisma.harvestLot.update).not.toHaveBeenCalled()
       expect(mockPrisma.harvestLot.findUnique).not.toHaveBeenCalled()
@@ -387,21 +395,79 @@ describe('Processing batches — whole-lot consumption', () => {
       expect(mockPrisma.harvestLot.update).not.toHaveBeenCalled()
     })
 
-    test('refuses to delete a batch that still owns parchment lots (400, nothing deleted)', async () => {
+    test('takes its untouched parchment output with it and still hands the cherry lot back', async () => {
       mockPrisma.processingBatch.findUnique.mockResolvedValueOnce({
         ...DELETABLE_BATCH,
-        parchmentLots: [{ id: 'pch-1' }],
+        parchmentLots: [{ id: 'pch-1', _count: { withdrawalHistory: 0, greenBeanLots: 0 } }],
+      })
+      mockPrisma.parchmentLot.deleteMany.mockResolvedValueOnce({ count: 1 })
+
+      const response = await deleteBatch('batch-1')
+      const body = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(body).toMatchObject({ harvestLotReleased: true, parchmentLotsDeleted: 1 })
+      expect(mockPrisma.parchmentLot.deleteMany).toHaveBeenCalledWith({
+        where: {
+          processingBatchId: 'batch-1',
+          withdrawalHistory: { none: { voidedAt: null } },
+          greenBeanLots: { none: {} },
+        },
+      })
+      expect(mockPrisma.processingBatch.delete).toHaveBeenCalledWith({ where: { id: 'batch-1' } })
+      expect(mockPrisma.harvestLot.updateMany).toHaveBeenCalledTimes(1)
+    })
+
+    test.each([
+      ['withdrawals', { withdrawalHistory: 2, greenBeanLots: 0 }, /2 withdrawals/],
+      ['green bean lots', { withdrawalHistory: 1, greenBeanLots: 3 }, /1 withdrawal and 3 green bean lots/],
+    ])('refuses with the counts when its parchment has %s (409, nothing deleted)', async (_what, counts, message) => {
+      mockPrisma.processingBatch.findUnique.mockResolvedValueOnce({
+        ...DELETABLE_BATCH,
+        parchmentLots: [{ id: 'pch-1', _count: counts }],
       })
 
       const response = await deleteBatch('batch-1')
       const body = await response.json()
 
-      expect(response.status).toBe(400)
-      expect(body.error).toMatch(/linked parchment lots/)
+      expect(response.status).toBe(409)
+      expect(body.error).toMatch(message)
+      expect(body.dependents).toEqual({
+        parchmentLots: 1,
+        withdrawals: counts.withdrawalHistory,
+        greenBeanLots: counts.greenBeanLots,
+      })
       expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+      expect(mockPrisma.parchmentLot.deleteMany).not.toHaveBeenCalled()
       expect(mockPrisma.dryingLogEntry.deleteMany).not.toHaveBeenCalled()
       expect(mockPrisma.processingBatch.delete).not.toHaveBeenCalled()
       expect(mockPrisma.harvestLot.updateMany).not.toHaveBeenCalled()
+    })
+
+    test('refuses (409) when its parchment was drawn from after the check, and deletes nothing more', async () => {
+      mockPrisma.processingBatch.findUnique.mockResolvedValueOnce({
+        ...DELETABLE_BATCH,
+        parchmentLots: [{ id: 'pch-1', _count: { withdrawalHistory: 0, greenBeanLots: 0 } }],
+      })
+      // The guarded delete skips the lot that now has a withdrawal.
+      mockPrisma.parchmentLot.deleteMany.mockResolvedValueOnce({ count: 0 })
+
+      const response = await deleteBatch('batch-1')
+
+      expect(response.status).toBe(409)
+      expect((await response.json()).error).toMatch(/changed since you looked/)
+      expect(mockPrisma.processingBatch.delete).not.toHaveBeenCalled()
+      expect(mockPrisma.harvestLot.updateMany).not.toHaveBeenCalled()
+    })
+
+    test('refuses (409) when a parchment lot was linked to it after the check, rather than cascading it away', async () => {
+      mockPrisma.processingBatch.findUnique.mockResolvedValueOnce({ ...DELETABLE_BATCH })
+      mockPrisma.parchmentLot.count.mockResolvedValueOnce(1)
+
+      const response = await deleteBatch('batch-1')
+
+      expect(response.status).toBe(409)
+      expect(mockPrisma.processingBatch.delete).not.toHaveBeenCalled()
     })
   })
 })

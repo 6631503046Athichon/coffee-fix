@@ -66,8 +66,8 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request)
     // Processors already receive the shared list through bulk-load and may add
-    // a customer from the Withdraw Stock popup; the GET list endpoint and
-    // editing or deleting a customer stay with Admin and Roaster.
+    // (or edit, see [id]/route.ts) a customer from the Withdraw Stock popup;
+    // the GET list endpoint and deleting a customer stay with Admin and Roaster.
     requireRole(user, ['Admin', 'Roaster', 'Processor'])
 
     const validation = await validateBody(request, createCustomerSchema)

@@ -9,14 +9,16 @@ import { handleApiErrorWithFallback } from '../../utils/errorHandler'
 export function transformInventoryItem(item: any): RoasterInventoryItem {
   const gbl = item.greenBeanLot
   const harvestLot = gbl?.parchmentLot?.harvestLot
-  // Pick the most recent withdrawal entry for type info
-  const latestWithdrawal = gbl?.withdrawalHistory?.[0]
+  // Pick the most recent withdrawal entry for type info. A voided one (D7)
+  // never happened, so it does not name how the roaster got the lot.
+  const latestWithdrawal = gbl?.withdrawalHistory?.find((w: any) => !w?.voidedAt)
   return {
     id: item.id,
     roasterId: item.roasterId,
     greenBeanLotId: item.greenBeanLotId,
     claimedWeightKg: item.claimedWeightKg,
     remainingWeightKg: item.remainingWeightKg,
+    createdAt: item.createdAt ?? undefined,
     greenBeanDisplayId: gbl?.displayId,
     grade: gbl?.grade ?? undefined,
     processorScore: gbl?.processorScore ?? undefined,

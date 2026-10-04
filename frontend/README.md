@@ -52,7 +52,7 @@ frontend/
 │   │   ├── weatherService.ts
 │   │   ├── weatherApiService.ts           # Weather API fetching
 │   │   ├── weatherAutoFetchService.ts     # Auto-fetch weather
-│   │   ├── geminiService.ts               # Gemini AI service
+│   │   ├── geminiService.ts               # AI buttons: calls the backend /api/ai/*
 │   │   ├── userService.ts
 │   │   ├── coffeeVarietyService.ts
 │   │   ├── activityTypeService.ts

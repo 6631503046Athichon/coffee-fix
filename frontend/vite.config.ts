@@ -27,10 +27,9 @@ export default defineConfig(({ mode }) => {
           : {}),
       },
       plugins: [react()],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
-      },
+      // No `define` for GEMINI_API_KEY: anything defined here is pasted into
+      // the public bundle. AI calls go through the backend's /api/ai/*, which
+      // holds the key (see backend/README.md).
       build: {
         // Manual chunk splitting was attempted here (vendor-react, vendor-charts,
         // vendor-router, vendor-ai, vendor-files, vendor-ui, vendor-misc) but

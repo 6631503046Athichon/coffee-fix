@@ -143,6 +143,15 @@ describe('bulk-load phase 2 keeps the uncapped lists light', () => {
   })
 })
 
+describe('bulk-load phase 2 roaster stock rows (D7)', () => {
+  test('name how the roaster got the lot from withdrawals that are not void', async () => {
+    mockAuthUser = admin
+    await phase2()
+    const history = argsOf(mockPrisma.roasterInventoryItem).include.greenBeanLot.include.withdrawalHistory
+    expect(history.where).toEqual({ voidedAt: null })
+  })
+})
+
 describe('bulk-load phase 2 keeps each role\'s scoping', () => {
   test('a Farmer\'s lists stay limited to the farms they own or share', async () => {
     mockAuthUser = farmer

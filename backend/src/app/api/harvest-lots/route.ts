@@ -5,6 +5,7 @@ import { validateBody, createHarvestLotSchema } from '@/lib/validations'
 import { nextDisplayId, parseDateOnly, withDisplayIdRetry } from '@/lib/utils'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { harvestLotStatusFilter, serializeHarvestLot } from '@/lib/harvestLot'
+import { isFarmerOnly } from '@/lib/farmAccess'
 
 // This route depends on auth cookies/headers, so it must be dynamic.
 export const dynamic = 'force-dynamic'
@@ -31,8 +32,10 @@ export async function GET(request: NextRequest) {
       Object.assign(where, harvestLotStatusFilter(status))
     }
 
-    // Farmers can only see their own farms' harvest lots
-    if (user.roles.includes('Farmer') && !user.roles.includes('Admin')) {
+    // Farmers can only see their own farms' harvest lots. A Farmer who also
+    // holds a staff role (Processor, Roaster, ...) sees every lot, as that
+    // role alone does (D8); Admins and super admins are staff.
+    if (isFarmerOnly(user)) {
       where.farm = { ownerId: user.id }
     }
 

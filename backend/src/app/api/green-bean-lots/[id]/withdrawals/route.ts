@@ -124,6 +124,9 @@ export async function POST(
           invoiceNumber: invoiceNumber || null,
           deliveryAddress: deliveryAddress || null,
           totalAmount,
+          // The roaster whose stock the kg go into below, so a void can take
+          // them back off it.
+          targetRoasterId: targetRoasterId || null,
         },
       })
 

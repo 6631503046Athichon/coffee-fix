@@ -6,7 +6,7 @@ import React, {
   useRef,
 } from "react";
 import { useDataContext } from "../../hooks/useDataContext";
-import { formatDate } from "../../utils/formatters";
+import { formatDate, formatDateDisplay } from "../../utils/formatters";
 import { useGradeNames } from "../../hooks/useGradeOptions";
 import { useToggleScrollAnchor } from "../../hooks/useToggleScrollAnchor";
 import {
@@ -75,9 +75,9 @@ import {
 } from "lucide-react";
 import {
   addProcessingBatch,
-  updateProcessingBatch,
   deleteProcessingBatch,
 } from "../../services/processing/processingBatchService";
+import type { UpdatedProcessingBatch } from "../../services/processing/processingBatchService";
 import {
   updateGreenBeanLotScore,
   updateGreenBeanLotAvailability,
@@ -105,6 +105,9 @@ import HullAndGradeModal from "./modals/HullAndGradeModal";
 import CompleteBatchModal from "./modals/CompleteBatchModal";
 import SetPriceModal from "./modals/SetPriceModal";
 import EditHarvestLotModal from "./modals/EditHarvestLotModal";
+import EditProcessingBatchModal from "./modals/EditProcessingBatchModal";
+import EditParchmentLotModal from "./modals/EditParchmentLotModal";
+import EditGreenBeanLotModal from "./modals/EditGreenBeanLotModal";
 import { logger } from "../../utils/logger";
 import {
   csvDate,
@@ -161,6 +164,25 @@ import type {
   WithdrawalType,
 } from "./workbench";
 import { canManageGreenBeanLot } from "./workbench/stockAccess";
+import { canManageParchmentLot } from "./workbench/recordAccess";
+import {
+  useParchmentWithdrawalHistory,
+  useWithdrawalCorrections,
+} from "./workbench/useWithdrawalCorrections";
+import {
+  VoidedNote,
+  VoidedTag,
+  WithdrawalRowActions,
+} from "./workbench/WithdrawalCorrectionControls";
+import {
+  activeWithdrawals,
+  canEditWithdrawalSale,
+  canVoidWithdrawal,
+  isVoidedWithdrawal,
+  madeByHullAndGrade,
+  withdrawalTypeLabel,
+  withdrawnKgTotal,
+} from "./workbench/withdrawalCorrections";
 
 interface ProcessorWorkbenchProps {
   currentUser: User;
@@ -201,10 +223,20 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const [parchmentWeightInput, setParchmentWeightInput] = useState('');
   const [selectedGreenBean, setSelectedGreenBean] =
     useState<GreenBeanLot | null>(null);
-  const [selectedGreenBeanForHistory, setSelectedGreenBeanForHistory] =
+  const [openGreenBeanHistory, setSelectedGreenBeanForHistory] =
     useState<GreenBeanLot | null>(null);
-  const [selectedParchmentForHistory, setSelectedParchmentForHistory] =
+  const [openParchmentHistory, setSelectedParchmentForHistory] =
     useState<ParchmentLot | null>(null);
+  // The history popups show the stored lot as it is now, so a withdrawal
+  // voided or edited from them (merged into the app data) shows at once.
+  const selectedGreenBeanForHistory = openGreenBeanHistory
+    ? (data.greenBeanLots.find((g) => g.id === openGreenBeanHistory.id) ??
+      openGreenBeanHistory)
+    : null;
+  const selectedParchmentForHistory = openParchmentHistory
+    ? (data.parchmentLots.find((p) => p.id === openParchmentHistory.id) ??
+      openParchmentHistory)
+    : null;
   const [selectedGreenBeanForSource, setSelectedGreenBeanForSource] =
     useState<GreenBeanLot | null>(null);
   const [scoringLot, setScoringLot] = useState<GreenBeanLot | null>(null);
@@ -677,136 +709,334 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     setScoringLot(null);
   };
 
-  // Delete handlers for Admin
+  // Edit and delete for batches, parchment lots and green-bean lots (F24).
+  // Only the record's owner or an Admin gets the buttons (recordAccess /
+  // stockAccess, as on the backend). A delete removes only that record: the
+  // backend refuses (409, with the counts) while anything downstream was
+  // drawn from it, Admin included, and those are corrected first.
+  const batchById = useMemo(
+    () => new Map(data.processingBatches.map((b) => [b.id, b])),
+    [data.processingBatches],
+  );
+  const parchmentLotsByBatch = useMemo(() => {
+    const byBatch = new Map<string, ParchmentLot[]>();
+    for (const lot of data.parchmentLots) {
+      if (!lot.processingBatchId) continue;
+      byBatch.set(lot.processingBatchId, [
+        ...(byBatch.get(lot.processingBatchId) ?? []),
+        lot,
+      ]);
+    }
+    return byBatch;
+  }, [data.parchmentLots]);
+  const batchOfParchment = (lot: ParchmentLot) =>
+    lot.processingBatchId ? batchById.get(lot.processingBatchId) : undefined;
+  // The batch's whole output: its weight, moisture and process are the
+  // batch's, so it is edited (and deleted) as the batch.
+  const isOnlyLotOfBatch = (lot: ParchmentLot) =>
+    Boolean(lot.processingBatchId) &&
+    (parchmentLotsByBatch.get(lot.processingBatchId as string)?.length ?? 0) <= 1;
+  const canManageParchment = (lot: ParchmentLot) =>
+    canManageParchmentLot(currentUser, lot, batchOfParchment(lot));
+
+  const [editingBatch, setEditingBatch] = useState<{
+    batch: ProcessingBatch;
+    lot: ParchmentLot;
+  } | null>(null);
+  const [editingParchment, setEditingParchment] =
+    useState<ParchmentLot | null>(null);
+  const [editingGreenBean, setEditingGreenBean] =
+    useState<GreenBeanLot | null>(null);
+  const [deletingRecordId, setDeletingRecordId] = useState<string | null>(
+    null,
+  );
+
+  // Void and Edit on the withdrawal history popups (D7). A parchment lot's
+  // own withdrawals are loaded when its popup opens.
+  const withdrawalCorrections = useWithdrawalCorrections();
+  const parchmentHistory = useParchmentWithdrawalHistory(
+    selectedParchmentForHistory,
+  );
+
+  const openParchmentEdit = (lot: ParchmentLot) => {
+    const batch = batchOfParchment(lot);
+    if (batch && isOnlyLotOfBatch(lot)) setEditingBatch({ batch, lot });
+    else setEditingParchment(lot);
+  };
+
+  const deleteErrorMessage = (error: unknown, fallback: string) =>
+    error instanceof Error && error.message ? error.message : fallback;
+
+  // Deleting a batch undoes its Record Process: its untouched parchment lot
+  // goes with it and the cherry lot is ready to process again.
   const handleDeleteBatch = async (batchId: string) => {
+    if (deletingRecordId) return;
+    const batch = batchById.get(batchId) ?? { id: batchId };
+    const lots = parchmentLotsByBatch.get(batchId) ?? [];
+    const harvestLotId = "harvestLotId" in batch ? batch.harvestLotId : undefined;
+    const cherryLot = harvestLotId
+      ? data.harvestLots.find((h) => h.id === harvestLotId)
+      : undefined;
+    const lotPart =
+      lots.length === 1
+        ? ` and its parchment lot ${formatParchmentId(lots[0])}`
+        : lots.length > 1
+          ? ` and its ${lots.length} parchment lots`
+          : "";
     if (
-      window.confirm(
-        "Are you sure you want to delete this processing batch? This will also delete related parchment and green bean lots.",
+      !window.confirm(
+        `Delete processing batch ${formatProcessingBatchId(batch)}${lotPart}? ` +
+          `${cherryLot ? `Cherry lot ${formatHarvestLotId(cherryLot)}` : "Its cherry lot"} goes back to Cherry Lots to be processed again. ` +
+          "A batch whose parchment was already withdrawn or hulled is not deleted. This cannot be undone.",
       )
     ) {
-      try {
-        const relatedParchmentIds = data.parchmentLots
-          .filter((p) => p.processingBatchId === batchId)
-          .map((p) => p.id);
-        const relatedGreenBeanIds = data.greenBeanLots
-          .filter(
-            (g) =>
-              g.parchmentLotId && relatedParchmentIds.includes(g.parchmentLotId),
-          )
-          .map((g) => g.id);
-
-        await Promise.all(
-          relatedGreenBeanIds.map((greenBeanId) =>
-            deleteGreenBeanLot(greenBeanId),
-          ),
-        );
-        await Promise.all(
-          relatedParchmentIds.map((parchmentId) =>
-            deleteParchmentLot(parchmentId),
-          ),
-        );
-        await deleteProcessingBatch(batchId);
-
-        setData((prev) => ({
-          ...prev,
-          processingBatches: prev.processingBatches.filter(
-            (b) => b.id !== batchId,
-          ),
-          parchmentLots: prev.parchmentLots.filter(
-            (p) => p.processingBatchId !== batchId,
-          ),
-          greenBeanLots: prev.greenBeanLots.filter((g) => {
-            const parchment = prev.parchmentLots.find(
-              (p) => p.id === g.parchmentLotId,
-            );
-            return parchment?.processingBatchId !== batchId;
-          }),
-        }));
-
-        addToast({
-          type: "success",
-          message: "Processing batch deleted successfully.",
-        });
-      } catch (error) {
-        console.error("Failed to delete processing batch:", error);
-        addToast({
-          type: "error",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to delete processing batch.",
-        });
-      }
+      return;
+    }
+    setDeletingRecordId(batchId);
+    try {
+      const { harvestLotReleased } = await deleteProcessingBatch(batchId);
+      setData((prev) => ({
+        ...prev,
+        processingBatches: prev.processingBatches.filter(
+          (b) => b.id !== batchId,
+        ),
+        parchmentLots: prev.parchmentLots.filter(
+          (p) => p.processingBatchId !== batchId,
+        ),
+        harvestLots:
+          harvestLotReleased && harvestLotId
+            ? prev.harvestLots.map((h) =>
+                h.id === harvestLotId
+                  ? {
+                      ...h,
+                      status: "Ready for Processing" as const,
+                      remainingWeightKg: undefined,
+                    }
+                  : h,
+              )
+            : prev.harvestLots,
+      }));
+      addToast({
+        type: "success",
+        message: harvestLotReleased && cherryLot
+          ? `Processing batch ${formatProcessingBatchId(batch)} deleted. Cherry lot ${formatHarvestLotId(cherryLot)} is ready to process again.`
+          : `Processing batch ${formatProcessingBatchId(batch)} deleted.`,
+      });
+    } catch (error) {
+      console.error("Failed to delete processing batch:", error);
+      addToast({
+        type: "error",
+        message: deleteErrorMessage(error, "Failed to delete processing batch."),
+      });
+    } finally {
+      setDeletingRecordId(null);
     }
   };
 
   const handleDeleteParchmentLot = async (lotId: string) => {
+    if (deletingRecordId) return;
+    const lot = data.parchmentLots.find((p) => p.id === lotId);
+    const label = lot ? formatParchmentId(lot) : "";
     if (
-      window.confirm(
-        "Are you sure you want to delete this parchment lot? This will also delete related green bean lots.",
+      !window.confirm(
+        `Delete parchment lot ${label}? ` +
+          "A lot that was already withdrawn from or hulled is not deleted. This cannot be undone.",
       )
     ) {
-      try {
-        const relatedGreenBeanIds = data.greenBeanLots
-          .filter((g) => g.parchmentLotId === lotId)
-          .map((g) => g.id);
+      return;
+    }
+    setDeletingRecordId(lotId);
+    try {
+      await deleteParchmentLot(lotId);
+      setData((prev) => ({
+        ...prev,
+        parchmentLots: prev.parchmentLots.filter((p) => p.id !== lotId),
+      }));
+      addToast({
+        type: "success",
+        message: `Parchment lot ${label} deleted.`,
+      });
+    } catch (error) {
+      console.error("Failed to delete parchment lot:", error);
+      addToast({
+        type: "error",
+        message: deleteErrorMessage(error, "Failed to delete parchment lot."),
+      });
+    } finally {
+      setDeletingRecordId(null);
+    }
+  };
 
-        await Promise.all(
-          relatedGreenBeanIds.map((greenBeanId) =>
-            deleteGreenBeanLot(greenBeanId),
-          ),
-        );
-        await deleteParchmentLot(lotId);
-
-        setData((prev) => ({
-          ...prev,
-          parchmentLots: prev.parchmentLots.filter((p) => p.id !== lotId),
-          greenBeanLots: prev.greenBeanLots.filter(
-            (g) => g.parchmentLotId !== lotId,
-          ),
-        }));
-
-        addToast({
-          type: "success",
-          message: "Parchment lot deleted successfully.",
-        });
-      } catch (error) {
-        console.error("Failed to delete parchment lot:", error);
-        addToast({
-          type: "error",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to delete parchment lot.",
-        });
-      }
+  // A batch's only parchment lot is deleted as the batch, so its cherry lot
+  // is not stranded as processed with nothing to show for it.
+  const handleDeleteParchmentRecord = (lot: ParchmentLot) => {
+    if (lot.processingBatchId && isOnlyLotOfBatch(lot)) {
+      void handleDeleteBatch(lot.processingBatchId);
+    } else {
+      void handleDeleteParchmentLot(lot.id);
     }
   };
 
   const handleDeleteGreenBeanLot = async (lotId: string) => {
+    if (deletingRecordId) return;
+    const lot = data.greenBeanLots.find((g) => g.id === lotId);
+    const label = lot ? formatGreenBeanId(lot) : "";
+    // A lot a Hull & Grade made goes by voiding that Hull & Grade, which puts
+    // its parchment back too (the backend refuses deleting the lot alone):
+    // open the parchment lot's history, where the Void is.
+    if (lot && madeByHullAndGrade(lot)) {
+      const source = data.parchmentLots.find((p) => p.id === lot.parchmentLotId);
+      addToast({
+        type: "info",
+        message:
+          `Green bean lot ${label} was made by a Hull & Grade of ${source ? `parchment lot ${formatParchmentId(source)}` : "its parchment lot"}. ` +
+          "To remove it, void that Hull & Grade in the parchment lot's history: that removes the green bean lots it made and puts the parchment back.",
+      });
+      if (source) setSelectedParchmentForHistory(source);
+      return;
+    }
     if (
-      window.confirm("Are you sure you want to delete this green bean lot?")
+      !window.confirm(
+        `Delete green bean lot ${label}${lot ? ` (${lot.grade})` : ""}? ` +
+          "A lot that was already withdrawn from, sent to a roaster, sold or cupped is not deleted. This cannot be undone.",
+      )
     ) {
-      try {
-        await deleteGreenBeanLot(lotId);
-        setData((prev) => ({
-          ...prev,
-          greenBeanLots: prev.greenBeanLots.filter((g) => g.id !== lotId),
-        }));
-        addToast({
-          type: "success",
-          message: "Green bean lot deleted successfully.",
-        });
-      } catch (error) {
-        console.error("Failed to delete green bean lot:", error);
-        addToast({
-          type: "error",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to delete green bean lot.",
-        });
-      }
+      return;
+    }
+    setDeletingRecordId(lotId);
+    try {
+      await deleteGreenBeanLot(lotId);
+      setData((prev) => ({
+        ...prev,
+        greenBeanLots: prev.greenBeanLots.filter((g) => g.id !== lotId),
+      }));
+      addToast({
+        type: "success",
+        message: `Green bean lot ${label} deleted.`,
+      });
+    } catch (error) {
+      console.error("Failed to delete green bean lot:", error);
+      addToast({
+        type: "error",
+        message: deleteErrorMessage(error, "Failed to delete green bean lot."),
+      });
+    } finally {
+      setDeletingRecordId(null);
+    }
+  };
+
+  // Merge only what the edit can change into the stored records: the PUT and
+  // PATCH responses do not carry everything bulk-load does.
+  const mergeParchmentWeights = (lot: ParchmentLot, saved: ParchmentLot) => ({
+    ...lot,
+    initialWeightKg: saved.initialWeightKg,
+    currentWeightKg: saved.currentWeightKg,
+    moistureContent: saved.moistureContent,
+    processType: saved.processType,
+    status: saved.status,
+  });
+
+  const handleBatchSaved = ({
+    processingBatch: saved,
+    parchmentLots: savedLots,
+  }: UpdatedProcessingBatch) => {
+    const savedLotById = new Map(savedLots.map((l) => [l.id, l]));
+    setData((prev) => ({
+      ...prev,
+      processingBatches: prev.processingBatches.map((b) =>
+        b.id === saved.id
+          ? {
+              ...b,
+              status: saved.status,
+              processType: saved.processType,
+              processNotes: saved.processNotes,
+              cropYearId: saved.cropYearId,
+              parchmentWeightKg: saved.parchmentWeightKg,
+              moistureContent: saved.moistureContent,
+              baggingDate: saved.baggingDate,
+              dryingStartDate: saved.dryingStartDate,
+              dryingEndDate: saved.dryingEndDate,
+            }
+          : b,
+      ),
+      parchmentLots: prev.parchmentLots.map((p) => {
+        const lot = savedLotById.get(p.id);
+        return lot ? mergeParchmentWeights(p, lot) : p;
+      }),
+      // Green beans are grouped by their parchment's process type.
+      greenBeanLots: prev.greenBeanLots.map((g) => {
+        const lot = g.parchmentLotId ? savedLotById.get(g.parchmentLotId) : undefined;
+        return lot ? { ...g, parchmentProcessType: lot.processType } : g;
+      }),
+    }));
+    setEditingBatch(null);
+    addToast({
+      type: "success",
+      message: `Processing batch ${formatProcessingBatchId(saved)} updated.`,
+    });
+  };
+
+  const handleParchmentSaved = (saved: ParchmentLot) => {
+    setData((prev) => {
+      // For a batch's only lot the backend keeps the batch in step.
+      const syncBatch =
+        saved.processingBatchId &&
+        prev.parchmentLots.filter(
+          (p) => p.processingBatchId === saved.processingBatchId,
+        ).length === 1;
+      return {
+        ...prev,
+        parchmentLots: prev.parchmentLots.map((p) =>
+          p.id === saved.id ? mergeParchmentWeights(p, saved) : p,
+        ),
+        processingBatches: syncBatch
+          ? prev.processingBatches.map((b) =>
+              b.id === saved.processingBatchId
+                ? {
+                    ...b,
+                    parchmentWeightKg: saved.initialWeightKg,
+                    moistureContent: saved.moistureContent,
+                  }
+                : b,
+            )
+          : prev.processingBatches,
+      };
+    });
+    setEditingParchment(null);
+    addToast({
+      type: "success",
+      message: `Parchment lot ${formatParchmentId(saved)} updated.`,
+    });
+  };
+
+  const handleGreenBeanSaved = (saved: GreenBeanLot) => {
+    setData((prev) => ({
+      ...prev,
+      greenBeanLots: prev.greenBeanLots.map((g) =>
+        g.id === saved.id
+          ? {
+              ...g,
+              grade: saved.grade,
+              initialWeightKg: saved.initialWeightKg,
+              currentWeightKg: saved.currentWeightKg,
+              availabilityStatus: saved.availabilityStatus,
+            }
+          : g,
+      ),
+    }));
+    setEditingGreenBean(null);
+    addToast({
+      type: "success",
+      message: `Green bean lot ${formatGreenBeanId(saved)} updated.`,
+    });
+  };
+
+  // A refused edit that means the list is stale (the record went away, or
+  // changed while the popup was open) reloads it.
+  const handleCorrectionError = (message: string) => {
+    addToast({ type: "error", message });
+    if (/not found|changed while you were editing/i.test(message)) {
+      void refreshData();
     }
   };
 
@@ -949,7 +1179,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
         // Drying dates are optional now. Only enforce ordering when both
         // sides are filled — partial entry is allowed and the processor
-        // can complete the timeline later via the batch edit flow.
+        // can complete the timeline later with Edit on the parchment lot
+        // (EditProcessingBatchModal).
         if (
           dryingStartDate &&
           dryingEndDate &&
@@ -2116,6 +2347,29 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           <PlayCircle size={14} />
                           Hull &amp; Grade
                         </button>
+                        {canManageParchment(p) && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openParchmentEdit(p)}
+                              className="p-1.5 rounded-md text-gray-400 hover:text-blue-600 hover:bg-gray-100 transition-colors"
+                              title={isOnlyLotOfBatch(p) ? "Edit batch and parchment" : "Edit parchment lot"}
+                              aria-label={`Edit parchment lot ${formatParchmentId(p)}`}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteParchmentRecord(p)}
+                              disabled={deletingRecordId !== null}
+                              className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                              title={isOnlyLotOfBatch(p) ? "Delete batch and parchment" : "Delete parchment lot"}
+                              aria-label={`Delete parchment lot ${formatParchmentId(p)}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                     </tr>
@@ -2519,6 +2773,25 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             <PlayCircle size={14} />
                             Withdraw
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingGreenBean(g)}
+                            className="p-1.5 rounded-md text-gray-400 hover:text-blue-600 hover:bg-gray-100 transition-colors"
+                            title="Edit grade or weight"
+                            aria-label={`Edit green bean lot ${formatGreenBeanId(g)}`}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteGreenBeanLot(g.id)}
+                            disabled={deletingRecordId !== null}
+                            className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            title="Delete green bean lot"
+                            aria-label={`Delete green bean lot ${formatGreenBeanId(g)}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                             </>
                           )}
                               </>
@@ -2780,6 +3053,30 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         ></span>
                         {p.status === "Hulled" ? "Hulled" : "In stock"}
                       </span>
+                      {canManageParchment(p) && (
+                        <>
+                          {/* -my-1 keeps the hit area without making the row taller */}
+                          <button
+                            type="button"
+                            onClick={() => openParchmentEdit(p)}
+                            className="p-1 -my-1 rounded-md text-gray-400 hover:text-blue-600 hover:bg-gray-100 transition-colors"
+                            title={isOnlyLotOfBatch(p) ? "Edit batch and parchment" : "Edit parchment lot"}
+                            aria-label={`Edit parchment lot ${formatParchmentId(p)}`}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteParchmentRecord(p)}
+                            disabled={deletingRecordId !== null}
+                            className="p-1 -my-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            title={isOnlyLotOfBatch(p) ? "Delete batch and parchment" : "Delete parchment lot"}
+                            aria-label={`Delete parchment lot ${formatParchmentId(p)}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -2976,6 +3273,29 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           ></span>
                           {g.availabilityStatus}
                         </span>
+                      )}
+                      {canManageLot(g) && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setEditingGreenBean(g)}
+                            className="p-1 -my-1 rounded-md text-gray-400 hover:text-blue-600 hover:bg-gray-100 transition-colors"
+                            title="Edit grade or weight"
+                            aria-label={`Edit green bean lot ${formatGreenBeanId(g)}`}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteGreenBeanLot(g.id)}
+                            disabled={deletingRecordId !== null}
+                            className="p-1 -my-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            title="Delete green bean lot"
+                            aria-label={`Delete green bean lot ${formatGreenBeanId(g)}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -4243,7 +4563,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         <ModalPortal>
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
-              <div className="p-6 sm:p-8">
+              {/* Scrolls as a whole on short screens: the lot's own
+                  withdrawals sit under its green bean lots. */}
+              <div className="p-6 sm:p-8 min-h-0 overflow-y-auto">
                 {(() => {
                   const relatedGreenBeans = data.greenBeanLots.filter(
                     (g) => g.parchmentLotId === selectedParchmentForHistory.id,
@@ -4251,6 +4573,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   const totalCurrentWeight = relatedGreenBeans.reduce(
                     (sum, g) => sum + g.currentWeightKg,
                     0,
+                  );
+                  // The parchment lot's own withdrawals (Hull & Grade, and
+                  // any Sale, Roasting Stock or Sample), loaded on open.
+                  const parchmentWithdrawals =
+                    selectedParchmentForHistory.withdrawalHistory ?? [];
+                  const parchmentManaged = canManageParchment(
+                    selectedParchmentForHistory,
                   );
 
                   return (
@@ -4470,6 +4799,143 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           </div>
                         )}
                       </div>
+
+                      {/* The lot's own withdrawals. Its owner and Admin
+                          may Void one (a Hull & Grade also removes the green
+                          bean lots it made) or edit a Sale (D7). A voided
+                          one stays, struck through, and does not count. */}
+                      <div
+                        className="mt-5 pt-4 border-t border-gray-100"
+                        data-testid="parchment-withdrawals"
+                      >
+                        <div className="flex items-center justify-between gap-3 mb-2">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                            Parchment withdrawals ({parchmentWithdrawals.length})
+                          </p>
+                          {parchmentWithdrawals.length > 0 && (
+                            <p className="text-[11px] text-gray-500">
+                              Withdrawn{" "}
+                              <span className="font-semibold text-gray-700">
+                                {withdrawnKgTotal(parchmentWithdrawals).toFixed(2)} kg
+                              </span>
+                            </p>
+                          )}
+                        </div>
+                        {parchmentHistory.status === "loading" ? (
+                          <p className="text-xs text-gray-400 italic">
+                            Loading withdrawals...
+                          </p>
+                        ) : parchmentHistory.status === "error" ? (
+                          <p className="text-xs text-red-600">
+                            Could not load this lot&apos;s withdrawals.{" "}
+                            <button
+                              type="button"
+                              onClick={parchmentHistory.retry}
+                              className="font-semibold text-sky-600 hover:text-sky-700"
+                            >
+                              Try again
+                            </button>
+                          </p>
+                        ) : parchmentWithdrawals.length === 0 ? (
+                          <p className="text-xs text-gray-400 italic">
+                            No withdrawals from this lot yet.
+                          </p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {parchmentWithdrawals.map((w, index) => {
+                              const voided = isVoidedWithdrawal(w);
+                              const target = {
+                                kind: "parchment" as const,
+                                lot: selectedParchmentForHistory,
+                                withdrawal: w,
+                              };
+                              const madeLots =
+                                w.withdrawalType === "HullAndGrade" && w.id
+                                  ? data.greenBeanLots.filter(
+                                      (g) => g.parchmentWithdrawalId === w.id,
+                                    ).length
+                                  : 0;
+                              const sale =
+                                w.withdrawalType === "Sale" && !w.saleDetailsHidden
+                                  ? [
+                                      w.customerName,
+                                      w.salePrice
+                                        ? `${w.salePrice.toFixed(2)} ${w.currency || "THB"}/kg`
+                                        : undefined,
+                                      w.invoiceNumber ? `Invoice ${w.invoiceNumber}` : undefined,
+                                    ].filter(Boolean)
+                                  : [];
+                              return (
+                                <div
+                                  key={w.id ?? `${w.date}-${w.withdrawalType}-${w.amountKg}-${index}`}
+                                  data-testid="parchment-withdrawal-row"
+                                  className={`flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-xs ${
+                                    voided
+                                      ? "bg-gray-50 border-gray-200 opacity-80"
+                                      : "bg-white border-gray-200"
+                                  }`}
+                                >
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="font-semibold text-gray-900">
+                                        {withdrawalTypeLabel(w.withdrawalType)}
+                                      </span>
+                                      {voided && <VoidedTag />}
+                                      <span className="text-gray-400">
+                                        {formatDateDisplay(w.date)}
+                                      </span>
+                                    </div>
+                                    {sale.length > 0 && (
+                                      <p className="text-gray-600 truncate">
+                                        {sale.join(" · ")}
+                                      </p>
+                                    )}
+                                    {madeLots > 0 && (
+                                      <p className="text-gray-500">
+                                        Made {madeLots} green bean lot
+                                        {madeLots === 1 ? "" : "s"}
+                                      </p>
+                                    )}
+                                    {voided && (
+                                      <VoidedNote
+                                        voidedAt={w.voidedAt}
+                                        voidedByName={
+                                          data.users.find((u) => u.id === w.voidedById)?.name
+                                        }
+                                        voidReason={w.voidReason}
+                                      />
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    <span
+                                      className={
+                                        voided
+                                          ? "font-semibold text-gray-400 line-through"
+                                          : "font-bold text-amber-700"
+                                      }
+                                    >
+                                      {w.amountKg.toFixed(2)} kg
+                                    </span>
+                                    <WithdrawalRowActions
+                                      variant="compact"
+                                      onEdit={
+                                        canEditWithdrawalSale(parchmentManaged, w)
+                                          ? () => withdrawalCorrections.openEdit(target)
+                                          : undefined
+                                      }
+                                      onVoid={
+                                        canVoidWithdrawal(parchmentManaged, w)
+                                          ? () => withdrawalCorrections.openVoid(target)
+                                          : undefined
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </>
                   );
                 })()}
@@ -4516,9 +4982,20 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                         Withdrawals
                       </p>
+                      {/* Voided rows stay listed but no longer count. */}
                       <p className="text-lg font-bold text-gray-900 leading-tight">
-                        {selectedGreenBeanForHistory.withdrawalHistory?.length || 0}
+                        {activeWithdrawals(selectedGreenBeanForHistory.withdrawalHistory).length}
                       </p>
+                      {(() => {
+                        const voided =
+                          (selectedGreenBeanForHistory.withdrawalHistory?.length || 0) -
+                          activeWithdrawals(selectedGreenBeanForHistory.withdrawalHistory).length;
+                        return voided > 0 ? (
+                          <p className="text-[10px] text-red-600 leading-tight">
+                            +{voided} voided
+                          </p>
+                        ) : null;
+                      })()}
                     </div>
                     <div className="w-px h-8 bg-gray-200" />
                     <div className="text-right">
@@ -4526,11 +5003,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         Total
                       </p>
                       <p className="text-lg font-bold text-gray-900 leading-tight">
-                        {(
-                          selectedGreenBeanForHistory.withdrawalHistory?.reduce(
-                            (sum, entry) => sum + entry.amountKg,
-                            0,
-                          ) || 0
+                        {withdrawnKgTotal(
+                          selectedGreenBeanForHistory.withdrawalHistory,
                         ).toFixed(2)}
                         <span className="text-xs font-normal text-gray-400 ml-1">kg</span>
                       </p>
@@ -4565,17 +5039,43 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           const badgeColor =
                             typeBadgeColors[entry.withdrawalType] ||
                             typeBadgeColors["Other"];
+                          // A voided row stays, greyed and struck through,
+                          // and no longer counts in the totals above.
+                          const voided = isVoidedWithdrawal(entry);
+                          const lotManaged = canManageLot(selectedGreenBeanForHistory);
+                          const correctionTarget = {
+                            kind: "greenBean" as const,
+                            lot: selectedGreenBeanForHistory,
+                            withdrawal: entry,
+                          };
+                          const offerInvoice =
+                            entry.withdrawalType === "Sale" &&
+                            !entry.saleDetailsHidden &&
+                            !voided;
+                          const onEdit = canEditWithdrawalSale(lotManaged, entry)
+                            ? () => withdrawalCorrections.openEdit(correctionTarget)
+                            : undefined;
+                          const onVoid = canVoidWithdrawal(lotManaged, entry)
+                            ? () => withdrawalCorrections.openVoid(correctionTarget)
+                            : undefined;
 
                           return (
                             <div
-                              // Withdrawal records have no backend id;
-                              // compose a content-stable key.
-                              key={`${selectedGreenBeanForHistory.id}-${entry.date}-${entry.withdrawalType}-${entry.amountKg}-${index}`}
-                              className="bg-white rounded-xl p-4 border border-gray-200 hover:border-teal-300 transition-colors"
+                              // Older records (and tests) may lack the
+                              // backend id; then compose a content-stable key.
+                              key={entry.id ?? `${selectedGreenBeanForHistory.id}-${entry.date}-${entry.withdrawalType}-${entry.amountKg}-${index}`}
+                              data-testid="withdrawal-history-row"
+                              className={
+                                voided
+                                  ? "bg-gray-50 rounded-xl p-4 border border-gray-200 opacity-80"
+                                  : "bg-white rounded-xl p-4 border border-gray-200 hover:border-teal-300 transition-colors"
+                              }
                             >
                             <div className="flex items-start justify-between mb-3">
                               <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-teal-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <div
+                                  className={`w-8 h-8 ${voided ? "bg-gray-300" : "bg-teal-500"} rounded-lg flex items-center justify-center flex-shrink-0`}
+                                >
                                   <span className="text-white font-bold text-sm">
                                     #{index + 1}
                                   </span>
@@ -4593,7 +5093,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                                   Amount
                                 </p>
-                                <p className="text-lg font-bold text-teal-700">
+                                <p
+                                  className={
+                                    voided
+                                      ? "text-lg font-bold text-gray-400 line-through"
+                                      : "text-lg font-bold text-teal-700"
+                                  }
+                                >
                                   {entry.amountKg.toFixed(2)} kg
                                 </p>
                               </div>
@@ -4601,11 +5107,24 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
                             {/* Withdrawal Type Badge */}
                             <div className="mb-3">
-                              <span
-                                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border ${badgeColor}`}
-                              >
-                                {entry.withdrawalType}
-                              </span>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span
+                                  className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border ${badgeColor}`}
+                                >
+                                  {entry.withdrawalType}
+                                </span>
+                                {voided && <VoidedTag />}
+                              </div>
+                              {voided && (
+                                <VoidedNote
+                                  className="mt-1.5"
+                                  voidedAt={entry.voidedAt}
+                                  voidedByName={
+                                    data.users.find((u) => u.id === entry.voidedById)?.name
+                                  }
+                                  voidReason={entry.voidReason}
+                                />
+                              )}
                             </div>
 
                             {/* Sale Information */}
@@ -4695,9 +5214,14 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
                             {/* Sale withdrawals link to their invoice. Not on
                                 someone else's lot: the backend withheld the
-                                sale, so the invoice would be a blank draft. */}
-                            {entry.withdrawalType === "Sale" && !entry.saleDetailsHidden && (
-                              <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2">
+                                sale, so the invoice would be a blank draft.
+                                Nor on a voided sale, which never happened.
+                                The lot's owner and Admin also get Edit (a
+                                Sale's customer, price, invoice number) and
+                                Void (D7). */}
+                            {(offerInvoice || onEdit || onVoid) && (
+                              <div className="mt-3 pt-3 border-t border-gray-100 flex justify-end gap-2">
+                                {offerInvoice && (
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -4712,6 +5236,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                   <FileText className="h-3.5 w-3.5" />
                                   Invoice
                                 </button>
+                                )}
+                                <WithdrawalRowActions onEdit={onEdit} onVoid={onVoid} />
                               </div>
                             )}
                           </div>
@@ -4741,6 +5267,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           portals, so inside it saving a customer would also submit the
           withdrawal. Its overlay sits above the Withdraw Stock popup. */}
       {withdrawDetails.newCustomerModal}
+      {/* Void / Edit a withdrawal, above the history popup they open from. */}
+      {withdrawalCorrections.modals}
       {pricingLot && (
         <SetPriceModal
           lot={pricingLot}
@@ -4755,6 +5283,43 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           onClose={() => setEditingHarvestLot(null)}
           onSaved={handleHarvestLotSaved}
           onError={handleHarvestLotEditError}
+        />
+      )}
+      {editingBatch && (
+        <EditProcessingBatchModal
+          batch={editingBatch.batch}
+          parchmentLot={editingBatch.lot}
+          cherryLot={data.harvestLots.find(
+            (h) => h.id === editingBatch.batch.harvestLotId,
+          )}
+          processTypes={data.processTypes}
+          onClose={() => setEditingBatch(null)}
+          onSaved={handleBatchSaved}
+          onError={handleCorrectionError}
+        />
+      )}
+      {editingParchment && (
+        <EditParchmentLotModal
+          lot={editingParchment}
+          batch={batchOfParchment(editingParchment)}
+          onClose={() => setEditingParchment(null)}
+          onSaved={handleParchmentSaved}
+          onError={handleCorrectionError}
+        />
+      )}
+      {editingGreenBean && (
+        <EditGreenBeanLotModal
+          lot={editingGreenBean}
+          parchmentLot={
+            editingGreenBean.parchmentLotId
+              ? data.parchmentLots.find(
+                  (p) => p.id === editingGreenBean.parchmentLotId,
+                )
+              : undefined
+          }
+          onClose={() => setEditingGreenBean(null)}
+          onSaved={handleGreenBeanSaved}
+          onError={handleCorrectionError}
         />
       )}
       {invoiceView && (

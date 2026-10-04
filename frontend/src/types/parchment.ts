@@ -22,6 +22,7 @@ export interface ParchmentWithdrawalRecord {
   currency?: string;
   customerName?: string;
   deliveryAddress?: string;
+  invoiceNumber?: string;
   totalAmount?: number;
   targetRoasterId?: string;
   roastProfileNotes?: string;
@@ -29,6 +30,15 @@ export interface ParchmentWithdrawalRecord {
   // Set by the backend when the viewer does not own the lot: the purpose and
   // the sale columns above were withheld.
   saleDetailsHidden?: boolean;
+  /**
+   * When the withdrawal was voided (D7): its kg went back to the lot (and a
+   * Hull & Grade's green bean lots were removed). The row stays, marked void.
+   */
+  voidedAt?: string;
+  /** Who voided it. */
+  voidedById?: string;
+  /** Why, as typed. Withheld with the sale on someone else's lot. */
+  voidReason?: string;
 }
 
 export enum ParchmentSourceType {

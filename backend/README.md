@@ -48,7 +48,17 @@ EMAIL_ENABLED="false"
 RESEND_API_KEY="re_your_resend_api_key"
 RESEND_FROM="onboarding@resend.dev"
 EMAIL_FROM="Coffee Lab <onboarding@resend.dev>"
+
+# Google Gemini key for the AI buttons (Optional - see "AI features" below).
+# Backend only: never put it in the frontend env, where any value is public.
+GEMINI_API_KEY="your-gemini-api-key"
 ```
+
+`GEMINI_API_KEY` is read only by `POST /api/ai/:feature`. Left unset, that route
+answers 501 "AI features are not set up on this server yet" and nothing else
+changes. On Vercel, set it in the **backend** project's environment variables
+and redeploy. Do not set `VITE_GEMINI_API_KEY` (or any Gemini key) in the
+frontend project: Vite pastes `VITE_*` values into the public bundle.
 
 ### 3. Database Setup
 
@@ -145,6 +155,34 @@ The API will be available at `http://localhost:3001`
 
 - `GET /api/trace/:publicId` - Public traceability lookup (no auth required)
 
+### AI features
+
+The browser never holds a Gemini key. Each feature takes structured input,
+builds its prompt on the server (`src/lib/aiFeatures.ts`) and calls Gemini
+(`gemini-2.5-flash`, `src/lib/gemini.ts`) with `GEMINI_API_KEY`, sent in the
+`x-goog-api-key` header. Responses are `{ result }`; the key and Gemini's own
+error text never appear in a response or the server log. Each feature caps
+the length of Gemini's answer (`AI_MAX_OUTPUT_TOKENS`), so the free text a
+caller sends cannot steer it into a long, billed one.
+
+- `POST /api/ai/soil-recommendations` - Advice text (Thai) for a soil analysis `{ pH, phosphorus, potassium, nitrogen, calcium, magnesium, organicMatter?, sulfur?, zinc?, iron?, manganese?, copper?, boron?, location?, variety? }` → `{ result: string }` (Farmer, Processor, Admin)
+- `POST /api/ai/soil-image` - Read a lab report photo `{ imageBase64, mimeType }` (jpeg, png, webp, heic, heif; at most 4,000,000 base64 characters) → `{ result: { pH?, phosphorus?, …, labName?, certificateNumber? } }`, every value a string (Farmer, Processor, Admin)
+- `POST /api/ai/quality-insights` - One attribute across a cupping session `{ attribute, samples: [{ blindCode, averageScore, notes }] }` (1-60 samples, notes up to 2,000 characters) → `{ result: { keyDescriptors, performanceSummary, roasterRecommendations } }` (Processor, Roaster, Admin)
+- `POST /api/ai/quality-report` - Annual report over the top lots `{ lots: [{ lotId, score, variety, process, notes }] }` (1-10 lots) → `{ result: ComprehensiveQualityReport }` (Processor, Roaster, Admin)
+
+Every feature needs a signed-in user with one of its roles (super admins
+always pass) and a JSON body within the feature's size limit. All features
+share one per-user limit of 5 calls a minute. Each server instance counts
+requests in memory, and every call that reaches Gemini is also counted on the
+user's row (`User.aiWindowStartedAt` / `aiWindowCalls`, `src/lib/aiRateLimit.ts`),
+which all instances share: apply `prisma/sql/006_ai_rate_limit.sql` before
+deploying (see `prisma/README.md`). As a backstop for the bill, also set a
+requests-per-minute quota on the key in Google Cloud.
+
+Errors: 401 signed out, 403 wrong role, 404 unknown feature, 413 body too
+large, 415 not JSON, 400 invalid input, 429 rate limited, 501 key not set,
+502 Gemini failed or gave an unreadable answer, 504 Gemini took over 25 s.
+
 ### Roaster Inventory
 
 - `GET /api/roaster-inventory` - List roaster inventory items
@@ -229,7 +267,7 @@ The API will be available at `http://localhost:3001`
 - `GET /api/customers` - List all customers
 - `POST /api/customers` - Create customer
 - `GET /api/customers/:id` - Get customer by ID
-- `PUT /api/customers/:id` - Update customer
+- `PUT /api/customers/:id` - Update customer (Admin, Roaster, Processor)
 - `DELETE /api/customers/:id` - Delete a customer nobody has sold to (Admin, Roaster)
 
 ### Sale Orders
@@ -341,7 +379,8 @@ backend/
 2. Use strong `JWT_SECRET` (min 32 chars)
 3. Configure `DATABASE_URL` pointing to production DB
 4. Set `FRONTEND_URL` to production frontend URL
-5. Run `npm run build` then `npm start`
+5. Set `GEMINI_API_KEY` to enable the AI buttons (backend only, see above)
+6. Run `npm run build` then `npm start`
 
 ## License
 

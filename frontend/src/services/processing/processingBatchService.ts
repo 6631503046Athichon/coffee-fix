@@ -1,5 +1,6 @@
-import { ProcessingBatch, ProcessingBatchStatus } from '../../types';
+import { ParchmentLot, ProcessingBatch, ProcessingBatchStatus } from '../../types';
 import { api } from '../api';
+import { transformParchmentLotFromBackend } from '../lots/parchmentLotService';
 
 // Status mapping constants
 const STATUS_TO_BACKEND: Record<ProcessingBatchStatus, string> = {
@@ -62,27 +63,56 @@ export const addProcessingBatch = async (
 };
 
 /**
- * Update an existing processing batch
+ * The batch fields the edit popup can correct. An empty string clears notes
+ * or a date; a field left out is not sent and stays as it is.
+ */
+export type ProcessingBatchUpdate = Partial<Pick<
+  ProcessingBatch,
+  | 'status'
+  | 'processType'
+  | 'processNotes'
+  | 'cropYearId'
+  | 'parchmentWeightKg'
+  | 'moistureContent'
+  | 'baggingDate'
+  | 'dryingStartDate'
+  | 'dryingEndDate'
+>>;
+
+export interface UpdatedProcessingBatch {
+  processingBatch: ProcessingBatch;
+  /** The batch's parchment lots as saved: weight, moisture and process type follow the batch. */
+  parchmentLots: ParchmentLot[];
+}
+
+/**
+ * Update an existing processing batch. Only the fields given are sent, so a
+ * partial edit never clears the others.
  */
 export const updateProcessingBatch = async (
   batchId: string,
-  batchData: Partial<ProcessingBatch>
-): Promise<ProcessingBatch> => {
+  changes: ProcessingBatchUpdate
+): Promise<UpdatedProcessingBatch> => {
+  const payload: Record<string, unknown> = {};
+  if (changes.status !== undefined) payload.status = STATUS_TO_BACKEND[changes.status];
+  if (changes.processType !== undefined) payload.processType = changes.processType;
+  if (changes.processNotes !== undefined) payload.processNotes = changes.processNotes || null;
+  if (changes.cropYearId !== undefined) payload.cropYearId = changes.cropYearId || null;
+  if (changes.parchmentWeightKg !== undefined) payload.parchmentWeightKg = changes.parchmentWeightKg;
+  if (changes.moistureContent !== undefined) payload.moistureContent = changes.moistureContent;
+  for (const key of ['baggingDate', 'dryingStartDate', 'dryingEndDate'] as const) {
+    if (changes[key] !== undefined) payload[key] = changes[key] || null;
+  }
   const response = await api.put<{ processingBatch: any }>(
     `/processing-batches/${batchId}`,
-    {
-      status: batchData.status ? STATUS_TO_BACKEND[batchData.status] : undefined,
-      processType: batchData.processType,
-      processNotes: batchData.processNotes || null,
-      cropYearId: batchData.cropYearId || null,
-      parchmentWeightKg: batchData.parchmentWeightKg ?? null,
-      moistureContent: batchData.moistureContent ?? null,
-      baggingDate: batchData.baggingDate || null,
-      dryingStartDate: batchData.dryingStartDate || null,
-      dryingEndDate: batchData.dryingEndDate || null,
-    }
+    payload
   );
-  return transformProcessingBatchFromBackend(response.processingBatch);
+  return {
+    processingBatch: transformProcessingBatchFromBackend(response.processingBatch),
+    parchmentLots: (response.processingBatch?.parchmentLots ?? []).map(
+      transformParchmentLotFromBackend
+    ),
+  };
 };
 
 /**
@@ -104,11 +134,24 @@ export const addDryingLog = async (
   return response.dryingLog;
 };
 
+export interface DeletedProcessingBatch {
+  /** The cherry lot went back to Ready for processing. */
+  harvestLotReleased: boolean;
+  /** Its untouched parchment output, deleted with it. */
+  parchmentLotsDeleted: number;
+}
+
 /**
- * Delete a processing batch
+ * Delete a processing batch. The backend takes its parchment output with it
+ * only while nothing was drawn from it; otherwise it answers 409 with the
+ * counts and deletes nothing.
  */
-export const deleteProcessingBatch = async (batchId: string): Promise<void> => {
-  await api.delete(`/processing-batches/${batchId}`);
+export const deleteProcessingBatch = async (batchId: string): Promise<DeletedProcessingBatch> => {
+  const response = await api.delete<Partial<DeletedProcessingBatch>>(`/processing-batches/${batchId}`);
+  return {
+    harvestLotReleased: Boolean(response?.harvestLotReleased),
+    parchmentLotsDeleted: response?.parchmentLotsDeleted ?? 0,
+  };
 };
 
 /**
@@ -119,6 +162,7 @@ export function transformProcessingBatchFromBackend(backendBatch: any): Processi
     id: backendBatch.id,
     displayId: backendBatch.displayId || undefined,
     harvestLotId: backendBatch.harvestLotId,
+    createdById: backendBatch.createdById || undefined,
     status: STATUS_FROM_BACKEND[backendBatch.status] || backendBatch.status,
     processType: backendBatch.processType,
     processNotes: backendBatch.processNotes || undefined,

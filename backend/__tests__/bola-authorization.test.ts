@@ -558,15 +558,16 @@ describe('BOLA Authorization Tests', () => {
       })
       mockPrisma.parchmentLot.update.mockResolvedValueOnce({
         id: 'lot-123',
-        status: 'Ready',
+        moistureContent: 11,
         processingBatch: { harvestLot: {} },
       })
 
       const { PATCH } = await import('@/app/api/parchment-lots/[id]/route')
 
+      // Status is no longer sent: it follows from the weight (F24).
       const request = new NextRequest('http://localhost:3001/api/parchment-lots/lot-123', {
         method: 'PATCH',
-        body: JSON.stringify({ status: 'Ready' }),
+        body: JSON.stringify({ moistureContent: 11 }),
       })
 
       const params = Promise.resolve({ id: 'lot-123' })

@@ -8,40 +8,48 @@ datasource db {
 }
 
 model User {
-  id                   String                 @id @default(uuid())
-  email                String?                @unique
-  username             String?                @unique
-  password             String
-  name                 String
-  roles                UserRole[]
-  isActive             Boolean                @default(true)
-  isSuperAdmin         Boolean                @default(false)
-  mustChangePassword   Boolean                @default(true)
-  mustChangeUsername   Boolean                @default(false)
-  mustChangeEmail      Boolean                @default(false)
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  lastLogin            DateTime?
-  cuppingSessions      CuppingSession[]       @relation("SessionCreator")
-  cuppingJudges        CuppingSessionJudge[]
-  createdFarms         Farm[]                 @relation("FarmOwner")
-  farmCollaborations   FarmCollaborator[]     @relation("CollaboratorUser")
-  gapLogs              GAPLogEntry[]
-  greenBeanLots        GreenBeanLot[]         @relation("GreenBeanLotCreator")
-  priceSetGreenBeans   GreenBeanLot[]         @relation("PriceSetter")
-  withdrawalHistory    GreenBeanWithdrawal[]  @relation("WithdrawalUser")
-  parchmentWithdrawals ParchmentWithdrawal[]  @relation("ParchmentWithdrawalUser")
-  harvestLots          HarvestLot[]           @relation("HarvestLotCreator")
-  invoices             Invoice[]
-  judgeScores          JudgeScore[]
-  passwordResetTokens  PasswordResetToken[]
-  pricingHistory       PricingHistory[]
-  processingBatches    ProcessingBatch[]      @relation("ProcessingBatchCreator")
-  roastBatches         RoastBatch[]
-  roasterInventory     RoasterInventoryItem[]
-  saleOrders           SaleOrder[]
-  soilAnalyses         SoilAnalysis[]
-  weatherRecords       WeatherRecord[]
+  id                         String                 @id @default(uuid())
+  email                      String?                @unique
+  username                   String?                @unique
+  password                   String
+  name                       String
+  roles                      UserRole[]
+  isActive                   Boolean                @default(true)
+  isSuperAdmin               Boolean                @default(false)
+  mustChangePassword         Boolean                @default(true)
+  mustChangeUsername         Boolean                @default(false)
+  mustChangeEmail            Boolean                @default(false)
+  createdAt                  DateTime               @default(now())
+  updatedAt                  DateTime               @updatedAt
+  lastLogin                  DateTime?
+  /// The user's shared AI call count (POST /api/ai/:feature, lib/aiRateLimit):
+  /// when their current one-minute window started and how many calls it
+  /// holds. Written only by that guarded UPDATE; NULL until their first AI
+  /// call. See prisma/sql/005_ai_rate_limit.sql.
+  aiWindowStartedAt          DateTime?
+  aiWindowCalls              Int?
+  cuppingSessions            CuppingSession[]       @relation("SessionCreator")
+  cuppingJudges              CuppingSessionJudge[]
+  createdFarms               Farm[]                 @relation("FarmOwner")
+  farmCollaborations         FarmCollaborator[]     @relation("CollaboratorUser")
+  gapLogs                    GAPLogEntry[]
+  greenBeanLots              GreenBeanLot[]         @relation("GreenBeanLotCreator")
+  priceSetGreenBeans         GreenBeanLot[]         @relation("PriceSetter")
+  withdrawalHistory          GreenBeanWithdrawal[]  @relation("WithdrawalUser")
+  parchmentWithdrawals       ParchmentWithdrawal[]  @relation("ParchmentWithdrawalUser")
+  voidedGreenBeanWithdrawals GreenBeanWithdrawal[]  @relation("GreenBeanWithdrawalVoider")
+  voidedParchmentWithdrawals ParchmentWithdrawal[]  @relation("ParchmentWithdrawalVoider")
+  harvestLots                HarvestLot[]           @relation("HarvestLotCreator")
+  invoices                   Invoice[]
+  judgeScores                JudgeScore[]
+  passwordResetTokens        PasswordResetToken[]
+  pricingHistory             PricingHistory[]
+  processingBatches          ProcessingBatch[]      @relation("ProcessingBatchCreator")
+  roastBatches               RoastBatch[]
+  roasterInventory           RoasterInventoryItem[]
+  saleOrders                 SaleOrder[]
+  soilAnalyses               SoilAnalysis[]
+  weatherRecords             WeatherRecord[]
 
   @@index([email])
   @@index([username])
@@ -210,50 +218,55 @@ model ParchmentLot {
 }
 
 model GreenBeanLot {
-  id                 String                      @id @default(uuid())
-  displayId          String?                     @unique
-  sourceType         GreenBeanSourceType
-  parchmentLotId     String?
-  grade              String
-  initialWeightKg    Float
-  currentWeightKg    Float
-  availabilityStatus GreenBeanAvailabilityStatus @default(Available)
-  pricePerKg         Float?
-  currency           String?
-  priceSetDate       DateTime?
-  priceSetBy         String?
-  createdById        String?
-  externalSource     Json?
-  publicTraceId      String?                     @unique
-  qrGeneratedAt      DateTime?
-  processorScore     Float?
-  cuppingFragrance   Float?
-  cuppingFlavor      Float?
-  cuppingAftertaste  Float?
-  cuppingAcidity     Float?
-  cuppingBody        Float?
-  cuppingBalance     Float?
-  cuppingOverall     Float?
-  cuppingUniformity  Float?
-  cuppingCleanCup    Float?
-  cuppingSweetness   Float?
-  createdAt          DateTime                    @default(now())
-  updatedAt          DateTime                    @updatedAt
-  cuppingSamples     CuppingSample[]
-  cuppingScores      CuppingScore[]
-  createdBy          User?                       @relation("GreenBeanLotCreator", fields: [createdById], references: [id])
-  parchmentLot       ParchmentLot?               @relation(fields: [parchmentLotId], references: [id])
-  priceSetter        User?                       @relation("PriceSetter", fields: [priceSetBy], references: [id])
-  withdrawalHistory  GreenBeanWithdrawal[]
-  invoiceItems       InvoiceItem[]
-  pricingHistory     PricingHistory[]
-  roastBatches       RoastBatch[]
-  roasterInventory   RoasterInventoryItem[]
-  saleOrderItems     SaleOrderItem[]
+  id                    String                      @id @default(uuid())
+  displayId             String?                     @unique
+  sourceType            GreenBeanSourceType
+  parchmentLotId        String?
+  grade                 String
+  initialWeightKg       Float
+  currentWeightKg       Float
+  availabilityStatus    GreenBeanAvailabilityStatus @default(Available)
+  pricePerKg            Float?
+  currency              String?
+  priceSetDate          DateTime?
+  priceSetBy            String?
+  createdById           String?
+  externalSource        Json?
+  publicTraceId         String?                     @unique
+  qrGeneratedAt         DateTime?
+  processorScore        Float?
+  cuppingFragrance      Float?
+  cuppingFlavor         Float?
+  cuppingAftertaste     Float?
+  cuppingAcidity        Float?
+  cuppingBody           Float?
+  cuppingBalance        Float?
+  cuppingOverall        Float?
+  cuppingUniformity     Float?
+  cuppingCleanCup       Float?
+  cuppingSweetness      Float?
+  /// The Hull & Grade parchment withdrawal that made this lot (prisma/sql/005).
+  /// Null on lots made any other way and on lots hulled before 005.
+  parchmentWithdrawalId String?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  cuppingSamples        CuppingSample[]
+  cuppingScores         CuppingScore[]
+  createdBy             User?                       @relation("GreenBeanLotCreator", fields: [createdById], references: [id])
+  parchmentLot          ParchmentLot?               @relation(fields: [parchmentLotId], references: [id])
+  parchmentWithdrawal   ParchmentWithdrawal?        @relation(fields: [parchmentWithdrawalId], references: [id], onDelete: SetNull)
+  priceSetter           User?                       @relation("PriceSetter", fields: [priceSetBy], references: [id])
+  withdrawalHistory     GreenBeanWithdrawal[]
+  invoiceItems          InvoiceItem[]
+  pricingHistory        PricingHistory[]
+  roastBatches          RoastBatch[]
+  roasterInventory      RoasterInventoryItem[]
+  saleOrderItems        SaleOrderItem[]
 
   @@index([sourceType])
   @@index([availabilityStatus])
   @@index([parchmentLotId])
+  @@index([parchmentWithdrawalId])
   @@index([updatedAt])
   @@index([createdAt])
 }
@@ -274,35 +287,53 @@ model GreenBeanWithdrawal {
   invoiceNumber   String?
   deliveryAddress String?
   totalAmount     Float?
+  /// The roaster whose RoasterInventoryItem received the kg (prisma/sql/005).
+  /// Null when none did, and on withdrawals recorded before 005.
+  targetRoasterId String?
+  /// Set when the withdrawal is voided: the kg went back to the lot (and off
+  /// the roaster's stock) and the row stays as a record. See prisma/sql/005.
+  voidedAt        DateTime?
+  voidedById      String?
+  voidReason      String?
   createdAt       DateTime       @default(now())
   greenBeanLot    GreenBeanLot   @relation(fields: [greenBeanLotId], references: [id], onDelete: Cascade)
   withdrawnByUser User?          @relation("WithdrawalUser", fields: [withdrawnBy], references: [id])
+  voidedByUser    User?          @relation("GreenBeanWithdrawalVoider", fields: [voidedById], references: [id], onDelete: SetNull)
 
   @@index([greenBeanLotId])
   @@index([date])
 }
 
 model ParchmentWithdrawal {
-  id                String                  @id @default(uuid())
-  parchmentLotId    String
-  amountKg          Float
-  withdrawalType    ParchmentWithdrawalType
-  purpose           String
-  notes             String?
-  date              DateTime                @default(now())
-  withdrawnBy       String?
-  withdrawnByName   String?
-  salePrice         Float?
-  currency          String?
-  customerName      String?
-  deliveryAddress   String?
-  totalAmount       Float?
-  targetRoasterId   String?
-  roastProfileNotes String?
-  cuppingScore      Float?
-  createdAt         DateTime                @default(now())
-  parchmentLot      ParchmentLot            @relation(fields: [parchmentLotId], references: [id], onDelete: Cascade)
-  withdrawnByUser   User?                   @relation("ParchmentWithdrawalUser", fields: [withdrawnBy], references: [id])
+  id                  String                  @id @default(uuid())
+  parchmentLotId      String
+  amountKg            Float
+  withdrawalType      ParchmentWithdrawalType
+  purpose             String
+  notes               String?
+  date                DateTime                @default(now())
+  withdrawnBy         String?
+  withdrawnByName     String?
+  salePrice           Float?
+  currency            String?
+  customerName        String?
+  deliveryAddress     String?
+  totalAmount         Float?
+  targetRoasterId     String?
+  roastProfileNotes   String?
+  cuppingScore        Float?
+  /// Editable afterwards like the other sale fields (prisma/sql/005).
+  invoiceNumber       String?
+  /// Set when the withdrawal is voided: the kg went back to the lot (a Hull &
+  /// Grade's green bean lots are removed) and the row stays as a record. See prisma/sql/005.
+  voidedAt            DateTime?
+  voidedById          String?
+  voidReason          String?
+  createdAt           DateTime                @default(now())
+  parchmentLot        ParchmentLot            @relation(fields: [parchmentLotId], references: [id], onDelete: Cascade)
+  withdrawnByUser     User?                   @relation("ParchmentWithdrawalUser", fields: [withdrawnBy], references: [id])
+  voidedByUser        User?                   @relation("ParchmentWithdrawalVoider", fields: [voidedById], references: [id], onDelete: SetNull)
+  gradedGreenBeanLots GreenBeanLot[]
 
   @@index([parchmentLotId])
   @@index([date])

@@ -443,7 +443,8 @@ describe('sales access and scoping', () => {
       expect(mockPrisma.customer.create).not.toHaveBeenCalled()
     })
 
-    test('a Processor still cannot list, read or edit customers', async () => {
+    // Editing is open to Processors (D3): see customer-edit-roles.test.ts.
+    test('a Processor still cannot list or read customers', async () => {
       mockAuthUser = processor
       const list = await import('@/app/api/customers/route')
       expect((await list.GET(request('/api/customers'))).status).toBe(403)
@@ -451,13 +452,7 @@ describe('sales access and scoping', () => {
 
       const one = await import('@/app/api/customers/[id]/route')
       expect((await one.GET(request(`/api/customers/${CUSTOMER}`), params(CUSTOMER))).status).toBe(403)
-      const edit = request(`/api/customers/${CUSTOMER}`, {
-        method: 'PUT',
-        body: JSON.stringify({ name: 'Renamed' }),
-      })
-      expect((await one.PUT(edit, params(CUSTOMER))).status).toBe(403)
       expect(mockPrisma.customer.findUnique).not.toHaveBeenCalled()
-      expect(mockPrisma.customer.update).not.toHaveBeenCalled()
     })
 
     test('409 when a sale lands between the count and the delete; 404 when already gone', async () => {

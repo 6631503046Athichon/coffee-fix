@@ -10,6 +10,8 @@ export interface RoasterInventoryItem {
   greenBeanLotId: string;
   claimedWeightKg: number;
   remainingWeightKg: number;
+  /** ISO timestamp the stock row was started at. */
+  createdAt?: string;
   // Enriched from nested greenBeanLot (populated by transformInventoryItem)
   greenBeanDisplayId?: string;
   grade?: string;

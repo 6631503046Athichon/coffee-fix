@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client'
+import type { Prisma, UserRole } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import type { AuthenticatedUser } from '@/lib/middleware'
 import { isAdminUser } from '@/lib/saleOrders'
@@ -71,4 +71,40 @@ export async function farmIdFilter(
     throw new Error('Insufficient permissions')
   }
   return requestedFarmId
+}
+
+// Multi-role accounts (D8): a user may hold Farmer and a staff role at once,
+// e.g. a farmer who also runs the wet mill. The staff role's screens work
+// across every farm (Processors process any farmer's cherry, Roasters buy
+// from any lot, HeadJudges and Cuppers score any lot's samples, Admins do
+// everything), so being a Farmer as well never narrows them. The farmer-only
+// rules (own farms' lots and lot chain, nobody else's lot by id) protect
+// accounts with no staff role. Soil, weather and GAP are not farmer rules:
+// every non-Admin sees those only on farms they belong to (above).
+
+/**
+ * Every role except Farmer. Listed rather than derived, so a role added to
+ * the enum later is not staff until someone decides it is (a test fails until
+ * the new role is placed on one side).
+ */
+export const STAFF_ROLES = [
+  'Processor',
+  'Roaster',
+  'HeadJudge',
+  'Cupper',
+  'Admin',
+] as const satisfies readonly UserRole[]
+
+const STAFF_ROLE_SET: ReadonlySet<string> = new Set(STAFF_ROLES)
+
+type RoleHolder = Pick<AuthenticatedUser, 'roles' | 'isSuperAdmin'>
+
+/** Holds a staff role; a super admin always counts, whatever their roles. */
+export function hasStaffRole(user: RoleHolder): boolean {
+  return !!user.isSuperAdmin || user.roles.some(role => STAFF_ROLE_SET.has(role))
+}
+
+/** A Farmer with no staff role: the only user the farmer scoping applies to. */
+export function isFarmerOnly(user: RoleHolder): boolean {
+  return user.roles.includes('Farmer') && !hasStaffRole(user)
 }

@@ -213,7 +213,7 @@ export async function POST(
       }
 
       // Create withdrawal record
-      await tx.parchmentWithdrawal.create({
+      const withdrawal = await tx.parchmentWithdrawal.create({
         data: {
           parchmentLotId: id,
           amountKg: amount,
@@ -270,6 +270,8 @@ export async function POST(
               displayId: greenBeanDisplayIds[i],
               sourceType: 'Internal',
               parchmentLotId: id,
+              // The hull that made it, so voiding the hull can find it.
+              parchmentWithdrawalId: withdrawal.id,
               grade: gl.grade,
               initialWeightKg: weight,
               currentWeightKg: weight,

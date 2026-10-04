@@ -1,5 +1,5 @@
 import React, { useId, useMemo } from 'react'
-import { Plus, Send } from 'lucide-react'
+import { Pencil, Plus, Send } from 'lucide-react'
 import Select from '../../common/Select'
 import type { Customer } from '../../../types'
 import {
@@ -20,6 +20,8 @@ interface WithdrawDetailsFieldsProps {
   roasters: { value: string; label: string }[]
   /** "+ New customer": the page opens its CreateCustomerModal. */
   onNewCustomer: () => void
+  /** "Edit" next to the picked customer: opens the customer edit popup. */
+  onEditCustomer?: () => void
   /** Extra classes on the tinted block, e.g. its margin. */
   className?: string
 }
@@ -37,6 +39,7 @@ const WithdrawDetailsFields: React.FC<WithdrawDetailsFieldsProps> = ({
   customers,
   roasters,
   onNewCustomer,
+  onEditCustomer,
   className = '',
 }) => {
   const id = useId()
@@ -50,6 +53,9 @@ const WithdrawDetailsFields: React.FC<WithdrawDetailsFieldsProps> = ({
   )
   const set = (patch: Partial<WithdrawDetails>) =>
     onChange((current) => ({ ...current, ...patch }))
+  const pickedCustomer = details.customerId
+    ? customers.find((c) => c.id === details.customerId)
+    : undefined
 
   if (type === 'Sale') {
     return (
@@ -65,18 +71,31 @@ const WithdrawDetailsFields: React.FC<WithdrawDetailsFieldsProps> = ({
               >
                 Customer
               </span>
-              <button
-                type="button"
-                onClick={onNewCustomer}
-                className={
-                  customers.length === 0
-                    ? 'inline-flex items-center gap-1 rounded-md bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-blue-700'
-                    : 'inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700'
-                }
-              >
-                <Plus className="h-3.5 w-3.5" />
-                New customer
-              </button>
+              <div className="flex items-center gap-3">
+                {pickedCustomer && onEditCustomer && (
+                  <button
+                    type="button"
+                    onClick={onEditCustomer}
+                    aria-label={`Edit customer ${pickedCustomer.name}`}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    Edit
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onNewCustomer}
+                  className={
+                    customers.length === 0
+                      ? 'inline-flex items-center gap-1 rounded-md bg-blue-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-blue-700'
+                      : 'inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700'
+                  }
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  New customer
+                </button>
+              </div>
             </div>
             <Select
               value={details.customerId || null}

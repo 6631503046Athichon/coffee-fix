@@ -16,7 +16,9 @@ import { isAdminUser } from '@/lib/saleOrders'
 // recorded it, with `saleDetailsHidden: true` so the client knows the sale
 // columns were withheld rather than never entered (and offers no invoice).
 // The free-text `purpose` is withheld with the sale: people type customer
-// names and order numbers into it.
+// names and order numbers into it. Whether a row is void (voidedAt, and who
+// voided it) is public, so everyone's history and kg add up the same way;
+// the free-text `voidReason` is withheld like `purpose`.
 
 /**
  * Columns anyone who can open the lot may read. Listed rather than stripped,
@@ -36,6 +38,8 @@ export const PUBLIC_WITHDRAWAL_FIELDS = [
   'withdrawnByName',
   'withdrawnByUser',
   'cuppingScore',
+  'voidedAt',
+  'voidedById',
 ] as const
 
 /** Whether `user` may read the sale details on a lot owned by `ownerId`. */

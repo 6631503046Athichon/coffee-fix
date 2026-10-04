@@ -2,9 +2,23 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
-import { safeParseFloat } from '@/lib/utils'
+import { parseStrictNumber, safeParseFloat } from '@/lib/utils'
+import {
+  LOT_CHANGED,
+  LOT_CHANGED_MESSAGE,
+  belowOutMessage,
+  describeDependents,
+  hasDependents,
+  reweighLot,
+  type ReweighResult,
+} from '@/lib/lotCorrections'
 
-// PATCH /api/parchment-lots/:id - Update parchment lot
+// PATCH /api/parchment-lots/:id - Correct a parchment lot's weight or moisture
+//
+// The lot's weight is its initialWeightKg; the kg left (currentWeightKg) and
+// the status follow from it and from what was already withdrawn or hulled,
+// so neither is set directly. For a batch's only lot, the batch's parchment
+// weight and moisture follow too: they describe the same parchment.
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -20,34 +34,148 @@ export async function PATCH(
     // lots that have no processingBatch fall back to Admin-only.
     const existing = await prisma.parchmentLot.findUnique({
       where: { id },
-      select: { processingBatch: { select: { createdById: true } } },
+      select: {
+        initialWeightKg: true,
+        currentWeightKg: true,
+        processingBatchId: true,
+        processingBatch: {
+          select: {
+            createdById: true,
+            _count: { select: { parchmentLots: true } },
+            // The cherry it came from caps the parchment, as on create.
+            harvestLot: { select: { weightKg: true } },
+          },
+        },
+      },
     })
     if (!existing) {
       return NextResponse.json({ error: 'Parchment lot not found' }, { status: 404 })
     }
     requireOwnership(user, existing.processingBatch?.createdById, ['Admin'])
 
-    const body = await request.json()
-    const { status, currentWeightKg } = body
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    const fields = body as Record<string, unknown>
 
-    const updateData: Prisma.ParchmentLotUpdateInput = {}
-    if (status !== undefined) updateData.status = status
-    if (currentWeightKg !== undefined) {
-      const weight = safeParseFloat(currentWeightKg)
-      if (weight !== null) updateData.currentWeightKg = weight
+    if (fields.currentWeightKg !== undefined || fields.status !== undefined) {
+      return NextResponse.json(
+        {
+          error: 'The kg left and the status follow from the lot weight and its withdrawals; send initialWeightKg to correct the weight',
+        },
+        { status: 400 }
+      )
     }
 
-    const parchmentLot = await prisma.parchmentLot.update({
-      where: { id },
-      data: updateData,
-      include: {
-        processingBatch: {
-          include: {
-            harvestLot: true,
+    let newWeight: number | null = null
+    if (fields.initialWeightKg !== undefined) {
+      newWeight = parseStrictNumber(fields.initialWeightKg)
+      if (newWeight === null || newWeight <= 0) {
+        return NextResponse.json(
+          { error: 'Weight must be greater than 0' },
+          { status: 400 }
+        )
+      }
+    }
+    let newMoisture: number | null = null
+    if (fields.moistureContent !== undefined) {
+      newMoisture = safeParseFloat(fields.moistureContent)
+      if (newMoisture === null || newMoisture < 0 || newMoisture > 100) {
+        return NextResponse.json(
+          { error: 'Moisture content must be between 0 and 100' },
+          { status: 400 }
+        )
+      }
+    }
+    if (newWeight === null && newMoisture === null) {
+      return NextResponse.json(
+        { error: 'Send initialWeightKg or moistureContent to update' },
+        { status: 400 }
+      )
+    }
+
+    // The batch's only lot is the batch's whole output: keep the two in step.
+    const syncBatchId =
+      existing.processingBatchId && existing.processingBatch?._count?.parchmentLots === 1
+        ? existing.processingBatchId
+        : null
+
+    let reweigh: Extract<ReweighResult, { ok: true }> | null = null
+    if (newWeight !== null && Math.abs(existing.initialWeightKg - newWeight) > 1e-9) {
+      const cherryWeight = existing.processingBatch?.harvestLot?.weightKg
+      if (syncBatchId && typeof cherryWeight === 'number' && newWeight > cherryWeight) {
+        return NextResponse.json(
+          {
+            error: `Parchment weight (${newWeight.toFixed(2)} kg) cannot exceed the cherry lot weight (${cherryWeight.toFixed(2)} kg).`,
           },
-        },
-      },
-    })
+          { status: 400 }
+        )
+      }
+      const result = reweighLot(existing, newWeight)
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: belowOutMessage('parchment lot', result.outKg), withdrawnKg: result.outKg },
+          { status: 409 }
+        )
+      }
+      reweigh = result
+    }
+
+    let parchmentLot
+    try {
+      parchmentLot = await prisma.$transaction(async (tx) => {
+        if (reweigh) {
+          // Guarded on the weights as read: a withdrawal in between makes
+          // this match nothing instead of being overwritten.
+          const guarded = await tx.parchmentLot.updateMany({
+            where: {
+              id,
+              initialWeightKg: existing.initialWeightKg,
+              currentWeightKg: existing.currentWeightKg,
+            },
+            data: {
+              initialWeightKg: reweigh.initialWeightKg,
+              currentWeightKg: reweigh.currentWeightKg,
+              status: reweigh.depleted ? 'Hulled' : 'AwaitingHulling',
+            },
+          })
+          if (guarded.count === 0) throw new Error(LOT_CHANGED)
+        }
+        if (syncBatchId) {
+          const batchData: Prisma.ProcessingBatchUncheckedUpdateInput = {}
+          if (reweigh) batchData.parchmentWeightKg = reweigh.initialWeightKg
+          if (newMoisture !== null) batchData.moistureContent = newMoisture
+          if (Object.keys(batchData).length > 0) {
+            await tx.processingBatch.update({ where: { id: syncBatchId }, data: batchData })
+          }
+        }
+
+        const updateData: Prisma.ParchmentLotUpdateInput = {}
+        if (newMoisture !== null) updateData.moistureContent = newMoisture
+        return tx.parchmentLot.update({
+          where: { id },
+          data: updateData,
+          include: {
+            processingBatch: {
+              include: {
+                harvestLot: true,
+              },
+            },
+          },
+        })
+      })
+    } catch (error) {
+      if ((error as Error)?.message === LOT_CHANGED) {
+        return NextResponse.json({ error: LOT_CHANGED_MESSAGE }, { status: 409 })
+      }
+      throw error
+    }
 
     return NextResponse.json({ parchmentLot, message: 'Parchment lot updated successfully' })
   } catch (error) {
@@ -121,9 +249,10 @@ export async function DELETE(
     // Check if lot exists
     const lot = await prisma.parchmentLot.findUnique({
       where: { id },
-      include: {
-        greenBeanLots: true,
+      select: {
         processingBatch: { select: { createdById: true } },
+        // A voided withdrawal (D7) never happened: it goes with the lot.
+        _count: { select: { greenBeanLots: true, withdrawalHistory: { where: { voidedAt: null } } } },
       },
     })
 
@@ -138,22 +267,46 @@ export async function DELETE(
     // ProcessingBatch (or Admin) can delete this parchment lot.
     requireOwnership(user, lot.processingBatch?.createdById, ['Admin'])
 
-    // Check if there are green bean lots linked
-    if (lot.greenBeanLots && lot.greenBeanLots.length > 0) {
+    // Withdrawals (sales included) cascade with the lot and its green-bean
+    // lots would lose their source, so a lot anything was drawn from is not
+    // deleted, for Admin too: the counts come back instead.
+    const dependents = {
+      greenBeanLots: lot._count?.greenBeanLots ?? 0,
+      withdrawals: lot._count?.withdrawalHistory ?? 0,
+    }
+    if (hasDependents(dependents)) {
       return NextResponse.json(
-        { error: 'Cannot delete parchment lot with linked green bean lots. Delete green bean lots first.' },
-        { status: 400 }
+        {
+          error: `This parchment lot already has ${describeDependents(dependents)}, so it was not deleted`,
+          dependents,
+        },
+        { status: 409 }
       )
     }
 
-    // PhysicalTestResults and ParchmentWithdrawal both cascade on delete in
-    // the schema, so a single delete inside a transaction is sufficient and
-    // atomic — no separate deleteMany() is needed.
-    await prisma.$transaction(async (tx) => {
-      await tx.parchmentLot.delete({
-        where: { id },
-      })
+    // PhysicalTestResults cascade on delete in the schema. The delete repeats
+    // the "nothing drawn from it" rule, so a withdrawal or Hull & Grade that
+    // lands after the check above makes it match nothing.
+    const deleted = await prisma.parchmentLot.deleteMany({
+      where: {
+        id,
+        greenBeanLots: { none: {} },
+        withdrawalHistory: { none: { voidedAt: null } },
+      },
     })
+    if (deleted.count === 0) {
+      const stillThere = await prisma.parchmentLot.findUnique({
+        where: { id },
+        select: { id: true },
+      })
+      if (!stillThere) {
+        return NextResponse.json({ error: 'Parchment lot not found' }, { status: 404 })
+      }
+      return NextResponse.json(
+        { error: 'This parchment lot was drawn from since you looked, so it was not deleted. Reload and try again.' },
+        { status: 409 }
+      )
+    }
 
     return NextResponse.json({ message: 'Parchment lot deleted successfully' })
   } catch (error) {
