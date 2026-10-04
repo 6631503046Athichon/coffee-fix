@@ -2,6 +2,7 @@ import { GreenBeanLot, GreenBeanWithdrawalRecord, RoasterInventoryItem } from ".
 import { api } from "../api";
 import { API_BASE_URL } from "../apiBaseUrl";
 import { handleApiErrorWithFallback } from "../../utils/errorHandler";
+import { toDateOnly } from "../../utils/dateOnly";
 
 // Backend-shaped payloads. Fields are intentionally typed loose because the
 // backend can evolve independently; the runtime transformer below maps these
@@ -291,9 +292,7 @@ export function transformGreenBeanLotFromBackend(backendLot: BackendGreenBeanLot
     qcNotes: backendLot.qcNotes ?? undefined,
     pricePerKg: backendLot.pricePerKg ?? undefined,
     currency: backendLot.currency ?? undefined,
-    priceSetDate: backendLot.priceSetDate
-      ? new Date(backendLot.priceSetDate).toISOString().substring(0, 10)
-      : undefined,
+    priceSetDate: toDateOnly(backendLot.priceSetDate) || undefined,
     priceSetBy: backendLot.priceSetBy ?? undefined,
     createdAt: backendLot.createdAt
       ? new Date(backendLot.createdAt).toISOString()
@@ -331,7 +330,7 @@ export function transformGreenBeanWithdrawalFromBackend(
   return {
     ...w,
     withdrawalType: WITHDRAWAL_TYPE_FROM_API[w.withdrawalType] || w.withdrawalType,
-    date: w.date ? new Date(w.date).toISOString().substring(0, 10) : w.date,
+    date: toDateOnly(w.date) || w.date,
   } as unknown as GreenBeanWithdrawalRecord;
 }
 

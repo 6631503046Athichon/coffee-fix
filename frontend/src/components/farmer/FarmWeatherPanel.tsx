@@ -908,7 +908,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
               {/* Quick-range presets — show active state when the
                   current filter matches the preset's range. Lets the
                   operator jump back to common windows in one click. */}
-              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-blue-100">
+              <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-blue-100">
                 <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                   ทางลัด:
                 </span>
@@ -930,7 +930,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                         setFilterStartDate(startIso)
                         setFilterEndDate(endIso)
                       }}
-                      className={`h-8 px-3 rounded-lg text-xs font-semibold transition-all ${
+                      className={`h-8 px-3 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                         isActive
                           ? 'bg-blue-600 text-white shadow-sm'
                           : 'border border-slate-200 bg-white text-slate-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700'

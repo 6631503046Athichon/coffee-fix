@@ -18,6 +18,7 @@ import {
   createParchmentWithdrawal,
   getAllParchmentLots,
 } from '../../services/lots/parchmentLotService'
+import { formatDateDisplay } from '../../utils/formatters'
 import ParchmentTab from './ParchmentTab'
 import { ROASTER_REQUIRED_MESSAGE } from './workbench'
 
@@ -678,5 +679,27 @@ describe('Source history withdrawals', () => {
     expect(rows).toHaveTextContent('4')
     expect(rows).not.toHaveTextContent('·')
     expect(rows).not.toHaveTextContent('undefined')
+  })
+
+  it("dates the lot and its parchment by their Thai day, in the app's date format", () => {
+    // 02:30 on 5 Oct in Thailand is still 4 Oct in UTC.
+    const washed: ParchmentLot = {
+      ...newParchment, id: 'pl-w', displayId: 'PL-2026-3', processType: 'Washed',
+      currentWeightKg: 0, status: 'Hulled', createdAt: '2026-10-04T19:30:00.000Z',
+    }
+    const lot: GreenBeanLot = {
+      ...newLot('gbl-h', 'GBL-2026-50', 'Grade A', 6), parchmentLotId: 'pl-w',
+      createdAt: '2026-10-04T19:30:00.000Z',
+    }
+    render(
+      <Harness
+        refreshData={async () => {}}
+        initial={{ harvestLots: [], parchmentLots: [washed], greenBeanLots: [lot] }}
+      />,
+    )
+    fireEvent.click(screen.getByLabelText('View source history'))
+    const day = formatDateDisplay('2026-10-05')
+    expect(screen.getByText(`Green Bean · ${day}`)).toBeInTheDocument()
+    expect(screen.getByText(day, { selector: 'span' })).toBeInTheDocument()
   })
 })

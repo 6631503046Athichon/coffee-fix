@@ -1,5 +1,6 @@
 import { ParchmentLot, ProcessingBatch, ProcessingBatchStatus } from '../../types';
 import { api } from '../api';
+import { toDateOnly } from '../../utils/dateOnly';
 import { transformParchmentLotFromBackend } from '../lots/parchmentLotService';
 
 // Status mapping constants
@@ -169,14 +170,14 @@ export function transformProcessingBatchFromBackend(backendBatch: any): Processi
     cropYearId: backendBatch.cropYearId || undefined,
     parchmentWeightKg: backendBatch.parchmentWeightKg ?? undefined,
     moistureContent: backendBatch.moistureContent ?? undefined,
-    baggingDate: backendBatch.baggingDate ? new Date(backendBatch.baggingDate).toISOString().split('T')[0] : undefined,
-    dryingStartDate: backendBatch.dryingStartDate ? new Date(backendBatch.dryingStartDate).toISOString().split('T')[0] : undefined,
-    dryingEndDate: backendBatch.dryingEndDate ? new Date(backendBatch.dryingEndDate).toISOString().split('T')[0] : undefined,
+    baggingDate: toDateOnly(backendBatch.baggingDate) || undefined,
+    dryingStartDate: toDateOnly(backendBatch.dryingStartDate) || undefined,
+    dryingEndDate: toDateOnly(backendBatch.dryingEndDate) || undefined,
     createdAt: backendBatch.createdAt
       ? new Date(backendBatch.createdAt).toISOString()
       : undefined,
     dryingLog: backendBatch.dryingLogs?.map((log: any) => ({
-      date: typeof log.date === 'string' ? log.date.split('T')[0] : new Date(log.date).toISOString().split('T')[0],
+      date: toDateOnly(log.date),
       moistureContent: log.moistureContent,
       ambientTemp: log.ambientTemp,
       relativeHumidity: log.relativeHumidity,

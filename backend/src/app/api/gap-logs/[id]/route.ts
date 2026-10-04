@@ -10,6 +10,7 @@ import {
   type FarmMembers,
 } from '@/lib/farmAccess'
 import { isAdminUser } from '@/lib/saleOrders'
+import { parseStrictDateOnly } from '@/lib/utils'
 
 type LogAccess = { createdBy: string | null; farm: FarmMembers | null }
 
@@ -143,6 +144,21 @@ export async function PUT(
     const body = await request.json()
     const { farmId, farmPlotLocation, activityTypeId, date, productUsed, quantity, notes } = body
 
+    // A picked YYYY-MM-DD is stored at 12:00 UTC (parseDateOnly's anchor),
+    // not 00:00 UTC, so it reads as the same day in every timezone. A log
+    // always has a date, so null or a non-date is refused.
+    let logDate: Date | undefined
+    if (date !== undefined) {
+      const parsed = parseStrictDateOnly(date)
+      if (!parsed || Number.isNaN(parsed.getTime())) {
+        return NextResponse.json(
+          { error: 'Date must be a valid date' },
+          { status: 400 }
+        )
+      }
+      logDate = parsed
+    }
+
     // SECURITY: a log moves only onto a farm the caller may record on (as
     // POST checks), so nobody can plant entries in another farmer's GAP
     // trail, and only off its farm for someone who may delete it there
@@ -199,7 +215,7 @@ export async function PUT(
         updateData.activityTypeName = activityType.name
       }
     }
-    if (date !== undefined) updateData.date = new Date(date)
+    if (logDate !== undefined) updateData.date = logDate
     if (productUsed !== undefined) updateData.productUsed = productUsed
     if (quantity !== undefined) updateData.quantity = quantity
     if (notes !== undefined) updateData.notes = notes

@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../api'
 import { ProcessingBatchStatus } from '../../types'
-import { deleteProcessingBatch, updateProcessingBatch } from './processingBatchService'
+import {
+  deleteProcessingBatch,
+  transformProcessingBatchFromBackend,
+  updateProcessingBatch,
+} from './processingBatchService'
 
 // F24: the batch edit popup saves through updateProcessingBatch. A partial
 // edit must send only what changed: sending every field (as before) cleared
@@ -56,6 +60,26 @@ describe('updateProcessingBatch', () => {
       status: 'ToProcess', processNotes: null, dryingEndDate: null, cropYearId: null,
     })
     expect(result.parchmentLots).toEqual([])
+  })
+})
+
+describe('transformProcessingBatchFromBackend dates', () => {
+  // 02:30 on 5 Oct in Thailand is still 4 Oct in UTC: each date is the 5th.
+  it('are Thai days', () => {
+    const batch = transformProcessingBatchFromBackend({
+      ...batchJson,
+      dryingStartDate: '2026-10-04T19:30:00.000Z',
+      dryingEndDate: '2026-10-05T12:00:00.000Z',
+      baggingDate: null,
+      dryingLogs: [
+        { date: '2026-10-04T19:30:00.000Z', moistureContent: 12, ambientTemp: 28, relativeHumidity: 70 },
+        { date: new Date('2026-10-04T19:30:00.000Z'), moistureContent: 11, ambientTemp: 27, relativeHumidity: 65 },
+      ],
+    })
+    expect(batch.dryingStartDate).toBe('2026-10-05')
+    expect(batch.dryingEndDate).toBe('2026-10-05')
+    expect(batch.baggingDate).toBeUndefined()
+    expect(batch.dryingLog?.map((log) => log.date)).toEqual(['2026-10-05', '2026-10-05'])
   })
 })
 

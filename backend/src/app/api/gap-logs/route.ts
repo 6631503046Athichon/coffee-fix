@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { farmIdFilter, farmMemberSelect, requireFarmAccess } from '@/lib/farmAccess'
+import { parseStrictDateOnly } from '@/lib/utils'
 
 // GET /api/gap-logs - List all GAP logs
 export async function GET(request: NextRequest) {
@@ -78,6 +79,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // A picked YYYY-MM-DD is stored at 12:00 UTC (parseDateOnly's anchor),
+    // not 00:00 UTC, so it reads as the same day in every timezone.
+    const logDate = parseStrictDateOnly(date)
+    if (!logDate || Number.isNaN(logDate.getTime())) {
+      return NextResponse.json(
+        { error: 'Date must be a valid date' },
+        { status: 400 }
+      )
+    }
+
     // SECURITY: If farmId is provided, the caller must own the farm,
     // collaborate on it, or be an Admin.
     if (farmId) {
@@ -114,7 +125,7 @@ export async function POST(request: NextRequest) {
         farmPlotLocation,
         activityTypeId,
         activityTypeName: activityType.name,
-        date: new Date(date),
+        date: logDate,
         productUsed,
         quantity,
         notes: notes || null,

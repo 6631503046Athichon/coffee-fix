@@ -59,4 +59,17 @@ describe('transformGreenBeanLotFromBackend', () => {
     })
     expect(row.purpose).toBeUndefined()
   })
+
+  // 02:30 on 5 Oct in Thailand is still 4 Oct in UTC: the row is the 5th.
+  it('dates a withdrawal and a price by their Thai day', () => {
+    const lot = transformGreenBeanLotFromBackend(backendLot({
+      priceSetDate: '2026-10-04T19:30:00.000Z',
+      withdrawalHistory: [{
+        id: 'gw-2', amountKg: 2, withdrawalType: 'Sale', date: '2026-10-04T19:30:00.000Z',
+      }],
+    }))
+    expect(lot.withdrawalHistory![0].date).toBe('2026-10-05')
+    expect(lot.priceSetDate).toBe('2026-10-05')
+    expect(transformGreenBeanLotFromBackend(backendLot({ priceSetDate: null })).priceSetDate).toBeUndefined()
+  })
 })

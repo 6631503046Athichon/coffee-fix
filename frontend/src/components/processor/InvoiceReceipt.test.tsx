@@ -121,3 +121,48 @@ describe('InvoiceReceipt traceability QR', () => {
     expect(vi.mocked(generatePublicTraceId)).not.toHaveBeenCalled()
   })
 })
+
+describe('InvoiceReceipt issue date and header', () => {
+  const originalTZ = process.env.TZ
+  afterEach(() => {
+    vi.useRealTimers()
+    if (originalTZ === undefined) delete process.env.TZ
+    else process.env.TZ = originalTZ
+  })
+
+  it('shows the Thai day of the sale', () => {
+    renderInvoice({ entry: { ...sale, date: '2026-10-04T19:30:00.000Z' } })
+    expect(screen.getByText('Issue Date').nextElementSibling).toHaveTextContent('2026-10-05')
+  })
+
+  it("falls back to the viewer's today, not the UTC day", () => {
+    process.env.TZ = 'Asia/Bangkok'
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-04T19:30:00.000Z'))
+    renderInvoice({ entry: { ...sale, date: '' } })
+    expect(screen.getByText('Issue Date').nextElementSibling).toHaveTextContent('2026-10-05')
+  })
+
+  // At phone width a long invoice number shrinks and truncates; the Print
+  // and close buttons keep their size.
+  it('lets a long invoice number truncate instead of pushing out the close button', () => {
+    const invoiceNumber = 'INV-2026-000000000123456789-ROASTER'
+    renderInvoice({ entry: { ...sale, invoiceNumber } })
+    const number = screen.getAllByText(invoiceNumber)[0]
+    expect(number).toHaveClass('truncate')
+    expect(number.parentElement).toHaveClass('min-w-0')
+    const print = screen.getByRole('button', { name: /Print/ })
+    expect(print.parentElement).toHaveClass('flex-shrink-0')
+    expect(print.parentElement!.parentElement).toHaveClass('gap-3')
+  })
+
+  // At 320px the 'Invoice' title needs ~85px; the icon-only Print button
+  // and the tighter header padding on phones leave it room to fit.
+  it('shows an icon-only Print button and tighter padding below sm', () => {
+    renderInvoice()
+    const print = screen.getByRole('button', { name: 'Print' })
+    expect(print).toHaveAttribute('aria-label', 'Print')
+    expect(screen.getByText('Print', { selector: 'span' })).toHaveClass('hidden', 'sm:inline')
+    expect(print.parentElement!.parentElement).toHaveClass('px-4', 'sm:px-6')
+  })
+})

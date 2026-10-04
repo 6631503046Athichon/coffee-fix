@@ -1,6 +1,7 @@
 import { PricingHistory } from '../../types';
 import { api } from '../api';
 import { handleApiError } from '../../utils/errorHandler';
+import { toDateOnly } from '../../utils/dateOnly';
 
 function transformPricingHistoryFromBackend(ph: any): PricingHistory {
   return {
@@ -8,7 +9,7 @@ function transformPricingHistoryFromBackend(ph: any): PricingHistory {
     greenBeanLotId: ph.greenBeanLotId,
     pricePerKg: ph.pricePerKg,
     currency: ph.currency,
-    effectiveDate: ph.effectiveDate?.split('T')[0] || ph.effectiveDate,
+    effectiveDate: toDateOnly(ph.effectiveDate) || ph.effectiveDate,
     setBy: ph.setBy || ph.setter?.name || '',
     notes: ph.notes || undefined,
   };

@@ -3536,7 +3536,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 {modal === "startProcessing" && selectedHarvestLot && (
                   <>
                     {/* Compact Header */}
-                    <div className="flex items-center justify-between mb-5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
                       <div className="flex items-center gap-3">
                         <div className="p-2.5 bg-blue-600 rounded-xl shadow-md">
                           <PlayCircle className="h-6 w-6 text-white" />
@@ -3548,7 +3548,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-3">
                         <div className="text-right">
                           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Variety</p>
                           <p className="text-sm font-bold text-gray-800 leading-tight">{selectedHarvestLot.cherryVariety}</p>
@@ -3698,7 +3698,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     return (
                       <>
                         {/* Compact Header */}
-                        <div className="flex items-center justify-between mb-5">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
                           <div className="flex items-center gap-3">
                             <div className="p-2.5 bg-amber-600 rounded-xl shadow-md">
                               <PackageCheck className="h-6 w-6 text-white" />
@@ -3710,7 +3710,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-3">
+                          <div className="flex flex-wrap items-center gap-3">
                             <div className="text-right">
                               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Weight</p>
                               <p className="text-lg font-bold text-amber-600 leading-tight">
@@ -3922,7 +3922,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 {modal === "withdrawStock" && selectedGreenBean && (
                   <>
                     {/* Compact Header */}
-                    <div className="flex items-center justify-between mb-5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
                       <div className="flex items-center gap-3">
                         <div className="p-2.5 bg-blue-600 rounded-xl shadow-md">
                           <Minus className="h-6 w-6 text-white" />
@@ -3936,7 +3936,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-3">
                         <div className="text-right">
                           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Stock</p>
                           <p className="text-lg font-bold text-green-600 leading-tight">
@@ -4144,7 +4144,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     matching the Hull & Grade modal in this file. They used to
                     sit in a separate amber card below, which cost a screen of
                     height before the first input. */}
-                <div className="flex items-center justify-between gap-4 mb-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 mb-5">
                   <div className="flex items-center gap-3">
                     <div className="p-2.5 bg-amber-600 rounded-xl shadow-md">
                       <Star className="h-6 w-6 text-white" />
@@ -4158,7 +4158,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <div className="text-right">
                       <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                         Grade
@@ -4637,7 +4637,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     <>
                       {/* Header — title left, this lot's split totals
                           inline on the right, like the QC Score modal. */}
-                      <div className="flex items-center justify-between gap-4 mb-5">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 mb-5">
                         <div className="flex items-center gap-3">
                           <div className="p-2.5 bg-amber-500 rounded-xl shadow-md">
                             <History className="h-6 w-6 text-white" />
@@ -4651,7 +4651,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-3">
                           <div className="text-right">
                             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                               Lots created
@@ -5014,7 +5014,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               <div className="p-6 sm:p-8">
                 {/* Header — title left, totals inline on the right, like
                     the QC Score modal. */}
-                <div className="flex items-center justify-between gap-4 mb-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 mb-5">
                   <div className="flex items-center gap-3">
                     <div className="p-2.5 bg-teal-500 rounded-xl shadow-md">
                       <History className="h-6 w-6 text-white" />
@@ -5028,7 +5028,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <div className="text-right">
                       <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                         Withdrawals

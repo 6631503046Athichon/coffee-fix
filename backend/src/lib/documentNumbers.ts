@@ -1,5 +1,6 @@
 import prisma from './prisma'
 import { reserveSequence } from './documentSequence'
+import { businessYear } from './utils'
 import type { SaleTx } from './saleOrders'
 
 /** The app's client, or the client a `prisma.$transaction` callback gets. */
@@ -31,9 +32,12 @@ function formatSequenceNumber(prefix: string, year: number, sequence: number): s
 // Pass the transaction client as `db` and take the number first thing in the
 // transaction that creates the record: a sale or invoice that fails then
 // gives its number back instead of leaving a gap.
+//
+// The year defaults to the Thai year (businessYear): on the UTC server
+// new Date().getFullYear() is still last year on 1 January until 07:00.
 
 export async function getNextSaleOrderNumber(
-  year = new Date().getFullYear(),
+  year = businessYear(),
   db: NumberDb = prisma,
 ): Promise<string> {
   const prefix = 'ORD'
@@ -57,7 +61,7 @@ export async function getNextSaleOrderNumber(
 }
 
 export async function getNextInvoiceNumber(
-  year = new Date().getFullYear(),
+  year = businessYear(),
   db: NumberDb = prisma,
 ): Promise<string> {
   const prefix = 'INV'

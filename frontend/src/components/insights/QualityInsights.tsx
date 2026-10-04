@@ -263,13 +263,13 @@ const QualityInsights: React.FC = () => {
                         <div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={processComparisonData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={[80, 'dataMax + 1']} /><Tooltip /><Legend /><Bar dataKey="Average Score" fill="#4f46e5" /></BarChart></ResponsiveContainer></div>
                     </div>
                     <div>
-                        <div className="flex justify-between items-center mb-2 gap-4">
+                        <div className="flex flex-wrap justify-between items-center mb-2 gap-4">
                              <h3 className="font-semibold text-gray-700">Farm Performance Over Time</h3>
                                       <Select
                                           value={selectedFarmName}
                                           onChange={(v) => setSelectedFarmName((v as string) || '')}
                                           options={farmerNames.map(name => ({ value: name, label: name }))}
-                                          className="w-48"
+                                          className="w-full sm:w-48"
                                       />
                         </div>
                         <div className="h-80"><ResponsiveContainer width="100%" height="100%"><LineChart data={farmPerformanceData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={[80, 'dataMax + 1']} /><Tooltip /><Legend /><Line type="monotone" dataKey="Score" stroke="#10b981" strokeWidth={2} activeDot={{ r: 8 }} /></LineChart></ResponsiveContainer></div>

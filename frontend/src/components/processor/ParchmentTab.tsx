@@ -89,6 +89,8 @@ import {
   formatHarvestLotId,
   formatParchmentId,
 } from '../../utils/formatDisplayId'
+import { formatDateDisplay } from '../../utils/formatters'
+import { toDateOnly } from '../../utils/dateOnly'
 
 // ─────────────────────────────────────────────────────────────────────
 // Types & constants
@@ -1509,8 +1511,9 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                     (h) => h.id === parchment.harvestLotId,
                   )
                 : undefined
+              // The Thai calendar day of the moment, in the app's usual format.
               const fmtDate = (s?: string) =>
-                s ? new Date(s).toLocaleDateString() : '—'
+                formatDateDisplay(toDateOnly(s), undefined, '—')
               return (
                 <div
                   key={gbl.id}

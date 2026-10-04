@@ -700,7 +700,7 @@ const GAPComplianceHelper: React.FC = () => {
                 maxWidth="5xl"
                 showCloseButton={false}
             >
-                <div className="flex items-center justify-end gap-2 mb-4">
+                <div className="flex flex-wrap items-center justify-end gap-2 mb-4">
                     <Button
                         onClick={handlePrint}
                         variant="primary"

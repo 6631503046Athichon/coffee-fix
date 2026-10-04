@@ -253,7 +253,7 @@ const UserManagement: React.FC = () => {
     return (
         <div>
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 mb-8">
-                <div className="flex justify-between items-center">
+                <div data-testid="user-management-header" className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
                             <UsersIcon className="h-8 w-8 text-blue-600" />
@@ -263,11 +263,11 @@ const UserManagement: React.FC = () => {
                             Manage user accounts, roles, and permissions.
                         </p>
                     </div>
-                    <div className="flex gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row">
                         {currentUser?.isSuperAdmin && (
                             <button
                                 onClick={handleTransferOwnership}
-                                className="flex items-center gap-2 px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                className="flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                             >
                                 <Shield className="h-5 w-5" />
                                 Transfer Ownership
@@ -275,7 +275,7 @@ const UserManagement: React.FC = () => {
                         )}
                         <button
                             onClick={() => setShowCreateModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                         >
                             <UserPlus className="h-5 w-5" />
                             Create User
@@ -353,7 +353,7 @@ const UserManagement: React.FC = () => {
                 {/* Results Count */}
                 {(searchTerm || roleFilter || statusFilter) && (
                     <div className="mt-4 pt-4 border-t border-gray-100">
-                        <div className="flex items-center gap-2 text-sm">
+                        <div className="flex flex-wrap items-center gap-2 text-sm">
                             {loading ? (
                                 <span className="text-gray-500">Searching...</span>
                             ) : (

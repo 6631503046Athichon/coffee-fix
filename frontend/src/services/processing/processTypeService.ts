@@ -5,6 +5,7 @@
 
 import { ProcessType } from '../../types';
 import { api } from '../api';
+import { toDateOnly, todayDateOnly } from '../../utils/dateOnly';
 
 interface ProcessTypeResponse {
   processTypes: Array<{
@@ -37,7 +38,7 @@ const mapProcessType = (pt: any): ProcessType => ({
   description: pt.description || '',
   colorScheme: pt.colorScheme || {},
   isActive: pt.isActive,
-  createdDate: pt.createdAt?.split('T')[0] || new Date().toISOString().split('T')[0],
+  createdDate: toDateOnly(pt.createdAt) || todayDateOnly(),
 });
 
 /**

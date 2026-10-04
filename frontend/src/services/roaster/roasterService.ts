@@ -1,6 +1,7 @@
 import { RoasterInventoryItem, RoastBatch, RoastLevel } from '../../types'
 import { api } from '../api'
 import { handleApiErrorWithFallback } from '../../utils/errorHandler'
+import { toDateOnly, todayDateOnly } from '../../utils/dateOnly'
 
 // ============================================
 // Roaster Inventory
@@ -35,9 +36,7 @@ export function transformRoastBatch(batch: any): RoastBatch {
     roasterId: batch.roasterId,
     roasterInventoryId: batch.roasterInventoryId,
     greenBeanLotId: batch.greenBeanLotId,
-    roastDate: batch.roastDate
-      ? new Date(batch.roastDate).toISOString().substring(0, 10)
-      : new Date().toISOString().substring(0, 10),
+    roastDate: toDateOnly(batch.roastDate) || todayDateOnly(),
     batchSizeKg: batch.batchSizeKg,
     yieldPercentage: batch.yieldPercentage,
     roastedWeightKg: batch.roastedWeightKg ?? undefined,

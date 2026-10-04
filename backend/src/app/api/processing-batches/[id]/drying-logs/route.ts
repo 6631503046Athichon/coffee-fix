@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
-import { safeParseFloat } from '@/lib/utils'
+import { parseStrictDateOnly, safeParseFloat } from '@/lib/utils'
 
 // POST /api/processing-batches/:id/drying-logs - Add drying log entry
 export async function POST(
@@ -38,6 +38,16 @@ export async function POST(
       )
     }
 
+    // A picked YYYY-MM-DD is stored at 12:00 UTC (parseDateOnly's anchor),
+    // not 00:00 UTC, so it reads as the same day in every timezone.
+    const logDate = parseStrictDateOnly(date)
+    if (!logDate || Number.isNaN(logDate.getTime())) {
+      return NextResponse.json(
+        { error: 'Date must be a valid date' },
+        { status: 400 }
+      )
+    }
+
     const moisture = safeParseFloat(moistureContent)
     const ambient = safeParseFloat(ambientTemp)
     const humidity = safeParseFloat(relativeHumidity)
@@ -52,7 +62,7 @@ export async function POST(
     const dryingLog = await prisma.dryingLogEntry.create({
       data: {
         processingBatchId: id,
-        date: new Date(date),
+        date: logDate,
         moistureContent: moisture,
         ambientTemp: ambient,
         relativeHumidity: humidity,

@@ -5,6 +5,7 @@ import { requireAuth, requireRole, requireOwnership, handleApiError } from '@/li
 import { validateBody, validateQuery, createInvoiceSchema, invoiceQuerySchema } from '@/lib/validations'
 import { getNextInvoiceNumber, isUniqueConstraintError } from '@/lib/documentNumbers'
 import { MAX_ORDER_NUMBER_ATTEMPTS, canSeeSales, isAdminUser } from '@/lib/saleOrders'
+import { parseStrictDateOnly, todayDateOnly } from '@/lib/utils'
 
 // GET /api/invoices - List invoices
 // Roasters see only invoices on the sales they recorded; Admins see every
@@ -74,7 +75,9 @@ export async function GET(request: NextRequest) {
           },
         },
       },
-      orderBy: { issueDate: 'desc' },
+      // A defaulted issue date is the Thai day at 12:00 UTC, so every invoice
+      // made that day shares one value: createdAt keeps them newest first.
+      orderBy: [{ issueDate: 'desc' }, { createdAt: 'desc' }],
     })
 
     return NextResponse.json({ invoices })
@@ -128,10 +131,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const issueDateValue = issueDate ? new Date(issueDate) : new Date()
-    const dueDateValue = dueDate ? new Date(dueDate) : null
+    // Issue and due dates are calendar days: a picked YYYY-MM-DD is stored at
+    // 12:00 UTC (parseDateOnly's anchor), so it reads as the same day in
+    // every timezone, and no issue date means the Thai today, not the UTC
+    // instant (which is still yesterday until 07:00 Thai time).
+    const issueDateValue = parseStrictDateOnly(issueDate) ?? todayDateOnly()
+    const dueDateValue = parseStrictDateOnly(dueDate)
 
-    if (dueDateValue && dueDateValue < issueDateValue) {
+    if (
+      Number.isNaN(issueDateValue.getTime()) ||
+      (dueDateValue && Number.isNaN(dueDateValue.getTime()))
+    ) {
+      return NextResponse.json(
+        { error: 'Issue and due dates must be real calendar dates' },
+        { status: 400 }
+      )
+    }
+
+    // Compared as Thai calendar days, so a due date on the issue day passes.
+    if (dueDateValue && todayDateOnly(dueDateValue) < todayDateOnly(issueDateValue)) {
       return NextResponse.json(
         { error: 'Due date cannot be earlier than the issue date' },
         { status: 400 }

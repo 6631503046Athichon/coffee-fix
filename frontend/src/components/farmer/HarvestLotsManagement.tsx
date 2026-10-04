@@ -183,8 +183,8 @@ const HarvestLotsManagement: React.FC = () => {
         <div className="bg-gray-50 p-6 border-b border-gray-200">
           <div className="flex flex-wrap justify-between items-center gap-4">
             <h3 className="text-2xl font-bold text-gray-900">Harvest Lots</h3>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center space-x-3">
+            <div data-testid="harvest-lots-toolbar" className="flex flex-col items-stretch gap-3 w-full sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <span className="text-sm font-semibold text-gray-700">Filter:</span>
                 {filterStatuses.map(status => (
                   <button
@@ -201,12 +201,12 @@ const HarvestLotsManagement: React.FC = () => {
                 ))}
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-gray-700">Farm:</span>
+                <span className="shrink-0 text-sm font-semibold text-gray-700">Farm:</span>
                 <Select
                   options={farmFilterOptions}
                   value={farmFilter}
                   onChange={(value) => setFarmFilter(String(value ?? 'All'))}
-                  className="w-52"
+                  className="w-full sm:w-52"
                   placeholder="Select farm"
                 />
               </div>
@@ -214,6 +214,7 @@ const HarvestLotsManagement: React.FC = () => {
                 variant="primary"
                 icon={<PlusCircle className="h-4 w-4" />}
                 onClick={handleOpenAddModal}
+                className="w-full sm:w-auto"
               >
                 Add Harvest Lot
               </Button>

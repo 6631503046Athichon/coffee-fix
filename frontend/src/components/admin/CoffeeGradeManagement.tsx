@@ -177,7 +177,7 @@ const CoffeeGradeManagement: React.FC = () => {
   return (
     <div className="space-y-6 min-h-full">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-800">Coffee Grade Management</h1>
           <p className="text-gray-600 mt-2">
@@ -186,7 +186,7 @@ const CoffeeGradeManagement: React.FC = () => {
         </div>
         <button
           onClick={openAddModal}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow-sm"
+          className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow-sm"
         >
           <Plus className="h-5 w-5" />
           Add Grade

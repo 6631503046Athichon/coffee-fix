@@ -251,12 +251,12 @@ const FarmManagement: React.FC = () => {
 		<div className="space-y-6">
 			<div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
 				<div className="flex flex-col gap-4">
-					<div className="flex items-center justify-between">
+					<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 						<div>
 							<h1 className="text-3xl font-bold text-gray-900">My Farm Management</h1>
 							<p className="text-gray-600">Add farm information, track varieties, and search farms quickly</p>
 						</div>
-						<Button variant="primary" icon={<PlusCircle className="h-5 w-5" />} onClick={handleOpenAddFarm}>
+						<Button variant="primary" icon={<PlusCircle className="h-5 w-5" />} onClick={handleOpenAddFarm} className="w-full sm:w-auto">
 							Add Farm
 						</Button>
 					</div>

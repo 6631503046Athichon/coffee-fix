@@ -25,6 +25,7 @@ import { toFixed2, clamp, toRoaId, toRoastBatchId } from '../../utils/formatters
 import { claimGreenBeanLot, createRoastBatch } from '../../services/roaster/roasterService'
 import { createGreenBeanLot } from '../../services/lots/greenBeanLotService'
 import { formatGreenBeanId } from '../../utils/formatDisplayId'
+import { todayDateOnly } from '../../utils/dateOnly'
 import { useToast } from '../../contexts/ToastContext'
 import { SaleOrderForm } from '../sales/modals/SaleOrderModal'
 import { formatKg } from '../sales/saleDisplay'
@@ -112,7 +113,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     producerName: '',
     variety: '',
     processType: '',
-    purchaseDate: new Date().toISOString().substring(0, 10),
+    purchaseDate: todayDateOnly(),
     pricePerKg: '',
     currency: 'THB',
     initialWeightKg: '',
@@ -1662,7 +1663,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                 producerName: '',
                 variety: '',
                 processType: '',
-                purchaseDate: new Date().toISOString().substring(0, 10),
+                purchaseDate: todayDateOnly(),
                 pricePerKg: '',
                 currency: 'THB',
                 initialWeightKg: '',

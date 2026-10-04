@@ -12,6 +12,7 @@ import {
 import { api } from '../api';
 import { handleApiError } from '../../utils/errorHandler';
 import { toRoaId, toRoastBatchId } from '../../utils/formatters';
+import { toDateOnly } from '../../utils/dateOnly';
 
 /** One sale line: roasted coffee from a roast batch, or green beans from a stock row. */
 export type SaleLineInput =
@@ -55,14 +56,11 @@ const optionalString = (value: any): string | undefined =>
 const numberOr = (value: any, fallback: number): number =>
   typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 
-const dateOnly = (value: any): string =>
-  typeof value === 'string' ? value.slice(0, 10) : '';
-
 export function transformRoastSummary(raw: any): RoastSaleSummary {
   return {
     id: raw.id,
     label: optionalString(raw.label) ?? toRoastBatchId(raw.id),
-    roastDate: dateOnly(raw.roastDate),
+    roastDate: toDateOnly(raw.roastDate),
     roastLevel: optionalString(raw.roastLevel) as RoastLevel | undefined,
     roastedWeightKg: typeof raw.roastedWeightKg === 'number' ? raw.roastedWeightKg : undefined,
     soldWeightKg: numberOr(raw.soldWeightKg, 0),
@@ -109,7 +107,7 @@ export function transformSaleOrderFromBackend(order: any): SaleOrder {
           address: optionalString(customer.address),
         }
       : undefined,
-    orderDate: dateOnly(order.orderDate),
+    orderDate: toDateOnly(order.orderDate),
     status: order.status,
     items: (order.items || []).map((item: any): SaleOrderItem => ({
       id: item.id,

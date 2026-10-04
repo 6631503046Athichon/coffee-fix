@@ -204,6 +204,25 @@ describe('transformSaleOrderFromBackend', () => {
   })
 })
 
+describe('sale dates', () => {
+  // 02:30 on 5 Oct in Thailand is still 4 Oct in UTC: the sale and the roast
+  // are both the 5th.
+  it('are the Thai day of the order and of the roast', () => {
+    const order = transformSaleOrderFromBackend({
+      ...saleJson,
+      orderDate: '2026-10-04T19:30:00.000Z',
+      items: [{ ...saleJson.items[0], roast: { ...roastJson, roastDate: '2026-10-04T19:30:00.000Z' } }],
+    })
+    expect(order.orderDate).toBe('2026-10-05')
+    expect(order.items[0].roast?.roastDate).toBe('2026-10-05')
+  })
+
+  it('pass a plain day through and blank a missing one', () => {
+    expect(transformSaleOrderFromBackend({ ...saleJson, orderDate: '2026-10-05' }).orderDate).toBe('2026-10-05')
+    expect(transformSaleOrderFromBackend({ ...saleJson, orderDate: null }).orderDate).toBe('')
+  })
+})
+
 describe('getSellableGreenLots', () => {
   afterEach(() => {
     vi.restoreAllMocks()

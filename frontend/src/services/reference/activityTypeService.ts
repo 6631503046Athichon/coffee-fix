@@ -5,6 +5,7 @@
 
 import { ActivityType } from '../../types';
 import { api } from '../api';
+import { toDateOnly, todayDateOnly } from '../../utils/dateOnly';
 
 interface ActivityTypeResponse {
   activityTypes: Array<{
@@ -34,7 +35,7 @@ const mapActivityType = (at: any): ActivityType => ({
   name: at.name,
   description: at.description || undefined,
   isActive: at.isActive,
-  createdDate: at.createdAt?.split('T')[0] || new Date().toISOString().split('T')[0],
+  createdDate: toDateOnly(at.createdAt) || todayDateOnly(),
 });
 
 /**

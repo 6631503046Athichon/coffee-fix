@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, requireOwnership, handleApiError } from '@/lib/middleware'
-import { safeParseFloat } from '@/lib/utils'
+import { parseStrictDateOnly, safeParseFloat } from '@/lib/utils'
 import { updateRoastBatchSchema } from '@/lib/validations/roasting'
 import { formatKgText, isPrismaCode } from '@/lib/saleOrders'
 
@@ -150,7 +150,14 @@ export async function PUT(
 
     let roastDate: Date | undefined
     if (input.roastDate !== undefined) {
-      roastDate = new Date(input.roastDate)
+      // A picked YYYY-MM-DD is stored at 12:00 UTC (parseDateOnly's anchor),
+      // not 00:00 UTC, so the public trace page does not show the day before
+      // to a viewer west of UTC. 2026-02-30 is refused, not rolled over.
+      const parsedRoastDate = parseStrictDateOnly(input.roastDate)
+      if (!parsedRoastDate || Number.isNaN(parsedRoastDate.getTime())) {
+        return NextResponse.json({ error: 'Invalid roast date' }, { status: 400 })
+      }
+      roastDate = parsedRoastDate
       // A day of slack covers clients ahead of the server's timezone.
       if (roastDate.getTime() > Date.now() + 24 * 60 * 60 * 1000) {
         return NextResponse.json({ error: 'Roast date cannot be in the future' }, { status: 400 })

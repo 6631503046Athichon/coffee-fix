@@ -1,14 +1,15 @@
 import { Invoice, SaleOrderItem } from '../../types';
 import { api } from '../api';
 import { handleApiError } from '../../utils/errorHandler';
+import { toDateOnly } from '../../utils/dateOnly';
 
 function transformInvoiceFromBackend(inv: any): Invoice {
   return {
     id: inv.id,
     invoiceNumber: inv.invoiceNumber,
     saleOrderId: inv.saleOrderId,
-    issueDate: inv.issueDate?.split('T')[0] || inv.issueDate,
-    dueDate: inv.dueDate?.split('T')[0] || inv.dueDate || undefined,
+    issueDate: toDateOnly(inv.issueDate) || inv.issueDate,
+    dueDate: toDateOnly(inv.dueDate) || inv.dueDate || undefined,
     status: inv.status,
     items: (inv.items || []).map((item: any): SaleOrderItem => ({
       id: item.id,

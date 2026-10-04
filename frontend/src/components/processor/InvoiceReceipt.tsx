@@ -4,6 +4,7 @@ import { GreenBeanLot } from '../../types';
 import { FileText, Link2, Printer, X } from 'lucide-react';
 import { generatePublicTraceId, generateQRDataUrl, getPublicTraceUrl } from '../../services/lots/greenBeanLotService';
 import { formatGreenBeanId } from '../../utils/formatDisplayId';
+import { toDateOnly, todayDateOnly } from '../../utils/dateOnly';
 
 interface InvoiceReceiptProps {
   visible: boolean;
@@ -86,30 +87,31 @@ const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({
   const qtyKg = entry.amountKg || 0;
   const total = entry.totalAmount != null ? entry.totalAmount : (qtyKg * pricePerKg);
   const invoiceNumber = entry.invoiceNumber || 'INV-DRAFT';
-  const issueDate = entry.date || new Date().toISOString().substring(0, 10);
+  const issueDate = toDateOnly(entry.date) || todayDateOnly();
 
   return ReactDOM.createPortal(
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-hidden border border-gray-100 flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-emerald-600 rounded-xl">
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b bg-gray-50">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-3 bg-emerald-600 rounded-xl flex-shrink-0">
               <FileText className="h-6 w-6 text-white" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-2xl font-extrabold text-gray-900">Invoice</h2>
-              <p className="text-sm text-gray-600">{invoiceNumber}</p>
+              <p className="text-sm text-gray-600 truncate" title={invoiceNumber}>{invoiceNumber}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
               type="button"
               onClick={() => window.print()}
+              aria-label="Print"
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm"
             >
               <Printer className="h-4 w-4" />
-              Print
+              <span className="hidden sm:inline">Print</span>
             </button>
             <button
               type="button"

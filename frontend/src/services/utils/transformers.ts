@@ -240,9 +240,7 @@ export const transformHarvestLotFromBackend = (lot: any) => ({
   weightKg: lot.weightKg,
   remainingWeightKg: lot.remainingWeightKg,
   farmPlotLocation: lot.farmPlotLocation,
-  harvestDate: lot.harvestDate
-    ? new Date(lot.harvestDate).toISOString().substring(0, 10)
-    : "",
+  harvestDate: toDateOnly(lot.harvestDate),
   status: (HARVEST_STATUS_MAP[lot.status as keyof typeof HARVEST_STATUS_MAP] ||
     lot.status) as "Ready for Processing" | "Complete",
   cropYearId: lot.cropYearId || undefined,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
 import { reserveSequence } from "@/lib/documentSequence";
+import { businessYear } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -73,10 +74,13 @@ async function backfillModel(
     return { updated: 0, details: {} };
   }
 
-  // Group records by year extracted from their own createdAt
+  // Group records by the Thai year of their own createdAt (businessYear),
+  // as new records and scripts/maintenance/populate-display-ids.ts number
+  // them: on the UTC server getFullYear() would put a lot made before 07:00
+  // on 1 January into last year.
   const byYear = new Map<number, Array<{ id: string; createdAt: Date }>>();
   for (const record of nullRecords) {
-    const year = new Date(record.createdAt).getFullYear();
+    const year = businessYear(new Date(record.createdAt));
     if (!byYear.has(year)) {
       byYear.set(year, []);
     }
