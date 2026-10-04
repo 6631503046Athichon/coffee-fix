@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { parseDateOnly } from '@/lib/utils'
+import { isAdminUser } from '@/lib/saleOrders'
 
 // GET /api/crop-years/:id
 export async function GET(
@@ -10,21 +11,26 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
     const { id } = await params
 
-    // Counts only: the crop year's lots and batches belong to many farmers,
-    // and the harvest-lots and processing-batches routes scope who sees them.
+    // Never the lots and batches themselves: they belong to many farmers, and
+    // the harvest-lots and processing-batches routes scope who sees them. Their
+    // counts span everyone's too ("each their own"), so only Admins get those.
     const cropYear = await prisma.cropYear.findUnique({
       where: { id },
-      include: {
-        _count: {
-          select: {
-            harvestLots: true,
-            processingBatches: true,
-          },
-        },
-      },
+      ...(isAdminUser(user)
+        ? {
+            include: {
+              _count: {
+                select: {
+                  harvestLots: true,
+                  processingBatches: true,
+                },
+              },
+            },
+          }
+        : {}),
     })
 
     if (!cropYear) {

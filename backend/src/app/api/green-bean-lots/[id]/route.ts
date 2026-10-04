@@ -22,7 +22,7 @@ import {
   reweighLot,
   type ReweighResult,
 } from "@/lib/lotCorrections";
-import { chainFarmIds, requireChainFarm } from "@/lib/farmAccess";
+import { batchLabel, chainScope, requireInScope } from "@/lib/farmAccess";
 import {
   OverHullError,
   hullLimitOf,
@@ -43,6 +43,9 @@ export async function GET(
   try {
     const user = await requireAuth(request);
     const { id } = await params;
+
+    // Each their own, as on the list (lib/farmAccess chainScope).
+    const scope = await chainScope(user);
 
     const greenBeanLot = await prisma.greenBeanLot.findUnique({
       where: { id },
@@ -69,7 +72,6 @@ export async function GET(
                 id: true,
                 farmerName: true,
                 cherryVariety: true,
-                // The farm it was grown on, for the farmer check below.
                 farmId: true,
               },
             },
@@ -82,7 +84,10 @@ export async function GET(
           },
         },
         cuppingScores: true,
+        // A roaster gets only the rows into their own stock on a lot they
+        // hold or see on the shelf.
         withdrawalHistory: {
+          where: scope ? scope.greenWithdrawalWhere : {},
           include: {
             withdrawnByUser: {
               select: {
@@ -134,17 +139,31 @@ export async function GET(
       );
     }
 
-    // A farmer-only user opens only green beans hulled from their own and
-    // shared farms' parchment, as on the list (lib/farmAccess).
-    requireChainFarm(
-      await chainFarmIds(user),
-      greenBeanLot.parchmentLot?.harvestLot?.farmId,
-    );
+    // A lot outside the user's share is a 403.
+    if (scope) {
+      requireInScope(
+        await prisma.greenBeanLot.findFirst({
+          where: { id, AND: [scope.greenBeanLotWhere] },
+          select: { id: true },
+        }),
+      );
+    }
+
+    // A roaster reads the parchment's batch only as a label for the lot,
+    // not the processor's record.
+    const batch = greenBeanLot.parchmentLot?.processingBatch;
+    const shaped =
+      scope && greenBeanLot.parchmentLot && batch && !scope.canReadBatch(batch)
+        ? {
+            ...greenBeanLot,
+            parchmentLot: { ...greenBeanLot.parchmentLot, processingBatch: batchLabel(batch) },
+          }
+        : greenBeanLot;
 
     // Withdrawal sale details and purpose, and other roasters' stock rows,
     // only for the lot's owner and Admin; see lib/withdrawalPrivacy.
     return NextResponse.json({
-      greenBeanLot: greenBeanLotForViewer(user, greenBeanLot),
+      greenBeanLot: greenBeanLotForViewer(user, shaped),
     });
   } catch (error) {
     return handleApiError(error);

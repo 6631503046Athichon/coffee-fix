@@ -12,7 +12,7 @@ import {
   reweighLot,
   type ReweighResult,
 } from '@/lib/lotCorrections'
-import { chainFarmIds, requireChainFarm } from '@/lib/farmAccess'
+import { batchLabel, chainScope, requireInScope } from '@/lib/farmAccess'
 
 // PATCH /api/parchment-lots/:id - Correct a parchment lot's weight or moisture
 //
@@ -192,6 +192,7 @@ export async function GET(
   try {
     const user = await requireAuth(request)
     const { id } = await params
+    const scope = await chainScope(user)
 
     const parchmentLot = await prisma.parchmentLot.findUnique({
       where: { id },
@@ -216,12 +217,12 @@ export async function GET(
             id: true,
             farmerName: true,
             cherryVariety: true,
-            // The farm it was grown on, for the farmer check below.
             farmId: true,
           },
         },
         physicalTestResults: true,
-        greenBeanLots: true,
+        // Only the green-bean lots the user may read (lib/farmAccess).
+        greenBeanLots: scope ? { where: scope.greenBeanLotWhere } : true,
       },
     })
 
@@ -232,9 +233,21 @@ export async function GET(
       )
     }
 
-    // A farmer-only user opens only parchment from their own and shared
-    // farms' cherry, as on the list (lib/farmAccess).
-    requireChainFarm(await chainFarmIds(user), parchmentLot.harvestLot?.farmId)
+    // Each their own, as on the list (lib/farmAccess chainScope): a lot
+    // outside the user's share is a 403.
+    if (scope) {
+      requireInScope(await prisma.parchmentLot.findFirst({
+        where: { id, AND: [scope.parchmentLotWhere] },
+        select: { id: true },
+      }))
+    }
+
+    // A roaster reads the lot only as the source of their green beans: its
+    // batch comes as a label, not the processor's record.
+    const batch = parchmentLot.processingBatch
+    if (scope && batch && !scope.canReadBatch(batch)) {
+      return NextResponse.json({ parchmentLot: { ...parchmentLot, processingBatch: batchLabel(batch) } })
+    }
 
     return NextResponse.json({ parchmentLot })
   } catch (error) {

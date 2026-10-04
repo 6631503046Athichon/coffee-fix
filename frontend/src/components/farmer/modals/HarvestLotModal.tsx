@@ -3,7 +3,7 @@ import { useDataContext } from '../../../hooks/useDataContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useFormPersist } from '../../../hooks/useFormPersist';
 import { HarvestLot, Farm, CropYear, UserRole } from '../../../types';
-import { isAdminUser, ownsFarm } from '../../../utils/farmAccess';
+import { collaboratesOnFarm, isAdminUser, ownsFarm } from '../../../utils/farmAccess';
 import { findCurrentCropYearId } from '../../processor/workbench/constants';
 import { Coffee } from 'lucide-react';
 import DatePicker from '../../common/DatePicker';
@@ -89,6 +89,18 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
   const farmsWithVarieties = React.useMemo(() => {
     return availableFarms.filter(f => f.varieties && f.varieties.length > 0);
   }, [availableFarms]);
+
+  // Farms shared with the user that they do not own. They are not offered
+  // (only a farm's owner may register a lot on it), but the popup names them
+  // so a collaborator is told why, not that there are no farms.
+  const sharedOnlyFarms = React.useMemo(() => {
+    if (!currentUser || isAdmin) return [];
+    return data.farms.filter(f => collaboratesOnFarm(currentUser, f) && !ownsFarm(currentUser, f));
+  }, [data.farms, currentUser, isAdmin]);
+  const sharedFarmNames = sharedOnlyFarms
+    .map(f => f.farmName || f.name || f.location)
+    .filter(Boolean)
+    .join(', ');
 
   // Farm selection state
   const [selectedFarmId, setSelectedFarmId] = useState<string>(initialFarm?.id || '');
@@ -452,12 +464,26 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
               {formErrors.farm && (
                 <p className="mt-1 text-sm text-red-600">{formErrors.farm}</p>
               )}
+              {sharedOnlyFarms.length > 0 && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Farms shared with you ({sharedFarmNames}) are not listed: only the farm owner can register harvest lots on a farm.
+                </p>
+              )}
             </div>
           ) : (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-              <p className="text-sm text-amber-800">
-                No farms with varieties available. Please add varieties to your farms first before registering harvest lots.
-              </p>
+              {sharedOnlyFarms.length > 0 && availableFarms.length === 0 ? (
+                <p className="text-sm text-amber-800">
+                  Only the farm owner can register harvest lots on a farm. You collaborate on {sharedFarmNames}, so ask the farm owner to register harvest lots there.
+                </p>
+              ) : (
+                <p className="text-sm text-amber-800">
+                  No farms with varieties available. Please add varieties to your farms first before registering harvest lots.
+                  {sharedOnlyFarms.length > 0 && (
+                    <> Farms shared with you ({sharedFarmNames}) are not listed: only the farm owner can register harvest lots on a farm.</>
+                  )}
+                </p>
+              )}
             </div>
           )
         )}

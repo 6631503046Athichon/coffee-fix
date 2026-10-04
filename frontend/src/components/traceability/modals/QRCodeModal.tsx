@@ -13,6 +13,13 @@ interface QRCodeModalProps {
   lotId: string;
   publicTraceId?: string | null;
   onPublicIdGenerated?: (publicTraceId: string) => void;
+  /**
+   * The viewer may publish this lot: generate (or regenerate) its public id.
+   * The backend allows only the lot's creator or an Admin, so it is off
+   * unless the caller says so; without it the modal only shows a QR the lot
+   * already has.
+   */
+  canGenerate?: boolean;
 }
 
 export const QRCodeModal: React.FC<QRCodeModalProps> = ({
@@ -20,7 +27,8 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   onClose,
   lotId,
   publicTraceId,
-  onPublicIdGenerated
+  onPublicIdGenerated,
+  canGenerate = false
 }) => {
   const [size, setSize] = useState(200);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
@@ -79,7 +87,8 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
     }
   }, [isOpen]);
 
-  // Auto-generate public ID when modal opens without one.
+  // Auto-generate public ID when modal opens without one (only for a viewer
+  // who may publish the lot; anyone else would get a 403).
   // Use a ref (not the `isGenerating` state) to gate the call — the
   // state can be stale across two renders, leading to double-fire
   // when this effect re-runs before the setState commits.
@@ -89,13 +98,13 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
       inflightRef.current = false;
       return;
     }
-    if (currentPublicId || inflightRef.current) return;
+    if (!canGenerate || currentPublicId || inflightRef.current) return;
     inflightRef.current = true;
     handleGeneratePublicId().finally(() => {
       inflightRef.current = false;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleGeneratePublicId is a stable closure over modal props
-  }, [isOpen, currentPublicId]);
+  }, [isOpen, currentPublicId, canGenerate]);
 
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -191,7 +200,14 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
 
         {!currentPublicId ? (
           <div className="text-center py-8">
-            {isGenerating ? (
+            {!canGenerate ? (
+              <>
+                <QrCode className="h-16 w-16 mx-auto text-gray-300 mb-4" />
+                <p className="text-gray-600">
+                  This lot has no public QR code yet. Only the lot's processor or an Admin can publish it.
+                </p>
+              </>
+            ) : isGenerating ? (
               <>
                 <div className="h-16 w-16 mx-auto mb-4 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
                 <p className="text-gray-600">Generating QR Code...</p>
@@ -297,22 +313,24 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
               </Button>
             </div>
 
-            {/* Regenerate Option */}
-            <div className="border-t border-gray-200 pt-4">
-              <Button
-                variant="outline"
-                onClick={() => handleGeneratePublicId({ regenerate: true, autoClose: true })}
-                disabled={isGenerating}
-                loading={isGenerating}
-                fullWidth
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Regenerate Public ID
-              </Button>
-              <p className="text-xs text-gray-500 mt-2 text-center">
-                Warning: Regenerating will invalidate the previous QR code
-              </p>
-            </div>
+            {/* Regenerate Option: the lot's creator or an Admin only */}
+            {canGenerate && (
+              <div className="border-t border-gray-200 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => handleGeneratePublicId({ regenerate: true, autoClose: true })}
+                  disabled={isGenerating}
+                  loading={isGenerating}
+                  fullWidth
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Regenerate Public ID
+                </Button>
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  Warning: Regenerating will invalidate the previous QR code
+                </p>
+              </div>
+            )}
           </>
         )}
       </div>

@@ -5,7 +5,7 @@ import { validateBody, createGreenBeanLotSchema } from '@/lib/validations'
 import { nextDisplayId, withDisplayIdRetry } from '@/lib/utils'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { greenBeanLotForViewer } from '@/lib/withdrawalPrivacy'
-import { chainFarmIds, greenBeanLotsOnFarms } from '@/lib/farmAccess'
+import { chainScope } from '@/lib/farmAccess'
 
 // GET /api/green-bean-lots - List all green bean lots
 export async function GET(request: NextRequest) {
@@ -32,12 +32,13 @@ export async function GET(request: NextRequest) {
       where.parchmentLotId = parchmentLotId
     }
 
-    // A farmer-only user sees only green beans hulled from their own and
-    // shared farms' parchment; staff roles and Admins see every lot
-    // (lib/farmAccess).
-    const farmIds = await chainFarmIds(user)
-    if (farmIds) {
-      Object.assign(where, greenBeanLotsOnFarms(farmIds))
+    // Each their own (lib/farmAccess chainScope): a processor's own lots, a
+    // farmer's hulled from their own and shared farms' parchment, a roaster's
+    // own, held and roasted lots plus the shelf (never another user's
+    // bought-in lot); the union for several roles. Admins see every lot.
+    const scope = await chainScope(user)
+    if (scope) {
+      where.AND = [scope.greenBeanLotWhere]
     }
 
     // Pagination
@@ -72,7 +73,10 @@ export async function GET(request: NextRequest) {
               name: true,
             },
           },
+          // A roaster gets only the rows into their own stock on a lot they
+          // hold or see on the shelf (lib/farmAccess chainScope).
           withdrawalHistory: {
+            where: scope ? scope.greenWithdrawalWhere : {},
             include: {
               withdrawnByUser: {
                 select: {

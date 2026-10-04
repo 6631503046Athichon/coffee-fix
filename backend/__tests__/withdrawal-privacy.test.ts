@@ -20,8 +20,8 @@ const mockPrisma: any = {
   weatherRecord: { findMany: jest.fn() },
   gAPLogEntry: { findMany: jest.fn() },
   processingBatch: { findMany: jest.fn() },
-  parchmentLot: { findMany: jest.fn(), findUnique: jest.fn() },
-  greenBeanLot: { findMany: jest.fn(), findUnique: jest.fn(), count: jest.fn() },
+  parchmentLot: { findMany: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn() },
+  greenBeanLot: { findMany: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn(), count: jest.fn() },
   roasterInventoryItem: { findMany: jest.fn() },
   roastBatch: { findMany: jest.fn() },
 }
@@ -202,6 +202,11 @@ beforeEach(() => {
   }
   mockPrisma.greenBeanLot.count.mockResolvedValue(1)
   mockPrisma.farm.findMany.mockResolvedValue([{ id: FARMER_FARM }])
+  // The by-id scope lookup (lib/farmAccess chainScope) finds the lot: these
+  // tests are about what a viewer who may open it sees. Who may open which
+  // lot is in each-their-own-scoping.test.ts.
+  mockPrisma.parchmentLot.findFirst.mockResolvedValue({ id: 'pl-1' })
+  mockPrisma.greenBeanLot.findFirst.mockResolvedValue({ id: 'gbl-1' })
 })
 
 describe('lib/withdrawalPrivacy', () => {

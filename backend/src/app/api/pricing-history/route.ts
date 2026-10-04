@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, requireOwnership, handleApiError } from '@/lib/middleware'
 import { currencySchema } from '@/lib/validations/common'
 import { parseStrictDateOnly, parseStrictNumber, todayDateOnly } from '@/lib/utils'
-import { chainFarmIds, greenBeanLotsOnFarms } from '@/lib/farmAccess'
+import { chainScope } from '@/lib/farmAccess'
 
 const createPricingHistorySchema = z.object({
   greenBeanLotId: z.string({ message: 'Green bean lot ID is required' })
@@ -41,13 +41,13 @@ export async function GET(request: NextRequest) {
       where.greenBeanLotId = greenBeanLotId
     }
 
-    // A farmer-only user sees the prices of the green beans they may open:
-    // those hulled from their own and shared farms' parchment, as on
-    // GET /api/green-bean-lots. Staff roles and Admins see every lot's
-    // (lib/farmAccess).
-    const farmIds = await chainFarmIds(user)
-    if (farmIds) {
-      where.greenBeanLot = greenBeanLotsOnFarms(farmIds)
+    // Each their own (lib/farmAccess chainScope): the price history of a
+    // processor's own lots, a farmer's farms' green beans, the lots a roaster
+    // created or holds stock of (not the shelf); the union for several roles.
+    // Admins see every lot's.
+    const scope = await chainScope(user)
+    if (scope) {
+      where.AND = [scope.pricingWhere]
     }
 
     const pricingHistory = await prisma.pricingHistory.findMany({

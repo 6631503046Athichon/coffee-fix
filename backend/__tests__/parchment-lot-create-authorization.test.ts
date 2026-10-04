@@ -222,6 +222,22 @@ describe('POST /api/parchment-lots', () => {
     expect(mockPrisma.processingBatch.findUnique).not.toHaveBeenCalled()
   })
 
+  test('an External lot records who brought it in, whatever the body says', async () => {
+    // Bought-in parchment has no batch: externalSource.importedBy is who may
+    // read it besides Admins (lib/farmAccess chainScope), as on an Excel import.
+    mockAuthUser = processor
+    const { POST } = await import('@/app/api/parchment-lots/route')
+    const response = await POST(
+      postRequest(parchmentBody({
+        sourceType: 'External',
+        processingBatchId: undefined,
+        externalSource: { supplier: 'Co-op', importedBy: 'processor-2' },
+      })),
+    )
+    expect(response.status).toBe(201)
+    expect(createdData().externalSource).toEqual({ supplier: 'Co-op', importedBy: 'processor-1' })
+  })
+
   test('403 for a Roaster, before any lookup', async () => {
     mockAuthUser = roaster
     const { POST } = await import('@/app/api/parchment-lots/route')

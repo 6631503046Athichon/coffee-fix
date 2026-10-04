@@ -3,24 +3,31 @@ import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { parseDateOnly } from '@/lib/utils'
 import { upkeepCropYears } from '@/lib/cropYears'
+import { isAdminUser } from '@/lib/saleOrders'
 
 // GET /api/crop-years - List all crop years (auto-creates if needed)
 // Login required: the call may write crop years.
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
 
+    // Lot and batch counts span every farmer and processor ("each their
+    // own"), so only Admins get them.
     const listCropYears = () =>
       prisma.cropYear.findMany({
         orderBy: { startDate: 'desc' },
-        include: {
-          _count: {
-            select: {
-              harvestLots: true,
-              processingBatches: true,
-            },
-          },
-        },
+        ...(isAdminUser(user)
+          ? {
+              include: {
+                _count: {
+                  select: {
+                    harvestLots: true,
+                    processingBatches: true,
+                  },
+                },
+              },
+            }
+          : {}),
       })
 
     // Add a missing previous / current / next year and replace the old

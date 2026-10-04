@@ -27,7 +27,8 @@ vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => auth }))
 
 // Renamed since the lot was recorded as "Somchai".
 const renamedFarmer: User = { id: 'u-farmer', name: 'Somchai Jaidee', roles: [UserRole.Farmer] }
-// A farmer who also processes: the backend sends this account every lot.
+// A farmer who also processes: the backend also sends this account other
+// farmers' lots (every lot still Ready for Processing, as to any Processor).
 const farmerProcessor: User = { id: 'u-farmer', name: 'Somchai', roles: [UserRole.Farmer, UserRole.Processor] }
 const admin: User = { id: 'u-admin', name: 'Admin', roles: [UserRole.Admin] }
 

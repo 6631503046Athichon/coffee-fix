@@ -2,19 +2,19 @@
  * F25 / D8: multi-role accounts. A user who farms and also holds a staff role
  * (Processor, Roaster, HeadJudge, Cupper, Admin) used to be narrowed to their
  * own farms' lots on every screen, so a Farmer+Processor could not process
- * other farmers' cherry. Farmer scoping now applies only to a user with no
- * staff role:
- * - a pure Farmer still sees only their own farms' harvest lots, and only
- *   their farms' batches, parchment and green beans (bulk-load), and still
- *   gets a 403 on another farmer's lot by id
- * - a Farmer with any staff role sees what that staff role alone sees
+ * other farmers' cherry.
+ * - bulk-load and the harvest-lot routes follow "each their own" (2026-10-05,
+ *   lib/farmAccess chainScope): a user with several roles reads the union of
+ *   their roles' scopes, so a Farmer+Processor gets their farms' lots plus
+ *   every Ready lot and the lots their batches used; a farmer reads the lots
+ *   of farms they own or collaborate on (each-their-own-scoping.test.ts and
+ *   bulk-load-each-their-own.test.ts check the rows)
  * - soil, weather and GAP stay farm-member only for every non-Admin, staff
  *   included (that rule is not a farmer rule and does not change)
  */
 
 import { describe, test, expect, jest, beforeEach } from '@jest/globals'
 import { NextRequest } from 'next/server'
-import { UserRole } from '@prisma/client'
 
 const FARMER = 'farmer-1'
 const OTHER_FARMER = 'farmer-2'
@@ -26,6 +26,7 @@ const mockPrisma: any = {
   harvestLot: {
     findMany: jest.fn(async () => []),
     findUnique: jest.fn(),
+    findFirst: jest.fn(),
     count: jest.fn(async () => 0),
   },
   cropYear: { findMany: jest.fn(async () => []) },
@@ -77,7 +78,6 @@ const farmerCupper = user(['Farmer', 'Cupper'])
 const farmerHeadJudge = user(['Farmer', 'HeadJudge'])
 const farmerAdmin = user(['Farmer', 'Admin'])
 const superAdminFarmer = user(['Farmer'], true)
-const processorOnly = user(['Processor'])
 
 const argsOf = (model: any) => model.findMany.mock.calls[0][0]
 
@@ -116,51 +116,46 @@ beforeEach(() => {
   mockAuthUser = null
 })
 
-describe('lib/farmAccess: who counts as staff (D8)', () => {
-  test('every role in the enum is either Farmer or a staff role, so a new role forces a decision', async () => {
-    const { STAFF_ROLES } = await import('@/lib/farmAccess')
-    expect([...STAFF_ROLES, 'Farmer'].sort()).toEqual(Object.values(UserRole).sort())
-    expect(STAFF_ROLES).not.toContain('Farmer')
-  })
-
-  test.each([
-    ['a pure Farmer', true, pureFarmer],
-    ['a Farmer+Processor', false, farmerProcessor],
-    ['a Farmer+Roaster', false, farmerRoaster],
-    ['a Farmer+Cupper', false, farmerCupper],
-    ['a Farmer+HeadJudge', false, farmerHeadJudge],
-    ['a Farmer+Admin', false, farmerAdmin],
-    ['a super admin who only holds Farmer', false, superAdminFarmer],
-    ['a Processor', false, processorOnly],
-  ])('isFarmerOnly: %s -> %s', async (_label, expected, viewer) => {
-    const { isFarmerOnly } = await import('@/lib/farmAccess')
-    expect(isFarmerOnly(viewer)).toBe(expected)
-  })
-})
-
-describe('bulk-load phase 1 harvest lots (F25)', () => {
-  test('a pure Farmer gets only the lots on farms they own', async () => {
+// bulk-load follows "each their own" like the list routes (lib/farmAccess
+// chainScope); bulk-load-each-their-own.test.ts checks the rows.
+describe('bulk-load phase 1 harvest lots (each their own)', () => {
+  test('a pure Farmer gets the lots on farms they own or collaborate on, and the lots recorded for them', async () => {
     mockAuthUser = pureFarmer
     await bulkLoad(1)
-    expect(argsOf(mockPrisma.harvestLot).where).toEqual({ farm: { ownerId: FARMER } })
+    expect(argsOf(mockPrisma.harvestLot).where).toEqual({ OR: farmerHarvest })
+  })
+
+  test("a Farmer+Processor gets the union: their farms' lots, every Ready lot and their batches' lots", async () => {
+    mockAuthUser = farmerProcessor
+    await bulkLoad(1)
+    expect(argsOf(mockPrisma.harvestLot).where).toEqual({ OR: [...farmerHarvest, ...processorHarvest] })
+  })
+
+  test("a Farmer+Roaster gets their farms' lots and the cherry behind their green beans", async () => {
+    mockAuthUser = farmerRoaster
+    await bulkLoad(1)
+    const { OR } = argsOf(mockPrisma.harvestLot).where
+    expect(OR.slice(0, 2)).toEqual(farmerHarvest)
+    expect(OR[2]).toHaveProperty('parchmentLots.some.greenBeanLots.some')
+    expect(OR).toHaveLength(3)
   })
 
   test.each([
-    ['Farmer+Processor', farmerProcessor],
-    ['Farmer+Roaster', farmerRoaster],
-    ['Farmer+Cupper', farmerCupper],
-    ['Farmer+HeadJudge', farmerHeadJudge],
-  ])('a %s gets every lot, as the staff role alone does', async (_label, viewer) => {
+    ['Farmer+Cupper (cupping roles read as before)', farmerCupper],
+    ['Farmer+HeadJudge (cupping roles read as before)', farmerHeadJudge],
+    ['Farmer+Admin', farmerAdmin],
+    ['super admin who only holds Farmer', superAdminFarmer],
+  ])('a %s gets every lot', async (_label, viewer) => {
     mockAuthUser = viewer
     await bulkLoad(1)
     expect(argsOf(mockPrisma.harvestLot).where).toEqual({})
   })
 })
 
-describe('bulk-load phase 2 lot chain (F25)', () => {
+describe('bulk-load phase 2 lot chain (each their own)', () => {
   const memberFarms = { farmId: { in: [OWN_FARM, SHARED_FARM] } }
 
-  test('a pure Farmer gets batches, parchment and green beans from their farms only', async () => {
+  test('a pure Farmer gets batches, parchment and green beans from their own and shared farms only', async () => {
     mockAuthUser = pureFarmer
     await bulkLoad(2)
     expect(argsOf(mockPrisma.processingBatch).where).toEqual({ harvestLot: memberFarms })
@@ -168,12 +163,26 @@ describe('bulk-load phase 2 lot chain (F25)', () => {
     expect(argsOf(mockPrisma.greenBeanLot).where).toEqual({ parchmentLot: { harvestLot: memberFarms } })
   })
 
-  test('a Farmer+Processor gets every batch, parchment lot and green-bean lot', async () => {
+  test("a Farmer+Processor gets their farms' chain plus their own processing chain", async () => {
     mockAuthUser = farmerProcessor
     await bulkLoad(2)
-    expect(argsOf(mockPrisma.processingBatch).where).toEqual({})
-    expect(argsOf(mockPrisma.parchmentLot).where).toEqual({})
-    expect(argsOf(mockPrisma.greenBeanLot).where).toEqual({})
+    expect(argsOf(mockPrisma.processingBatch).where).toEqual({
+      OR: [{ harvestLot: memberFarms }, { createdById: FARMER }],
+    })
+    expect(argsOf(mockPrisma.parchmentLot).where).toEqual({
+      OR: [
+        { harvestLot: memberFarms },
+        { processingBatch: { createdById: FARMER } },
+        { processingBatchId: null, externalSource: { path: ['importedBy'], equals: FARMER } },
+      ],
+    })
+    expect(argsOf(mockPrisma.greenBeanLot).where).toEqual({
+      OR: [
+        { parchmentLot: { harvestLot: memberFarms } },
+        { createdById: FARMER },
+        { parchmentLot: { processingBatch: { createdById: FARMER } } },
+      ],
+    })
   })
 
   test('a Farmer+Processor still sees soil, weather and GAP only on farms they belong to', async () => {
@@ -184,68 +193,128 @@ describe('bulk-load phase 2 lot chain (F25)', () => {
     expect(argsOf(mockPrisma.gAPLogEntry).where).toEqual(memberFarms)
   })
 
-  test('a Farmer+Roaster gets the whole lot chain and only their own roaster rows', async () => {
+  test("a Farmer+Roaster gets their farms' chain plus their green beans and the shelf, no other batches, and only their own roaster rows", async () => {
     mockAuthUser = farmerRoaster
     await bulkLoad(2)
-    expect(argsOf(mockPrisma.greenBeanLot).where).toEqual({})
+    // A roaster reads no processing batches, so only the farms' ones.
+    expect(argsOf(mockPrisma.processingBatch).where).toEqual({ harvestLot: memberFarms })
+    const { OR } = argsOf(mockPrisma.greenBeanLot).where
+    expect(OR).toEqual([
+      { parchmentLot: { harvestLot: memberFarms } },
+      { createdById: FARMER },
+      { roasterInventory: { some: { roasterId: FARMER } } },
+      { roastBatches: { some: { roasterId: FARMER } } },
+      { availabilityStatus: 'Available', currentWeightKg: { gt: 0 }, sourceType: 'Internal' },
+    ])
     expect(argsOf(mockPrisma.roasterInventoryItem).where).toEqual({ roasterId: FARMER })
+  })
+
+  test.each([
+    ['Farmer+Cupper (cupping roles read as before)', farmerCupper],
+    ['Farmer+Admin', farmerAdmin],
+  ])('a %s gets the whole lot chain', async (_label, viewer) => {
+    mockAuthUser = viewer
+    await bulkLoad(2)
+    expect(argsOf(mockPrisma.processingBatch).where).toEqual({})
+    expect(argsOf(mockPrisma.parchmentLot).where).toEqual({})
+    expect(argsOf(mockPrisma.greenBeanLot).where).toEqual({})
   })
 })
 
-describe('GET /api/harvest-lots (F25)', () => {
-  test('a pure Farmer lists only their own farms\' lots, even when asking for another farm', async () => {
+// A farmer's share of harvest lots: their own and shared farms', and the
+// lots recorded for them.
+const farmerHarvest = [{ farmId: { in: [OWN_FARM, SHARED_FARM] } }, { createdById: FARMER }]
+const ready = { status: 'ReadyForProcessing', processingBatches: { none: {} } }
+// A processor's: every Ready lot, and the lots their batches used.
+const processorHarvest = [ready, { processingBatches: { some: { createdById: FARMER } } }]
+
+describe('GET /api/harvest-lots (each their own)', () => {
+  test("a pure Farmer lists only their own and shared farms' lots, even when asking for another farm", async () => {
     mockAuthUser = pureFarmer
     await listHarvestLots('?farmId=farm-other&status=ReadyForProcessing')
     const { where } = argsOf(mockPrisma.harvestLot)
-    expect(where.farm).toEqual({ ownerId: FARMER })
+    expect(where.AND).toEqual([{ OR: farmerHarvest }])
     expect(where.farmId).toBe('farm-other')
     expect(mockPrisma.harvestLot.count).toHaveBeenCalledWith({ where })
   })
 
-  test('a Farmer+Processor lists every farmer\'s ready cherry', async () => {
+  test("a Farmer+Processor lists the union: their farms' lots, every Ready lot and their batches' lots", async () => {
     mockAuthUser = farmerProcessor
     await listHarvestLots('?status=ReadyForProcessing')
     expect(argsOf(mockPrisma.harvestLot).where).toEqual({
-      status: 'ReadyForProcessing', processingBatches: { none: {} },
+      ...ready,
+      AND: [{ OR: [...farmerHarvest, ...processorHarvest] }],
     })
   })
 
-  test('a Farmer who is also a super admin is not scoped', async () => {
-    mockAuthUser = superAdminFarmer
+  test("a Farmer+Roaster lists their farms' lots and the cherry behind their green beans", async () => {
+    mockAuthUser = farmerRoaster
+    await listHarvestLots()
+    const [scope] = argsOf(mockPrisma.harvestLot).where.AND
+    expect(scope.OR.slice(0, 2)).toEqual(farmerHarvest)
+    expect(scope.OR[2]).toHaveProperty('parchmentLots.some.greenBeanLots.some')
+    expect(scope.OR).toHaveLength(3)
+  })
+
+  test.each([
+    ['a Farmer who is also a super admin', superAdminFarmer],
+    ['a Farmer+Admin', farmerAdmin],
+    ['a Farmer+Cupper (cupping roles read as before)', farmerCupper],
+    ['a Farmer+HeadJudge (cupping roles read as before)', farmerHeadJudge],
+  ])('%s is not scoped', async (_label, viewer) => {
+    mockAuthUser = viewer
     await listHarvestLots()
     expect(argsOf(mockPrisma.harvestLot).where).toEqual({})
   })
 })
 
-describe('GET /api/harvest-lots/:id (F25)', () => {
+describe('GET /api/harvest-lots/:id (each their own)', () => {
   beforeEach(() => {
     mockPrisma.harvestLot.findUnique.mockResolvedValue(othersLot)
   })
 
-  test('a pure Farmer cannot read another farmer\'s lot', async () => {
+  test("a pure Farmer cannot read another farmer's lot", async () => {
     mockAuthUser = pureFarmer
+    mockPrisma.harvestLot.findFirst.mockResolvedValue(null)
     const response = await getHarvestLot('hl-other')
     expect(response.status).toBe(403)
   })
 
-  test.each([
-    ['Farmer+Processor', farmerProcessor],
-    ['Farmer+Roaster', farmerRoaster],
-    ['Farmer+Cupper', farmerCupper],
-  ])('a %s reads another farmer\'s lot, as the staff role alone does', async (_label, viewer) => {
-    mockAuthUser = viewer
+  test("a Farmer+Processor reads another farmer's Ready lot through the union of their scopes", async () => {
+    mockAuthUser = farmerProcessor
+    mockPrisma.harvestLot.findFirst.mockResolvedValue({ id: 'hl-other' })
     const response = await getHarvestLot('hl-other')
     expect(response.status).toBe(200)
+    expect(mockPrisma.harvestLot.findFirst).toHaveBeenCalledWith({
+      where: { id: 'hl-other', AND: [{ OR: [...farmerHarvest, ...processorHarvest] }] },
+      select: { id: true },
+    })
     const body = await response.json()
     expect(body.harvestLot.id).toBe('hl-other')
     // The farm's owner id is not passed on.
     expect(body.harvestLot.farm).toEqual({ id: 'farm-other', farmName: 'Mae Farm', location: 'Nan' })
   })
 
+  test('a Farmer+Roaster gets 403 on a lot behind none of their green beans', async () => {
+    mockAuthUser = farmerRoaster
+    mockPrisma.harvestLot.findFirst.mockResolvedValue(null)
+    const response = await getHarvestLot('hl-other')
+    expect(response.status).toBe(403)
+  })
+
+  test('a Farmer+Cupper reads it without a scope lookup, as before', async () => {
+    mockAuthUser = farmerCupper
+    const response = await getHarvestLot('hl-other')
+    expect(response.status).toBe(200)
+    expect(mockPrisma.harvestLot.findFirst).not.toHaveBeenCalled()
+  })
+
   test('a pure Farmer still reads a lot recorded for them', async () => {
     mockAuthUser = pureFarmer
     mockPrisma.harvestLot.findUnique.mockResolvedValue({ ...othersLot, createdById: FARMER })
+    mockPrisma.harvestLot.findFirst.mockResolvedValue({ id: 'hl-other' })
     const response = await getHarvestLot('hl-other')
     expect(response.status).toBe(200)
+    expect(mockPrisma.harvestLot.findFirst.mock.calls[0][0].where.AND).toEqual([{ OR: farmerHarvest }])
   })
 })

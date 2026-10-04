@@ -613,11 +613,19 @@ describe('Cherry lot edit and delete', { timeout: 20000 }, () => {
 })
 
 describe('Hull & Grade price', { timeout: 20000 }, () => {
+  // The signed-in processor's own lot: Hull & Grade is offered only on a
+  // parchment lot whose batch they recorded (or to an Admin).
+  const ownBatch = {
+    id: 'pb-own', harvestLotId: 'hl-own', processType: 'Washed', createdById: 'processor',
+    status: ProcessingBatchStatus.Completed, parchmentWeightKg: 100,
+  }
   const parchment: ParchmentLot = {
     id: 'pl-1', displayId: 'PL-2026-3', sourceType: ParchmentSourceType.Internal,
+    processingBatchId: 'pb-own',
     initialWeightKg: 100, currentWeightKg: 100, moistureContent: 11,
     processType: 'Washed', status: 'AwaitingHulling', withdrawalHistory: [],
   }
+  const hullData: AppData = { ...INITIAL_APP_DATA, parchmentLots: [parchment], processingBatches: [ownBatch] }
 
   // Text queries rather than getByRole: role queries over the whole
   // workbench are slow enough to push the suite's timeouts.
@@ -653,7 +661,7 @@ describe('Hull & Grade price', { timeout: 20000 }, () => {
   })
 
   it('puts an optional THB price input directly after the weight on every row', () => {
-    render(<Harness initial={{ ...INITIAL_APP_DATA, parchmentLots: [parchment] }} refreshData={async () => {}} />)
+    render(<Harness initial={hullData} refreshData={async () => {}} />)
     const form = openHull()
     addGrade(form, 'Grade B')
 
@@ -686,7 +694,7 @@ describe('Hull & Grade price', { timeout: 20000 }, () => {
     const onData = vi.fn()
     // Keep the reload pending: the lots must come from the save response.
     const refreshData = vi.fn(() => new Promise<void>(() => {}))
-    render(<Harness initial={{ ...INITIAL_APP_DATA, parchmentLots: [parchment] }} refreshData={refreshData} onData={onData} />)
+    render(<Harness initial={hullData} refreshData={refreshData} onData={onData} />)
     const form = openHull()
     addGrade(form, 'Grade B')
     fireEvent.change(weight(1), { target: { value: '50' } })
@@ -723,7 +731,7 @@ describe('Hull & Grade price', { timeout: 20000 }, () => {
       parchmentLot: { ...parchment, currentWeightKg: 0, status: 'Hulled' },
       greenBeanLots: [],
     })
-    render(<Harness initial={{ ...INITIAL_APP_DATA, parchmentLots: [parchment] }} refreshData={async () => {}} />)
+    render(<Harness initial={hullData} refreshData={async () => {}} />)
     const form = openHull()
     addGrade(form, 'Grade B')
     addGrade(form, 'Grade C')
@@ -744,7 +752,7 @@ describe('Hull & Grade price', { timeout: 20000 }, () => {
   }, 20000)
 
   it('flags a price of 0, -1, abc or 1.234 on its row, blocks Save, and shows no value until a price is valid', () => {
-    render(<Harness initial={{ ...INITIAL_APP_DATA, parchmentLots: [parchment] }} refreshData={async () => {}} />)
+    render(<Harness initial={hullData} refreshData={async () => {}} />)
     const form = openHull()
     const save = saveButton()
     fireEvent.change(weight(1), { target: { value: '80' } })
@@ -773,6 +781,76 @@ describe('Hull & Grade price', { timeout: 20000 }, () => {
     expect(form).toHaveTextContent('Ready to confirm')
     expect(valueLine(form)).toHaveTextContent('14,440.00 THB value')
     expect(valueLine(form)).not.toHaveTextContent('grades priced')
+  })
+})
+
+describe('Hull & Grade for the lot\'s processor only', { timeout: 20000 }, () => {
+  // POST /parchment-lots/:id/withdrawals lets only the batch's processor, or
+  // an Admin, hull a parchment lot (bought-in parchment is Admin-only). A
+  // lot the viewer may not hull is listed without the button, not refused
+  // with a 403. Text queries keep the whole-workbench render fast.
+  const batchBy = (id: string, createdById: string) => ({
+    id, harvestLotId: `hl-${id}`, processType: 'Washed', createdById,
+    status: ProcessingBatchStatus.Completed, parchmentWeightKg: 100,
+  })
+  const parchmentOf = (id: string, displayId: string, processingBatchId?: string): ParchmentLot => ({
+    id, displayId, processingBatchId,
+    sourceType: processingBatchId ? ParchmentSourceType.Internal : ParchmentSourceType.External,
+    initialWeightKg: 100, currentWeightKg: 100, moistureContent: 11,
+    processType: 'Washed', status: 'AwaitingHulling', withdrawalHistory: [],
+  })
+  const data: AppData = {
+    ...INITIAL_APP_DATA,
+    processingBatches: [batchBy('pb-mine', 'processor'), batchBy('pb-theirs', 'p-2')],
+    parchmentLots: [
+      parchmentOf('pl-mine', 'PL-MINE', 'pb-mine'),
+      parchmentOf('pl-theirs', 'PL-THEIRS', 'pb-theirs'),
+      parchmentOf('pl-bought', 'PL-BOUGHT'),
+    ],
+  }
+  const hullButtons = () => screen.queryAllByText('Hull & Grade', { selector: 'button' })
+  // The workflow card or data grid row that holds this lot's id.
+  const holderOf = (displayId: string) => {
+    let el: HTMLElement | null = screen.getByText(displayId)
+    while (el && !el.matches('tr, .border-l-4')) el = el.parentElement
+    return el!
+  }
+  const hasHull = (displayId: string) =>
+    within(holderOf(displayId)).queryByText('Hull & Grade', { selector: 'button' }) !== null
+
+  beforeEach(() => vi.clearAllMocks())
+
+  it.each(['Workflow', 'Data Grid'])('a Processor gets it on their own lot only, in %s', (view) => {
+    render(<Harness initial={data} refreshData={async () => {}} />)
+    if (view === 'Data Grid') fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
+    expect(hullButtons()).toHaveLength(1)
+    expect(hasHull('PL-MINE')).toBe(true)
+    expect(hasHull('PL-THEIRS')).toBe(false)
+    expect(hasHull('PL-BOUGHT')).toBe(false)
+  })
+
+  it('a Processor who also roasts still gets it on their own lot only', () => {
+    render(<Harness initial={data} refreshData={async () => {}} roles={[UserRole.Processor, UserRole.Roaster]} />)
+    expect(hullButtons()).toHaveLength(1)
+    expect(hasHull('PL-MINE')).toBe(true)
+  })
+
+  it.each([
+    ['an Admin', [UserRole.Admin], false],
+    ['a super admin', [UserRole.Processor], true],
+  ] as const)('%s gets it on every lot, bought-in parchment included', (_label, roles, isSuperAdmin) => {
+    render(<Harness initial={data} refreshData={async () => {}} roles={[...roles]} isSuperAdmin={isSuperAdmin} />)
+    for (const view of ['Workflow', 'Data Grid']) {
+      if (view === 'Data Grid') fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
+      expect(hullButtons()).toHaveLength(3)
+      for (const id of ['PL-MINE', 'PL-THEIRS', 'PL-BOUGHT']) expect(hasHull(id)).toBe(true)
+    }
+  })
+
+  it('opens the Hull & Grade popup for the owner', () => {
+    render(<Harness initial={data} refreshData={async () => {}} />)
+    fireEvent.click(within(holderOf('PL-MINE')).getByText('Hull & Grade', { selector: 'button' }))
+    expect(screen.getByText('Save', { selector: 'button' })).toBeInTheDocument()
   })
 })
 

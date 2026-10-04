@@ -26,6 +26,7 @@ import { claimGreenBeanLot, createRoastBatch } from '../../services/roaster/roas
 import { createGreenBeanLot } from '../../services/lots/greenBeanLotService'
 import { formatGreenBeanId } from '../../utils/formatDisplayId'
 import { todayDateOnly } from '../../utils/dateOnly'
+import { isAdminUser } from '../../utils/farmAccess'
 import { useToast } from '../../contexts/ToastContext'
 import { SaleOrderForm } from '../sales/modals/SaleOrderModal'
 import { formatKg } from '../sales/saleDisplay'
@@ -216,11 +217,15 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
           (lot) =>
             lot.availabilityStatus === 'Available' &&
             lot.currentWeightKg > 0 &&
-            lot.sourceType === GreenBeanSourceType.External,
+            lot.sourceType === GreenBeanSourceType.External &&
+            // Another user's bought-in lot can reach a roaster who holds or
+            // roasted some of it, but only its buyer (or an Admin) may roast
+            // or claim from it
+            (isAdminUser(currentUser) || lot.createdById === currentUser.id),
         )
         .map(mapLotForDisplay)
         .sort((a, b) => b.id.localeCompare(a.id)),
-    [data.greenBeanLots, mapLotForDisplay],
+    [data.greenBeanLots, mapLotForDisplay, currentUser],
   )
 
   const availableInternalLots = useMemo(

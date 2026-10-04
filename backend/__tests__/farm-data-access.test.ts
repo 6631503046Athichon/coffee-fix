@@ -13,8 +13,8 @@
  *   shared farm; farm edit and delete stay with the owner and Admins
  * - a GAP log moves only onto a farm the caller may record on, and only off
  *   its farm for someone who may delete it there
- * - crop years: login required to list them, and a crop year's detail holds
- *   counts, not other farmers' lots and batches
+ * - crop years: login required to list them, and a crop year's detail never
+ *   holds other farmers' lots and batches; only an Admin gets their counts
  */
 
 import { describe, test, expect, jest, beforeEach } from '@jest/globals'
@@ -625,8 +625,19 @@ describe('crop years (F16)', () => {
     expect(data.cropYears).toHaveLength(1)
   })
 
-  test('GET /crop-years/:id returns counts, not other farmers\' lots and batches', async () => {
+  test('GET /crop-years/:id gives a farmer neither other farmers\' lots and batches nor their counts', async () => {
     mockAuthUser = farmerA
+    const { status, data } = await call('crop-years/[id]/route', 'GET', 'crop-years/cy-1', { id: 'cy-1' })
+    expect(status).toBe(200)
+    expect(data.cropYear.year).toBe('2026/2027')
+    // The counts span every farmer and processor ("each their own").
+    expect(data.cropYear._count).toBeUndefined()
+    expect(data.cropYear.harvestLots).toBeUndefined()
+    expect(data.cropYear.processingBatches).toBeUndefined()
+  })
+
+  test('GET /crop-years/:id gives an Admin the counts, still not the lots and batches', async () => {
+    mockAuthUser = admin
     const { status, data } = await call('crop-years/[id]/route', 'GET', 'crop-years/cy-1', { id: 'cy-1' })
     expect(status).toBe(200)
     expect(data.cropYear._count).toEqual({ harvestLots: 4, processingBatches: 2 })

@@ -213,6 +213,44 @@ describe('PUT /api/roaster-inventory/[id] moves claim changes to and from the so
       expectNoWrites()
     })
 
+    // Another user's bought-in lot is theirs alone (each their own,
+    // lib/farmAccess canClaimGreenBeanLot), as POST /roaster-inventory refuses it.
+    const boughtInBy = (createdById: string) =>
+      mockTx.greenBeanLot.findUnique.mockResolvedValue({
+        currentWeightKg: 30,
+        initialWeightKg: 50,
+        availabilityStatus: 'Available',
+        sourceType: 'External',
+        createdById,
+      })
+
+    test("403 when the lot is another user's bought-in lot, with nothing written", async () => {
+      boughtInBy('roaster-2')
+      const { PUT } = await import('@/app/api/roaster-inventory/[id]/route')
+      const response = await PUT(putRequest({ claimedWeightKg: 25 }), routeParams)
+      expect(response.status).toBe(403)
+      expect((await response.json()).error).toBe(
+        'This green bean lot was bought in by another user, so it cannot be claimed',
+      )
+      expectNoWrites()
+    })
+
+    test('a roaster claims more of a lot they bought in themselves', async () => {
+      boughtInBy('roaster-1')
+      const { PUT } = await import('@/app/api/roaster-inventory/[id]/route')
+      const response = await PUT(putRequest({ claimedWeightKg: 25 }), routeParams)
+      expect(response.status).toBe(200)
+      expect(lotWrite().data.currentWeightKg).toBe(25)
+    })
+
+    test("kg of another user's bought-in lot can still go back to it", async () => {
+      boughtInBy('roaster-2')
+      const { PUT } = await import('@/app/api/roaster-inventory/[id]/route')
+      const response = await PUT(putRequest({ claimedWeightKg: 15 }), routeParams)
+      expect(response.status).toBe(200)
+      expect(lotWrite().data.currentWeightKg).toBe(35)
+    })
+
     test("an Admin raising a roaster's claim takes the kg off the lot too", async () => {
       mockAuthUser = admin
       const { PUT } = await import('@/app/api/roaster-inventory/[id]/route')

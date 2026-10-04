@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, requireOwnership, handleApiError } from '@/lib/middleware'
 import { safeParseFloat } from '@/lib/utils'
 import { SALE_TX_OPTIONS, WEIGHT_EPSILON, formatKgText, round3 } from '@/lib/saleOrders'
+import { batchLabel, canClaimGreenBeanLot, chainScope } from '@/lib/farmAccess'
 
 const round6 = (value: number) => Math.round(value * 1e6) / 1e6
 
@@ -89,6 +90,15 @@ class LotShortError extends Error {
   }
 }
 
+// Claiming more of another user's bought-in lot, as POST /roaster-inventory
+// refuses a claim on it.
+class LotNotClaimableError extends Error {
+  constructor() {
+    super('This green bean lot was bought in by another user, so it cannot be claimed')
+    this.name = 'LotNotClaimableError'
+  }
+}
+
 class LotNotFoundError extends Error {
   constructor() {
     super('Green bean lot not found')
@@ -159,6 +169,26 @@ export async function GET(
 
     // SECURITY: a Roaster reads only their own inventory and roasts.
     requireOwnership(user, inventoryItem.roasterId, ['Admin'])
+
+    // The lot's processing batch comes as a label (process, variety, farm),
+    // not the processor's record, unless the reader may read the batch
+    // (lib/farmAccess chainScope).
+    const parchmentLot = inventoryItem.greenBeanLot?.parchmentLot
+    const batch = parchmentLot?.processingBatch
+    if (parchmentLot && batch) {
+      const scope = await chainScope(user)
+      if (scope && !scope.canReadBatch(batch)) {
+        return NextResponse.json({
+          inventoryItem: {
+            ...inventoryItem,
+            greenBeanLot: {
+              ...inventoryItem.greenBeanLot,
+              parchmentLot: { ...parchmentLot, processingBatch: batchLabel(batch) },
+            },
+          },
+        })
+      }
+    }
 
     return NextResponse.json({ inventoryItem })
   } catch (error) {
@@ -303,7 +333,13 @@ export async function PUT(
       if (claimMoves) {
         const lot = await tx.greenBeanLot.findUnique({
           where: { id: lotId },
-          select: { currentWeightKg: true, initialWeightKg: true, availabilityStatus: true },
+          select: {
+            currentWeightKg: true,
+            initialWeightKg: true,
+            availabilityStatus: true,
+            sourceType: true,
+            createdById: true,
+          },
         })
         if (!lot) throw new LotNotFoundError()
 
@@ -311,6 +347,7 @@ export async function PUT(
         let availabilityStatus = lot.availabilityStatus
         if (claimDelta > 0) {
           // Claiming more is a claim: same rules as POST /roaster-inventory.
+          if (!canClaimGreenBeanLot(user, lot)) throw new LotNotClaimableError()
           if (lot.availabilityStatus !== 'Available') throw new LotUnavailableError()
           if (lot.currentWeightKg + WEIGHT_EPSILON < claimDelta) throw new LotShortError(lot.currentWeightKg)
           lotKg = Math.max(0, round6(lot.currentWeightKg - claimDelta))
@@ -403,6 +440,9 @@ export async function PUT(
     }
     if (error instanceof LotNotFoundError) {
       return NextResponse.json({ error: error.message }, { status: 404 })
+    }
+    if (error instanceof LotNotClaimableError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
     }
     return handleApiError(error)
   }

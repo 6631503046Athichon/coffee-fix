@@ -1,15 +1,19 @@
 /**
- * A farmer-only user (a Farmer with no staff role) used to read every
+ * A farmer-only user (a Farmer with no other role) used to read every
  * processor's chain through the API: GET /api/processing-batches,
  * /api/parchment-lots and /api/green-bean-lots, list and by id, returned
- * every farmer's batches, parchment and green beans. They now return only
- * the chain grown on farms the farmer owns or collaborates on, the rule
- * bulk-load already applied. Staff roles (multi-role included), Admins and
- * super admins still see every chain.
+ * every farmer's batches, parchment and green beans. They return only the
+ * chain grown on farms the farmer owns or collaborates on, the rule bulk-load
+ * already applied.
  *
  * GET /api/pricing-history listed every green-bean lot's price history to
  * any signed-in user, so a farmer could still read the prices of lots the
  * green-bean routes refuse them. It is scoped the same way.
+ *
+ * Since "each their own" (2026-10-05) the other roles are scoped too
+ * (lib/farmAccess chainScope; each-their-own-scoping.test.ts checks who gets
+ * which rows). Only Admins, super admins, HeadJudges and Cuppers still read
+ * every chain. This file checks the clauses a farmer's reads send.
  */
 
 import { describe, test, expect, jest, beforeEach } from '@jest/globals'
@@ -18,13 +22,12 @@ import { NextRequest } from 'next/server'
 const FARMER = 'farmer-1'
 const OWN_FARM = 'farm-own'
 const SHARED_FARM = 'farm-shared'
-const OTHER_FARM = 'farm-other'
 
 const mockPrisma: any = {
   farm: { findMany: jest.fn() },
-  processingBatch: { findMany: jest.fn(), findUnique: jest.fn() },
-  parchmentLot: { findMany: jest.fn(), findUnique: jest.fn() },
-  greenBeanLot: { findMany: jest.fn(), findUnique: jest.fn(), count: jest.fn() },
+  processingBatch: { findMany: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn() },
+  parchmentLot: { findMany: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn() },
+  greenBeanLot: { findMany: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn(), count: jest.fn() },
   pricingHistory: { findMany: jest.fn() },
 }
 
@@ -51,45 +54,46 @@ const user = (roles: string[], isSuperAdmin = false) => ({
 })
 const pureFarmer = user(['Farmer'])
 
-// Everyone the farmer rule must leave alone.
+// Everyone who still reads every chain.
 const unscoped: [string, any][] = [
-  ['a Processor', user(['Processor'])],
-  ['a Roaster', user(['Roaster'])],
   ['a Cupper', user(['Cupper'])],
   ['a HeadJudge', user(['HeadJudge'])],
-  ['a Farmer+Processor', user(['Farmer', 'Processor'])],
   ['an Admin', user(['Admin'])],
   ['a super admin who only holds Farmer', user(['Farmer'], true)],
 ]
 
 const memberFarms = { farmId: { in: [OWN_FARM, SHARED_FARM] } }
+// What each model's farmer clause is.
+const farmerBatches = { harvestLot: memberFarms }
+const farmerParchment = { harvestLot: memberFarms }
+const farmerGreen = { parchmentLot: { harvestLot: memberFarms } }
 
 const request = (url: string) => new NextRequest(`http://localhost:3001${url}`)
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 const whereOf = (model: any) => model.findMany.mock.calls[0][0].where
 
-// One record of each kind, grown on `farmId` (null: bought in, no farm).
-const batchOn = (farmId: string | null) => ({
+// One record of each kind; the scope lookup (findFirst) decides who may open it.
+const batch = () => ({
   id: 'pb-1',
   harvestLotId: 'hl-1',
   createdById: 'processor-9',
-  harvestLot: { id: 'hl-1', farmId, farm: farmId ? { id: farmId, farmName: 'Farm', location: 'Nan' } : null },
+  harvestLot: { id: 'hl-1', farmId: 'farm-other', farm: { id: 'farm-other', farmName: 'Farm', location: 'Nan' } },
   parchmentLots: [],
   dryingLogs: [],
 })
-const parchmentOn = (farmId: string | null) => ({
+const parchment = () => ({
   id: 'pl-1',
   processType: 'Washed',
-  processingBatch: farmId ? { id: 'pb-1', createdById: 'processor-9' } : null,
-  harvestLot: farmId ? { id: 'hl-1', farmerName: 'Someone', cherryVariety: 'Typica', farmId } : null,
+  processingBatch: null,
+  harvestLot: { id: 'hl-1', farmerName: 'Someone', cherryVariety: 'Typica', farmId: 'farm-other' },
   physicalTestResults: null,
   greenBeanLots: [],
 })
-const greenOn = (farmId: string | null) => ({
+const green = () => ({
   id: 'gbl-1',
   grade: 'Grade A',
   createdById: 'processor-9',
-  parchmentLot: farmId ? { id: 'pl-1', harvestLot: { id: 'hl-1', farmerName: 'Someone', cherryVariety: 'Typica', farmId } } : null,
+  parchmentLot: null,
   withdrawalHistory: [],
   roasterInventory: [],
   roastBatches: [],
@@ -104,39 +108,39 @@ beforeEach(() => {
   mockPrisma.greenBeanLot.findMany.mockResolvedValue([])
   mockPrisma.greenBeanLot.count.mockResolvedValue(0)
   mockPrisma.pricingHistory.findMany.mockResolvedValue([])
+  mockPrisma.processingBatch.findUnique.mockResolvedValue(batch())
+  mockPrisma.parchmentLot.findUnique.mockResolvedValue(parchment())
+  mockPrisma.greenBeanLot.findUnique.mockResolvedValue(green())
 })
 
-describe('lib/farmAccess chain helpers', () => {
-  test('chainFarmIds: the farms a pure Farmer owns or collaborates on', async () => {
-    const { chainFarmIds } = await import('@/lib/farmAccess')
-    expect(await chainFarmIds(pureFarmer as any)).toEqual([OWN_FARM, SHARED_FARM])
+describe('lib/farmAccess chainScope for a pure Farmer', () => {
+  test('the chain on farms they own or collaborate on, and the harvest lots recorded for them', async () => {
+    const { chainScope } = await import('@/lib/farmAccess')
+    const scope = await chainScope(pureFarmer as any)
     expect(mockPrisma.farm.findMany.mock.calls[0][0].where).toEqual({
       OR: [{ ownerId: FARMER }, { collaborators: { some: { userId: FARMER } } }],
     })
+    expect(scope).toMatchObject({
+      harvestLotWhere: { OR: [memberFarms, { createdById: FARMER }] },
+      processingBatchWhere: farmerBatches,
+      parchmentLotWhere: farmerParchment,
+      greenBeanLotWhere: farmerGreen,
+      pricingWhere: { greenBeanLot: farmerGreen },
+    })
   })
 
-  test.each(unscoped)('chainFarmIds: no limit for %s', async (_label, viewer) => {
-    const { chainFarmIds } = await import('@/lib/farmAccess')
-    expect(await chainFarmIds(viewer)).toBeNull()
+  test.each(unscoped)('no limit for %s', async (_label, viewer) => {
+    const { chainScope } = await import('@/lib/farmAccess')
+    expect(await chainScope(viewer)).toBeNull()
     expect(mockPrisma.farm.findMany).not.toHaveBeenCalled()
-  })
-
-  test('requireChainFarm lets a limited user through only on one of their farms', async () => {
-    const { requireChainFarm } = await import('@/lib/farmAccess')
-    expect(() => requireChainFarm(null, OTHER_FARM)).not.toThrow()
-    expect(() => requireChainFarm(null, null)).not.toThrow()
-    expect(() => requireChainFarm([OWN_FARM], OWN_FARM)).not.toThrow()
-    expect(() => requireChainFarm([OWN_FARM], OTHER_FARM)).toThrow('Insufficient permissions')
-    expect(() => requireChainFarm([OWN_FARM], null)).toThrow('Insufficient permissions')
-    expect(() => requireChainFarm([], undefined)).toThrow('Insufficient permissions')
   })
 })
 
 describe('list routes', () => {
   const lists: [string, string, () => any, any][] = [
-    ['GET /api/processing-batches', '/api/processing-batches', () => mockPrisma.processingBatch, { harvestLot: memberFarms }],
-    ['GET /api/parchment-lots', '/api/parchment-lots', () => mockPrisma.parchmentLot, { harvestLot: memberFarms }],
-    ['GET /api/green-bean-lots', '/api/green-bean-lots', () => mockPrisma.greenBeanLot, { parchmentLot: { harvestLot: memberFarms } }],
+    ['GET /api/processing-batches', '/api/processing-batches', () => mockPrisma.processingBatch, farmerBatches],
+    ['GET /api/parchment-lots', '/api/parchment-lots', () => mockPrisma.parchmentLot, farmerParchment],
+    ['GET /api/green-bean-lots', '/api/green-bean-lots', () => mockPrisma.greenBeanLot, farmerGreen],
   ]
   const routeOf = async (url: string) => {
     if (url === '/api/processing-batches') return import('@/app/api/processing-batches/route')
@@ -152,7 +156,7 @@ describe('list routes', () => {
   test.each(lists)('%s: a pure Farmer gets only their own and shared farms\' chain', async (_label, url, model, scope) => {
     mockAuthUser = pureFarmer
     await list(url)
-    expect(whereOf(model())).toEqual(scope)
+    expect(whereOf(model())).toEqual({ AND: [scope] })
   })
 
   test("GET /api/green-bean-lots: a pure Farmer's page count is over the same scoped rows", async () => {
@@ -177,7 +181,7 @@ describe('list routes', () => {
     expect(whereOf(mockPrisma.processingBatch)).toEqual({
       harvestLotId: 'hl-1',
       status: 'Drying',
-      harvestLot: memberFarms,
+      AND: [farmerBatches],
     })
   })
 
@@ -185,73 +189,57 @@ describe('list routes', () => {
     mockAuthUser = pureFarmer
     mockPrisma.farm.findMany.mockResolvedValue([])
     await list('/api/parchment-lots')
-    expect(whereOf(mockPrisma.parchmentLot)).toEqual({ harvestLot: { farmId: { in: [] } } })
+    expect(whereOf(mockPrisma.parchmentLot)).toEqual({ AND: [{ harvestLot: { farmId: { in: [] } } }] })
   })
 })
 
 describe('by-id routes', () => {
-  type Open = (farmId: string | null) => Promise<Response>
-  const routes: [string, Open][] = [
-    ['GET /api/processing-batches/:id', async farmId => {
-      mockPrisma.processingBatch.findUnique.mockResolvedValue(batchOn(farmId))
+  const routes: [string, () => any, any, () => Promise<Response>][] = [
+    ['GET /api/processing-batches/:id', () => mockPrisma.processingBatch, farmerBatches, async () => {
       const { GET } = await import('@/app/api/processing-batches/[id]/route')
       return GET(request('/api/processing-batches/pb-1'), params('pb-1'))
     }],
-    ['GET /api/parchment-lots/:id', async farmId => {
-      mockPrisma.parchmentLot.findUnique.mockResolvedValue(parchmentOn(farmId))
+    ['GET /api/parchment-lots/:id', () => mockPrisma.parchmentLot, farmerParchment, async () => {
       const { GET } = await import('@/app/api/parchment-lots/[id]/route')
       return GET(request('/api/parchment-lots/pl-1'), params('pl-1'))
     }],
-    ['GET /api/green-bean-lots/:id', async farmId => {
-      mockPrisma.greenBeanLot.findUnique.mockResolvedValue(greenOn(farmId))
+    ['GET /api/green-bean-lots/:id', () => mockPrisma.greenBeanLot, farmerGreen, async () => {
       const { GET } = await import('@/app/api/green-bean-lots/[id]/route')
       return GET(request('/api/green-bean-lots/gbl-1'), params('gbl-1'))
     }],
   ]
+  const idOf: Record<string, string> = {
+    'GET /api/processing-batches/:id': 'pb-1',
+    'GET /api/parchment-lots/:id': 'pl-1',
+    'GET /api/green-bean-lots/:id': 'gbl-1',
+  }
 
-  test.each(routes)("%s: a pure Farmer gets 403 on another farmer's chain", async (_label, open) => {
+  test.each(routes)('%s: a pure Farmer gets 403 on a record outside their farms', async (_label, model, _scope, open) => {
     mockAuthUser = pureFarmer
-    const response = await open(OTHER_FARM)
+    model().findFirst.mockResolvedValue(null)
+    const response = await open()
     expect(response.status).toBe(403)
   })
 
-  test.each(routes)('%s: a pure Farmer gets 403 on stock from no farm', async (_label, open) => {
+  test.each(routes)('%s: a pure Farmer opens a record on their farms, looked up through their farms', async (label, model, scope, open) => {
     mockAuthUser = pureFarmer
-    const response = await open(null)
-    expect(response.status).toBe(403)
-  })
-
-  test.each(routes)('%s: a pure Farmer opens the chain from a farm they own', async (_label, open) => {
-    mockAuthUser = pureFarmer
-    const response = await open(OWN_FARM)
+    model().findFirst.mockResolvedValue({ id: idOf[label] })
+    const response = await open()
     expect(response.status).toBe(200)
-  })
-
-  test.each(routes)('%s: a pure Farmer opens the chain from a farm shared with them', async (_label, open) => {
-    mockAuthUser = pureFarmer
-    const response = await open(SHARED_FARM)
-    expect(response.status).toBe(200)
+    expect(model().findFirst).toHaveBeenCalledWith({
+      where: { id: idOf[label], AND: [scope] },
+      select: { id: true },
+    })
   })
 
   test.each(
-    routes.flatMap(([label, open]) =>
-      unscoped.map(([who, viewer]): [string, string, Open, any] => [label, who, open, viewer])),
-  )("%s: %s opens another farmer's chain", async (_label, _who, open, viewer) => {
+    routes.flatMap(([label, model, , open]) =>
+      unscoped.map(([who, viewer]): [string, string, () => any, () => Promise<Response>, any] => [label, who, model, open, viewer])),
+  )('%s: %s opens any record without a scope lookup', async (_label, _who, model, open, viewer) => {
     mockAuthUser = viewer
-    const response = await open(OTHER_FARM)
+    const response = await open()
     expect(response.status).toBe(200)
-  })
-
-  test('the parchment and green-bean detail routes load the farm the check needs', async () => {
-    mockAuthUser = pureFarmer
-    mockPrisma.parchmentLot.findUnique.mockResolvedValue(parchmentOn(OWN_FARM))
-    mockPrisma.greenBeanLot.findUnique.mockResolvedValue(greenOn(OWN_FARM))
-    const parchment = await import('@/app/api/parchment-lots/[id]/route')
-    const green = await import('@/app/api/green-bean-lots/[id]/route')
-    await parchment.GET(request('/api/parchment-lots/pl-1'), params('pl-1'))
-    await green.GET(request('/api/green-bean-lots/gbl-1'), params('gbl-1'))
-    expect(mockPrisma.parchmentLot.findUnique.mock.calls[0][0].include.harvestLot.select.farmId).toBe(true)
-    expect(mockPrisma.greenBeanLot.findUnique.mock.calls[0][0].include.parchmentLot.include.harvestLot.select.farmId).toBe(true)
+    expect(model().findFirst).not.toHaveBeenCalled()
   })
 
   test('an unknown id is still 404 for a pure Farmer', async () => {
@@ -260,6 +248,7 @@ describe('by-id routes', () => {
     const { GET } = await import('@/app/api/processing-batches/[id]/route')
     const response = await GET(request('/api/processing-batches/nope'), params('nope'))
     expect(response.status).toBe(404)
+    expect(mockPrisma.processingBatch.findFirst).not.toHaveBeenCalled()
   })
 })
 
@@ -273,14 +262,14 @@ describe('GET /api/pricing-history', () => {
 
   test("a pure Farmer gets only the prices of their own and shared farms' green beans", async () => {
     mockAuthUser = pureFarmer
-    expect(await history()).toEqual({ greenBeanLot: { parchmentLot: { harvestLot: memberFarms } } })
+    expect(await history()).toEqual({ AND: [{ greenBeanLot: farmerGreen }] })
   })
 
   test("a pure Farmer asking for another farm's lot by id still gets only their farms' rows", async () => {
     mockAuthUser = pureFarmer
     expect(await history('?greenBeanLotId=gbl-other')).toEqual({
       greenBeanLotId: 'gbl-other',
-      greenBeanLot: { parchmentLot: { harvestLot: memberFarms } },
+      AND: [{ greenBeanLot: farmerGreen }],
     })
   })
 

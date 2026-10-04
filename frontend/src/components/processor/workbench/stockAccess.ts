@@ -1,8 +1,13 @@
 // Which green-bean lots a user may act on. The backend lets only a lot's
 // creator, or an Admin / super admin, withdraw from it or price it
 // (requireOwnership on POST /green-bean-lots/:id/withdrawals and PUT
-// /green-bean-lots/:id). Every role still sees every lot; these decide which
-// lots get the action buttons and which feed the Parchment page's stock.
+// /green-bean-lots/:id). Each user is sent only their own share of the lots
+// ("each their own", 2026-10-05): a Processor their own, a Roaster the ones
+// they bought, hold or roasted plus the shelf of claimable lots, a user with
+// several roles the union of those, an Admin every lot. So a lot in the data
+// can still be someone else's (a shelf lot, the source of a roast); these
+// decide which lots get the action buttons and which feed the Parchment
+// page's stock.
 
 import { GreenBeanSourceType, UserRole } from '../../../types'
 import type { GreenBeanLot, User } from '../../../types'

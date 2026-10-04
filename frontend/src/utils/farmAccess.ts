@@ -35,12 +35,15 @@ export const ownedFarmIds = (user: Viewer, farms: Farm[]): Set<string> =>
   new Set(farms.filter(farm => ownsFarm(user, farm)).map(farm => farm.id));
 
 /**
- * The user's own harvest lots: those on a farm they own, which is what the
- * backend lists for a farmer. The backend keeps a lot's owner (createdById)
- * equal to its farm's owner on create, on a farm change and when an Admin
- * gives the farm to someone else, so the farm decides. For a user with a
- * staff role as well, who is sent every lot, this keeps the farmer pages to
- * their own.
+ * The user's own harvest lots: those on a farm they own. The backend keeps a
+ * lot's owner (createdById) equal to its farm's owner on create, on a farm
+ * change and when an Admin gives the farm to someone else, so the farm
+ * decides. The backend sends each user only their share ("each their own",
+ * 2026-10-05), but that share is wider than this: a farmer also gets the
+ * lots of the farms they collaborate on, and a user who is a Processor as
+ * well also gets every lot still Ready for Processing and the lots their
+ * batches used (the union of their roles). This keeps the farmer pages to
+ * the lots on their own farms.
  */
 export const ownHarvestLots = (user: Viewer, lots: HarvestLot[], farms: Farm[]): HarvestLot[] => {
   const farmIds = ownedFarmIds(user, farms);

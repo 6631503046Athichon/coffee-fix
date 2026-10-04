@@ -8,6 +8,7 @@ import { Search, ExternalLink, CheckCircle, Archive, AlertCircle, ChevronLeft, C
 import { UserRole, GreenBeanLot } from '@/types';
 import { toRoaId } from '@/utils/formatters';
 import { isAdminUser } from '@/utils/farmAccess';
+import { canManageGreenBeanLot } from '@/components/processor/workbench/stockAccess';
 import { QRCodeModal } from '@/components/traceability/modals/QRCodeModal';
 
 const PAGE_SIZE = 10
@@ -108,7 +109,9 @@ const TraceabilityHub: React.FC = () => {
 
           return {
             ...gbl,
-            processType: processingBatch?.processType || 'N/A',
+            // A roaster's shelf lot comes without its batch (out of their
+            // scope); its parchment lot carries the process too.
+            processType: processingBatch?.processType || parchmentLot?.processType || 'N/A',
             variety: harvestLot?.cherryVariety || 'N/A',
             finalScore,
           } as EnrichedLot
@@ -193,6 +196,12 @@ const TraceabilityHub: React.FC = () => {
   // Pagination logic
   const totalPages = Math.ceil(filteredLots.length / PAGE_SIZE)
   const paginatedLots = filteredLots.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  // Publishing a lot (generating its public id) and previewing it before it
+  // is public are for the lot's creator or an Admin: the backend refuses
+  // anyone else (403). Others get a lot's QR only once it is published.
+  const canPublishLot = (lot: GreenBeanLot) =>
+    !!currentUser && canManageGreenBeanLot(currentUser, lot)
 
   // QR Modal handlers
   const openQRModal = (lot: EnrichedLot) => {
@@ -331,6 +340,7 @@ const TraceabilityHub: React.FC = () => {
                 paginatedLots.map((lot) => {
                   if (!lot || !lot.id) return null
                   const hasPublicId = !!lot.publicTraceId
+                  const canPublish = canPublishLot(lot)
                   const displayScore =
                     lot.processorScore != null ? lot.processorScore.toFixed(1) : lot.finalScore
                   const isNew = isRecentLot(lot.createdAt)
@@ -388,30 +398,48 @@ const TraceabilityHub: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
-                        <button
-                          onClick={() => openQRModal(lot)}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                            hasPublicId
-                              ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200'
-                              : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
-                          }`}
-                          title={hasPublicId ? 'View/Download QR' : 'Generate QR'}
-                        >
-                          <QrCode className="h-3.5 w-3.5" />
-                          {hasPublicId ? 'QR' : 'Generate'}
-                        </button>
+                        {hasPublicId || canPublish ? (
+                          <button
+                            onClick={() => openQRModal(lot)}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                              hasPublicId
+                                ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200'
+                                : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                            }`}
+                            title={hasPublicId ? 'View/Download QR' : 'Generate QR'}
+                          >
+                            <QrCode className="h-3.5 w-3.5" />
+                            {hasPublicId ? 'QR' : 'Generate'}
+                          </button>
+                        ) : (
+                          <span
+                            className="text-sm text-gray-400"
+                            title="Not published yet. Only the lot's processor or an Admin can publish it."
+                          >
+                            -
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
-                        <Link
-                          to={
-                            hasPublicId ? `/trace/${lot.publicTraceId}` : `/traceability/${lot.id}`
-                          }
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 font-bold text-sm transition-colors duration-200 hover:underline"
-                        >
-                          View <ExternalLink className="h-4 w-4" />
-                        </Link>
+                        {hasPublicId || canPublish ? (
+                          <Link
+                            to={
+                              hasPublicId ? `/trace/${lot.publicTraceId}` : `/traceability/${lot.id}`
+                            }
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 font-bold text-sm transition-colors duration-200 hover:underline"
+                          >
+                            View <ExternalLink className="h-4 w-4" />
+                          </Link>
+                        ) : (
+                          <span
+                            className="text-sm text-gray-400"
+                            title="Not published yet. Only the lot's processor or an Admin can preview it."
+                          >
+                            -
+                          </span>
+                        )}
                       </td>
                     </tr>
                   )
@@ -487,6 +515,7 @@ const TraceabilityHub: React.FC = () => {
           lotId={selectedLotForQR.id}
           publicTraceId={selectedLotForQR.publicTraceId}
           onPublicIdGenerated={handlePublicIdGenerated}
+          canGenerate={canPublishLot(selectedLotForQR)}
         />
       )}
     </div>

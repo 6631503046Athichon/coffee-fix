@@ -24,6 +24,7 @@ const mockPrisma: any = {
   $queryRaw: jest.fn(mockSequence.queryRaw),
   harvestLot: {
     findUnique: jest.fn(),
+    findFirst: jest.fn(),
     findMany: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
@@ -31,7 +32,7 @@ const mockPrisma: any = {
     delete: jest.fn(),
     deleteMany: jest.fn(),
   },
-  farm: { findUnique: jest.fn() },
+  farm: { findUnique: jest.fn(), findMany: jest.fn() },
   cropYear: { findUnique: jest.fn() },
   processingBatch: { count: jest.fn() },
   parchmentLot: { count: jest.fn() },
@@ -302,23 +303,33 @@ describe('who owns a harvest lot', () => {
     expect(writtenData()).toEqual({ farmerName: 'Somchai K.' })
   })
 
-  test('GET lets a farmer read the lots they may edit, by the same owner', async () => {
-    const readable = (lot: Record<string, unknown>) =>
-      mockPrisma.harvestLot.findUnique.mockResolvedValue({ ...fullLot, processingBatches: [], ...lot })
-
-    // Their lot that lost its farm.
-    readable({ createdById: FARMER_A, farmId: null, farm: null })
-    mockAuthUser = farmerA
-    expect((await get()).status).toBe(200)
-    mockAuthUser = farmerB
-    expect((await get()).status).toBe(403)
-
-    // An older lot: the farm's owner.
-    readable({ createdById: null, farm: { id: FARM_A, farmName: 'Doi Farm', location: 'Chiang Rai', ownerId: FARMER_A } })
+  test('GET lets a farmer read the lots on farms they belong to and the lots recorded for them', async () => {
+    // Each their own (lib/farmAccess chainScope): the lookup through the
+    // farmer's share decides; who sees which lot is in
+    // each-their-own-scoping.test.ts.
+    mockPrisma.harvestLot.findUnique.mockResolvedValue({
+      ...fullLot,
+      createdById: null,
+      processingBatches: [],
+      farm: { id: FARM_A, farmName: 'Doi Farm', location: 'Chiang Rai' },
+    })
+    mockPrisma.farm.findMany.mockResolvedValue([{ id: FARM_A }, { id: FARM_A2 }])
+    mockPrisma.harvestLot.findFirst.mockResolvedValue({ id: LOT_ID })
     mockAuthUser = farmerA
     const { status, data } = await get()
     expect(status).toBe(200)
     expect(data.harvestLot.farm).toEqual({ id: FARM_A, farmName: 'Doi Farm', location: 'Chiang Rai' })
+    expect(mockPrisma.harvestLot.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: LOT_ID,
+        AND: [{ OR: [{ farmId: { in: [FARM_A, FARM_A2] } }, { createdById: FARMER_A }] }],
+      },
+      select: { id: true },
+    })
+
+    // Not in farmer B's share.
+    mockPrisma.farm.findMany.mockResolvedValue([{ id: FARM_B }])
+    mockPrisma.harvestLot.findFirst.mockResolvedValue(null)
     mockAuthUser = farmerB
     expect((await get()).status).toBe(403)
   })

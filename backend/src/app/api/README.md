@@ -28,16 +28,18 @@ for the visual file tree.
 | `farms/[id]/collaborators/route.ts` | manage farm collaborators (FarmCollaborator records) |
 
 ## Lots — traceability chain
+Every list and by-id read of the chain goes through `chainScope` (`lib/farmAccess`, "each their own", 2026-10-05): Admins see everything (HeadJudges and Cuppers too, cupping is hands-off); a Processor their own batches, those batches' parchment and cherry, the parchment they imported (`externalSource.importedBy`) and their green beans, plus every lot still Ready for Processing; a Roaster the green beans they bought in, hold or roasted plus the shelf (Internal, Available, kg left; never another user's bought-in lot), and parchment / cherry only as the source of those; a Farmer the chain from farms they own or collaborate on; several roles the union. By id, out of scope = 403, missing = 404. A lot's `withdrawalHistory` follows the same split (`greenWithdrawalWhere` / `parchmentWithdrawalWhere`): every row on a lot the reader owns or reads as farmer or processor, but a roaster reading someone else's lot (held, roasted or on the shelf) gets only the rows with `targetRoasterId` = them, never another buyer's kg and dates (bulk-load phase 2, green-bean-lots list and `:id`, parchment-lots list).
+
 | Path | Purpose |
 |---|---|
-| `harvest-lots/route.ts` | list & create harvest lots. A new lot's `createdById` is its farm's owner (so a lot an Admin records belongs to the farmer), or the caller when there is no farm |
-| `harvest-lots/[id]/route.ts` | read / update / delete a harvest lot. Owner = `createdById ?? farm.ownerId`; owner and Admin take the owner path, a non-owner Processor the processor path (unprocessed lots only, `?ifUnprocessed=1` guard for the workbench). Owner PUT writes only the keys sent (`updateHarvestLotSchema`, unknown keys dropped); `farmId` null/empty = 400, moving to a farm the caller does not own = 403 (the lot then belongs to the new farm's owner); processed = a batch or parchment lot draws on it: its owner's different `weightKg` or `status` = 409, an Admin may correct `weightKg`, `status` back to Ready = 409 for everyone (a lot only marked Complete by hand is not locked). DELETE of a processed lot = 409 `{ error, dependents: { processingBatches, parchmentLots, greenBeanLots, withdrawals } }`; an Admin's `?cascade=1` deletes it with its whole chain (with `&expect=b,p,g,w`, the counts they saw: a mismatch = 409 with the new counts), anyone else's = 403 |
-| `parchment-lots/route.ts` | list & create parchment lots. A farmer-only user (`isFarmerOnly`) lists only parchment from farms they own or collaborate on (`lib/farmAccess`, as bulk-load) |
-| `parchment-lots/[id]/route.ts` | read / update / delete a parchment lot. A farmer-only user reads only their farms' lots (403 otherwise) |
+| `harvest-lots/route.ts` | list & create harvest lots. A new lot's `createdById` is its farm's owner (so a lot an Admin records belongs to the farmer), or the caller when there is no farm. Only the farm's owner or an Admin creates one (a collaborator gets 403 "Only the farm owner can register harvest lots on this farm") |
+| `harvest-lots/[id]/route.ts` | read / update / delete a harvest lot. Read lists only the batches the reader may read. Owner = `createdById ?? farm.ownerId`; owner and Admin take the owner path, a non-owner Processor the processor path (unprocessed lots only, `?ifUnprocessed=1` guard for the workbench). Owner PUT writes only the keys sent (`updateHarvestLotSchema`, unknown keys dropped); `farmId` null/empty = 400, moving to a farm the caller does not own = 403 (the lot then belongs to the new farm's owner); processed = a batch or parchment lot draws on it: its owner's different `weightKg` or `status` = 409, an Admin may correct `weightKg`, `status` back to Ready = 409 for everyone (a lot only marked Complete by hand is not locked). DELETE of a processed lot = 409 `{ error, dependents: { processingBatches, parchmentLots, greenBeanLots, withdrawals } }`; an Admin's `?cascade=1` deletes it with its whole chain (with `&expect=b,p,g,w`, the counts they saw: a mismatch = 409 with the new counts), anyone else's = 403 |
+| `parchment-lots/route.ts` | list & create parchment lots. External parchment records the creator as `externalSource.importedBy` |
+| `parchment-lots/[id]/route.ts` | read / update / delete a parchment lot. Read lists only the green lots the reader may read; a reader who may not read the batch (a roaster) gets it as a label (`batchLabel`) |
 | `parchment-lots/[id]/withdrawals/route.ts` | record parchment withdrawals (sale / sample / loss / roasting stock). The body is checked with `createParchmentWithdrawalSchema`: a Sale's `salePrice` > 0 with max 2 decimals, `currency` THB/USD/EUR/JPY/CNY, a wrong type = 400; takes `invoiceNumber`. Hull & Grade creates one green bean lot per graded row, owned by the parchment's owner (`processingBatch.createdById`, also when an Admin hulls), takes an optional `gradedLots[i].price` (THB/kg, max 2 decimals, empty or 0 = no price; stamps priceSetDate/priceSetBy and writes a PricingHistory row) and returns the new lots as `greenBeanLots` |
 | `parchment-lots/import-excel/route.ts` | bulk import parchment lots from Excel |
-| `green-bean-lots/route.ts` | list & create green bean lots. A farmer-only user lists only green beans hulled from their farms' parchment. A lot made from parchment belongs to the parchment's owner, also when an Admin records it |
-| `green-bean-lots/[id]/route.ts` | read / update / delete a green bean lot. A farmer-only user reads only their farms' lots (403 otherwise) |
+| `green-bean-lots/route.ts` | list & create green bean lots. A lot made from parchment belongs to the parchment's owner, also when an Admin records it |
+| `green-bean-lots/[id]/route.ts` | read / update / delete a green bean lot. A reader who may not read the batch (a roaster) gets it as a label (`batchLabel`) |
 | `green-bean-lots/[id]/withdrawals/route.ts` | record green bean withdrawals. The body is checked with `createWithdrawalSchema`: a Sale's `salePrice` > 0 with max 2 decimals, `currency` THB/USD/EUR/JPY/CNY, a wrong type = 400 |
 | `green-bean-lots/[id]/qr/route.ts` | QR code asset for the lot |
 | `green-bean-lots/[id]/generate-public-id/route.ts` | mint the public traceability ID |
@@ -45,8 +47,8 @@ for the visual file tree.
 ## Processing — `processing-batches/`, `process-types/`
 | Path | Purpose |
 |---|---|
-| `processing-batches/route.ts` | list & create processing batches. A farmer-only user lists only batches on their farms' cherry |
-| `processing-batches/[id]/route.ts` | read / update / delete a batch. A farmer-only user reads only their farms' batches (403 otherwise) |
+| `processing-batches/route.ts` | list & create processing batches (reads scoped by `chainScope`, see Lots) |
+| `processing-batches/[id]/route.ts` | read / update / delete a batch (read: out of scope = 403) |
 | `processing-batches/[id]/drying-logs/route.ts` | drying log entries for the batch |
 | `process-types/route.ts` | reference list of process types |
 | `process-types/[id]/route.ts` | read / update / delete a process type |
@@ -55,8 +57,8 @@ for the visual file tree.
 | Path | Purpose |
 |---|---|
 | `roast-batches/route.ts` | list & create roast batches |
-| `roaster-inventory/route.ts` | list & create roaster inventory items |
-| `roaster-inventory/[id]/route.ts` | read / update / delete an inventory item |
+| `roaster-inventory/route.ts` | list & create (claim) roaster inventory items. Claiming another user's bought-in (External) lot = 403, Admins excepted (`canClaimGreenBeanLot`) |
+| `roaster-inventory/[id]/route.ts` | read / update / delete an inventory item. Read gives a roaster the lot's processing batch as a label (`batchLabel`). Raising the claim follows the claim rules (another user's bought-in lot = 403) |
 
 ## Sales — `sale-orders/`, `invoices/`, `customers/`, `pricing-history/`
 | Path | Purpose |
@@ -67,7 +69,7 @@ for the visual file tree.
 | `invoices/[id]/route.ts` | read / update / delete an invoice. Read and update go by the sale's owner (`saleOrder.createdBy`) or Admin, not by who issued the invoice |
 | `customers/route.ts` | list & create customers |
 | `customers/[id]/route.ts` | read / update / delete a customer |
-| `pricing-history/route.ts` | append-only price snapshots. A farmer-only user lists only the prices of green beans from their farms' parchment, as on `green-bean-lots` |
+| `pricing-history/route.ts` | append-only price snapshots. Lists only the prices of lots in the reader's `chainScope` (a Roaster: lots they bought in or hold, not the shelf) |
 
 ## Farm observations
 | Path | Purpose |

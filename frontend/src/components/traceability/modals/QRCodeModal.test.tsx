@@ -16,7 +16,9 @@ vi.mock('../../../services/lots/greenBeanLotService', async (importOriginal) => 
 
 // Opening the modal for a lot with no public id creates one, but must never
 // replace an id the server already holds (printed QR codes would die). Only
-// the explicit "Regenerate Public ID" action asks for a new id.
+// the explicit "Regenerate Public ID" action asks for a new id. All of that
+// is for a viewer who may publish the lot (canGenerate: its creator or an
+// Admin); anyone else only sees a QR the lot already has.
 
 const generated = (publicTraceId: string) => ({
   publicTraceId,
@@ -25,7 +27,7 @@ const generated = (publicTraceId: string) => ({
 })
 
 const renderModal = (props: Partial<React.ComponentProps<typeof QRCodeModal>> = {}) =>
-  render(<QRCodeModal isOpen onClose={() => {}} lotId="gbl-1" {...props} />)
+  render(<QRCodeModal isOpen onClose={() => {}} lotId="gbl-1" canGenerate {...props} />)
 
 describe('QRCodeModal public id', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -74,5 +76,34 @@ describe('QRCodeModal public id', () => {
       expect(call).toEqual(['gbl-1', false])
     }
     consoleError.mockRestore()
+  })
+})
+
+describe('QRCodeModal for a viewer who may not publish the lot', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('does not generate a public id, and says only the owner or an Admin can publish it', async () => {
+    renderModal({ publicTraceId: null, canGenerate: false })
+
+    expect(screen.getByText(/This lot has no public QR code yet\. Only the lot's processor or an Admin can publish it\./)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Generate Public ID/ })).not.toBeInTheDocument()
+    // Give the auto-generate effect its chance to (wrongly) fire.
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(generatePublicTraceId).not.toHaveBeenCalled()
+  })
+
+  it('shows the published QR without the Regenerate action', () => {
+    renderModal({ publicTraceId: 'pub-old', canGenerate: false })
+
+    expect(screen.getByText(/#\/trace\/pub-old/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Regenerate Public ID/ })).not.toBeInTheDocument()
+    expect(generatePublicTraceId).not.toHaveBeenCalled()
+  })
+
+  it('is off unless the caller says the viewer may publish', async () => {
+    render(<QRCodeModal isOpen onClose={() => {}} lotId="gbl-1" publicTraceId={null} />)
+
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(generatePublicTraceId).not.toHaveBeenCalled()
   })
 })

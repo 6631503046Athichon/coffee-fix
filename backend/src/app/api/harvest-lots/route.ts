@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { validateBody, createHarvestLotSchema } from '@/lib/validations'
 import { nextDisplayId, parseDateOnly, withDisplayIdRetry } from '@/lib/utils'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { harvestLotStatusFilter, serializeHarvestLot } from '@/lib/harvestLot'
-import { isFarmerOnly } from '@/lib/farmAccess'
+import { chainScope } from '@/lib/farmAccess'
+import { isAdminUser } from '@/lib/saleOrders'
 
 // This route depends on auth cookies/headers, so it must be dynamic.
 export const dynamic = 'force-dynamic'
@@ -32,11 +33,13 @@ export async function GET(request: NextRequest) {
       Object.assign(where, harvestLotStatusFilter(status))
     }
 
-    // Farmers can only see their own farms' harvest lots. A Farmer who also
-    // holds a staff role (Processor, Roaster, ...) sees every lot, as that
-    // role alone does (D8); Admins and super admins are staff.
-    if (isFarmerOnly(user)) {
-      where.farm = { ownerId: user.id }
+    // Each their own (lib/farmAccess chainScope): a farmer's own and shared
+    // farms' lots, every processor's Ready cherry plus the lots their batches
+    // used, a roaster's only as the source of their green beans; the union
+    // for several roles. Admins see every lot.
+    const scope = await chainScope(user)
+    if (scope) {
+      where.AND = [scope.harvestLotWhere]
     }
 
     // Pagination
@@ -114,7 +117,14 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      requireOwnership(user, farm.ownerId, ['Admin'])
+      // Only the farm's owner (or an Admin) records its cherry; a collaborator
+      // reads the farm's lots but is told who may add them.
+      if (!isAdminUser(user) && farm.ownerId !== user.id) {
+        return NextResponse.json(
+          { error: 'Only the farm owner can register harvest lots on this farm' },
+          { status: 403 }
+        )
+      }
       ownerId = farm.ownerId
     }
 

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { HarvestLot, Farm, CropYear } from '../../types';
-import { isAdminUser, ownHarvestLots, ownsFarm } from '../../utils/farmAccess';
+import { isAdminUser, isFarmMember, ownHarvestLots } from '../../utils/farmAccess';
 import { BarChart, Weight, Wind, Award, MapPin, Leaf, TrendingUp, Clock, ArrowRight, ChevronRight, Flame, Droplets, FlaskConical } from 'lucide-react';
 import DatePicker from '../common/DatePicker';
 import Select from '../common/Select';
@@ -61,11 +61,12 @@ const FarmerDashboard: React.FC = () => {
     readyForProcessing: myHarvestLots.filter(l => l.status === 'Ready for Processing').length,
   }), [myHarvestLots]);
 
-  // Farms the current user owns; Admin sees all
+  // The farms Farm Management lists: those the user owns or collaborates
+  // on, by id (Admin sees all), so the Farm Summary counts the same farms.
   const availableFarms = useMemo(() => {
     if (!currentUser) return data.farms;
     if (isAdmin) return data.farms;
-    return data.farms.filter(f => ownsFarm(currentUser, f));
+    return data.farms.filter(f => isFarmMember(currentUser, f));
   }, [data.farms, currentUser, isAdmin]);
 
   // Compute average cupping feedback per year (for this farmer), then pick max/min

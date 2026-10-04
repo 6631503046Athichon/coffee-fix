@@ -2,6 +2,7 @@ import type { Prisma, UserRole } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import type { AuthenticatedUser } from '@/lib/middleware'
 import { isAdminUser } from '@/lib/saleOrders'
+import { harvestLotStatusFilter } from '@/lib/harvestLot'
 
 // Who may see and record a farm's soil, weather and GAP data: Admins (super
 // admins included), the farm's owner, and its collaborators (the farmhands the
@@ -73,55 +74,205 @@ export async function farmIdFilter(
   return requestedFarmId
 }
 
-// Multi-role accounts (D8): a user may hold Farmer and a staff role at once,
-// e.g. a farmer who also runs the wet mill. The staff role's screens work
-// across every farm (Processors process any farmer's cherry, Roasters buy
-// from any lot, HeadJudges and Cuppers score any lot's samples, Admins do
-// everything), so being a Farmer as well never narrows them. The farmer-only
-// rules (own farms' lots and lot chain, nobody else's lot by id) protect
-// accounts with no staff role. Soil, weather and GAP are not farmer rules:
-// every non-Admin sees those only on farms they belong to (above).
+// The lot chain: harvest lot -> processing batch -> parchment lot -> green
+// bean lot, and each green lot's price history. Owner decision 2026-10-05,
+// "each their own" (ของใครของมัน): only an Admin reads the whole chain.
+// - Admin (Admin role or super admin): everything.
+// - Farmer: the chain grown on farms they own or collaborate on, and the
+//   harvest lots recorded for them (a lot with no farm is its recorder's).
+//   Bought-in parchment and green beans come from no farm.
+// - Processor: the batches they created, those batches' parchment and cherry
+//   lots, the parchment they imported (externalSource.importedBy; other
+//   bought-in parchment is Admin-only), and the green-bean lots they created
+//   or hulled from their parchment, with those lots' price history. Cherry
+//   still Ready for Processing is open to every processor: that is where they
+//   pick up work.
+// - Roaster: the green-bean lots they created (bought in), hold stock of or
+//   roasted, and the shelf: Internal lots still Available with kg left.
+//   Another user's bought-in (External) lot is never on it and cannot be
+//   claimed. Parchment and cherry lots only as the source of those green
+//   lots, to label them; no processing batches. Price history only of the
+//   lots they created or hold stock of, not the shelf.
+// - HeadJudge and Cupper: every lot, as before (cupping is hands-off).
+// - Several roles: the union of each role's scope. No role: nothing.
+// Lists filter with these clauses. A by-id read looks the record up through
+// the same clause: missing is 404, there but out of scope is 403.
+// A lot's withdrawal history follows the same split: every row on a lot the
+// user owns or reads as a farmer or processor, but on a lot a roaster reads
+// as stock, roast or shelf only the rows that put kg into their own stock
+// (targetRoasterId), never another buyer's kg and dates. lib/withdrawalPrivacy
+// then strips the sale from the rows of a lot the user does not own.
+
+/** Roles that keep reading every lot (cupping is hands-off). */
+const UNSCOPED_ROLES: ReadonlySet<string> = new Set<UserRole>(['HeadJudge', 'Cupper'])
+
+/** A where clause no row matches. */
+const NO_ROWS = { id: { in: [] as string[] } }
+
+/** The roasters' shelf: Internal lots still Available with kg left. */
+export const roasterShelfWhere = {
+  availabilityStatus: 'Available',
+  currentWeightKg: { gt: 0 },
+  sourceType: 'Internal',
+} satisfies Prisma.GreenBeanLotWhereInput
 
 /**
- * Every role except Farmer. Listed rather than derived, so a role added to
- * the enum later is not staff until someone decides it is (a test fails until
- * the new role is placed on one side).
+ * Whether `user` may claim kg of `lot` for roaster stock: never another
+ * user's bought-in (External) lot, unless an Admin does it.
  */
-export const STAFF_ROLES = [
-  'Processor',
-  'Roaster',
-  'HeadJudge',
-  'Cupper',
-  'Admin',
-] as const satisfies readonly UserRole[]
-
-const STAFF_ROLE_SET: ReadonlySet<string> = new Set(STAFF_ROLES)
-
-type RoleHolder = Pick<AuthenticatedUser, 'roles' | 'isSuperAdmin'>
-
-/** Holds a staff role; a super admin always counts, whatever their roles. */
-export function hasStaffRole(user: RoleHolder): boolean {
-  return !!user.isSuperAdmin || user.roles.some(role => STAFF_ROLE_SET.has(role))
+export function canClaimGreenBeanLot(
+  user: AuthenticatedUser,
+  lot: { sourceType: string; createdById: string | null }
+): boolean {
+  return isAdminUser(user) || lot.sourceType !== 'External' || lot.createdById === user.id
 }
 
-/** A Farmer with no staff role: the only user the farmer scoping applies to. */
-export function isFarmerOnly(user: RoleHolder): boolean {
-  return user.roles.includes('Farmer') && !hasStaffRole(user)
+/** The fields of a processing batch canReadBatch looks at. */
+export interface BatchOwnership {
+  createdById?: string | null
+  harvestLot?: { farmId?: string | null } | null
 }
 
-// The lot chain grown from a harvest lot: its processing batch, the parchment
-// from that batch, and the green beans hulled from the parchment. Staff roles
-// (multi-role included) and Admins work across every farm's chain. A
-// farmer-only user reads only the chain from farms they own or collaborate on,
-// on the list routes and by id, the same rule bulk-load applies. Bought-in
-// parchment and green beans come from no farm, so a farmer never sees them.
+/** What a user chainScope limits may read of the lot chain. */
+export interface ChainScope {
+  harvestLotWhere: Prisma.HarvestLotWhereInput
+  processingBatchWhere: Prisma.ProcessingBatchWhereInput
+  parchmentLotWhere: Prisma.ParchmentLotWhereInput
+  greenBeanLotWhere: Prisma.GreenBeanLotWhereInput
+  pricingWhere: Prisma.PricingHistoryWhereInput
+  /** The rows of a green-bean lot's withdrawalHistory the user may read. */
+  greenWithdrawalWhere: Prisma.GreenBeanWithdrawalWhereInput
+  /** The rows of a parchment lot's withdrawalHistory the user may read. */
+  parchmentWithdrawalWhere: Prisma.ParchmentWithdrawalWhereInput
+  /** processingBatchWhere's rule on a loaded batch (with its harvestLot.farmId). */
+  canReadBatch: (batch: BatchOwnership) => boolean
+}
+
+/** A clause matching what any of `clauses` matches; no clauses match nothing. */
+function anyOf<W>(clauses: W[]): W {
+  const unique = [...new Map(clauses.map(clause => [JSON.stringify(clause), clause])).values()]
+  if (unique.length === 0) return NO_ROWS as W
+  if (unique.length === 1) return unique[0]
+  return { OR: unique } as W
+}
 
 /**
- * The farms whose lot chain `user` may read: their own and shared farms for a
- * farmer-only user, or null (no limit) for everyone else.
+ * The lot chain `user` may read, as Prisma where clauses per model, or null
+ * when nothing limits them (Admins, super admins, HeadJudges and Cuppers).
  */
-export async function chainFarmIds(user: AuthenticatedUser): Promise<string[] | null> {
-  return isFarmerOnly(user) ? memberFarmIds(user) : null
+export async function chainScope(user: AuthenticatedUser): Promise<ChainScope | null> {
+  if (isAdminUser(user) || user.roles.some(role => UNSCOPED_ROLES.has(role))) return null
+
+  const me = user.id
+  const harvest: Prisma.HarvestLotWhereInput[] = []
+  const batches: Prisma.ProcessingBatchWhereInput[] = []
+  const parchment: Prisma.ParchmentLotWhereInput[] = []
+  const green: Prisma.GreenBeanLotWhereInput[] = []
+  const priced: Prisma.GreenBeanLotWhereInput[] = []
+  const greenWithdrawals: Prisma.GreenBeanWithdrawalWhereInput[] = []
+  const parchmentWithdrawals: Prisma.ParchmentWithdrawalWhereInput[] = []
+
+  const isFarmer = user.roles.includes('Farmer')
+  const isProcessor = user.roles.includes('Processor')
+  const farmIds = isFarmer ? await memberFarmIds(user) : []
+
+  if (isFarmer) {
+    harvest.push({ farmId: { in: farmIds } }, { createdById: me })
+    batches.push(processingBatchesOnFarms(farmIds))
+    parchment.push(parchmentLotsOnFarms(farmIds))
+    green.push(greenBeanLotsOnFarms(farmIds))
+    priced.push(greenBeanLotsOnFarms(farmIds))
+    greenWithdrawals.push({ greenBeanLot: greenBeanLotsOnFarms(farmIds) })
+    parchmentWithdrawals.push({ parchmentLot: parchmentLotsOnFarms(farmIds) })
+  }
+
+  if (isProcessor) {
+    harvest.push(
+      harvestLotStatusFilter('ReadyForProcessing'),
+      { processingBatches: { some: { createdById: me } } },
+    )
+    batches.push({ createdById: me })
+    const ownParchment: Prisma.ParchmentLotWhereInput[] = [
+      { processingBatch: { createdById: me } },
+      { processingBatchId: null, externalSource: { path: ['importedBy'], equals: me } },
+    ]
+    parchment.push(...ownParchment)
+    const own: Prisma.GreenBeanLotWhereInput[] = [
+      { createdById: me },
+      { parchmentLot: { processingBatch: { createdById: me } } },
+    ]
+    green.push(...own)
+    priced.push(...own)
+    greenWithdrawals.push(...own.map(lot => ({ greenBeanLot: lot })))
+    parchmentWithdrawals.push(...ownParchment.map(lot => ({ parchmentLot: lot })))
+  }
+
+  if (user.roles.includes('Roaster')) {
+    const roasterGreen: Prisma.GreenBeanLotWhereInput[] = [
+      { createdById: me },
+      { roasterInventory: { some: { roasterId: me } } },
+      { roastBatches: { some: { roasterId: me } } },
+      roasterShelfWhere,
+    ]
+    const labelled = anyOf(roasterGreen)
+    green.push(...roasterGreen)
+    parchment.push({ greenBeanLots: { some: labelled } })
+    harvest.push({ parchmentLots: { some: { greenBeanLots: { some: labelled } } } })
+    priced.push({ createdById: me }, { roasterInventory: { some: { roasterId: me } } })
+    // Every row on a lot they bought in; elsewhere only their own stock's.
+    greenWithdrawals.push({ greenBeanLot: { createdById: me } }, { targetRoasterId: me })
+    parchmentWithdrawals.push({ targetRoasterId: me })
+  }
+
+  return {
+    harvestLotWhere: anyOf(harvest),
+    processingBatchWhere: anyOf(batches),
+    parchmentLotWhere: anyOf(parchment),
+    greenBeanLotWhere: anyOf(green),
+    pricingWhere: { greenBeanLot: anyOf(priced) },
+    greenWithdrawalWhere: anyOf(greenWithdrawals),
+    parchmentWithdrawalWhere: anyOf(parchmentWithdrawals),
+    canReadBatch: batch =>
+      (isProcessor && !!batch.createdById && batch.createdById === me) ||
+      (!!batch.harvestLot?.farmId && farmIds.includes(batch.harvestLot.farmId)),
+  }
+}
+
+/** A processing batch as the by-id routes load it under a lot made from it. */
+export interface LabelledBatch {
+  id: string
+  displayId?: string | null
+  processType: string
+  harvestLot?: {
+    id: string
+    displayId?: string | null
+    farmerName: string
+    cherryVariety: string
+    farm?: { id: string; farmName: string; location: string } | null
+  } | null
+}
+
+/**
+ * A processing batch cut down to what labels the lots made from it (process,
+ * variety, farm), for a user who reads those lots but not the batch: a
+ * roaster opening the source of their green beans.
+ */
+export function batchLabel(batch: LabelledBatch) {
+  const lot = batch.harvestLot
+  return {
+    id: batch.id,
+    displayId: batch.displayId ?? null,
+    processType: batch.processType,
+    harvestLot: lot
+      ? {
+          id: lot.id,
+          displayId: lot.displayId ?? null,
+          farmerName: lot.farmerName,
+          cherryVariety: lot.cherryVariety,
+          farm: lot.farm ? { id: lot.farm.id, farmName: lot.farm.farmName, location: lot.farm.location } : null,
+        }
+      : null,
+  }
 }
 
 /** Processing batches on cherry from `farmIds`. */
@@ -137,13 +288,11 @@ export const greenBeanLotsOnFarms = (farmIds: string[]) =>
   ({ parchmentLot: parchmentLotsOnFarms(farmIds) }) satisfies Prisma.GreenBeanLotWhereInput
 
 /**
- * Throws a 403 (via handleApiError) when `farmIds`, chainFarmIds' answer,
- * limits the user and the record was not grown on one of those farms. A
- * record with no farm on record is refused too.
+ * Throws a 403 (via handleApiError) unless `found`: the by-id lookup through
+ * the user's chainScope clause matched the record.
  */
-export function requireChainFarm(farmIds: string[] | null, farmId: string | null | undefined): void {
-  if (farmIds === null) return
-  if (!farmId || !farmIds.includes(farmId)) {
+export function requireInScope(found: unknown): void {
+  if (!found) {
     throw new Error('Insufficient permissions')
   }
 }

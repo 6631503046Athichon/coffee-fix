@@ -53,7 +53,13 @@ describe('harvest reads after whole-lot processing', () => {
     mockFindMany.mockResolvedValue([])
     const { GET } = await import('@/app/api/harvest-lots/route')
     await GET(new NextRequest('http://localhost/api/harvest-lots?status=ReadyForProcessing'))
-    const where = { status: 'ReadyForProcessing', processingBatches: { none: {} } }
+    const ready = { status: 'ReadyForProcessing', processingBatches: { none: {} } }
+    // On top, the processor's share (lib/farmAccess chainScope): every Ready
+    // lot and the lots their batches used.
+    const where = {
+      ...ready,
+      AND: [{ OR: [ready, { processingBatches: { some: { createdById: 'processor' } } }] }],
+    }
     expect(mockFindMany).toHaveBeenCalledWith(expect.objectContaining({ where }))
     expect(mockPrisma.harvestLot.count).toHaveBeenCalledWith({ where })
   })

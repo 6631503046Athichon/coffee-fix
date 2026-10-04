@@ -1,5 +1,5 @@
 import React from 'react'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { GreenBeanSourceType, UserRole } from '../../types'
@@ -81,6 +81,9 @@ const purchasedLot = (over: Partial<GreenBeanLot> = {}): GreenBeanLot => ({
   currentWeightKg: 25,
   availabilityStatus: 'Available',
   cuppingScores: [],
+  // The roaster bought it in: only its buyer (or an Admin) sees it on the
+  // purchased shelf
+  createdById: roasterUser.id,
   ...over,
 })
 
@@ -689,5 +692,20 @@ describe('RoasterWorkbench Start roast popup', { timeout: 20000 }, () => {
     expect(screen.getByLabelText('Notes')).toHaveValue('Pick up Friday')
     fireEvent.click(chip('Roast'))
     expect(screen.getByLabelText('Green beans in')).toHaveValue(4)
+  })
+
+  it("lists another user's bought-in lot only for an Admin, never for another roaster", () => {
+    const othersLot = purchasedLot({ createdById: 'user-someone-else' })
+    renderWorkbench(appData({ customers: [customer()], roasterInventory: [stock()], greenBeanLots: [othersLot] }))
+    fireEvent.click(screen.getByRole('button', { name: /Purchased Lots/ }))
+    expect(screen.queryByRole('button', { name: 'Start roast' })).toBeNull()
+    cleanup()
+
+    renderWorkbench(
+      appData({ customers: [customer()], roasterInventory: [stock()], greenBeanLots: [othersLot] }),
+      adminUser,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Purchased Lots/ }))
+    expect(screen.getByRole('button', { name: 'Start roast' })).toBeInTheDocument()
   })
 })

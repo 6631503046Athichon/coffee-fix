@@ -5,7 +5,7 @@ import { requireAuth, requireOwnership, handleApiError } from '@/lib/middleware'
 import type { AuthenticatedUser } from '@/lib/middleware'
 import { parseStrictDateOnly, parseStrictNumber } from '@/lib/utils'
 import { serializeHarvestLot } from '@/lib/harvestLot'
-import { isFarmerOnly } from '@/lib/farmAccess'
+import { chainScope, requireInScope } from '@/lib/farmAccess'
 import {
   PROCESSOR_EDITABLE_HARVEST_LOT_FIELDS,
   processorUpdateHarvestLotSchema,
@@ -410,6 +410,7 @@ export async function GET(
   try {
     const { id } = await params
     const user = await requireAuth(request)
+    const scope = await chainScope(user)
 
     const harvestLot = await prisma.harvestLot.findUnique({
       where: { id },
@@ -419,7 +420,6 @@ export async function GET(
             id: true,
             farmName: true,
             location: true,
-            ownerId: true,
           },
         },
         cropYear: {
@@ -441,15 +441,23 @@ export async function GET(
       )
     }
 
-    // SECURITY: Farmers can only read their own harvest lots (the same owner
-    // as for edit and delete: createdById, or else the farm's owner). A
-    // Farmer who also holds a staff role reads any lot, as that role does (D8).
-    if (isFarmerOnly(user)) {
-      requireOwnership(user, harvestLot.createdById ?? harvestLot.farm?.ownerId, ['Admin'])
+    // SECURITY: each their own, as on the list (lib/farmAccess chainScope):
+    // a lot outside the user's share is a 403.
+    if (scope) {
+      requireInScope(await prisma.harvestLot.findFirst({
+        where: { id, AND: [scope.harvestLotWhere] },
+        select: { id: true },
+      }))
     }
 
+    // Every batch counts towards the lot's status; only the ones the user may
+    // read are listed (another processor's batch on the same lot is theirs).
     const { farm, ...restHarvestLot } = serializeHarvestLot({
       ...harvestLot,
+      processingBatches: scope
+        ? harvestLot.processingBatches.filter(batch =>
+          scope.canReadBatch({ createdById: batch.createdById, harvestLot: { farmId: harvestLot.farmId } }))
+        : harvestLot.processingBatches,
       _count: { processingBatches: harvestLot.processingBatches.length },
     })
     const safeFarm = farm

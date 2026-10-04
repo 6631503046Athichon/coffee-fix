@@ -1497,7 +1497,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         setCropYearId(findCurrentCropYearId(data.cropYears));
       }
     }
-    if (type === "hullAndGrade") setSelectedParchment(item);
+    if (type === "hullAndGrade") {
+      // The backend lets only the batch's processor, or an Admin, draw down
+      // a parchment lot (bought-in parchment is Admin-only). The buttons are
+      // hidden for anyone else; this keeps the popup shut too.
+      if (!item || !canManageParchment(item)) return;
+      setSelectedParchment(item);
+    }
     if (type === "withdrawStock") {
       setSelectedGreenBean(item);
       setWithdrawalType("Sample");
@@ -2382,19 +2388,21 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           // Keeps Hull & Grade lined up with the rows above.
                           <span className="w-8 h-8" aria-hidden="true" />
                         )}
-                        <button
-                          onClick={() => openModal("hullAndGrade", p)}
-                          disabled={
-                            p.status === "Hulled" || p.currentWeightKg <= 0
-                          }
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm transition-all"
-                          title="Hull & Grade — split this parchment into green bean lots"
-                        >
-                          <PlayCircle size={14} />
-                          Hull &amp; Grade
-                        </button>
+                        {/* Hull & Grade, Edit and Delete: the lot's
+                            processor or an Admin only (recordAccess). */}
                         {canManageParchment(p) && (
                           <>
+                            <button
+                              onClick={() => openModal("hullAndGrade", p)}
+                              disabled={
+                                p.status === "Hulled" || p.currentWeightKg <= 0
+                              }
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm transition-all"
+                              title="Hull & Grade — split this parchment into green bean lots"
+                            >
+                              <PlayCircle size={14} />
+                              Hull &amp; Grade
+                            </button>
                             <button
                               type="button"
                               onClick={() => openParchmentEdit(p)}
@@ -3176,15 +3184,19 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => openModal("hullAndGrade", p)}
-                    disabled={p.status === "Hulled" || p.currentWeightKg <= 0}
-                    className="w-full py-2 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm transition-all inline-flex items-center justify-center gap-1.5"
-                    title="Hull & Grade — split this parchment into green bean lots"
-                  >
-                    <PlayCircle size={14} />
-                    Hull &amp; Grade
-                  </button>
+                  {/* Another processor's lot (or bought-in parchment) is
+                      listed without it: the backend would refuse (403). */}
+                  {canManageParchment(p) && (
+                    <button
+                      onClick={() => openModal("hullAndGrade", p)}
+                      disabled={p.status === "Hulled" || p.currentWeightKg <= 0}
+                      className="w-full py-2 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm transition-all inline-flex items-center justify-center gap-1.5"
+                      title="Hull & Grade — split this parchment into green bean lots"
+                    >
+                      <PlayCircle size={14} />
+                      Hull &amp; Grade
+                    </button>
+                  )}
                 </div>
               );
             })

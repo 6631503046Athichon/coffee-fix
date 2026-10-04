@@ -4,7 +4,7 @@ import { requireAuth, handleApiError } from '@/lib/middleware'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { serializeHarvestLot } from '@/lib/harvestLot'
 import { greenBeanLotForViewer } from '@/lib/withdrawalPrivacy'
-import { isFarmerOnly, memberFarmIds } from '@/lib/farmAccess'
+import { chainScope, memberFarmIds } from '@/lib/farmAccess'
 import { upkeepCropYears } from '@/lib/cropYears'
 
 export const dynamic = 'force-dynamic'
@@ -33,9 +33,6 @@ export async function GET(request: NextRequest) {
 
     // Pre-compute role checks
     const isAdmin = user.roles.includes('Admin') || user.isSuperAdmin
-    // Narrowed to their own farms' lots: Farmers with no staff role only. A
-    // Farmer+Processor sees every lot, as any Processor does (D8).
-    const farmerScoped = isFarmerOnly(user)
     const isRoaster = user.roles.includes('Roaster')
     const isProcessor = user.roles.includes('Processor')
 
@@ -49,12 +46,21 @@ export async function GET(request: NextRequest) {
         ]
       }
 
+      // Harvest lots follow "each their own" like GET /api/harvest-lots
+      // (lib/farmAccess chainScope): a farmer's own and shared farms' lots,
+      // every processor's Ready cherry plus the lots their batches used, a
+      // roaster's only as the source of their green beans, the union for
+      // several roles. Null (no limit) for Admins and cupping roles.
+      const scope = await chainScope(user)
+
+      // Lot and batch counts per crop year span every farmer and processor,
+      // so only Admins get them; nothing on the client reads them.
       const listCropYears = () =>
         prisma.cropYear.findMany({
           orderBy: { startDate: 'desc' },
-          include: {
-            _count: { select: { harvestLots: true, processingBatches: true } },
-          },
+          ...(isAdmin
+            ? { include: { _count: { select: { harvestLots: true, processingBatches: true } } } }
+            : {}),
         })
 
       const [farms, harvestLots, loadedCropYears, processTypes, activityTypes, coffeeGrades, customers, users] = await Promise.all([
@@ -74,7 +80,7 @@ export async function GET(request: NextRequest) {
 
         // Harvest Lots
         prisma.harvestLot.findMany({
-          where: farmerScoped ? { farm: { ownerId: user.id } } : {},
+          where: scope ? scope.harvestLotWhere : {},
           include: {
             _count: { select: { processingBatches: true } },
             farm: { select: { id: true, farmName: true, location: true } },
@@ -176,8 +182,12 @@ export async function GET(request: NextRequest) {
 
     if (phase === '2') {
       // Phase 2: Secondary data
-      // Farms the user owns or collaborates on, fetched once.
-      const farmIds = isAdmin ? [] : await memberFarmIds(user)
+      // Farms the user owns or collaborates on, and the lot chain they may
+      // read (null: Admins and cupping roles, who read every lot).
+      const [farmIds, scope] = await Promise.all([
+        isAdmin ? Promise.resolve([] as string[]) : memberFarmIds(user),
+        chainScope(user),
+      ])
 
       // Soil, weather and GAP records: every non-Admin sees only their own and
       // shared farms' (lib/farmAccess, as the list and by-id routes do), staff
@@ -185,15 +195,14 @@ export async function GET(request: NextRequest) {
       const farmScopeWhere = isAdmin
         ? {}
         : { farmId: { in: farmIds } }
-      const processingScopeWhere = farmerScoped
-        ? { harvestLot: { farmId: { in: farmIds } } }
-        : {}
-      const parchmentScopeWhere = farmerScoped
-        ? { harvestLot: { farmId: { in: farmIds } } }
-        : {}
-      const greenBeanScopeWhere = farmerScoped
-        ? { parchmentLot: { harvestLot: { farmId: { in: farmIds } } } }
-        : {}
+      // The lot chain follows "each their own", as the list routes do: a
+      // farmer's farms' chain, a processor's own batches and what they made
+      // from them, a roaster's green beans (their own, held, roasted and the
+      // shelf) with the parchment behind them and no batches; the union for
+      // several roles.
+      const processingScopeWhere = scope ? scope.processingBatchWhere : {}
+      const parchmentScopeWhere = scope ? scope.parchmentLotWhere : {}
+      const greenBeanScopeWhere = scope ? scope.greenBeanLotWhere : {}
 
       // Roaster scope: roasters get their own inventory and roasts, Admins
       // get everyone's, and other roles get none (the rows carry sold kg).
@@ -202,6 +211,12 @@ export async function GET(request: NextRequest) {
       if (isRoaster && !isAdmin) {
         roasterWhere.roasterId = user.id
       }
+      // The withdrawals named on a roaster's stock rows: only the ones that
+      // put kg into this roaster's stock, never another buyer's kg and dates.
+      // Admins read every row, so every withdrawal that is not void.
+      const stockWithdrawalWhere = isAdmin
+        ? { voidedAt: null }
+        : { voidedAt: null, targetRoasterId: user.id }
 
       // No row caps on soil, GAP, batches or parchment: the pages build their
       // tables, reports and CSVs from these lists, so a cap hid older rows.
@@ -263,11 +278,10 @@ export async function GET(request: NextRequest) {
         }),
 
         // Green Bean Lots
-        // No `take` cap: Farmer-scoped queries are already bounded by the
-        // farm ownership filter above, and staff callers (Admin included) are
-        // expected to see the full list on the dashboard. A misleading
-        // `take: 50` here previously silently truncated farmer dashboards
-        // once they had >50 lots across all their farms.
+        // No `take` cap: the scope above bounds every non-Admin's list, and
+        // Admins are expected to see the full list on the dashboard. A
+        // misleading `take: 50` here previously silently truncated farmer
+        // dashboards once they had >50 lots across all their farms.
         prisma.greenBeanLot.findMany({
           where: greenBeanScopeWhere,
           include: {
@@ -280,7 +294,10 @@ export async function GET(request: NextRequest) {
               },
             },
             priceSetter: { select: { id: true, name: true } },
+            // A roaster gets only the rows into their own stock on a lot
+            // they hold or see on the shelf (lib/farmAccess chainScope).
             withdrawalHistory: {
+              where: scope ? scope.greenWithdrawalWhere : {},
               include: {
                 withdrawnByUser: {
                   select: { id: true, name: true },
@@ -310,7 +327,7 @@ export async function GET(request: NextRequest) {
                 // The latest withdrawal names how the roaster got the lot; a
                 // voided one (D7) never happened, so it is left out.
                 withdrawalHistory: {
-                  where: { voidedAt: null },
+                  where: stockWithdrawalWhere,
                   orderBy: { createdAt: 'desc' as const },
                   take: 5,
                   select: { withdrawalType: true, amountKg: true, date: true, withdrawnByName: true },

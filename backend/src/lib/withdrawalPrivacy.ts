@@ -3,9 +3,13 @@ import { isAdminUser } from '@/lib/saleOrders'
 
 // Withdrawal rows carry the sale behind them: the customer's name and
 // delivery address, the price, the total, the invoice number, and the roaster
-// the kg went to. Lots themselves are readable by every role (Cuppers,
-// HeadJudges, every Roaster, farmers on their own lots), so each route that
-// returns a lot with its withdrawal history runs it through here first.
+// the kg went to. A lot is readable by more people than its owner (Cuppers,
+// HeadJudges, the farmers whose farm grew it, roasters holding it or seeing
+// it on the shelf), so each route that returns a lot with its withdrawal
+// history runs it through here first. Which rows they get at all is decided
+// earlier, in the query (lib/farmAccess chainScope greenWithdrawalWhere and
+// parchmentWithdrawalWhere): a roaster reading someone else's lot gets only
+// the rows into their own stock.
 //
 // Only the lot's owner and Admin (or super admin) see the full rows. That is
 // the same rule as who may record a withdrawal on the lot:

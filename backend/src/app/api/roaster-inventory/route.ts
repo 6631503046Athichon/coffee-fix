@@ -3,6 +3,9 @@ import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { WEIGHT_EPSILON, isAdminUser } from '@/lib/saleOrders'
+import { canClaimGreenBeanLot } from '@/lib/farmAccess'
+
+const NOT_CLAIMABLE_ERROR = 'This green bean lot was bought in by another user, so it cannot be claimed'
 
 /** Kilograms to the milligram, as the sale and withdrawal routes store stock. */
 const round6 = (value: number) => Math.round(value * 1e6) / 1e6
@@ -87,6 +90,10 @@ export async function POST(request: NextRequest) {
     const lot = await prisma.greenBeanLot.findUnique({ where: { id: greenBeanLotId } })
 
     if (!lot) return NextResponse.json({ error: 'Green bean lot not found' }, { status: 404 })
+    // Another user's bought-in lot is theirs alone: it is not on the shelf
+    // and cannot be claimed (lib/farmAccess).
+    if (!canClaimGreenBeanLot(user, lot))
+      return NextResponse.json({ error: NOT_CLAIMABLE_ERROR }, { status: 403 })
     if (lot.availabilityStatus !== 'Available')
       return NextResponse.json({ error: 'Green bean lot is not available' }, { status: 400 })
 

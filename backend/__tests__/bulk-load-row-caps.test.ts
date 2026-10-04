@@ -95,7 +95,7 @@ describe('bulk-load phase 2 returns every row the pages need (F13)', () => {
     expect(body.parchmentLots[ROWS - 1]).toEqual({ id: `pl-${ROWS}`, status: 'AwaitingHulling' })
   })
 
-  test('a Processor gets every processing batch, so loaded lots never point at an unloaded batch', async () => {
+  test('a Processor gets every one of their processing batches, so loaded lots never point at an unloaded batch', async () => {
     mockAuthUser = processor
     const body = await phase2()
     expect(body.processingBatches).toHaveLength(ROWS)
@@ -150,6 +150,16 @@ describe('bulk-load phase 2 roaster stock rows (D7)', () => {
     const history = argsOf(mockPrisma.roasterInventoryItem).include.greenBeanLot.include.withdrawalHistory
     expect(history.where).toEqual({ voidedAt: null })
   })
+
+  test.each([
+    ['a Roaster', user('roaster-1', ['Roaster'])],
+    ['a Farmer+Roaster', user('roaster-1', ['Farmer', 'Roaster'])],
+  ])("%s's stock rows name only the withdrawals that went into their stock, not other buyers' kg and dates", async (_who, viewer) => {
+    mockAuthUser = viewer
+    await phase2()
+    const history = argsOf(mockPrisma.roasterInventoryItem).include.greenBeanLot.include.withdrawalHistory
+    expect(history.where).toEqual({ voidedAt: null, targetRoasterId: 'roaster-1' })
+  })
 })
 
 describe('bulk-load phase 2 keeps each role\'s scoping', () => {
@@ -163,13 +173,20 @@ describe('bulk-load phase 2 keeps each role\'s scoping', () => {
     expect(argsOf(mockPrisma.parchmentLot).where).toEqual({ harvestLot: farmScope })
   })
 
-  test('a Processor sees soil and GAP only for farms they are a member of', async () => {
+  // Each their own (lib/farmAccess chainScope; each-their-own-scoping and
+  // bulk-load-each-their-own check the rows).
+  test('a Processor sees soil and GAP only for farms they are a member of, and only their own batches', async () => {
     mockAuthUser = processor
     await phase2()
     expect(argsOf(mockPrisma.soilAnalysis).where).toEqual({ farmId: { in: ['farm-1'] } })
     expect(argsOf(mockPrisma.gAPLogEntry).where).toEqual({ farmId: { in: ['farm-1'] } })
-    expect(argsOf(mockPrisma.processingBatch).where).toEqual({})
-    expect(argsOf(mockPrisma.parchmentLot).where).toEqual({})
+    expect(argsOf(mockPrisma.processingBatch).where).toEqual({ createdById: 'processor-1' })
+    expect(argsOf(mockPrisma.parchmentLot).where).toEqual({
+      OR: [
+        { processingBatch: { createdById: 'processor-1' } },
+        { processingBatchId: null, externalSource: { path: ['importedBy'], equals: 'processor-1' } },
+      ],
+    })
   })
 
   test('an Admin is not scoped', async () => {
@@ -177,6 +194,9 @@ describe('bulk-load phase 2 keeps each role\'s scoping', () => {
     await phase2()
     expect(argsOf(mockPrisma.soilAnalysis).where).toEqual({})
     expect(argsOf(mockPrisma.gAPLogEntry).where).toEqual({})
+    expect(argsOf(mockPrisma.processingBatch).where).toEqual({})
+    expect(argsOf(mockPrisma.parchmentLot).where).toEqual({})
+    expect(argsOf(mockPrisma.greenBeanLot).where).toEqual({})
     expect(mockPrisma.farm.findMany).not.toHaveBeenCalled()
   })
 })

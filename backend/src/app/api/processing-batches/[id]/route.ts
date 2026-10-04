@@ -12,7 +12,7 @@ import {
   reweighLot,
   type ReweighResult,
 } from '@/lib/lotCorrections'
-import { chainFarmIds, requireChainFarm } from '@/lib/farmAccess'
+import { chainScope, requireInScope } from '@/lib/farmAccess'
 
 // GET /api/processing-batches/:id
 export async function GET(
@@ -57,9 +57,15 @@ export async function GET(
       )
     }
 
-    // A farmer-only user opens only batches on their own and shared farms'
-    // cherry, as on the list (lib/farmAccess).
-    requireChainFarm(await chainFarmIds(user), processingBatch.harvestLot.farmId)
+    // Each their own, as on the list (lib/farmAccess chainScope): a batch
+    // outside the user's share is a 403.
+    const scope = await chainScope(user)
+    if (scope) {
+      requireInScope(await prisma.processingBatch.findFirst({
+        where: { id, AND: [scope.processingBatchWhere] },
+        select: { id: true },
+      }))
+    }
 
     return NextResponse.json({ processingBatch })
   } catch (error) {

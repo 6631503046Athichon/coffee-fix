@@ -38,7 +38,8 @@ const mockPrisma: any = {
   $transaction: jest.fn(async (callback: any) => callback(mockTx)),
 }
 for (const model of findFirstModels) {
-  mockPrisma[model] = { findFirst: jest.fn(), findMany: jest.fn() }
+  // count: data-version stamps a scoped list with its newest row and count.
+  mockPrisma[model] = { findFirst: jest.fn(), findMany: jest.fn(), count: jest.fn() }
 }
 Object.assign(mockPrisma.roastBatch, { count: jest.fn() })
 Object.assign(mockPrisma.roasterInventoryItem, { findUnique: jest.fn() })
@@ -138,6 +139,7 @@ describe('sales access and scoping', () => {
     for (const model of findFirstModels) {
       mockPrisma[model].findMany.mockResolvedValue([])
       mockPrisma[model].findFirst.mockResolvedValue({ updatedAt: new Date('2026-09-20T10:00:00.000Z') })
+      mockPrisma[model].count.mockResolvedValue(0)
     }
     mockPrisma.pricingHistory.findFirst.mockResolvedValue({ createdAt: new Date('2026-09-19T10:00:00.000Z') })
     mockPrisma.roastBatch.count.mockResolvedValue(0)
@@ -570,15 +572,17 @@ describe('sales access and scoping', () => {
       expect(afterCustomerDelete.customers).not.toBe(before.customers)
     })
 
-    test('the saleOrders and customers stamps are 16 hex characters; other tables keep timestamps', async () => {
+    test('counted stamps are 16 hex characters; the others keep timestamps', async () => {
       mockAuthUser = roaster
       mockPrisma.saleOrder.count.mockResolvedValue(1234)
       const body = await versions()
       expect(body.saleOrders).toMatch(/^[0-9a-f]{16}$/)
       expect(body.customers).toMatch(/^[0-9a-f]{16}$/)
-      expect(body.roastBatches).toBe('2026-09-20T10:00:00.000Z')
-      expect(body.pricingHistory).toBe('2026-09-19T10:00:00.000Z')
+      // Scoped lists ("each their own") count their rows too.
+      expect(body.roastBatches).toMatch(/^[0-9a-f]{16}$/)
+      expect(body.pricingHistory).toMatch(/^[0-9a-f]{16}$/)
       expect(body.invoices).toBe('2026-09-20T10:00:00.000Z')
+      expect(body.cropYears).toBe('2026-09-20T10:00:00.000Z')
     })
 
     // The hash is unkeyed, so a roaster who knows the newest updatedAt (from
@@ -635,8 +639,12 @@ describe('sales access and scoping', () => {
       expect(farmerBody.customers).toBeNull()
       expect(mockPrisma.customer.findFirst).not.toHaveBeenCalled()
       expect(mockPrisma.customer.count).not.toHaveBeenCalled()
-      // Everything else is unchanged for them.
-      expect(farmerBody.roastBatches).toBe('2026-09-20T10:00:00.000Z')
+      // No roaster stock or roasts either: bulk-load sends them none.
+      expect(farmerBody.roastBatches).toBeNull()
+      expect(farmerBody.roasterInventory).toBeNull()
+      expect(mockPrisma.roastBatch.findFirst).not.toHaveBeenCalled()
+      // Shared reference data is unchanged for them.
+      expect(farmerBody.cropYears).toBe('2026-09-20T10:00:00.000Z')
     })
 
     test('an empty table still gets a stamp', async () => {

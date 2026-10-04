@@ -5,7 +5,14 @@ import { requireAuth, requireRole, requireOwnership, handleApiError } from '@/li
 import { nextDisplayId, safeParseFloat, withDisplayIdRetry } from '@/lib/utils'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { parchmentLotForViewer } from '@/lib/withdrawalPrivacy'
-import { chainFarmIds, parchmentLotsOnFarms } from '@/lib/farmAccess'
+import { chainScope } from '@/lib/farmAccess'
+
+// The body's externalSource as an object to add to, or an empty one.
+function externalSourceObject(value: unknown): Prisma.InputJsonObject {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? { ...(value as Prisma.InputJsonObject) }
+    : {}
+}
 
 // GET /api/parchment-lots - List all parchment lots
 export async function GET(request: NextRequest) {
@@ -32,11 +39,13 @@ export async function GET(request: NextRequest) {
       where.processType = processType
     }
 
-    // A farmer-only user sees only parchment from their own and shared farms'
-    // cherry; staff roles and Admins see every lot (lib/farmAccess).
-    const farmIds = await chainFarmIds(user)
-    if (farmIds) {
-      Object.assign(where, parchmentLotsOnFarms(farmIds))
+    // Each their own (lib/farmAccess chainScope): a processor's batches'
+    // parchment and what they imported, a farmer's from their own and shared
+    // farms' cherry, a roaster's only as the source of their green beans; the
+    // union for several roles. Admins see every lot.
+    const scope = await chainScope(user)
+    if (scope) {
+      where.AND = [scope.parchmentLotWhere]
     }
 
     const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '100', 10), 200)
@@ -50,8 +59,10 @@ export async function GET(request: NextRequest) {
             id: true,
             processType: true,
             status: true,
-            // The lot's owner, for the withdrawal privacy check below.
+            // The lot's owner, for the withdrawal privacy check below, and
+            // the farm canReadBatch looks at.
             createdById: true,
+            harvestLot: { select: { farmId: true } },
           },
         },
         harvestLot: {
@@ -62,15 +73,29 @@ export async function GET(request: NextRequest) {
           },
         },
         physicalTestResults: true,
-        withdrawalHistory: { orderBy: { date: 'desc' as const } },
+        // A roaster reading the parchment behind their green beans gets only
+        // the rows into their own stock (lib/farmAccess chainScope).
+        withdrawalHistory: {
+          where: scope ? scope.parchmentWithdrawalWhere : {},
+          orderBy: { date: 'desc' as const },
+        },
       },
       orderBy: { createdAt: 'desc' },
     })
 
     // Withdrawal sale details and purpose only for the lot's owner and
-    // Admin; see lib/withdrawalPrivacy.
+    // Admin; see lib/withdrawalPrivacy. Then, as on the by-id read, a reader
+    // who may not read the batch (a roaster labelling the source of their
+    // green beans) gets only its id and process, not its owner and status.
     return NextResponse.json({
-      parchmentLots: parchmentLots.map(lot => parchmentLotForViewer(user, lot)),
+      parchmentLots: parchmentLots.map(lot => {
+        const shaped = parchmentLotForViewer(user, lot)
+        const batch = lot.processingBatch
+        if (scope && batch && !scope.canReadBatch(batch)) {
+          return { ...shaped, processingBatch: { id: batch.id, processType: batch.processType } }
+        }
+        return shaped
+      }),
     })
   } catch (error) {
     return handleApiError(error)
@@ -182,7 +207,10 @@ export async function POST(request: NextRequest) {
           processingBatchId: isExternal ? null : processingBatchId,
           harvestLotId: batchHarvestLotId,
           sourceType: isExternal ? 'External' : 'Internal',
-          externalSource: isExternal && externalSource ? externalSource : undefined,
+          // Who brought it in, as the Excel import records it: bought-in
+          // parchment has no batch, so this is who may read it besides Admins
+          // (lib/farmAccess chainScope). Set here, never taken from the body.
+          externalSource: isExternal ? { ...externalSourceObject(externalSource), importedBy: user.id } : undefined,
           initialWeightKg: parsedInitialWeight,
           currentWeightKg: parsedCurrentWeight,
           moistureContent: parsedMoistureContent,
