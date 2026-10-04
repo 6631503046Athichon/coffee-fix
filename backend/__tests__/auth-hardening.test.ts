@@ -11,8 +11,8 @@
  * - F30: every password change sets User.passwordChangedAt and requireAuth
  *   refuses tokens issued before it, also on its 10 s cache; the session that
  *   made the change gets a fresh cookie and stays signed in (an Admin who
- *   sets their own password through the Admin edit is still sent to
- *   first-login setup, as every Admin reset sets mustChangePassword)
+ *   sets their own password through the Admin edit is not sent to
+ *   first-login setup; only passwords set for someone else are)
  *
  * Real middleware, auth and rate limiter; only Prisma is faked.
  */
@@ -448,7 +448,7 @@ describe('F30: a password change signs out older sessions', () => {
       expect((await ownProfile(admin, adminToken)).status).toBe(200)
     })
 
-    test('an Admin changing their own password keeps this session, which then owes first-login setup', async () => {
+    test('an Admin changing their own password keeps this session and is not sent to first-login setup', async () => {
       const admin = account({ roles: ['Admin'] })
       users.push(admin)
       const adminToken = tokenIssued(admin, 5)
@@ -464,12 +464,11 @@ describe('F30: a password change signs out older sessions', () => {
       expect(meRes.status).toBe(200)
       const { user } = await meRes.json()
       expect(user.id).toBe(admin.id)
-      // The Admin edit sets mustChangePassword on every password it saves,
-      // the Admin's own included, so other routes send them to setup first.
-      expect(user.mustChangePassword).toBe(true)
-      const other = await ownProfile(admin, fresh!)
-      expect(other.status).toBe(403)
-      expect((await other.json()).error).toBe('First-login setup required')
+      // The Admin chose this password themselves, so no setup step: other
+      // routes answer as usual.
+      expect(user.mustChangePassword).toBeFalsy()
+      expect(admin.mustChangePassword).toBeFalsy()
+      expect((await ownProfile(admin, fresh!)).status).toBe(200)
 
       // The token from before the change is signed out.
       expect((await me(req('auth/me', { token: adminToken }))).status).toBe(401)

@@ -71,10 +71,10 @@ yet. Apply it **before** the backend that reads them: until they exist, every
 compared in whole seconds as `iat` is, so a change signs out every other
 session and a stolen cookie stops working. The session that made the change
 gets a fresh cookie (`refreshSessionCookie`) and stays signed in; an Admin
-resetting someone else's password keeps their own session. An Admin who
-sets their own password through the Admin edit (User Management) keeps the
-session too, but that edit sets `mustChangePassword` as every Admin reset
-does, so their next page is the first-login setup. The 10 s auth
+resetting someone else's password keeps their own session, and that user
+must pick their own password at next sign-in (`mustChangePassword`). An
+Admin who sets their own password through the Admin edit (User Management)
+keeps the session and is not sent to first-login setup. The 10 s auth
 cache keeps the column too and is dropped on the instance that saved the
 change; another instance may still accept an older token for up to 10 s.
 NULL means no change since the column was added, so the deploy signs nobody

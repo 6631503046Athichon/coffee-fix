@@ -256,7 +256,7 @@ describe('login after setup', () => {
 })
 
 describe('POST /api/users with an Admin-typed password', () => {
-  test('the user must change it at first login', async () => {
+  test('the user must change the password and the username at first login', async () => {
     const admin = account({ roles: ['Admin'] })
     users.push(admin)
     const { POST } = await import('@/app/api/users/route')
@@ -269,8 +269,10 @@ describe('POST /api/users with an Admin-typed password', () => {
     expect(res.status).toBe(201)
     const data = mockPrisma.user.create.mock.calls[0][0].data
     expect(data.mustChangePassword).toBe(true)
-    // The Admin chose these, so they are not owed.
-    expect(data.mustChangeUsername).toBe(false)
+    // The Admin chose the username too, so for PDPA the user replaces it.
+    expect(data.mustChangeUsername).toBe(true)
+    // No email was entered, so none is owed (the setup form only asks for
+    // an email when mustChangeEmail is set).
     expect(data.mustChangeEmail).toBe(false)
   })
 })

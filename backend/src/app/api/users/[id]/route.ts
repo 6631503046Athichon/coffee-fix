@@ -267,7 +267,10 @@ export async function PUT(
     if (isActive !== undefined) updateData.isActive = isActive
     if (password !== undefined) {
       updateData.password = await hashPassword(password)
-      updateData.mustChangePassword = true
+      // A password an Admin sets for someone else is known to the Admin, so
+      // that user must pick their own at next sign-in. An Admin changing
+      // their own password chose it themselves: no setup step.
+      if (currentUser.id !== id) updateData.mustChangePassword = true
       // SECURITY: Never store plaintext passwords
       // An Admin's reset signs the user out everywhere: requireAuth refuses
       // tokens issued before passwordChangedAt.
@@ -291,8 +294,7 @@ export async function PUT(
     const response = NextResponse.json({ user: updatedUser })
     if (password === undefined) return response
     forgetCachedAuth(id)
-    // An Admin who changed their own password keeps this session (it is
-    // still sent to first-login setup: mustChangePassword is set above).
+    // An Admin who changed their own password keeps this session.
     return currentUser.id === id ? refreshSessionCookie(response, updatedUser) : response
   } catch (error) {
     return handleApiError(error)

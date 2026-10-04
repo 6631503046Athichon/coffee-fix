@@ -175,12 +175,12 @@ export async function POST(request: NextRequest) {
         name,
         roles: roles || [],
         isActive: isActive !== undefined ? isActive : true,
-        // The Admin knows the password either way (generated, or typed in
-        // with autoGenerate: false, where only the 6-character minimum
-        // applies), so the user always replaces it at first login. Username
-        // and email changes are owed only for generated credentials.
+        // The Admin chose these credentials either way (generated, or typed
+        // in with autoGenerate: false), so for PDPA the user always replaces
+        // both the password and the username at first login. An email is
+        // owed only when the Admin did not enter one.
         mustChangePassword: true,
-        mustChangeUsername: autoGenerate,
+        mustChangeUsername: true,
         mustChangeEmail: autoGenerate && !email, // Don't require email change if already provided
       },
       select: {
