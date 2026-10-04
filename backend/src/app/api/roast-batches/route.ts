@@ -4,7 +4,26 @@ import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { safeParseFloat } from '@/lib/utils'
 import { createRoastBatchSchema } from '@/lib/validations/roasting'
-import { WEIGHT_EPSILON, isAdminUser, round2 } from '@/lib/saleOrders'
+import { WEIGHT_EPSILON, isAdminUser, round2, type SaleTx } from '@/lib/saleOrders'
+
+/** Kilograms to the milligram, as the sale and withdrawal routes store stock. */
+const round6 = (value: number) => Math.round(value * 1e6) / 1e6
+
+/** Rewrites a stock row's remainingWeightKg rounded to 6 decimals and at least 0, when it is not already. */
+async function tidyRemainingKg(tx: SaleTx, id: string) {
+  const row = await tx.roasterInventoryItem.findUnique({
+    where: { id },
+    select: { remainingWeightKg: true },
+  })
+  if (!row) return
+  const tidy = Math.max(0, round6(row.remainingWeightKg))
+  if (tidy !== row.remainingWeightKg) {
+    await tx.roasterInventoryItem.update({
+      where: { id },
+      data: { remainingWeightKg: tidy },
+    })
+  }
+}
 
 // GET /api/roast-batches - List roast batches
 // Roasters see only their own batches (?roasterId is ignored for them);
@@ -168,7 +187,10 @@ export async function POST(request: NextRequest) {
     }
     const yieldPct = round2((roastedKg / amount) * 100)
 
-    if (amount > inventory.remainingWeightKg) {
+    // Stock figures carry float leftovers (5 - 4 x 1.2 is 0.19999...), so the
+    // weight checks allow WEIGHT_EPSILON of slack, or the last 0.2 kg could
+    // never be roasted.
+    if (amount > inventory.remainingWeightKg + WEIGHT_EPSILON) {
       return NextResponse.json(
         { error: 'Insufficient weight in inventory' },
         { status: 400 }
@@ -181,12 +203,15 @@ export async function POST(request: NextRequest) {
         // Atomic guarded decrement: two concurrent roasts cannot both pass the
         // up-front weight check and overdraw the inventory item.
         const decResult = await tx.roasterInventoryItem.updateMany({
-          where: { id: roasterInventoryId, remainingWeightKg: { gte: amount } },
+          where: { id: roasterInventoryId, remainingWeightKg: { gte: amount - WEIGHT_EPSILON } },
           data: { remainingWeightKg: { decrement: amount } },
         })
         if (decResult.count === 0) {
           throw new Error('INSUFFICIENT_INVENTORY')
         }
+        // Round what is left to the milligram, never below 0, so no float
+        // leftover is stored (the UPDATE above holds the row lock).
+        await tidyRemainingKg(tx, roasterInventoryId)
 
         // The roast belongs to whoever owns the beans: an Admin roasting a
         // roaster's stock records it in that roaster's Roast Logbook, where

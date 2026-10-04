@@ -9,6 +9,9 @@ import { Prisma } from '@prisma/client'
 // fields here — they would never be read out of the DB in the first place:
 //   - currentWeightKg / availabilityStatus: business inventory data
 //   - farmerName / farm.ownerNames: PII
+//   - processingBatch.processNotes: the processor's internal free-text notes
+// externalSource is a JSON column, so it is read whole and trimmed to the
+// keys the page shows in serializePublicTrace below.
 export const publicTraceSelect = {
   id: true,
   grade: true,
@@ -34,7 +37,6 @@ export const publicTraceSelect = {
         select: {
           id: true,
           processType: true,
-          processNotes: true,
           baggingDate: true,
           dryingStartDate: true,
           dryingEndDate: true,
@@ -105,6 +107,32 @@ export const publicTraceSelect = {
 
 export type PublicTraceLot = Prisma.GreenBeanLotGetPayload<{ select: typeof publicTraceSelect }>
 
+/**
+ * The keys of a bought-in lot's externalSource the public page shows. The
+ * rest is the buyer's own record: the price paid and its currency, supplier
+ * notes and names, certificate numbers. Listed rather than stripped, so a key
+ * added to the form later stays private until it is added here on purpose.
+ */
+export const PUBLIC_EXTERNAL_SOURCE_KEYS = [
+  'originName',
+  'producerName',
+  'variety',
+  'processType',
+  'purchaseDate',
+  'tasteNote',
+] as const
+
+/** externalSource with only the public keys, or null when it is not an object. */
+export function publicExternalSource(source: Prisma.JsonValue | null): Prisma.JsonObject | null {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return null
+  const all = source as Prisma.JsonObject
+  const shown: Prisma.JsonObject = {}
+  for (const key of PUBLIC_EXTERNAL_SOURCE_KEYS) {
+    if (all[key] !== undefined) shown[key] = all[key]
+  }
+  return shown
+}
+
 // traceId is the lot's public id, or null for a lot that has not been
 // published yet (only the staff preview can return null).
 export function serializePublicTrace(lot: PublicTraceLot, traceId: string | null) {
@@ -113,7 +141,7 @@ export function serializePublicTrace(lot: PublicTraceLot, traceId: string | null
       id: lot.id,
       grade: lot.grade,
       sourceType: lot.sourceType,
-      externalSource: lot.externalSource,
+      externalSource: publicExternalSource(lot.externalSource),
       cuppingFragrance: lot.cuppingFragrance,
       cuppingFlavor: lot.cuppingFlavor,
       cuppingAftertaste: lot.cuppingAftertaste,

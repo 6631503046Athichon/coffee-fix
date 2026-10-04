@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { User, LogOut, Menu } from 'lucide-react';
 import { UserRole } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
+import { clearFormDrafts } from '../../hooks/useFormPersist';
 
 interface HeaderProps {
   currentUserRoles: UserRole[];
@@ -22,6 +23,9 @@ const Header: React.FC<HeaderProps> = ({ currentUserRoles, onToggleMobileNav }) 
       // still want to navigate to /login even when the backend call errors.
       console.error('Logout failed:', error);
     } finally {
+      // Unsent form drafts (e.g. a half-typed harvest lot) stay on this
+      // browser otherwise, for whoever signs in next.
+      clearFormDrafts();
       navigate('/login');
     }
   };

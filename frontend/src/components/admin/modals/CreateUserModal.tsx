@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { UserRole } from '../../../types'
 import { createUser } from '../../../services/auth/userService'
 import { X, Copy, Check, AlertCircle, UserPlus } from 'lucide-react'
@@ -25,6 +25,10 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
   const [error, setError] = useState('')
   const [generatedCredentials, setGeneratedCredentials] = useState<GeneratedCredentials | null>(null)
   const [copiedField, setCopiedField] = useState<'username' | 'password' | null>(null)
+  // Set once the backend has created the user: however the popup is then
+  // closed (Done, X, Cancel), the list behind it is refreshed so the new
+  // account shows and the Admin does not create it a second time.
+  const userCreatedRef = useRef(false)
 
   const allRoles = Object.values(UserRole)
 
@@ -73,9 +77,14 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
       }
 
       const response = await createUser(payload)
+      userCreatedRef.current = true
 
       if (response.credentials) {
         setGeneratedCredentials(response.credentials)
+      } else {
+        // Nothing to show: close rather than leave the filled form open,
+        // which invites a second, duplicate create.
+        closeModal()
       }
     } catch (err: any) {
       setError(err instanceof Error ? err.message : 'Failed to create user')
@@ -94,10 +103,16 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
     }
   }
 
-  const handleFinish = () => {
-    onUserCreated()
+  const closeModal = () => {
+    const created = userCreatedRef.current
+    userCreatedRef.current = false
     resetForm()
     onClose()
+    if (created) onUserCreated()
+  }
+
+  const handleFinish = () => {
+    closeModal()
   }
 
   const resetForm = () => {
@@ -111,14 +126,17 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
   }
 
   const handleClose = () => {
+    // While the create is in flight the popup stays: closed now, a success
+    // would land on the hidden popup, skip the list refresh and show these
+    // credentials the next time it opens (F45).
+    if (loading) return
     if (generatedCredentials) {
       const confirmed = window.confirm(
         'You have not saved the generated credentials. Are you sure you want to close?'
       )
       if (!confirmed) return
     }
-    resetForm()
-    onClose()
+    closeModal()
   }
 
   if (!isOpen) return null
@@ -130,14 +148,16 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
           {/* Header */}
           <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center">
             <div className="flex items-center gap-3">
-              <UserPlus className="h-6 w-6 text-indigo-600" />
+              <UserPlus className="h-6 w-6 text-blue-600" />
               <h2 className="text-xl font-bold text-gray-900">
                 {generatedCredentials ? 'User Created Successfully' : 'Create New User'}
               </h2>
             </div>
             <button
               onClick={handleClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              disabled={loading}
+              aria-label="Close"
+              className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <X className="h-5 w-5" />
             </button>
@@ -163,7 +183,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
                     placeholder="Enter user's full name"
                     required
                   />
@@ -178,7 +198,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
                     placeholder="user@example.com"
                   />
                 </div>
@@ -194,7 +214,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
                         key={role}
                         className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
                           roles.includes(role)
-                            ? 'border-indigo-500 bg-indigo-50'
+                            ? 'border-blue-500 bg-blue-50'
                             : 'border-gray-300 hover:border-gray-400'
                         }`}
                       >
@@ -202,7 +222,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
                           type="checkbox"
                           checked={roles.includes(role)}
                           onChange={() => handleRoleToggle(role)}
-                          className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                         />
                         <span className="text-sm font-medium text-gray-700">{role}</span>
                       </label>
@@ -220,7 +240,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
                       type="checkbox"
                       checked={isActive}
                       onChange={(e) => setIsActive(e.target.checked)}
-                      className="h-5 w-5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                      className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                     />
                     <span className="text-sm font-medium text-gray-700">Active Account</span>
                   </label>
@@ -241,14 +261,15 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
                   <button
                     type="button"
                     onClick={handleClose}
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                    disabled={loading}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
                   >
                     {loading ? 'Creating...' : 'Create User'}
                   </button>
@@ -348,7 +369,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
                 {/* Finish Button */}
                 <button
                   onClick={handleFinish}
-                  className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                 >
                   Done
                 </button>

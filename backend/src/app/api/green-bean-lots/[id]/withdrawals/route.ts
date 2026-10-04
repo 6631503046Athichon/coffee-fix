@@ -4,6 +4,24 @@ import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/li
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { safeParseFloat } from '@/lib/utils'
 import { isActiveRoaster, INVALID_TARGET_ROASTER_MESSAGE } from '@/lib/targetRoaster'
+import { createWithdrawalSchema } from '@/lib/validations/greenBeanLot'
+import { BODY_NOT_OBJECT_MESSAGE, readJsonObjectBody } from '@/lib/withdrawalVoid'
+
+// The fields createWithdrawalSchema checks here: a wrong type is a 400, not a
+// database error, and a Sale's price must be above 0 with at most 2 decimals,
+// in a known currency. The kg and the target roaster keep their own checks
+// below (the kg may come as a numeric string and must fit the lot; the
+// roaster must be an active Roaster).
+const withdrawalFieldsSchema = createWithdrawalSchema.pick({
+  withdrawalType: true,
+  purpose: true,
+  notes: true,
+  salePrice: true,
+  currency: true,
+  customerName: true,
+  invoiceNumber: true,
+  deliveryAddress: true,
+})
 
 // POST /api/green-bean-lots/:id/withdrawals - Create withdrawal
 export async function POST(
@@ -24,8 +42,11 @@ export async function POST(
     if (limited) return limited
     const { id } = await params
 
-    const body = await request.json()
-    const { amountKg, withdrawalType, purpose, notes, salePrice, currency, customerName, invoiceNumber, deliveryAddress, targetRoasterId } = body
+    const body = await readJsonObjectBody(request)
+    if (!body) {
+      return NextResponse.json({ error: BODY_NOT_OBJECT_MESSAGE }, { status: 400 })
+    }
+    const { amountKg, withdrawalType, purpose, targetRoasterId } = body as Record<string, any>
 
     // Presence check: distinguish "field missing" from "field has invalid value".
     // A literal 0, negative number, NaN (serialised as null by JSON.stringify),
@@ -45,6 +66,15 @@ export async function POST(
         { status: 400 }
       )
     }
+
+    const parsed = withdrawalFieldsSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? 'Invalid withdrawal' },
+        { status: 400 }
+      )
+    }
+    const fields = parsed.data
 
     // Any withdrawal with a targetRoasterId routes stock to that roaster's inventory
 
@@ -92,8 +122,8 @@ export async function POST(
     }
 
     // Calculate total amount for sales
-    const price = safeParseFloat(salePrice);
-    const totalAmount = withdrawalType === 'Sale' && price !== null
+    const price = fields.salePrice ?? null
+    const totalAmount = fields.withdrawalType === 'Sale' && price !== null
       ? amount * price
       : null
 
@@ -105,7 +135,12 @@ export async function POST(
         data: { currentWeightKg: { decrement: amount } },
       })
       if (guarded.count === 0) {
-        throw new Error('Insufficient weight (concurrent withdrawal contention)')
+        // Another withdrawal took the kg first: a 409 the client can show
+        // (handleApiError keeps only a 4xx statusCode's message).
+        throw Object.assign(
+          new Error('Insufficient weight (concurrent withdrawal contention)'),
+          { statusCode: 409 },
+        )
       }
 
       // Create withdrawal
@@ -113,16 +148,16 @@ export async function POST(
         data: {
           greenBeanLotId: id,
           amountKg: amount,
-          withdrawalType,
-          purpose,
-          notes: notes || null,
+          withdrawalType: fields.withdrawalType,
+          purpose: fields.purpose,
+          notes: fields.notes || null,
           withdrawnBy: user.id,
           withdrawnByName: user.name,
           salePrice: price,
-          currency: currency || null,
-          customerName: customerName || null,
-          invoiceNumber: invoiceNumber || null,
-          deliveryAddress: deliveryAddress || null,
+          currency: fields.currency ?? null,
+          customerName: fields.customerName || null,
+          invoiceNumber: fields.invoiceNumber || null,
+          deliveryAddress: fields.deliveryAddress || null,
           totalAmount,
           // The roaster whose stock the kg go into below, so a void can take
           // them back off it.

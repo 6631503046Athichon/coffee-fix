@@ -4,6 +4,8 @@ import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { hashPassword } from '@/lib/auth'
 import { generateUsername, generatePassword } from '@/lib/credentialGenerator'
 import { validateBody, createUserSchema } from '@/lib/validations'
+import { userRoleSchema } from '@/lib/validations/common'
+import { isAdminUser } from '@/lib/saleOrders'
 import { z } from 'zod'
 
 // Extended schema for user creation with autoGenerate option.
@@ -26,8 +28,15 @@ export async function GET(request: NextRequest) {
     const role = searchParams.get('role')
     const status = searchParams.get('status')
 
-    // Non-admin users get a limited view (only active users, basic fields)
-    if (!user.roles.includes('Admin')) {
+    // An unknown role used to reach Prisma as an invalid enum value and come
+    // back as a 500 carrying the query text (audit F28).
+    if (role && !userRoleSchema.safeParse(role).success) {
+      return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+    }
+
+    // Non-admin users get a limited view (only active users, basic fields).
+    // A super admin gets the full view like an Admin.
+    if (!isAdminUser(user)) {
       const where: Record<string, unknown> = { isActive: true }
       if (role) {
         where.roles = { has: role }

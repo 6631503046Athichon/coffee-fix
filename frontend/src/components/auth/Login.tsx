@@ -1,12 +1,22 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { Coffee, LogIn, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getDashboardPathByRole } from '../../utils/routing';
+import { postLoginPath } from './loginRedirect';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const location = useLocation();
+  const { login, currentUser, isAuthenticated } = useAuth();
+
+  // Signed in, whether by this form or by a session check that answered
+  // late (a backend waking from idle): go on to the page the user asked for
+  // before being sent here (loginRedirect), else their dashboard.
+  useEffect(() => {
+    if (isAuthenticated && currentUser) {
+      navigate(postLoginPath(currentUser, location.state), { replace: true });
+    }
+  }, [isAuthenticated, currentUser, location.state, navigate]);
 
   const [formData, setFormData] = useState({
     identifier: '',
@@ -25,13 +35,9 @@ const Login: React.FC = () => {
     try {
       const user = await login(formData.identifier, formData.password);
 
-      // Check if user needs to complete first login setup
-      if (user.mustChangePassword || user.mustChangeUsername || user.mustChangeEmail) {
-        navigate('/first-login-setup');
-      } else {
-        // Redirect to appropriate dashboard based on user role
-        navigate(getDashboardPathByRole(user.roles));
-      }
+      // First-login setup if still owed, else the page the user asked for
+      // before being sent here, else their dashboard.
+      navigate(postLoginPath(user, location.state), { replace: true });
     } catch (err) {
       let errorMessage = 'Login failed';
       

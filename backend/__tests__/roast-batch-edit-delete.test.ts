@@ -521,7 +521,7 @@ describe('roast batch edit and delete', () => {
       const response = await POST(postRequest())
       expect(response.status).toBe(201)
       expect(mockPrisma.roasterInventoryItem.updateMany).toHaveBeenCalledWith({
-        where: { id: INV, remainingWeightKg: { gte: 10 } },
+        where: { id: INV, remainingWeightKg: { gte: 10 - 1e-6 } },
         data: { remainingWeightKg: { decrement: 10 } },
       })
       expect(mockPrisma.roastBatch.create.mock.calls[0][0].data).toMatchObject({
@@ -655,7 +655,7 @@ describe('roast batch edit and delete', () => {
       const response = await POST(postRequest({ batchSizeKg: 10.0051, roastedWeightKg: 8 }))
       expect(response.status).toBe(201)
       expect(mockPrisma.roasterInventoryItem.updateMany).toHaveBeenCalledWith({
-        where: { id: INV, remainingWeightKg: { gte: 10.01 } },
+        where: { id: INV, remainingWeightKg: { gte: 10.01 - 1e-6 } },
         data: { remainingWeightKg: { decrement: 10.01 } },
       })
       expect(mockPrisma.roastBatch.create.mock.calls[0][0].data.batchSizeKg).toBe(10.01)

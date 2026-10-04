@@ -14,6 +14,7 @@ import { Input } from '../../common/Input';
 import RestoredDataBanner from '../../common/RestoredDataBanner';
 import { generateHarvestLotId } from '../../../utils/idGenerator';
 import { addHarvestLot } from '../../../services/lots/harvestLotService';
+import { todayDateOnly } from '../../../utils/dateOnly';
 
 // Production Year Chips Component - แสดงแค่ 3 ปี (ก่อน, ปัจจุบัน, หน้า)
 const ProductionYearChips: React.FC<{
@@ -95,19 +96,26 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
     return farmsWithVarieties.find(f => f.id === selectedFarmId) || initialFarm;
   }, [selectedFarmId, farmsWithVarieties, initialFarm]);
 
-  // Form persist hook - saves form data to localStorage
+  // Form persist hook - saves form data to localStorage. The draft is kept
+  // per user, so whoever signs in next on this browser never gets it (the
+  // Header's Logout also clears every draft). Values the form fills in by
+  // itself go through setDefaults: they are not edits, so they must not make
+  // the form dirty (a false "leave page?" prompt) or save a draft.
   const {
     values: formValues,
     setValue: setFormValue,
+    setDefaults,
     resetForm,
     clearSavedData,
     wasRestored,
   } = useFormPersist({
-    storageKey: 'harvest-lot-modal',
+    storageKey: `harvest-lot-modal-${currentUser?.id || 'signed-out'}`,
     initialValues: {
       cherryVariety: '',
       weightKg: '',
-      harvestDate: new Date().toISOString().substring(0, 10),
+      // The viewer's today (utils/dateOnly); the UTC day is still yesterday
+      // in Thailand until 07:00.
+      harvestDate: todayDateOnly(),
       cropYearId: '',
     },
     warnOnLeave: true,
@@ -185,7 +193,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         // เลือก current year เป็นค่าเริ่มต้นเสมอ ถ้ายังไม่ได้เลือก หรือค่าเก่าไม่ตรงกับ crop year ที่มีอยู่
         const validSelection = cropYearId && data.cropYears.some(y => y.id === cropYearId);
         if (currentYear && !validSelection) {
-          setCropYearId(currentYear.id);
+          setDefaults({ cropYearId: currentYear.id });
         }
       }
     }
@@ -197,13 +205,19 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
     if (selectedFarm) {
       // Only reset if farm actually changed (not on initial mount with restored data)
       if (prevFarmIdRef.current !== null && prevFarmIdRef.current !== selectedFarm.id) {
-        setCherryVariety(selectedFarm.varieties?.[0] || '');
-        setWeightKg('');
-        setHarvestDate(new Date().toISOString().substring(0, 10));
-        setCropYearId('');
+        // Switching farm throws the entries away, so the saved draft (and
+        // the "restored" banner over the now blank fields) goes with them;
+        // otherwise a reload would bring the discarded values back.
+        clearSavedData();
+        setDefaults({
+          cherryVariety: selectedFarm.varieties?.[0] || '',
+          weightKg: '',
+          harvestDate: todayDateOnly(),
+          cropYearId: '',
+        });
       } else if (!cherryVariety && selectedFarm.varieties?.[0]) {
         // Set default variety if not set
-        setCherryVariety(selectedFarm.varieties[0]);
+        setDefaults({ cherryVariety: selectedFarm.varieties[0] });
       }
       prevFarmIdRef.current = selectedFarm.id;
     }
@@ -331,7 +345,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
 
       // Reset local modal state and close immediately after successful registration
       resetForm();
-      setCherryVariety(selectedFarm.varieties?.[0] || '');
+      setDefaults({ cherryVariety: selectedFarm.varieties?.[0] || '' });
       setSuccessMessage(null);
       onClose();
     } catch (error: any) {

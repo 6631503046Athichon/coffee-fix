@@ -29,4 +29,6 @@ Vite + React 19 SPA (TypeScript, non-strict).
 - Call backend through `services/<domain>Service.ts`, never `fetch` inline.
 - Use `useAuth()` from `contexts/AuthContext` for the current user.
 - Use `useToast()` from `contexts/ToastContext` for notifications.
+  A component that only adds toasts and has a large tree under it (the app
+  shell) uses `useToastActions()`, which does not re-render when the list changes.
 - Hash-based routing — link via `#/path`, NOT real browser routes.

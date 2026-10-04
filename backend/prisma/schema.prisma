@@ -25,9 +25,13 @@ model User {
   /// The user's shared AI call count (POST /api/ai/:feature, lib/aiRateLimit):
   /// when their current one-minute window started and how many calls it
   /// holds. Written only by that guarded UPDATE; NULL until their first AI
-  /// call. See prisma/sql/005_ai_rate_limit.sql.
+  /// call. See prisma/sql/006_ai_rate_limit.sql.
   aiWindowStartedAt          DateTime?
   aiWindowCalls              Int?
+  /// When the password was last changed. requireAuth refuses a token issued
+  /// before it, so a change signs out every other session. NULL = not changed
+  /// since this column was added. See prisma/sql/007_password_changed_at.sql.
+  passwordChangedAt          DateTime?
   cuppingSessions            CuppingSession[]       @relation("SessionCreator")
   cuppingJudges              CuppingSessionJudge[]
   createdFarms               Farm[]                 @relation("FarmOwner")

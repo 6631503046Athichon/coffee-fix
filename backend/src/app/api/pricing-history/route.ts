@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, requireOwnership, handleApiError } from '@/lib/middleware'
 import { currencySchema } from '@/lib/validations/common'
 import { parseStrictDateOnly, parseStrictNumber, todayDateOnly } from '@/lib/utils'
+import { chainFarmIds, greenBeanLotsOnFarms } from '@/lib/farmAccess'
 
 const createPricingHistorySchema = z.object({
   greenBeanLotId: z.string({ message: 'Green bean lot ID is required' })
@@ -30,7 +31,7 @@ const createPricingHistorySchema = z.object({
 // GET /api/pricing-history - List all pricing history
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
 
     const where: Prisma.PricingHistoryWhereInput = {}
     
@@ -38,6 +39,15 @@ export async function GET(request: NextRequest) {
     const greenBeanLotId = request.nextUrl.searchParams.get('greenBeanLotId')
     if (greenBeanLotId) {
       where.greenBeanLotId = greenBeanLotId
+    }
+
+    // A farmer-only user sees the prices of the green beans they may open:
+    // those hulled from their own and shared farms' parchment, as on
+    // GET /api/green-bean-lots. Staff roles and Admins see every lot's
+    // (lib/farmAccess).
+    const farmIds = await chainFarmIds(user)
+    if (farmIds) {
+      where.greenBeanLot = greenBeanLotsOnFarms(farmIds)
     }
 
     const pricingHistory = await prisma.pricingHistory.findMany({

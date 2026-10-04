@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, handleApiError } from '@/lib/middleware'
+import { requireAuth, handleApiError, forgetCachedAuth, refreshSessionCookie } from '@/lib/middleware'
 import { rateLimit, RATE_LIMITS, getClientIp } from '@/lib/rateLimit'
 import { firstLoginUpdateSchema } from '@/lib/validations/user'
 import bcrypt from 'bcryptjs'
@@ -123,20 +123,24 @@ export async function POST(request: NextRequest) {
       updateData.mustChangeEmail = false
     }
 
-    // Update password if provided and required
+    // Update password if provided and required. passwordChangedAt signs out
+    // every session started before now; this one gets a fresh cookie below.
     if (user.mustChangePassword && newPassword) {
       const hashedPassword = await bcrypt.hash(newPassword, 10)
       updateData.password = hashedPassword
       updateData.mustChangePassword = false
+      updateData.passwordChangedAt = new Date()
     }
+    const changesPassword = updateData.password !== undefined
 
     // Update user
     const updatedUser = await prisma.user.update({
       where: { id: user.id },
       data: updateData
     })
+    if (changesPassword) forgetCachedAuth(user.id)
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       message: 'Profile updated successfully',
       user: {
         id: updatedUser.id,
@@ -153,6 +157,7 @@ export async function POST(request: NextRequest) {
         updatedAt: updatedUser.updatedAt,
       }
     })
+    return changesPassword ? refreshSessionCookie(response, updatedUser) : response
 
   } catch (error) {
     return handleApiError(error)

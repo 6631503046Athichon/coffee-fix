@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
-import { isAdminUser } from '@/lib/saleOrders'
+import { WEIGHT_EPSILON, isAdminUser } from '@/lib/saleOrders'
+
+/** Kilograms to the milligram, as the sale and withdrawal routes store stock. */
+const round6 = (value: number) => Math.round(value * 1e6) / 1e6
 
 // GET /api/roaster-inventory - List roaster inventory items
 // Roasters see only their own inventory (?roasterId is ignored for them);
@@ -87,13 +90,17 @@ export async function POST(request: NextRequest) {
     if (lot.availabilityStatus !== 'Available')
       return NextResponse.json({ error: 'Green bean lot is not available' }, { status: 400 })
 
-    const weight = parseFloat(claimedWeightKg)
+    // Kg to the milligram, as the lot's other stock routes store them.
+    const weight = round6(parseFloat(claimedWeightKg))
 
     if (!Number.isFinite(weight) || weight <= 0) {
       return NextResponse.json({ error: 'Invalid claimed weight' }, { status: 400 })
     }
 
-    if (weight > lot.currentWeightKg) {
+    // Lot weights carry float leftovers (5 - 4 x 1.2 is 0.19999...), so the
+    // checks allow WEIGHT_EPSILON of slack, or the last 0.2 kg could never be
+    // claimed.
+    if (weight > lot.currentWeightKg + WEIGHT_EPSILON) {
       return NextResponse.json({ error: 'Insufficient weight available' }, { status: 400 })
     }
 
@@ -126,7 +133,7 @@ export async function POST(request: NextRequest) {
       // up-front weight check and overdraw the lot. updateMany compiles to
       // a single SQL UPDATE that Postgres serialises at the row level.
       const decResult = await tx.greenBeanLot.updateMany({
-        where: { id: greenBeanLotId, currentWeightKg: { gte: weight } },
+        where: { id: greenBeanLotId, currentWeightKg: { gte: weight - WEIGHT_EPSILON } },
         data: { currentWeightKg: { decrement: weight } },
       })
       if (decResult.count === 0) {
@@ -135,15 +142,17 @@ export async function POST(request: NextRequest) {
 
       // Re-read post-decrement weight to decide availabilityStatus. Only flip
       // to Withdrawn when stock is depleted — never clobber an existing
-      // Withdrawn status back to Available.
+      // Withdrawn status back to Available. What is left is stored rounded
+      // to the milligram and never below 0, so no float leftover stays.
       const fresh = await tx.greenBeanLot.findUnique({
         where: { id: greenBeanLotId },
         select: { currentWeightKg: true, availabilityStatus: true },
       })
-      const remaining = fresh?.currentWeightKg ?? 0
+      const remaining = Math.max(0, round6(fresh?.currentWeightKg ?? 0))
       const updatedSourceLot = await tx.greenBeanLot.update({
         where: { id: greenBeanLotId },
         data: {
+          ...(fresh && remaining !== fresh.currentWeightKg && { currentWeightKg: remaining }),
           ...(remaining <= 0 && { availabilityStatus: 'Withdrawn' }),
         },
         select: {
@@ -178,6 +187,20 @@ export async function POST(request: NextRequest) {
           },
           include: inventoryInclude,
         })
+        // Sums leave float leftovers too (0.7 + 0.1 is 0.7999...): store
+        // them rounded to the milligram. The UPDATE above holds the row lock.
+        const claimedKg = round6(inventoryItem.claimedWeightKg)
+        const remainingKg = Math.max(0, round6(inventoryItem.remainingWeightKg))
+        if (
+          claimedKg !== inventoryItem.claimedWeightKg ||
+          remainingKg !== inventoryItem.remainingWeightKg
+        ) {
+          inventoryItem = await tx.roasterInventoryItem.update({
+            where: { id: existingItem.id },
+            data: { claimedWeightKg: claimedKg, remainingWeightKg: remainingKg },
+            include: inventoryInclude,
+          })
+        }
       } else {
         inventoryItem = await tx.roasterInventoryItem.create({
           data: {

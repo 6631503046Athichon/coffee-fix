@@ -893,7 +893,7 @@ describe('PATCH /api/green-bean-lots/[id]/withdrawals/[withdrawalId]', () => {
     ['a price that is true', { salePrice: true }, 'greater than 0'],
     ['an unknown currency', { currency: 'BTC' }, 'Currency must be one of'],
     ['a customer name that is not text', { customerName: 5 }, 'customerName must be text'],
-    ['a customer name over 100 characters', { customerName: 'x'.repeat(101) }, 'at most 100'],
+    ['a customer name over 200 characters', { customerName: 'x'.repeat(201) }, 'at most 200'],
     ['an invoice number over 50 characters', { invoiceNumber: 'x'.repeat(51) }, 'at most 50'],
     ['an empty body', {}, 'Nothing to change'],
     ['a body that is not an object', ['INV-2'], 'JSON object'],
@@ -903,6 +903,13 @@ describe('PATCH /api/green-bean-lots/[id]/withdrawals/[withdrawalId]', () => {
     expect(response.status).toBe(400)
     expect((await response.json()).error).toContain(message)
     expect(row()).toMatchObject({ salePrice: 200, totalAmount: 6000, currency: 'THB', customerName: 'Cafe Doi' })
+  })
+
+  test('a customer name of up to 200 characters, as the address book allows, is accepted', async () => {
+    mockAuthUser = processor
+    const name = 'C'.repeat(150)
+    expect((await patchGreen('gbw-1', { customerName: name })).status).toBe(200)
+    expect(row().customerName).toBe(name)
   })
 
   test('a price string with 2 decimals is accepted', async () => {

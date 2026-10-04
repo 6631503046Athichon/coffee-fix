@@ -11,7 +11,7 @@ import { addFarmCollaborator, removeFarmCollaborator } from '../../services/farm
 import { generateFarmId } from '../../utils/idGenerator';
 import { getActiveCoffeeVarieties, CoffeeVariety } from '../../services/reference/coffeeVarietyService';
 import { getAllUsers } from '../../services/auth/userService';
-import { canManageFarm } from '../../utils/farmAccess';
+import { canManageFarm, isAdminUser } from '../../utils/farmAccess';
 
 type ParsedGoogleMaps = { lat: number; lng: number; placeName?: string } | null;
 
@@ -98,7 +98,8 @@ const AddFarmPage: React.FC = () => {
 	const [farmerUsers, setFarmerUsers] = useState<User[]>([]);
 	const [selectedOwnerId, setSelectedOwnerId] = useState<string>('');
 	const [farmersLoading, setFarmersLoading] = useState(true);
-	const isAdmin = currentUser?.roles?.includes(UserRole.Admin) ?? false;
+	// A super admin counts as an Admin whatever roles the account lists.
+	const isAdmin = isAdminUser(currentUser);
 
 	// Collaborators
 	const [collaborators, setCollaborators] = useState<FarmCollaborator[]>([]);
@@ -695,7 +696,7 @@ const AddFarmPage: React.FC = () => {
 		<div className="max-w-4xl mx-auto">
 		<div className="space-y-6">
 			{/* Header Section */}
-			<div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-2xl p-6 shadow-sm border border-emerald-200">
+			<div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
 				<div className="flex items-center gap-4 mb-4">
 					<Button
 						type="button"
@@ -827,8 +828,8 @@ const AddFarmPage: React.FC = () => {
 					{isAdmin && (
 						<div className="mt-6 pt-6 border-t border-gray-100">
 							<div className="flex items-center gap-2.5 mb-4">
-								<div className="p-1.5 bg-indigo-50 rounded-lg">
-									<Users className="h-4 w-4 text-indigo-600" />
+								<div className="p-1.5 bg-blue-50 rounded-lg">
+									<Users className="h-4 w-4 text-blue-600" />
 								</div>
 								<label className="text-sm font-semibold text-gray-700">Farmhands</label>
 							</div>
@@ -852,7 +853,7 @@ const AddFarmPage: React.FC = () => {
 									variant="primary"
 									onClick={handleAddCollaborator}
 									disabled={!selectedCollaboratorId || collaboratorLoading}
-									className="bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap px-5 py-2.5"
+									className="whitespace-nowrap px-5 py-2.5"
 								>
 									<UserPlus className="h-5 w-5 mr-1.5" />
 									Add
@@ -863,10 +864,10 @@ const AddFarmPage: React.FC = () => {
 							{collaborators.length > 0 ? (
 								<div className="space-y-1.5">
 									{collaborators.map((collab) => (
-										<div key={collab.id} className="group flex items-center justify-between bg-gradient-to-r from-indigo-50/80 to-blue-50/50 rounded-xl px-4 py-3 border border-indigo-100/60 transition-all hover:border-indigo-200">
+										<div key={collab.id} className="group flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-200 transition-all hover:border-gray-300">
 											<div className="flex items-center gap-3">
-												<div className="w-9 h-9 bg-white rounded-full flex items-center justify-center shadow-sm border border-indigo-100">
-													<UserIcon className="h-4 w-4 text-indigo-500" />
+												<div className="w-9 h-9 bg-white rounded-full flex items-center justify-center shadow-sm border border-gray-200">
+													<UserIcon className="h-4 w-4 text-blue-600" />
 												</div>
 												<div className="flex flex-col">
 													<span className="text-sm font-semibold text-gray-800">{collab.user?.name || 'Unknown'}</span>

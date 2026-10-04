@@ -57,6 +57,16 @@ describe('DatePicker', () => {
     expect(onChange).toHaveBeenCalledWith(expect.stringMatching(/^\d{4}-\d{2}-01$/))
   })
 
+  it('is flat: a plain header bar and no coloured halo on the picked day (F47)', () => {
+    render(<DatePicker value="2026-09-15" onChange={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: '15 September 2026' }))
+
+    const header = screen.getByRole('button', { name: 'Previous' }).parentElement as HTMLElement
+    expect(header).toHaveClass('bg-gray-50')
+    expect(header.className).not.toMatch(/gradient/)
+    expect(screen.getByRole('button', { name: '15' }).className).not.toMatch(/ring-blue-200/)
+  })
+
   it('treats an impossible day as empty', () => {
     render(<DatePicker value="2026-02-30" onChange={() => {}} />)
 

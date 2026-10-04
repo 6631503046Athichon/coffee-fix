@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { hashPassword, verifyPassword } from '@/lib/auth'
-import { handleApiError } from '@/lib/middleware'
+import { handleApiError, forgetCachedAuth } from '@/lib/middleware'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { passwordSchema } from '@/lib/validations/user'
 
@@ -86,12 +86,16 @@ export async function POST(request: NextRequest) {
 
     // Update user password and mark token as used
     await prisma.$transaction(async (tx) => {
-      // Update password
+      // Update password. passwordChangedAt signs out every session started
+      // before now (requireAuth refuses older tokens), so a stolen cookie
+      // stops working. This request has no session to keep: the user signs
+      // in with the new password.
       await tx.user.update({
         where: { id: resetToken.userId },
         data: {
           password: hashedPassword,
           mustChangePassword: false,
+          passwordChangedAt: new Date(),
         },
       })
 
@@ -110,6 +114,7 @@ export async function POST(request: NextRequest) {
         },
       })
     })
+    forgetCachedAuth(resetToken.userId)
 
     return NextResponse.json({
       message: 'Password has been reset successfully. You can now log in with your new password.',

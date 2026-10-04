@@ -12,6 +12,7 @@ import {
   reweighLot,
   type ReweighResult,
 } from '@/lib/lotCorrections'
+import { chainFarmIds, requireChainFarm } from '@/lib/farmAccess'
 
 // PATCH /api/parchment-lots/:id - Correct a parchment lot's weight or moisture
 //
@@ -189,7 +190,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth(request)
+    const user = await requireAuth(request)
     const { id } = await params
 
     const parchmentLot = await prisma.parchmentLot.findUnique({
@@ -215,6 +216,8 @@ export async function GET(
             id: true,
             farmerName: true,
             cherryVariety: true,
+            // The farm it was grown on, for the farmer check below.
+            farmId: true,
           },
         },
         physicalTestResults: true,
@@ -228,6 +231,10 @@ export async function GET(
         { status: 404 }
       )
     }
+
+    // A farmer-only user opens only parchment from their own and shared
+    // farms' cherry, as on the list (lib/farmAccess).
+    requireChainFarm(await chainFarmIds(user), parchmentLot.harvestLot?.farmId)
 
     return NextResponse.json({ parchmentLot })
   } catch (error) {

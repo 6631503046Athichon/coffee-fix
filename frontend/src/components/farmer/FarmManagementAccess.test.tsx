@@ -336,4 +336,20 @@ describe('A collaborator cannot reach the farm edit form', { timeout: 20000 }, (
     expect(await screen.findByRole('button', { name: /Update Farm/ })).toBeInTheDocument()
     expect(screen.queryByText(/Only the farm's owner or an Admin can edit/)).not.toBeInTheDocument()
   })
+
+  it('a super admin gets the Admin parts of the form (farmhands) whatever roles the account lists', async () => {
+    vi.mocked(api.get).mockResolvedValue({})
+    render(<EditRoute user={{ id: 'u-super', name: 'Owner', roles: [UserRole.Processor], isSuperAdmin: true }} />)
+
+    expect(await screen.findByRole('button', { name: /Update Farm/ })).toBeInTheDocument()
+    expect(screen.getByText('Farmhands')).toBeInTheDocument()
+  })
+
+  it('the owner does not get the Admin-only farmhands section', async () => {
+    vi.mocked(api.get).mockResolvedValue({})
+    render(<EditRoute user={owner} />)
+
+    expect(await screen.findByRole('button', { name: /Update Farm/ })).toBeInTheDocument()
+    expect(screen.queryByText('Farmhands')).not.toBeInTheDocument()
+  })
 })

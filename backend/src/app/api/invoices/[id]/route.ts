@@ -96,7 +96,7 @@ export async function PUT(
 
     const existingInvoice = await prisma.invoice.findUnique({
       where: { id },
-      select: { id: true, createdBy: true },
+      select: { id: true, saleOrder: { select: { createdBy: true } } },
     })
 
     if (!existingInvoice) {
@@ -106,8 +106,11 @@ export async function PUT(
       )
     }
 
-    // SECURITY: Ownership — one Roaster cannot edit another Roaster's invoice.
-    requireOwnership(user, existingInvoice.createdBy, ['Admin'])
+    // SECURITY: Ownership — the sale's owner (the Roaster who recorded it) or
+    // an Admin, as on GET. Not the invoice's creator: an invoice an Admin
+    // issued on a Roaster's sale is still that Roaster's to update, and one
+    // Roaster still cannot edit another Roaster's invoice.
+    requireOwnership(user, existingInvoice.saleOrder.createdBy, ['Admin'])
 
     const updatedInvoice = await prisma.invoice.update({
       where: { id },

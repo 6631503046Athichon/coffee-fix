@@ -856,7 +856,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                 field above) — the previous native <input type="date">
                 rendered as Chrome's plain calendar popup which clashed
                 with the rest of the UI. */}
-            <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50/60 to-white p-4 shadow-sm">
+            <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
               <div className="flex items-center gap-2 mb-3">
                 <div className="p-1.5 rounded-lg bg-blue-100 text-blue-600">
                   <Calendar className="h-4 w-4" />

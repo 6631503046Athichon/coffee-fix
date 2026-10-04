@@ -8,9 +8,9 @@ import {
   nonNegativeNumberSchema,
   positiveNumberSchema,
   parchmentWithdrawalTypeSchema,
-  currencySchema,
   dateStringSchema,
 } from './common';
+import { withdrawalCurrencySchema, withdrawalSalePriceSchema } from './greenBeanLot';
 
 // ============================================
 // Parchment Lot Schemas
@@ -79,9 +79,12 @@ export const createParchmentWithdrawalSchema = z.object({
   ),
   notes: z.string().max(500).optional().nullable(),
   // Sale fields
-  salePrice: positiveNumberSchema.optional().nullable(),
-  currency: currencySchema.optional().nullable(),
-  customerName: z.string().max(100).optional().nullable(),
+  salePrice: withdrawalSalePriceSchema.optional(),
+  currency: withdrawalCurrencySchema.optional(),
+  // The customer picked from the address book: as long as Customer.name
+  // allows (createCustomerSchema in ./sales).
+  customerName: z.string().max(200, 'Customer name must be 200 characters or fewer').optional().nullable(),
+  invoiceNumber: z.string().max(50).optional().nullable(),
   deliveryAddress: z.string().max(500).optional().nullable(),
   // RoastingStock fields
   targetRoasterId: uuidSchema.optional().nullable(),

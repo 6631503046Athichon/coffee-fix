@@ -117,12 +117,18 @@ describe('withdrawalSaleChanges', () => {
       .toEqual({ ok: false, error: 'The price per kg can have at most 2 decimals.' })
     expect(withdrawalSaleChanges(row, { ...form, invoiceNumber: 'x'.repeat(51) }))
       .toEqual({ ok: false, error: 'Invoice number can be at most 50 characters.' })
-    expect(withdrawalSaleChanges(row, { ...form, customerName: 'x'.repeat(101) }))
-      .toEqual({ ok: false, error: 'Customer name can be at most 100 characters.' })
+    expect(withdrawalSaleChanges(row, { ...form, customerName: 'x'.repeat(201) }))
+      .toEqual({ ok: false, error: 'Customer name can be at most 200 characters.' })
+  })
+
+  it('takes a customer name of up to 200 characters, as the address book allows', () => {
+    const name = 'C'.repeat(150)
+    expect(withdrawalSaleChanges(row, { ...form, customerName: name }))
+      .toMatchObject({ ok: true, changes: { customerName: name } })
   })
 
   it('does not re-check stored values the user left alone, so an older sale can still be edited', () => {
-    const longName = 'x'.repeat(101)
+    const longName = 'x'.repeat(201)
     for (const salePrice of [0, 150.555]) {
       const old = { ...row, salePrice, customerName: longName }
       expect(withdrawalSaleChanges(old, {

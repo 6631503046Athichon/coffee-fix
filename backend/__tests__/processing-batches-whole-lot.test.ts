@@ -14,6 +14,7 @@
 
 import { describe, test, expect, jest, beforeEach } from '@jest/globals'
 import { NextRequest } from 'next/server'
+import { businessYear } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
 // Prisma mock
@@ -260,7 +261,8 @@ describe('Processing batches — whole-lot consumption', () => {
       expect(mockPrisma.processingBatch.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            displayId: `PB-${new Date().getFullYear()}-1`,
+            // Numbered by the Thai year, not the server's local one.
+            displayId: `PB-${businessYear()}-1`,
             harvestLotId: 'hl-1',
             status: 'Completed',
             createdById: 'processor-123',

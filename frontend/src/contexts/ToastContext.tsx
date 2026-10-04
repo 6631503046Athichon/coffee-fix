@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
 export interface Toast {
   id: string;
@@ -7,13 +7,22 @@ export interface Toast {
   duration?: number;
 }
 
-interface ToastContextType {
-  toasts: Toast[];
+interface ToastActions {
   addToast: (toast: Omit<Toast, 'id'>) => void;
   removeToast: (id: string) => void;
 }
 
+interface ToastContextType extends ToastActions {
+  toasts: Toast[];
+}
+
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
+
+// addToast and removeToast alone, in a value that never changes. useToast's
+// value changes with the toast list, so a component that only shows toasts
+// (the app shell) would re-render, with every page under it, each time a
+// toast comes or goes.
+const ToastActionsContext = createContext<ToastActions | undefined>(undefined);
 
 // Lightweight uuid fallback for non-secure contexts where crypto.randomUUID
 // is unavailable (older Safari, plain http during local dev).
@@ -70,10 +79,14 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     removeToast,
   };
 
+  const actions = useMemo(() => ({ addToast, removeToast }), [addToast, removeToast]);
+
   return (
-    <ToastContext.Provider value={value}>
-      {children}
-    </ToastContext.Provider>
+    <ToastActionsContext.Provider value={actions}>
+      <ToastContext.Provider value={value}>
+        {children}
+      </ToastContext.Provider>
+    </ToastActionsContext.Provider>
   );
 };
 
@@ -81,6 +94,15 @@ export const useToast = () => {
   const context = useContext(ToastContext);
   if (context === undefined) {
     throw new Error('useToast must be used within a ToastProvider');
+  }
+  return context;
+};
+
+/** addToast / removeToast without re-rendering when the toast list changes. */
+export const useToastActions = () => {
+  const context = useContext(ToastActionsContext);
+  if (context === undefined) {
+    throw new Error('useToastActions must be used within a ToastProvider');
   }
   return context;
 };

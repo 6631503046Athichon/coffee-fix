@@ -6,6 +6,14 @@ import { rateLimit, RATE_LIMITS, getClientIp } from '@/lib/rateLimit'
 import { validateBody, loginSchema } from '@/lib/validations'
 import { AUTH_COOKIE_NAME, authCookieOptions } from '@/lib/authCookie'
 
+// bcrypt hash (cost 10, as hashPassword uses) of a random value nobody knows.
+// An unknown identifier is checked against it so its answer takes as long as
+// a wrong password for a real account.
+const DUMMY_PASSWORD_HASH = '$2a$10$DbsjYo.Z46/.JOJZp1ijiunlPr6O.q8Rl8xoFh9FUHD2X8/SmpYxm'
+
+const invalidCredentials = () =>
+  NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
+
 export async function POST(request: NextRequest) {
   try {
     // Rate limit: 5 login attempts per 15 minutes per (IP + email) combo.
@@ -81,26 +89,22 @@ export async function POST(request: NextRequest) {
       user = await findByIdentifier(lowered)
     }
 
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Invalid email or password' },
-        { status: 401 }
-      )
+    // An unknown identifier, and a wrong password on any account, disabled or
+    // not, get the same 401 after the same bcrypt work, so neither the answer
+    // nor its timing tells whether an account exists or is disabled (audit
+    // F29). An unknown identifier is checked against a dummy hash for that.
+    const isValidPassword = await verifyPassword(password, user ? user.password : DUMMY_PASSWORD_HASH)
+    if (!user || !isValidPassword) {
+      return invalidCredentials()
     }
 
+    // Only someone who knows the password learns the account is disabled:
+    // the owner needs to hear why they cannot sign in, and it gives anyone
+    // else nothing, as a disabled account cannot be used.
     if (!user.isActive) {
       return NextResponse.json(
         { error: 'This account is disabled' },
         { status: 403 }
-      )
-    }
-
-    // Verify password
-    const isValidPassword = await verifyPassword(password, user.password)
-    if (!isValidPassword) {
-      return NextResponse.json(
-        { error: 'Invalid email or password' },
-        { status: 401 }
       )
     }
 

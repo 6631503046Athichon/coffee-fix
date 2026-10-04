@@ -152,11 +152,11 @@ const FarmerDashboard: React.FC = () => {
 
         {/* Quick Access for Admin Users */}
         {isAdmin && (
-          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border border-purple-200 p-6">
+          <div className="bg-gray-50 rounded-xl border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Award className="h-5 w-5 text-purple-600" />
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Award className="h-5 w-5 text-blue-600" />
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-gray-900">Admin Quick Access</h3>

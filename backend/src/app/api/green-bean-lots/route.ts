@@ -5,6 +5,7 @@ import { validateBody, createGreenBeanLotSchema } from '@/lib/validations'
 import { nextDisplayId, withDisplayIdRetry } from '@/lib/utils'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { greenBeanLotForViewer } from '@/lib/withdrawalPrivacy'
+import { chainFarmIds, greenBeanLotsOnFarms } from '@/lib/farmAccess'
 
 // GET /api/green-bean-lots - List all green bean lots
 export async function GET(request: NextRequest) {
@@ -29,6 +30,14 @@ export async function GET(request: NextRequest) {
     const parchmentLotId = request.nextUrl.searchParams.get('parchmentLotId')
     if (parchmentLotId) {
       where.parchmentLotId = parchmentLotId
+    }
+
+    // A farmer-only user sees only green beans hulled from their own and
+    // shared farms' parchment; staff roles and Admins see every lot
+    // (lib/farmAccess).
+    const farmIds = await chainFarmIds(user)
+    if (farmIds) {
+      Object.assign(where, greenBeanLotsOnFarms(farmIds))
     }
 
     // Pagination
@@ -130,15 +139,21 @@ export async function POST(request: NextRequest) {
     } = validation.data
     const processorScore = (validation.data as { processorScore?: unknown }).processorScore
 
-    // SECURITY: The caller becomes this lot's owner (createdById) and can
-    // then sell or roast it. So a lot that names a parchment lot must name
-    // one the caller processed (parchmentLot -> processingBatch.createdById);
-    // Admin and super admin may name any. Otherwise anyone could mint stock
-    // that traces back to another processor's batch and farm. Internal lots
-    // come out of processing; a Roaster adds the External lots they buy.
+    // SECURITY: The lot's owner (createdById) can sell, roast and withdraw
+    // it. A lot that names a parchment lot belongs to that parchment's owner
+    // (parchmentLot -> processingBatch.createdById); with no parchment, or
+    // none with an owner on record, it is the caller's. So a non-Admin may
+    // only name parchment they processed, or anyone could mint stock that
+    // traces back to another processor's batch and farm; Admin and super
+    // admin may name any, and the lot is then the processor's, not theirs.
+    // Internal lots come out of processing; a Roaster adds the External lots
+    // they buy.
     if (sourceType === 'Internal') {
       requireRole(user, ['Processor', 'Admin'])
     }
+    // The owner, as above: a lot an Admin records from a processor's
+    // parchment is that processor's to price, sell and withdraw.
+    let ownerId = user.id
     if (parchmentLotId) {
       const parchmentLot = await prisma.parchmentLot.findUnique({
         where: { id: parchmentLotId },
@@ -151,6 +166,7 @@ export async function POST(request: NextRequest) {
         )
       }
       requireOwnership(user, parchmentLot.processingBatch?.createdById, ['Admin'])
+      ownerId = parchmentLot.processingBatch?.createdById ?? user.id
     }
 
     // Prisma JSON fields cannot serialize nested undefined values from optional form fields.
@@ -167,7 +183,7 @@ export async function POST(request: NextRequest) {
           displayId,
           sourceType,
           parchmentLotId: parchmentLotId || null,
-          createdById: user.id,
+          createdById: ownerId,
           grade,
           initialWeightKg,
           currentWeightKg: currentWeightKg || initialWeightKg,

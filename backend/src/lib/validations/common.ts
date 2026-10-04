@@ -1,4 +1,5 @@
 ﻿import { z } from 'zod';
+import { parseDateOnly, todayDateOnly } from '../utils';
 
 // ============================================
 // Common ID Validators
@@ -19,22 +20,29 @@ export const dateStringSchema = z.string().refine(
   { message: 'รูปแบบวันที่ไม่ถูกต้อง' }
 );
 
+// "Today" is the Thai calendar day: the server runs on UTC, where it is still
+// yesterday until 07:00 in Thailand. A plain YYYY-MM-DD is that day; a full
+// datetime is the Thai day of that moment. Both come back as 12:00 UTC of the
+// day (todayDateOnly's anchor), so days compare with getTime. null when the
+// value is not a date.
+const thaiDayOf = (val: string): Date | null => {
+  const date = parseDateOnly(val);
+  if (!date || isNaN(date.getTime())) return null;
+  return todayDateOnly(date);
+};
+
 export const pastDateSchema = z.string().refine(
   (val) => {
-    const date = new Date(val);
-    const today = new Date();
-    today.setHours(23, 59, 59, 999);
-    return !isNaN(date.getTime()) && date <= today;
+    const day = thaiDayOf(val);
+    return day !== null && day.getTime() <= todayDateOnly().getTime();
   },
   { message: 'วันที่ต้องไม่เกินวันนี้' }
 );
 
 export const futureDateSchema = z.string().refine(
   (val) => {
-    const date = new Date(val);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return !isNaN(date.getTime()) && date >= today;
+    const day = thaiDayOf(val);
+    return day !== null && day.getTime() >= todayDateOnly().getTime();
   },
   { message: 'วันที่ต้องเป็นวันนี้หรืออนาคต' }
 );

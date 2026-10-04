@@ -23,6 +23,8 @@ export async function GET() {
     })
   } catch (error) {
     const latencyMs = Date.now() - start
+    // The reason stays in the server log. Anyone can call this route, and the
+    // driver's text can name the database host, user or pool (audit F28).
     console.error('[Health Check] Database unreachable:', error instanceof Error ? error.message : error)
 
     return NextResponse.json(
@@ -30,7 +32,6 @@ export async function GET() {
         status: 'degraded',
         database: 'disconnected',
         latencyMs,
-        error: error instanceof Error ? error.message.substring(0, 200) : 'Unknown error',
         timestamp: new Date().toISOString(),
       },
       { status: 503 }

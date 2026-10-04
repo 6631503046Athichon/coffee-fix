@@ -478,7 +478,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                                                     e.stopPropagation();
                                                     navigate(`/farmer-dashboard/${lot.id}`);
                                                 }}
-                                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-indigo-600 transition-colors hover:border-indigo-100 hover:bg-indigo-50 hover:text-indigo-700"
+                                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-gray-500 transition-colors hover:border-gray-200 hover:bg-gray-50 hover:text-blue-600"
                                                 title="Open details"
                                             >
                                                 <ChevronRight className="h-4 w-4" />
@@ -549,7 +549,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                 <form onSubmit={handleEditSubmit} className="space-y-6">
                     {/* Lot ID Badge */}
                     {editingLot && (
-                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-blue-100 rounded-lg">
                                     <Package className="h-5 w-5 text-blue-600" />

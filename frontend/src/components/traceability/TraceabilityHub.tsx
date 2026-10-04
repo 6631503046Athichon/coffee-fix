@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Search, ExternalLink, CheckCircle, Archive, AlertCircle, ChevronLeft, ChevronRight, QrCode, Star } from 'lucide-react';
 import { UserRole, GreenBeanLot } from '@/types';
 import { toRoaId } from '@/utils/formatters';
+import { isAdminUser } from '@/utils/farmAccess';
 import { QRCodeModal } from '@/components/traceability/modals/QRCodeModal';
 
 const PAGE_SIZE = 10
@@ -58,12 +59,12 @@ const TraceabilityHub: React.FC = () => {
   const [qrModalOpen, setQrModalOpen] = useState(false)
   const [selectedLotForQR, setSelectedLotForQR] = useState<EnrichedLot | null>(null)
 
-  // Check if user has access
+  // Check if user has access. A super admin counts as an Admin whatever
+  // roles the account lists (isAdminUser), as the sidebar and the route do.
   useEffect(() => {
     if (currentUser) {
-      const hasAccess = currentUser.roles?.some(
-        (role) => role === UserRole.Admin || role === UserRole.Processor,
-      )
+      const hasAccess =
+        isAdminUser(currentUser) || !!currentUser.roles?.includes(UserRole.Processor)
       if (!hasAccess) {
         navigate('/farmer-dashboard')
       }

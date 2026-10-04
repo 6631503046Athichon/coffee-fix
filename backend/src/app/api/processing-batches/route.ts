@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
 import { nextDisplayId, parseDateOnly, safeParseFloat, withDisplayIdRetry } from "@/lib/utils";
 import { rateLimit, RATE_LIMITS } from "@/lib/rateLimit";
+import { chainFarmIds, processingBatchesOnFarms } from "@/lib/farmAccess";
 
 // Thrown inside the create transaction when the status-conditional claim on
 // the harvest lot updates zero rows (lot already Complete). Mapped to 409.
@@ -12,7 +13,7 @@ const HARVEST_LOT_ALREADY_PROCESSED = "HARVEST_LOT_ALREADY_PROCESSED";
 // GET /api/processing-batches - List all processing batches
 export async function GET(request: NextRequest) {
   try {
-    await requireAuth(request);
+    const user = await requireAuth(request);
 
     const where: Prisma.ProcessingBatchWhereInput = {};
 
@@ -26,6 +27,13 @@ export async function GET(request: NextRequest) {
     const status = request.nextUrl.searchParams.get("status");
     if (status && (Object.values(ProcessingBatchStatus) as string[]).includes(status)) {
       where.status = status as ProcessingBatchStatus;
+    }
+
+    // A farmer-only user sees only the batches on their own and shared
+    // farms' cherry; staff roles and Admins see every batch (lib/farmAccess).
+    const farmIds = await chainFarmIds(user);
+    if (farmIds) {
+      Object.assign(where, processingBatchesOnFarms(farmIds));
     }
 
     const limit = Math.min(parseInt(request.nextUrl.searchParams.get("limit") || "50", 10), 200);

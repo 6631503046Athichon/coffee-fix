@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import {
+  requireAuth,
+  requireRole,
+  handleApiError,
+  forgetCachedAuth,
+  refreshSessionCookie,
+} from '@/lib/middleware'
 import { hashPassword, verifyPassword } from '@/lib/auth'
 import { isAdminUser } from '@/lib/saleOrders'
 import { passwordSchema, updateUserSchema } from '@/lib/validations/user'
@@ -206,6 +212,9 @@ export async function PUT(
       if (username !== undefined) updateData.username = username
       if (password !== undefined) {
         updateData.password = await hashPassword(password)
+        // Signs out every other session (requireAuth refuses tokens issued
+        // before it); this one gets a fresh cookie below.
+        updateData.passwordChangedAt = new Date()
       }
 
       const updatedUser = await prisma.user.update({
@@ -222,7 +231,10 @@ export async function PUT(
         },
       })
 
-      return NextResponse.json({ user: updatedUser })
+      const response = NextResponse.json({ user: updatedUser })
+      if (password === undefined) return response
+      forgetCachedAuth(id)
+      return refreshSessionCookie(response, updatedUser)
     }
 
     // Admin updates
@@ -257,6 +269,9 @@ export async function PUT(
       updateData.password = await hashPassword(password)
       updateData.mustChangePassword = true
       // SECURITY: Never store plaintext passwords
+      // An Admin's reset signs the user out everywhere: requireAuth refuses
+      // tokens issued before passwordChangedAt.
+      updateData.passwordChangedAt = new Date()
     }
 
     const updatedUser = await prisma.user.update({
@@ -273,7 +288,12 @@ export async function PUT(
       },
     })
 
-    return NextResponse.json({ user: updatedUser })
+    const response = NextResponse.json({ user: updatedUser })
+    if (password === undefined) return response
+    forgetCachedAuth(id)
+    // An Admin who changed their own password keeps this session (it is
+    // still sent to first-login setup: mustChangePassword is set above).
+    return currentUser.id === id ? refreshSessionCookie(response, updatedUser) : response
   } catch (error) {
     return handleApiError(error)
   }

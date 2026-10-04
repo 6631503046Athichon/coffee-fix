@@ -10,7 +10,7 @@
 
 import { describe, test, expect, jest, beforeEach } from '@jest/globals'
 import { NextRequest } from 'next/server'
-import { todayDateOnly } from '@/lib/utils'
+import { businessYear, todayDateOnly } from '@/lib/utils'
 
 // Writes must go through the transaction client. The top-level client and
 // the `tx` client are separate mocks, so a write that escaped the transaction
@@ -545,7 +545,8 @@ describe('green bean lot pricing', () => {
 
       expect(response.status).toBe(201)
       const [first, second] = txMock.greenBeanLot.create.mock.calls.map((call: any) => call[0].data)
-      const year = new Date().getFullYear()
+      // Display ids number by the Thai year, which turns 7 h before UTC's.
+      const year = businessYear()
       expect(first).toMatchObject({ grade: 'Grade B', displayId: `GBL-${year}-1` })
       expect(first.pricePerKg).toBeUndefined()
       expect(second).toMatchObject({ grade: 'Grade A', displayId: `GBL-${year}-2`, pricePerKg: 220 })

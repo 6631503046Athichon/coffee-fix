@@ -9,6 +9,7 @@ import CreateCustomerModal from '@/components/sales/modals/CreateCustomerModal';
 import SaleOrderModal from '@/components/sales/modals/SaleOrderModal';
 import { formatSaleDate } from '@/components/sales/saleDisplay';
 import { Modal } from '@/components/common/Modal';
+import { isAdminUser } from '@/utils/farmAccess';
 
 const TYPE_BADGE: Record<string, string> = {
   Roaster: 'bg-amber-50 text-amber-700',
@@ -48,10 +49,10 @@ const CustomerManagement: React.FC = () => {
   const [deleteError, setDeleteError] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
 
-  // Check if user has Admin or Roaster role
-  const hasAccess = currentUser?.roles?.some(role =>
-    role === UserRole.Admin || role === UserRole.Roaster
-  ) ?? false;
+  // Check if user has Admin or Roaster role. A super admin counts as an
+  // Admin whatever roles the account lists (isAdminUser).
+  const hasAccess =
+    isAdminUser(currentUser) || !!currentUser?.roles?.includes(UserRole.Roaster);
 
   // Only the first load shows the spinner; later refetches keep the table.
   useEffect(() => {

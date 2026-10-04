@@ -25,6 +25,12 @@ JWT and password primitives.
   - `harvestLot.createdById` or `farm.ownerId`
 - `optionalAuth(request)` — returns user or null (use for endpoints that behave
   differently for guests, like `trace/[publicId]`).
+- `handleApiError(error)` — the catch-all. Known Prisma codes and auth errors
+  get their status; an error with a 4xx `statusCode` answers that status with
+  its message (throw `Object.assign(new Error(msg), { statusCode: 409 })` for
+  one the client should see); anything else, a bare `SyntaxError` included,
+  is a generic 500 with the detail kept in the server log. A route that wants
+  a 400 for a body that is not JSON catches `request.json()` itself.
 - `errorResponse(message, status)` / `successResponse(data, status)` — JSON helpers.
 
 ## `prisma.ts`
@@ -34,10 +40,14 @@ to avoid connection-pool exhaustion in dev.
 ## `trace.ts`
 The public traceability story of a green bean lot.
 - `publicTraceSelect` — the Prisma select behind it. It is served without auth,
-  so it must never read inventory or PII fields.
+  so it must never read inventory, PII or internal free-text fields (no
+  `processNotes`).
 - `serializePublicTrace(lot, traceId)` — the response body. Used by the public
   `trace/[publicId]` route and the staff `green-bean-lots/[id]/trace-preview`
-  route, so a preview matches what customers will see.
+  route, so a preview matches what customers will see. A bought-in lot's
+  `externalSource` keeps only `PUBLIC_EXTERNAL_SOURCE_KEYS` (origin, producer,
+  variety, process, purchase date, taste note): never the price paid,
+  currency or supplier notes.
 
 ## `validations/`
 Zod schemas, one file per domain (`farm`, `harvestLot`, `parchmentLot`,

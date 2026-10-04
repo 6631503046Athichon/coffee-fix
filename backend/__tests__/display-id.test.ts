@@ -23,13 +23,13 @@ describe('displayId helpers', () => {
 
       const id = await nextDisplayId(model, 'HL')
 
-      const year = new Date().getFullYear()
+      const year = (await import('@/lib/utils')).businessYear() // Thai year
       expect(id).toBe(`HL-${year}-1`)
     })
 
     test('returns max + 1 when rows exist', async () => {
       const { nextDisplayId } = await import('@/lib/utils')
-      const year = new Date().getFullYear()
+      const year = (await import('@/lib/utils')).businessYear() // Thai year
       const model = {
         findMany: jest.fn(async () => [
           { displayId: `HL-${year}-1` },
@@ -45,7 +45,7 @@ describe('displayId helpers', () => {
 
     test('ignores non-numeric suffixes', async () => {
       const { nextDisplayId } = await import('@/lib/utils')
-      const year = new Date().getFullYear()
+      const year = (await import('@/lib/utils')).businessYear() // Thai year
       const model = {
         findMany: jest.fn(async () => [
           { displayId: `HL-${year}-abc` },
@@ -62,7 +62,7 @@ describe('displayId helpers', () => {
   describe('nextDisplayIds (bulk)', () => {
     test('returns sequential ids from one read', async () => {
       const { nextDisplayIds } = await import('@/lib/utils')
-      const year = new Date().getFullYear()
+      const year = (await import('@/lib/utils')).businessYear() // Thai year
       const model = {
         findMany: jest.fn(async () => [{ displayId: `GBL-${year}-4` }]),
       }
@@ -92,7 +92,7 @@ describe('displayId helpers', () => {
 
     test('starts at 1 when table is empty', async () => {
       const { nextDisplayIds } = await import('@/lib/utils')
-      const year = new Date().getFullYear()
+      const year = (await import('@/lib/utils')).businessYear() // Thai year
       const model = { findMany: jest.fn(async () => []) }
 
       const ids = await nextDisplayIds(model, 'PCH', 2)

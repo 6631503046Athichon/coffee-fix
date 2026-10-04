@@ -5,6 +5,7 @@ import { requireAuth, requireRole, requireOwnership, handleApiError } from '@/li
 import { nextDisplayId, safeParseFloat, withDisplayIdRetry } from '@/lib/utils'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { parchmentLotForViewer } from '@/lib/withdrawalPrivacy'
+import { chainFarmIds, parchmentLotsOnFarms } from '@/lib/farmAccess'
 
 // GET /api/parchment-lots - List all parchment lots
 export async function GET(request: NextRequest) {
@@ -29,6 +30,13 @@ export async function GET(request: NextRequest) {
     const processType = request.nextUrl.searchParams.get('processType')
     if (processType) {
       where.processType = processType
+    }
+
+    // A farmer-only user sees only parchment from their own and shared farms'
+    // cherry; staff roles and Admins see every lot (lib/farmAccess).
+    const farmIds = await chainFarmIds(user)
+    if (farmIds) {
+      Object.assign(where, parchmentLotsOnFarms(farmIds))
     }
 
     const limit = Math.min(parseInt(request.nextUrl.searchParams.get('limit') || '100', 10), 200)

@@ -149,7 +149,7 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
                 type={showCurrentPassword ? 'text' : 'password'}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full px-3 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
                 required
               />
               <button
@@ -178,7 +178,7 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
                 placeholder="Choose a unique username"
                 required
               />
@@ -203,7 +203,7 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
                 placeholder="your.email@example.com"
                 required
               />
@@ -223,7 +223,7 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
                     type={showNewPassword ? 'text' : 'password'}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full px-3 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
                     placeholder="8+ characters with A-Z, a-z and 0-9"
                     required
                   />
@@ -247,7 +247,7 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
                     type={showConfirmPassword ? 'text' : 'password'}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full px-3 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
                     placeholder="Re-enter your password"
                     required
                   />
@@ -266,7 +266,7 @@ export const FirstLoginSetup: React.FC<FirstLoginSetupProps> = ({ user }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
           >
             {loading ? 'Updating...' : 'Update & Continue'}
           </button>

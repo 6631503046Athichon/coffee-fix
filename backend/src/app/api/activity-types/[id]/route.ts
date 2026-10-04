@@ -54,9 +54,23 @@ export async function PUT(
     if (description !== undefined) updateData.description = description
     if (isActive !== undefined) updateData.isActive = isActive
 
-    const updatedActivityType = await prisma.activityType.update({
-      where: { id },
-      data: updateData,
+    // GAP logs keep a copy of their type's name (activityTypeName), which the
+    // GAP pages show, filter on and look the type up by when a log is edited.
+    // A rename moves every log of this type to the new name in the same
+    // transaction; a stale copy would drop the older logs out of the filters
+    // and make editing them fail with "not found".
+    const updatedActivityType = await prisma.$transaction(async (tx) => {
+      const activityType = await tx.activityType.update({
+        where: { id },
+        data: updateData,
+      })
+      if (name !== undefined) {
+        await tx.gAPLogEntry.updateMany({
+          where: { activityTypeId: id, activityTypeName: { not: activityType.name } },
+          data: { activityTypeName: activityType.name },
+        })
+      }
+      return activityType
     })
 
     return NextResponse.json({ activityType: updatedActivityType })

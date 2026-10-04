@@ -1309,7 +1309,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             // Closed mid-way, a later lot's failure would reopen it (or take
             // over another bucket's popup) with the rest of this withdrawal.
             closeDisabled={withdrawSubmitting}
-            accent="indigoSolid"
+            accent="blueSolid"
             icon={Minus}
             context={[
               {
@@ -1381,7 +1381,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                   className={`block w-full h-[46px] border rounded-xl px-4 text-lg font-bold text-gray-800 focus:outline-none focus:ring-1 transition-all ${
                     isOver
                       ? 'border-red-400 focus:ring-red-500 focus:border-red-500'
-                      : 'border-gray-300 focus:ring-indigo-500 focus:border-indigo-500'
+                      : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
                   }`}
                 />
               </div>
@@ -1396,7 +1396,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                     setWithdrawForm((f) => ({ ...f, purpose: e.target.value }))
                   }
                   placeholder="e.g., Order #123, Sample roast..."
-                  className="block w-full h-[46px] border border-gray-300 rounded-xl px-4 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                  className="block w-full h-[46px] border border-gray-300 rounded-xl px-4 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 />
               </div>
             </div>
@@ -1464,7 +1464,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
               onSubmit={submitWithdraw}
               submitLabel={withdrawSubmitting ? 'Withdrawing...' : 'Save'}
               submitDisabled={withdrawSubmitting || isOver}
-              accent="indigoSolid"
+              accent="blueSolid"
             />
           </Modal>
         )
@@ -1702,7 +1702,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
 // self-contained: one page = one file, no scattered helpers.
 // ─────────────────────────────────────────────────────────────────────
 
-type Accent = 'green' | 'amber' | 'teal' | 'gray' | 'indigoSolid'
+type Accent = 'green' | 'amber' | 'teal' | 'gray' | 'blueSolid'
 
 // Solid Tailwind classes per accent. Inlined as full strings so Tailwind's
 // JIT picks them up (no template-literal class names that the scanner can't
@@ -1767,22 +1767,22 @@ const ACCENT: Record<
     valueText: 'text-gray-900',
     button: 'bg-gray-900',
     buttonHover: 'hover:bg-gray-800',
-    iconBlock: 'bg-gradient-to-br from-gray-700 to-gray-900',
+    iconBlock: 'bg-gray-900',
     iconRing: 'focus:ring-gray-500',
   },
-  // Workbench-style — solid indigo (no gradient) icon block + indigo Save
-  // button. Used for the Withdraw Stock modal so it mirrors the look of
-  // the Workbench's per-GBL Withdraw flow.
-  indigoSolid: {
-    leftBorder: 'border-l-indigo-500',
-    headerBg: 'bg-indigo-50',
-    headerText: 'text-indigo-900',
-    headerLabel: 'text-indigo-700',
-    valueText: 'text-indigo-700',
-    button: 'bg-indigo-600',
-    buttonHover: 'hover:bg-indigo-700',
-    iconBlock: 'bg-indigo-600',
-    iconRing: 'focus:ring-indigo-500',
+  // Workbench-style: solid blue-600 (the primary colour, no gradient) icon
+  // block + blue Save button. Used for the Withdraw Stock modal so it
+  // mirrors the look of the Workbench's per-GBL Withdraw flow.
+  blueSolid: {
+    leftBorder: 'border-l-blue-500',
+    headerBg: 'bg-blue-50',
+    headerText: 'text-blue-900',
+    headerLabel: 'text-blue-700',
+    valueText: 'text-blue-700',
+    button: 'bg-blue-600',
+    buttonHover: 'hover:bg-blue-700',
+    iconBlock: 'bg-blue-600',
+    iconRing: 'focus:ring-blue-500',
   },
 }
 

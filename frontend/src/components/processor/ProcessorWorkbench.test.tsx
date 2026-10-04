@@ -54,11 +54,12 @@ const batch = {
   status: ProcessingBatchStatus.Completed, parchmentWeightKg: 80,
 }
 
-function Harness({ initial, refreshData, onData, roles = [UserRole.Processor], withToasts = false }: {
+function Harness({ initial, refreshData, onData, roles = [UserRole.Processor], isSuperAdmin = false, withToasts = false }: {
   initial: AppData
   refreshData: () => Promise<void>
   onData?: (data: AppData) => void
   roles?: UserRole[]
+  isSuperAdmin?: boolean
   withToasts?: boolean
 }) {
   const [data, setData] = useState(initial)
@@ -66,7 +67,7 @@ function Harness({ initial, refreshData, onData, roles = [UserRole.Processor], w
   return (
     <DataContext.Provider value={{ data, setData, refreshData, isEditing: false, setIsEditing: () => {} }}>
       <ToastProvider>
-        <ProcessorWorkbench currentUser={{ id: 'processor', name: 'Processor', roles }} />
+        <ProcessorWorkbench currentUser={{ id: 'processor', name: 'Processor', roles, isSuperAdmin }} />
         {withToasts && <ToastContainer />}
       </ToastProvider>
     </DataContext.Provider>
@@ -107,6 +108,62 @@ describe('Record Process', { timeout: 20000 }, () => {
     expect(screen.queryByRole('button', { name: 'Record Process' })).not.toBeInTheDocument()
     expect(screen.queryByText('320.00 kg')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
+  })
+
+  // F39: the drying dates (and output and process type) lived on in workbench
+  // state after Cancel, and were saved on the next lot recorded.
+  it('starts the next lot clean after a Cancel instead of saving the cancelled lot\'s dates', async () => {
+    const processTypes: ProcessType[] = ['Natural', 'Washed'].map((name) => ({
+      id: `pt-${name}`, name, createdDate: '2026-09-01', isActive: true,
+      colorScheme: { borderColor: 'border-l-gray-400', iconBg: 'bg-gray-100', iconColor: 'text-gray-600', badgeColor: 'bg-gray-100 text-gray-700 border-gray-200' },
+    }))
+    const other: HarvestLot = { ...lot, id: 'hl-other', displayId: 'HL-2026-45' }
+    vi.mocked(addProcessingBatch).mockResolvedValue({ ...batch, harvestLotId: other.id })
+    render(
+      <Harness
+        initial={{ ...INITIAL_APP_DATA, harvestLots: [lot, other], processTypes }}
+        refreshData={() => new Promise<void>(() => {})}
+      />,
+    )
+    const formOf = () => screen.getByRole('button', { name: 'Save' }).closest('form')!
+    const field = (name: string) => formOf().querySelector<HTMLInputElement>(`[name="${name}"]`)!
+    const pickToday = (label: string) => {
+      const picker = within(formOf()).getByText(label).parentElement as HTMLElement
+      fireEvent.click(within(picker).getAllByRole('button')[0])
+      fireEvent.click(within(picker).getByRole('button', { name: 'Today' }))
+    }
+
+    // Fill in the first lot, then cancel it.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Record Process' })[0])
+    pickToday('Drying Start Date')
+    pickToday('Drying End Date')
+    fireEvent.click(within(formOf()).getByRole('button', { name: 'Washed' }))
+    fireEvent.change(field('parchmentWeightKg'), { target: { value: '80' } })
+    expect(field('dryingStartDate').value).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(field('processType').value).toBe('Washed')
+    fireEvent.click(within(formOf()).getByRole('button', { name: 'Cancel' }))
+
+    // The next lot opens with nothing carried over.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Record Process' })[1])
+    expect(formOf()).toHaveTextContent('Lot #HL-2026-45')
+    expect(field('dryingStartDate').value).toBe('')
+    expect(field('dryingEndDate').value).toBe('')
+    expect(field('parchmentWeightKg').value).toBe('')
+    expect(field('processType').value).toBe('Natural')
+    expect(within(formOf()).getAllByText('Select date')).toHaveLength(2)
+    // F47: flat header icon and the blue primary Save, no gradient.
+    expect(formOf().querySelector('[class*="bg-gradient"]')).toBeNull()
+    expect(within(formOf()).getByRole('button', { name: 'Save' })).toHaveClass('bg-blue-600')
+
+    fireEvent.change(field('parchmentWeightKg'), { target: { value: '70' } })
+    fireEvent.change(field('moistureContent'), { target: { value: '11' } })
+    fireEvent.submit(formOf())
+
+    await waitFor(() => expect(addProcessingBatch).toHaveBeenCalledTimes(1))
+    expect(addProcessingBatch).toHaveBeenCalledWith(expect.objectContaining({
+      harvestLotId: other.id, processType: 'Natural', parchmentWeightKg: 70,
+      dryingStartDate: '', dryingEndDate: '', baggingDate: '',
+    }))
   })
 })
 
@@ -406,6 +463,19 @@ describe('Cherry lot edit and delete', { timeout: 20000 }, () => {
     confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
   afterEach(() => confirmSpy.mockRestore())
+
+  it('gives a super admin the edit and delete controls whatever roles the account lists', () => {
+    // The sidebar and the route let a super admin in as an Admin, and the
+    // backend lets them edit any lot, so the controls must be there too.
+    render(<Harness initial={{ ...INITIAL_APP_DATA, harvestLots: [cherryLot] }} refreshData={async () => {}} roles={[UserRole.Farmer]} isSuperAdmin />)
+    expect(screen.getByRole('button', { name: 'Edit cherry lot HL-2026-44' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete cherry lot HL-2026-44' })).toBeInTheDocument()
+  })
+
+  it('gives no edit or delete controls to a role that may not change cherry lots', () => {
+    render(<Harness initial={{ ...INITIAL_APP_DATA, harvestLots: [cherryLot] }} refreshData={async () => {}} roles={[UserRole.Roaster]} />)
+    expect(screen.queryByRole('button', { name: 'Edit cherry lot HL-2026-44' })).not.toBeInTheDocument()
+  })
 
   it('edits a lot from its card and merges only the edited fields into the stored lot', async () => {
     // The PUT response is thinner than bulk-load (no farm summary here).

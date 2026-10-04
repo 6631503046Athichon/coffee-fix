@@ -45,7 +45,7 @@ export const VOID_REASON_MAX = 500
 
 /** Same limits as the backend's withdrawal schemas. */
 export const WITHDRAWAL_TEXT_LIMITS = {
-  customerName: 100,
+  customerName: 200,
   deliveryAddress: 500,
   invoiceNumber: 50,
 } as const

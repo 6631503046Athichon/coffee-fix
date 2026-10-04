@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Coffee, Lock, CheckCircle, XCircle, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { verifyResetToken, resetPassword } from '../../services/auth/authService';
+import { PASSWORD_MIN_LENGTH, PASSWORD_POLICY_HINT, passwordPolicyProblem } from './passwordPolicy';
 
 const ResetPassword: React.FC = () => {
   const navigate = useNavigate();
@@ -59,9 +60,12 @@ const ResetPassword: React.FC = () => {
     e.preventDefault();
     setError('');
 
-    // Validation
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters');
+    // Validation: the backend's password policy (8+ characters with an
+    // uppercase letter, a lowercase letter and a number), checked here so
+    // the user is told before the request is sent.
+    const policyProblem = passwordPolicyProblem(formData.password);
+    if (policyProblem) {
+      setError(policyProblem);
       return;
     }
 
@@ -193,9 +197,10 @@ const ResetPassword: React.FC = () => {
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                       required
-                      minLength={6}
+                      minLength={PASSWORD_MIN_LENGTH}
+                      aria-describedby="password-policy"
                       className="w-full px-4 pr-12 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition-colors"
-                      placeholder="New password (at least 6 characters)"
+                      placeholder="New password"
                     />
                     <button
                       type="button"
@@ -210,6 +215,9 @@ const ResetPassword: React.FC = () => {
                       )}
                     </button>
                   </div>
+                  <p id="password-policy" className="mt-1 text-xs text-gray-500">
+                    {PASSWORD_POLICY_HINT}
+                  </p>
                 </div>
 
                 <div>
@@ -223,7 +231,7 @@ const ResetPassword: React.FC = () => {
                       value={formData.confirmPassword}
                       onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                       required
-                      minLength={6}
+                      minLength={PASSWORD_MIN_LENGTH}
                       className="w-full px-4 pr-12 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none transition-colors"
                       placeholder="Confirm new password"
                     />

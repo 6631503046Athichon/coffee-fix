@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
 import { farmIdFilter, farmMemberSelect, requireFarmAccess } from '@/lib/farmAccess'
+import { todayDateOnly } from '@/lib/utils'
 
 // GET /api/weather-records - List all weather records
 export async function GET(request: NextRequest) {
@@ -118,7 +119,15 @@ export async function POST(request: NextRequest) {
       )
     }
     const oneDayAhead = new Date(Date.now() + 24 * 60 * 60 * 1000)
-    if (parsedRecordDate < farm.createdAt || parsedRecordDate > oneDayAhead) {
+    // The lower bound compares Thai calendar days, not instants: a record
+    // for the farm's first day is stored at 00:00 UTC (07:00 in Thailand),
+    // which is before a farm created later that same day. A date whose Thai
+    // day cannot be worked out (a year below 1000 makes an invalid day) is
+    // refused rather than let through by a NaN comparison.
+    const recordDay = todayDateOnly(parsedRecordDate).getTime()
+    const beforeFarmExisted =
+      Number.isNaN(recordDay) || recordDay < todayDateOnly(farm.createdAt).getTime()
+    if (beforeFarmExisted || parsedRecordDate > oneDayAhead) {
       return NextResponse.json(
         { error: 'recordDate must be between the farm creation date and one day from now' },
         { status: 400 }

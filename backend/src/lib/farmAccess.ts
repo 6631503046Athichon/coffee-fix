@@ -108,3 +108,42 @@ export function hasStaffRole(user: RoleHolder): boolean {
 export function isFarmerOnly(user: RoleHolder): boolean {
   return user.roles.includes('Farmer') && !hasStaffRole(user)
 }
+
+// The lot chain grown from a harvest lot: its processing batch, the parchment
+// from that batch, and the green beans hulled from the parchment. Staff roles
+// (multi-role included) and Admins work across every farm's chain. A
+// farmer-only user reads only the chain from farms they own or collaborate on,
+// on the list routes and by id, the same rule bulk-load applies. Bought-in
+// parchment and green beans come from no farm, so a farmer never sees them.
+
+/**
+ * The farms whose lot chain `user` may read: their own and shared farms for a
+ * farmer-only user, or null (no limit) for everyone else.
+ */
+export async function chainFarmIds(user: AuthenticatedUser): Promise<string[] | null> {
+  return isFarmerOnly(user) ? memberFarmIds(user) : null
+}
+
+/** Processing batches on cherry from `farmIds`. */
+export const processingBatchesOnFarms = (farmIds: string[]) =>
+  ({ harvestLot: { farmId: { in: farmIds } } }) satisfies Prisma.ProcessingBatchWhereInput
+
+/** Parchment lots from cherry grown on `farmIds`. */
+export const parchmentLotsOnFarms = (farmIds: string[]) =>
+  ({ harvestLot: { farmId: { in: farmIds } } }) satisfies Prisma.ParchmentLotWhereInput
+
+/** Green-bean lots hulled from parchment grown on `farmIds`. */
+export const greenBeanLotsOnFarms = (farmIds: string[]) =>
+  ({ parchmentLot: parchmentLotsOnFarms(farmIds) }) satisfies Prisma.GreenBeanLotWhereInput
+
+/**
+ * Throws a 403 (via handleApiError) when `farmIds`, chainFarmIds' answer,
+ * limits the user and the record was not grown on one of those farms. A
+ * record with no farm on record is refused too.
+ */
+export function requireChainFarm(farmIds: string[] | null, farmId: string | null | undefined): void {
+  if (farmIds === null) return
+  if (!farmId || !farmIds.includes(farmId)) {
+    throw new Error('Insufficient permissions')
+  }
+}

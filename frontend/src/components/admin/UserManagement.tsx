@@ -4,6 +4,7 @@ import { User, UserRole } from '@/types';
 import { Users as UsersIcon, AlertCircle, UserPlus, Edit, Trash2, Shield, Search, Key, X, Filter, ChevronDown, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { getAllUsers, updateUser, deleteUser } from '@/services/auth/userService';
 import { useAuth } from '@/contexts/AuthContext';
+import { isAdminUser } from '@/utils/farmAccess';
 import CreateUserModal from '@/components/admin/modals/CreateUserModal';
 import EditUserModal from '@/components/admin/modals/EditUserModal';
 import TransferOwnershipModal from '@/components/admin/modals/TransferOwnershipModal';
@@ -48,7 +49,7 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({ options, value, onChang
                 onClick={() => setIsOpen(!isOpen)}
                 className={`flex items-center gap-2 pl-3 pr-3 py-2.5 border rounded-xl text-sm transition-all duration-200 cursor-pointer font-medium min-w-[140px] ${
                     isOpen
-                        ? 'border-indigo-500 ring-2 ring-indigo-500 bg-white'
+                        ? 'border-blue-500 ring-2 ring-blue-500 bg-white'
                         : 'border-gray-200 bg-gray-50 hover:bg-white hover:border-gray-300'
                 }`}
             >
@@ -72,14 +73,14 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({ options, value, onChang
                                 }}
                                 className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
                                     value === option.value
-                                        ? 'bg-indigo-50 text-indigo-700 font-medium'
+                                        ? 'bg-blue-50 text-blue-700 font-medium'
                                         : 'text-gray-700 hover:bg-gray-50'
                                 }`}
                             >
                                 {option.icon && <span>{option.icon}</span>}
                                 <span className="flex-1 text-left">{option.label}</span>
                                 {value === option.value && (
-                                    <Check className="h-4 w-4 text-indigo-600" />
+                                    <Check className="h-4 w-4 text-blue-600" />
                                 )}
                             </button>
                         ))}
@@ -97,8 +98,8 @@ const UserManagement: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string>('');
 
-    // Check if user has Admin role
-    const isAdmin = currentUser?.roles?.includes(UserRole.Admin) ?? false;
+    // Admin role, or a super admin whatever roles the account lists
+    const isAdmin = isAdminUser(currentUser);
 
     // Search and filter states
     const [searchTerm, setSearchTerm] = useState('');
@@ -255,7 +256,7 @@ const UserManagement: React.FC = () => {
                 <div className="flex justify-between items-center">
                     <div>
                         <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-                            <UsersIcon className="h-8 w-8 text-indigo-600" />
+                            <UsersIcon className="h-8 w-8 text-blue-600" />
                             User Management
                         </h1>
                         <p className="text-gray-600 mt-2">
@@ -266,7 +267,7 @@ const UserManagement: React.FC = () => {
                         {currentUser?.isSuperAdmin && (
                             <button
                                 onClick={handleTransferOwnership}
-                                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                                className="flex items-center gap-2 px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                             >
                                 <Shield className="h-5 w-5" />
                                 Transfer Ownership
@@ -274,7 +275,7 @@ const UserManagement: React.FC = () => {
                         )}
                         <button
                             onClick={() => setShowCreateModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
                         >
                             <UserPlus className="h-5 w-5" />
                             Create User
@@ -295,7 +296,7 @@ const UserManagement: React.FC = () => {
                             placeholder="Search by name, email, or username..."
                             value={searchTerm}
                             onSearch={setSearchTerm}
-                            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:bg-white focus:outline-none focus:border-indigo-500 transition-all duration-200 placeholder-gray-400"
+                            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:bg-white focus:outline-none focus:border-blue-500 transition-all duration-200 placeholder-gray-400"
                         />
                     </div>
 
@@ -357,17 +358,17 @@ const UserManagement: React.FC = () => {
                                 <span className="text-gray-500">Searching...</span>
                             ) : (
                                 <>
-                                    <span className="font-semibold text-indigo-600">{users.length}</span>
+                                    <span className="font-semibold text-blue-600">{users.length}</span>
                                     <span className="text-gray-500">user{users.length !== 1 ? 's' : ''} found</span>
                                 </>
                             )}
                             {searchTerm && (
-                                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md text-xs font-medium">
+                                <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md text-xs font-medium">
                                     "{searchTerm}"
                                 </span>
                             )}
                             {roleFilter && (
-                                <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-md text-xs font-medium">
+                                <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md text-xs font-medium">
                                     {roleFilter}
                                 </span>
                             )}
@@ -446,7 +447,7 @@ const UserManagement: React.FC = () => {
                                 <tr>
                                     <td colSpan={6} className="px-4 py-12 text-center">
                                         <div role="status" className="flex flex-col items-center gap-3">
-                                            <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                                            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                                             <p className="text-sm text-gray-600">Loading users...</p>
                                         </div>
                                     </td>
@@ -663,7 +664,7 @@ const UserManagement: React.FC = () => {
                                                     setResetPasswordUser(null);
                                                     setNewPassword('');
                                                 }}
-                                                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                                                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
                                             >
                                                 Done
                                             </button>

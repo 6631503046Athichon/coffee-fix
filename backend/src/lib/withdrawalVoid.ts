@@ -91,7 +91,7 @@ export type WithdrawalEdit = {
 }
 
 // Same limits as the withdrawal schemas in lib/validations.
-const TEXT_LIMITS = { customerName: 100, deliveryAddress: 500, invoiceNumber: 50 } as const
+const TEXT_LIMITS = { customerName: 200, deliveryAddress: 500, invoiceNumber: 50 } as const
 
 /**
  * The PATCH body as the columns it changes. null or an empty string clears a

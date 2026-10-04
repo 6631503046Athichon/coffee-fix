@@ -10,6 +10,7 @@ import {
   currencySchema,
   dateStringSchema,
 } from './common';
+import { parseStrictNumber } from '../utils';
 
 // ============================================
 // Green Bean Lot Schemas
@@ -80,6 +81,44 @@ export const updateGreenBeanLotSchema = z.object({
 // Green Bean Withdrawal Schema
 // ============================================
 
+// The sale fields of a withdrawal, shared with createParchmentWithdrawalSchema.
+// The PATCH that corrects them afterwards (lib/withdrawalVoid) applies the
+// same rules and messages.
+
+const SALE_PRICE_MESSAGE = 'Sale price must be a number greater than 0';
+
+/**
+ * A Sale's price per kg: above 0 and to the satang (at most 2 decimals), as a
+ * number or a plain numeric string ("180.25"). "150abc", true and [150] are
+ * refused; empty or null means no price.
+ */
+export const withdrawalSalePriceSchema = z.preprocess(
+  (value) => {
+    if (value === '') return null;
+    if (typeof value === 'string') return parseStrictNumber(value) ?? value;
+    return value;
+  },
+  z.number({ message: SALE_PRICE_MESSAGE })
+    .positive(SALE_PRICE_MESSAGE)
+    .refine(
+      (price) => Math.abs(price * 100 - Math.round(price * 100)) <= 1e-6,
+      'Sale price must have at most 2 decimals'
+    )
+    .nullable()
+);
+
+/** A Sale's currency: one of currencySchema's, in any case; empty means none. */
+export const withdrawalCurrencySchema = z.preprocess(
+  (value) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed === '' ? null : trimmed.toUpperCase();
+  },
+  z.enum(currencySchema.options, {
+    message: `Currency must be one of ${currencySchema.options.join(', ')}`,
+  }).nullable()
+);
+
 export const createWithdrawalSchema = z.object({
   amountKg: positiveWeightSchema,
   withdrawalType: withdrawalTypeSchema,
@@ -88,9 +127,11 @@ export const createWithdrawalSchema = z.object({
   ),
   notes: z.string().max(500).optional().nullable(),
   date: dateStringSchema.optional(),
-  salePrice: positiveNumberSchema.optional().nullable(),
-  currency: currencySchema.optional().nullable(),
-  customerName: z.string().max(100).optional().nullable(),
+  salePrice: withdrawalSalePriceSchema.optional(),
+  currency: withdrawalCurrencySchema.optional(),
+  // The customer picked from the address book: as long as Customer.name
+  // allows (createCustomerSchema in ./sales).
+  customerName: z.string().max(200, 'Customer name must be 200 characters or fewer').optional().nullable(),
   invoiceNumber: z.string().max(50).optional().nullable(),
   deliveryAddress: z.string().max(500).optional().nullable(),
   // For Roasting Stock withdrawals: target roaster to push inventory to

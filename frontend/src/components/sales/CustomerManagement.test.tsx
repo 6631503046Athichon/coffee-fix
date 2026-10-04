@@ -2,6 +2,7 @@ import React from 'react'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { UserRole } from '../../types'
 import type { User } from '../../types'
 import { addCustomer, getAllCustomers } from '../../services/sales/customerService'
 import { getSellableGreenLots, getSellableRoasts } from '../../services/sales/saleOrderService'
@@ -99,5 +100,38 @@ describe('CustomerManagement', { timeout: 20000 }, () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
 
     expect(await screen.findByRole('row', { name: /Green Leaf/ })).toBeInTheDocument()
+  })
+})
+
+describe('CustomerManagement access', { timeout: 20000 }, () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getAllCustomers).mockResolvedValue([aroma])
+  })
+
+  const renderPage = () =>
+    render(
+      <MemoryRouter initialEntries={['/customers']}>
+        <TestDataProvider initial={appData({ customers: [aroma] })}>
+          <CustomerManagement />
+        </TestDataProvider>
+      </MemoryRouter>,
+    )
+
+  it('lets a super admin in whatever roles the account lists, as the sidebar and the API do', async () => {
+    auth.currentUser = { id: 'u-super', name: 'Owner', roles: [UserRole.Farmer], isSuperAdmin: true }
+    renderPage()
+
+    expect(await screen.findByRole('row', { name: /Cafe Aroma/ })).toBeInTheDocument()
+    expect(screen.queryByText('Access Denied')).not.toBeInTheDocument()
+    expect(getAllCustomers).toHaveBeenCalled()
+  })
+
+  it('still turns away a user with neither role', () => {
+    auth.currentUser = { id: 'u-farmer', name: 'Farmer', roles: [UserRole.Farmer] }
+    renderPage()
+
+    expect(screen.getByText('Access Denied')).toBeInTheDocument()
+    expect(getAllCustomers).not.toHaveBeenCalled()
   })
 })

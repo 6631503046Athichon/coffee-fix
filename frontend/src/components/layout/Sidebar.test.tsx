@@ -2,7 +2,7 @@ import React from 'react'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
-import { ClipboardList, Droplets, Flame, Lightbulb, Package, Receipt, Sprout, Users } from 'lucide-react'
+import { ClipboardList, Droplets, Flame, Lightbulb, Package, Receipt, Sprout, Tag, Users } from 'lucide-react'
 import { UserRole } from '../../types'
 import Sidebar from './Sidebar'
 
@@ -81,5 +81,53 @@ describe('Sidebar for multi-role accounts', () => {
   it('a Farmer+Processor sees both sections', () => {
     renderFull([UserRole.Farmer, UserRole.Processor])
     expect(links()).toEqual(['/farmer-dashboard', '/harvest-lots', '/processor', '/insights'])
+  })
+})
+
+// A super admin counts as an Admin whatever roles the account lists, as the
+// backend treats them: the Administration section must not disappear when
+// the account does not also carry the Admin role.
+describe('Sidebar for a super admin', () => {
+  const adminNav = [
+    { name: 'Farmer Dashboard', href: '/farmer-dashboard', icon: Sprout, roles: [UserRole.Farmer, UserRole.Admin], section: 'farmer' },
+    { name: 'Processor Workbench', href: '/processor', icon: Droplets, roles: [UserRole.Processor, UserRole.Admin], section: 'processor' },
+    ...navItems,
+    { name: 'User Management', href: '/users', icon: Users, roles: [UserRole.Admin], section: 'admin' },
+    { name: 'Activity Types', href: '/activity-types', icon: Tag, roles: [UserRole.Admin], section: 'admin' },
+  ]
+
+  const renderAdminNav = (roles: UserRole[], isSuperAdmin?: boolean) =>
+    render(
+      <MemoryRouter>
+        <Sidebar
+          navItems={adminNav}
+          currentUserRoles={roles}
+          isSuperAdmin={isSuperAdmin}
+          isMobileOpen={false}
+          onMobileClose={() => {}}
+        />
+      </MemoryRouter>,
+    )
+
+  it('shows the Administration pages to a super admin without the Admin role', () => {
+    renderAdminNav([UserRole.Processor], true)
+    expect(screen.getByText('Administration')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'User Management' })).toHaveAttribute('href', '/users')
+    expect(screen.getByRole('link', { name: 'Activity Types' })).toBeInTheDocument()
+    // and everything else an Admin sees
+    expect(screen.getByRole('link', { name: 'Farmer Dashboard' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Sales' })).toBeInTheDocument()
+  })
+
+  it('does not narrow a super admin who also roasts to the roaster workspace', () => {
+    renderAdminNav([UserRole.Roaster], true)
+    expect(screen.getByRole('link', { name: 'User Management' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Processor Workbench' })).toBeInTheDocument()
+  })
+
+  it('still hides them from the same roles without super admin', () => {
+    renderAdminNav([UserRole.Processor])
+    expect(screen.queryByText('Administration')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'User Management' })).not.toBeInTheDocument()
   })
 })

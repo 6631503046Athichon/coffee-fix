@@ -1,15 +1,17 @@
 
 
 import React, { useState, useMemo, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
-import { Routes, Route, Navigate, Link } from 'react-router-dom';
+import { Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { Coffee, Droplets, FlaskConical, Trophy, Users, Search, Lightbulb, Database, ClipboardCheck, ClipboardList, Edit, Flame, MapPin, Tag, Package, Box, Bean, Receipt } from 'lucide-react';
 
 import { UserRole, CuppingSessionType, Customer } from './types';
 import { INITIAL_APP_DATA } from './constants';
 import { DataContext, SaleOrdersStatus } from './hooks/useDataContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { ToastProvider, useToast } from './contexts/ToastContext';
+import { ToastProvider, useToast, useToastActions } from './contexts/ToastContext';
 import { connectionManager } from './utils/connectionManager';
+import { createRefreshQueue, RefreshQueue } from './utils/refreshQueue';
+import { isApiError } from './services/apiError';
 import { logger } from './utils/logger';
 import { getDashboardPathByRole } from './utils/routing';
 import { FIRST_LOGIN_SETUP_PATH, needsFirstLoginSetup } from './utils/firstLogin';
@@ -28,6 +30,8 @@ import Login from './components/auth/Login';
 import ForgotPassword from './components/auth/ForgotPassword';
 import ResetPassword from './components/auth/ResetPassword';
 import ProtectedRoute from './components/common/ProtectedRoute';
+import AuthLoadingScreen from './components/auth/AuthLoadingScreen';
+import { loginRedirectState } from './components/auth/loginRedirect';
 
 const FirstLoginSetup = lazy(() =>
   import('./components/auth/FirstLoginSetup').then(module => ({ default: module.FirstLoginSetup }))
@@ -81,14 +85,7 @@ const RootRedirect: React.FC = () => {
 
   if (isAuthLoading) {
     // Show loading state while checking authentication
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
+    return <AuthLoadingScreen />;
   }
 
   if (isAuthenticated && currentUser) {
@@ -171,12 +168,55 @@ const ConnectionToastListener: React.FC = () => {
   return null;
 };
 
+// How long a reload request waits so requests made right after it (a save
+// that refreshes twice, several quick saves) share one reload.
+const REFRESH_MERGE_WINDOW_MS = 300;
+
+// The longest wait before retrying a reload the backend rate-limited.
+const MAX_RATE_LIMIT_RETRY_SEC = 60;
+
+/** Seconds the backend asked to wait (its 429 body carries retryAfter). */
+const retryAfterSeconds = (data: unknown): number => {
+  const value = Number((data as { retryAfter?: unknown } | null)?.retryAfter);
+  if (!Number.isFinite(value) || value <= 0) return 30;
+  return Math.min(Math.ceil(value), MAX_RATE_LIMIT_RETRY_SEC);
+};
+
+// Shown for an address no page answers to, inside the signed-in layout. An
+// app-level catch-all can never match one: "/*" takes every path.
+const NotFoundPage: React.FC = () => (
+  <div className="min-h-[16rem] flex items-center justify-center">
+    <div className="text-center">
+      <h1 className="text-3xl font-bold text-gray-900 mb-2">404</h1>
+      <p className="text-gray-600 mb-4">Page not found</p>
+      <Link
+        to="/"
+        className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+      >
+        Go to your dashboard
+      </Link>
+    </div>
+  </div>
+);
+
 // Protected routes component
 const ProtectedRoutes: React.FC = () => {
   const { isAuthenticated, isAuthLoading, currentUser } = useAuth();
+  // Actions only: the toast list would re-render every page on each toast.
+  const { addToast } = useToastActions();
+  const location = useLocation();
   const [data, setData] = useState(INITIAL_APP_DATA);
   const [isEditing, setIsEditingState] = useState(false);
   const isEditingRef = useRef(false);
+
+  // Set once a signed-in user has been seen here. A sign-out (Logout or a
+  // 401) re-renders this on the page being left, before the router reaches
+  // /login; that page must not be remembered for the login page, or the next
+  // person to sign in on this browser lands on it.
+  const [wasSignedIn, setWasSignedIn] = useState(isAuthenticated);
+  if (isAuthenticated && !wasSignedIn) {
+    setWasSignedIn(true);
+  }
 
   // Function to set editing state - pauses auto-refresh while editing
   const setIsEditing = useCallback((editing: boolean) => {
@@ -309,14 +349,84 @@ const ProtectedRoutes: React.FC = () => {
       lastVersionsRef.current = {};
       setSaleOrdersStatus((s) => (s === 'ok' ? 'ok' : 'failed'));
       console.error('Failed to load data from backend:', error);
-      // Fallback to INITIAL_APP_DATA if API fails
+      // The rows already shown stay; runRefresh tells the user they may be
+      // out of date.
+      throw error;
     }
   }, [mergeArrays]);
 
-  // Refresh data function - can be called from any component
-  const refreshData = useCallback(async () => {
-    await loadDataFromBackend();
-  }, [loadDataFromBackend]);
+  // Every reload goes through one queue (utils/refreshQueue): one at a time,
+  // bursts merged. A reload is two rate-limited bulk-load calls, and saves,
+  // events, the auto-refresh and reconnects used to start their own.
+  const refreshQueueRef = useRef<RefreshQueue | null>(null);
+  const rateLimitRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const requestRefresh = useCallback(
+    (options?: { immediate?: boolean }) => refreshQueueRef.current?.request(options) ?? Promise.resolve(),
+    [],
+  );
+
+  // A failed reload used to leave the screen stale without a word.
+  const reportRefreshFailure = useCallback((error: unknown) => {
+    // Session expired: the auth:logout handler takes the user to login.
+    if (isApiError(error) && error.status === 401) return;
+    // Backend unreachable: ConnectionToastListener already says so, and the
+    // reconnect reloads.
+    if (!connectionManager.isConnected()) return;
+
+    if (isApiError(error) && error.status === 429) {
+      const waitSec = retryAfterSeconds(error.data);
+      if (!rateLimitRetryRef.current) {
+        rateLimitRetryRef.current = setTimeout(() => {
+          rateLimitRetryRef.current = null;
+          void requestRefresh({ immediate: true });
+        }, waitSec * 1000);
+      }
+      addToast({
+        type: 'warning',
+        message: `Too many refreshes in a short time. The data will refresh again in ${waitSec} second${waitSec === 1 ? '' : 's'}.`,
+        duration: 8000,
+      });
+      return;
+    }
+
+    addToast({
+      type: 'error',
+      message: 'Could not refresh the data. What you see may be out of date.',
+      duration: 8000,
+    });
+  }, [addToast, requestRefresh]);
+
+  const runRefresh = useCallback(async () => {
+    try {
+      await loadDataFromBackend();
+      // A reload went through, so a rate-limit retry still waiting would
+      // only spend two more bulk-load calls of the per-minute budget.
+      if (rateLimitRetryRef.current) {
+        clearTimeout(rateLimitRetryRef.current);
+        rateLimitRetryRef.current = null;
+      }
+    } catch (error) {
+      reportRefreshFailure(error);
+    }
+  }, [loadDataFromBackend, reportRefreshFailure]);
+
+  useEffect(() => {
+    const queue = createRefreshQueue(runRefresh, REFRESH_MERGE_WINDOW_MS);
+    refreshQueueRef.current = queue;
+    return () => {
+      queue.dispose();
+      if (refreshQueueRef.current === queue) refreshQueueRef.current = null;
+      if (rateLimitRetryRef.current) {
+        clearTimeout(rateLimitRetryRef.current);
+        rateLimitRetryRef.current = null;
+      }
+    };
+  }, [runRefresh]);
+
+  // Refresh data function - can be called from any component. Resolves once
+  // a reload started after the call has finished; never rejects.
+  const refreshData = useCallback(() => requestRefresh(), [requestRefresh]);
 
   // Weather auto-fetch now runs entirely on the backend (see
   // backend/src/lib/weatherScheduler.ts, started from instrumentation.ts).
@@ -338,9 +448,9 @@ const ProtectedRoutes: React.FC = () => {
       clearTimeout(refreshTimerRef.current);
     }
     refreshTimerRef.current = setTimeout(() => {
-      loadDataFromBackend();
+      void requestRefresh({ immediate: true });
     }, 2000);
-  }, [loadDataFromBackend]);
+  }, [requestRefresh]);
 
   // Load data from backend API on mount
   useEffect(() => {
@@ -350,7 +460,7 @@ const ProtectedRoutes: React.FC = () => {
     }
 
     // Initial load
-    loadDataFromBackend();
+    void requestRefresh({ immediate: true });
 
     // Auto-refresh every 2 minutes with smart change detection
     // First checks /api/data-version for changes, only reloads if data actually changed
@@ -366,7 +476,7 @@ const ProtectedRoutes: React.FC = () => {
             versions[key] !== lastVersionsRef.current[key]
         );
         if (hasChanges) {
-          await loadDataFromBackend();
+          await requestRefresh({ immediate: true });
         }
       } catch {
         // If version check fails, skip this refresh cycle
@@ -406,7 +516,7 @@ const ProtectedRoutes: React.FC = () => {
       window.removeEventListener('localStorageUpdate', handleCustomStorageUpdate);
       window.removeEventListener('dataRefresh', handleDataRefresh);
     };
-  }, [isAuthenticated, isAuthLoading, loadDataFromBackend, debouncedRefresh]);
+  }, [isAuthenticated, isAuthLoading, requestRefresh, debouncedRefresh]);
 
   // Connection recovery: auto-refresh when backend reconnects
   // Recovery polling is started/stopped internally by connectionManager.reportFailure()/reportSuccess()
@@ -414,7 +524,7 @@ const ProtectedRoutes: React.FC = () => {
     if (!isAuthenticated || isAuthLoading) return;
 
     const handleReconnected = () => {
-      loadDataFromBackend();
+      void requestRefresh({ immediate: true });
     };
 
     window.addEventListener('backend:connected', handleReconnected);
@@ -423,7 +533,7 @@ const ProtectedRoutes: React.FC = () => {
       connectionManager.stopRecoveryPolling();
       window.removeEventListener('backend:connected', handleReconnected);
     };
-  }, [isAuthenticated, isAuthLoading, loadDataFromBackend]);
+  }, [isAuthenticated, isAuthLoading, requestRefresh]);
 
   const contextValue = useMemo(
     () => ({ data, setData, refreshData, setIsEditing, isEditing, saleOrdersStatus }),
@@ -492,19 +602,21 @@ const ProtectedRoutes: React.FC = () => {
   }, [currentUser, data.cuppingSessions]);
 
   if (isAuthLoading) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
+    return <AuthLoadingScreen />;
   }
 
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    // Remember the page so the login page can come back to it (a deep link
+    // survives a slow session check on a cold start, or opening it signed out).
+    // Not after a sign-out here: see wasSignedIn.
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={wasSignedIn ? undefined : loginRedirectState(location)}
+      />
+    );
   }
 
   return (
@@ -513,6 +625,7 @@ const ProtectedRoutes: React.FC = () => {
         <Sidebar
           navItems={navItems}
           currentUserRoles={currentUser?.roles || [UserRole.Farmer]}
+          isSuperAdmin={!!currentUser?.isSuperAdmin}
           isMobileOpen={isMobileNavOpen}
           onMobileClose={closeMobileNav}
         />
@@ -708,6 +821,8 @@ const ProtectedRoutes: React.FC = () => {
                   </ProtectedRoute>
                 }
               />
+              {/* Any other address: a 404 inside the app, with a way home */}
+              <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </main>
         </div>
@@ -737,20 +852,9 @@ const App: React.FC = () => {
           />
           {/* Root route - redirect to login if not authenticated */}
           <Route path="/" element={<RootRedirect />} />
-          {/* Protected Routes - requires authentication */}
+          {/* Protected Routes - requires authentication. Unknown addresses
+              land here too and get ProtectedRoutes' 404 (NotFoundPage). */}
           <Route path="/*" element={<RequireFirstLoginDone><ProtectedRoutes /></RequireFirstLoginDone>} />
-          {/* 404 Fallback */}
-          <Route path="*" element={
-            <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-              <div className="text-center">
-                <h1 className="text-4xl font-bold text-gray-900 mb-4">404</h1>
-                <p className="text-gray-600 mb-6">Page not found</p>
-                <Link to="/login" className="text-blue-600 hover:text-blue-700">
-                  Go to Login
-                </Link>
-              </div>
-            </div>
-          } />
         </Routes>
       </ToastProvider>
     </AuthProvider>

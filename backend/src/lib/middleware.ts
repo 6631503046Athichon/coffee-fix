@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyToken, extractToken } from './auth'
+import { verifyToken, extractToken, generateToken } from './auth'
+import { AUTH_COOKIE_NAME, authCookieOptions } from './authCookie'
 import prisma from './prisma'
 
 export interface AuthenticatedUser {
@@ -21,13 +22,23 @@ export interface AuthenticatedUser {
 // account disabled keeps the run of the app for up to TTL seconds after the
 // admin's change — i.e. revocation latency. 10s is the smallest window that
 // still meaningfully reduces DB load.
+//
+// Each entry also keeps the user's passwordChangedAt, so a token issued before
+// the last password change is refused on a cache hit too. The instance that
+// saves a new password drops the entry (forgetCachedAuth); another instance
+// may keep its older copy for up to the TTL, the same latency as above.
 const AUTH_CACHE_TTL = 10 * 1000
-const authCache = new Map<string, { user: AuthenticatedUser; expiresAt: number }>()
+interface CachedAuth {
+  user: AuthenticatedUser
+  passwordChangedAt: Date | null
+  expiresAt: number
+}
+const authCache = new Map<string, CachedAuth>()
 
-function getCachedUser(userId: string): AuthenticatedUser | null {
+function getCachedAuth(userId: string): CachedAuth | null {
   const cached = authCache.get(userId)
   if (cached && cached.expiresAt > Date.now()) {
-    return cached.user
+    return cached
   }
   if (cached) {
     authCache.delete(userId)
@@ -35,13 +46,54 @@ function getCachedUser(userId: string): AuthenticatedUser | null {
   return null
 }
 
-function setCachedUser(userId: string, user: AuthenticatedUser): void {
+function setCachedAuth(userId: string, user: AuthenticatedUser, passwordChangedAt: Date | null): void {
   // Limit cache size to prevent memory leaks
   if (authCache.size > 1000) {
     const firstKey = authCache.keys().next().value
     if (firstKey) authCache.delete(firstKey)
   }
-  authCache.set(userId, { user, expiresAt: Date.now() + AUTH_CACHE_TTL })
+  authCache.set(userId, { user, passwordChangedAt, expiresAt: Date.now() + AUTH_CACHE_TTL })
+}
+
+/**
+ * Drop a user's cached auth row. Call it after saving a new password, so this
+ * instance re-reads passwordChangedAt on the next request instead of letting
+ * an older token through on the cached copy.
+ */
+export function forgetCachedAuth(userId: string): void {
+  authCache.delete(userId)
+}
+
+/**
+ * True when the token was issued before the user's last password change, so
+ * the session it carries is revoked. A JWT's iat is in whole seconds, so the
+ * change time is compared in whole seconds too: the token handed out in the
+ * same second as the change (refreshSessionCookie) stays valid.
+ */
+export function isTokenRevoked(issuedAt: number | undefined, passwordChangedAt: Date | null | undefined): boolean {
+  if (!passwordChangedAt) return false
+  if (typeof issuedAt !== 'number') return true
+  return issuedAt < Math.floor(passwordChangedAt.getTime() / 1000)
+}
+
+/**
+ * Give the session that just changed its own password a fresh token, so the
+ * passwordChangedAt check that signs out every older session keeps this one
+ * signed in. Same claims and cookie as login.
+ */
+export function refreshSessionCookie(
+  response: NextResponse,
+  user: { id: string; email: string | null; username: string | null; roles: string[] },
+): NextResponse {
+  const token = generateToken({
+    userId: user.id,
+    email: user.email || undefined,
+    username: user.username || undefined,
+    roles: user.roles,
+  })
+  // 1 day to match the JWT's 24h expiry, as login sets it.
+  response.cookies.set(AUTH_COOKIE_NAME, token, authCookieOptions(60 * 60 * 24))
+  return response
 }
 
 export interface RequireAuthOptions {
@@ -74,11 +126,15 @@ export async function requireAuth(
 
   // Verify token
   const payload = verifyToken(token)
+  const issuedAt = (payload as { iat?: number }).iat
 
   // Check cache first. Only accounts with setup done are ever cached.
-  const cachedUser = getCachedUser(payload.userId)
-  if (cachedUser) {
-    return cachedUser
+  const cached = getCachedAuth(payload.userId)
+  if (cached) {
+    if (isTokenRevoked(issuedAt, cached.passwordChangedAt)) {
+      throw new Error('Invalid or expired token')
+    }
+    return cached.user
   }
 
   // Get user from database (only on cache miss)
@@ -95,6 +151,7 @@ export async function requireAuth(
       mustChangePassword: true,
       mustChangeUsername: true,
       mustChangeEmail: true,
+      passwordChangedAt: true,
     },
   })
 
@@ -102,7 +159,14 @@ export async function requireAuth(
     throw new Error('User not found or inactive')
   }
 
-  const { mustChangePassword, mustChangeUsername, mustChangeEmail, ...user } = row
+  const { mustChangePassword, mustChangeUsername, mustChangeEmail, passwordChangedAt, ...user } = row
+
+  // A password change signs out every session started before it: a stolen
+  // cookie stops working once the password is changed (audit F30).
+  if (isTokenRevoked(issuedAt, passwordChangedAt)) {
+    throw new Error('Invalid or expired token')
+  }
+
   if (mustChangePassword || mustChangeUsername || mustChangeEmail) {
     // Not cached: the request after setup is saved must see the cleared
     // flags at once, on whichever instance serves it.
@@ -113,7 +177,7 @@ export async function requireAuth(
   }
 
   // Cache the result
-  setCachedUser(user.id, user)
+  setCachedAuth(user.id, user, passwordChangedAt ?? null)
 
   return user
 }
@@ -248,7 +312,25 @@ export function handleApiError(error: unknown): NextResponse {
     return errorResponse('User not found or inactive', 401)
   }
 
-  // Generic error
-  return errorResponse(err.message || 'Internal server error', err.statusCode || 500)
+  // An error a route throws on purpose carries a 4xx statusCode, and its
+  // message is written for the client.
+  if (
+    typeof err.statusCode === 'number' &&
+    err.statusCode >= 400 &&
+    err.statusCode < 500 &&
+    err.message
+  ) {
+    return errorResponse(err.message, err.statusCode)
+  }
+
+  // Anything else is unexpected. Its text can hold Prisma query details,
+  // table and column names or config hints, so it stays in the server log
+  // (above) and the client gets a generic message (audit F28).
+  //
+  // A bare SyntaxError lands here too: it may come from request.json(), but
+  // just as well from JSON.parse on stored data in a GET, which is a server
+  // fault, not a bad request. A route that answers 400 for a body that is
+  // not JSON catches request.json() itself (validateBody, readJsonObjectBody).
+  return errorResponse('Internal server error', 500)
 }
 

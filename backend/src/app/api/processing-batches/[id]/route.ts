@@ -12,6 +12,7 @@ import {
   reweighLot,
   type ReweighResult,
 } from '@/lib/lotCorrections'
+import { chainFarmIds, requireChainFarm } from '@/lib/farmAccess'
 
 // GET /api/processing-batches/:id
 export async function GET(
@@ -20,7 +21,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params
-    await requireAuth(request)
+    const user = await requireAuth(request)
 
     const processingBatch = await prisma.processingBatch.findUnique({
       where: { id },
@@ -55,6 +56,10 @@ export async function GET(
         { status: 404 }
       )
     }
+
+    // A farmer-only user opens only batches on their own and shared farms'
+    // cherry, as on the list (lib/farmAccess).
+    requireChainFarm(await chainFarmIds(user), processingBatch.harvestLot.farmId)
 
     return NextResponse.json({ processingBatch })
   } catch (error) {

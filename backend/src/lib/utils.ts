@@ -110,9 +110,19 @@ export function todayDateOnly(now: Date = new Date()): Date {
 }
 
 /**
+ * The current year in the business timezone. On a UTC server,
+ * new Date().getFullYear() is still last year on 1 January until 07:00
+ * Thai time.
+ */
+export function businessYear(now: Date = new Date()): number {
+  return todayDateOnly(now).getUTCFullYear()
+}
+
+/**
  * Generate the next sequential displayId for a given prefix.
  * Format: {PREFIX}-{YEAR}-{NUMBER} e.g. HL-2026-1, PB-2026-2
- * Queries the table for the highest existing number in the current year.
+ * Queries the table for the highest existing number in the current year
+ * (Thai time, see businessYear).
  *
  * NOTE: This read-then-compute is racy on its own — two concurrent callers
  * compute the same `maxNum + 1`. The Prisma schema marks `displayId` as
@@ -134,8 +144,7 @@ export async function nextDisplayId(
   model: { findMany: (args: any) => Promise<any[]> },
   prefix: string
 ): Promise<string> {
-  const year = new Date().getFullYear()
-  const yearPrefix = `${prefix}-${year}-`
+  const yearPrefix = `${prefix}-${businessYear()}-`
 
   const items = await model.findMany({
     where: {
@@ -171,8 +180,7 @@ export async function nextDisplayIds(
   count: number,
 ): Promise<string[]> {
   if (count <= 0) return []
-  const year = new Date().getFullYear()
-  const yearPrefix = `${prefix}-${year}-`
+  const yearPrefix = `${prefix}-${businessYear()}-`
 
   const items = await model.findMany({
     where: { displayId: { startsWith: yearPrefix } },

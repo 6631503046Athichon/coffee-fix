@@ -18,6 +18,11 @@ interface UseFormPersistReturn<T> {
   setValue: <K extends keyof T>(key: K, value: T[K]) => void;
   /** Update multiple fields at once */
   setValues: (newValues: Partial<T>) => void;
+  /**
+   * Fill in defaults the form picks by itself (current year, first variety).
+   * Not a user change: it neither marks the form dirty nor saves a draft.
+   */
+  setDefaults: (newValues: Partial<T>) => void;
   /** Reset form to initial values and clear storage */
   resetForm: () => void;
   /** Clear saved data from storage (call after successful submit) */
@@ -26,6 +31,38 @@ interface UseFormPersistReturn<T> {
   isDirty: boolean;
   /** Whether data was restored from storage */
   wasRestored: boolean;
+}
+
+const STORAGE_PREFIX = 'form-persist-';
+
+/**
+ * Remove every saved form draft from this browser. Call on logout so the
+ * next person to sign in here never sees, or inherits, someone else's draft.
+ */
+export function clearFormDrafts(): void {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(STORAGE_PREFIX)) keys.push(key);
+    }
+    keys.forEach(key => localStorage.removeItem(key));
+  } catch (e) {
+    console.warn('[useFormPersist] Failed to clear saved drafts:', e);
+  }
+}
+
+function loadSaved<T>(fullKey: string, initialValues: T): { values: T; restored: boolean } {
+  try {
+    const saved = localStorage.getItem(fullKey);
+    if (saved) {
+      // Merge with initial values to handle new fields
+      return { values: { ...initialValues, ...JSON.parse(saved) }, restored: true };
+    }
+  } catch (e) {
+    console.warn(`[useFormPersist] Failed to load saved data for ${fullKey}:`, e);
+  }
+  return { values: initialValues, restored: false };
 }
 
 /**
@@ -52,32 +89,25 @@ export function useFormPersist<T extends Record<string, any>>({
   warnOnLeave = true,
   debounceMs = 500,
 }: UseFormPersistOptions<T>): UseFormPersistReturn<T> {
-  const fullKey = `form-persist-${storageKey}`;
+  const fullKey = `${STORAGE_PREFIX}${storageKey}`;
 
   // Try to load saved data on initial render
-  const [values, setValuesState] = useState<T>(() => {
-    try {
-      const saved = localStorage.getItem(fullKey);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Merge with initial values to handle new fields
-        return { ...initialValues, ...parsed };
-      }
-    } catch (e) {
-      console.warn(`[useFormPersist] Failed to load saved data for ${storageKey}:`, e);
-    }
-    return initialValues;
-  });
+  const [values, setValuesState] = useState<T>(() => loadSaved(fullKey, initialValues).values);
 
-  const [wasRestored, setWasRestored] = useState(() => {
-    try {
-      return localStorage.getItem(fullKey) !== null;
-    } catch {
-      return false;
-    }
-  });
+  const [wasRestored, setWasRestored] = useState(() => loadSaved(fullKey, initialValues).restored);
 
   const [isDirty, setIsDirty] = useState(false);
+
+  // A new key (another signed-in user) loads that key's own draft instead of
+  // carrying the previous one's values over and saving them under it.
+  const [loadedKey, setLoadedKey] = useState(fullKey);
+  if (loadedKey !== fullKey) {
+    const saved = loadSaved(fullKey, initialValues);
+    setLoadedKey(fullKey);
+    setValuesState(saved.values);
+    setWasRestored(saved.restored);
+    setIsDirty(false);
+  }
 
   // Debounced save to localStorage
   useEffect(() => {
@@ -118,6 +148,10 @@ export function useFormPersist<T extends Record<string, any>>({
     setIsDirty(true);
   }, []);
 
+  const setDefaults = useCallback((newValues: Partial<T>) => {
+    setValuesState(prev => ({ ...prev, ...newValues }));
+  }, []);
+
   const resetForm = useCallback(() => {
     setValuesState(initialValues);
     setIsDirty(false);
@@ -143,6 +177,7 @@ export function useFormPersist<T extends Record<string, any>>({
     values,
     setValue,
     setValues,
+    setDefaults,
     resetForm,
     clearSavedData,
     isDirty,

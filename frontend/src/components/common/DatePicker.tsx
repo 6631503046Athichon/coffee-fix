@@ -227,7 +227,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
                         user jump straight to the month or year picker.
                         Prev/next arrows step by the unit of the current
                         view (month / year / decade). */}
-                    <div className="flex items-center justify-between px-3 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-100">
+                    <div className="flex items-center justify-between px-3 py-2.5 bg-gray-50 border-b border-gray-100">
                         <button
                             type="button"
                             onClick={(e) => {
@@ -348,7 +348,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
                                             className={`
                                                 aspect-square flex items-center justify-center rounded-lg text-sm font-semibold transition-all duration-150 min-w-[34px] min-h-[34px] w-full
                                                 ${isSelectedDay
-                                                    ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-200 scale-105'
+                                                    ? 'bg-blue-600 text-white shadow-sm scale-105'
                                                     : isTodayDay
                                                         ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-300 font-bold'
                                                         : isWeekend
@@ -393,7 +393,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
                                             className={`
                                                 py-3 rounded-lg text-sm font-semibold transition-all
                                                 ${isSelectedMonth
-                                                    ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-200'
+                                                    ? 'bg-blue-600 text-white shadow-sm'
                                                     : isThisMonth
                                                         ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-300 font-bold'
                                                         : isCurrentMonth
@@ -433,7 +433,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
                                             className={`
                                                 py-3 rounded-lg text-sm font-semibold transition-all
                                                 ${isSelectedYear
-                                                    ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-200'
+                                                    ? 'bg-blue-600 text-white shadow-sm'
                                                     : isThisYear
                                                         ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-300 font-bold'
                                                         : isCurrentYear

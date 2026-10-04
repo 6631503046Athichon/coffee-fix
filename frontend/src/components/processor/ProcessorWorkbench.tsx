@@ -100,9 +100,6 @@ import {
   formatProcessingBatchId,
   formatHarvestLotId,
 } from "../../utils/formatDisplayId";
-import StartProcessingModal from "./modals/StartProcessingModal";
-import HullAndGradeModal from "./modals/HullAndGradeModal";
-import CompleteBatchModal from "./modals/CompleteBatchModal";
 import SetPriceModal from "./modals/SetPriceModal";
 import EditHarvestLotModal from "./modals/EditHarvestLotModal";
 import EditProcessingBatchModal from "./modals/EditProcessingBatchModal";
@@ -140,8 +137,6 @@ import {
   processTypeKey,
   GradeDropdown,
   CropYearChips,
-  KanbanCard,
-  KanbanColumn,
   Pagination,
   ExportCsvButton,
   GradePriceInput,
@@ -163,7 +158,7 @@ import type {
   ScoreInput,
   WithdrawalType,
 } from "./workbench";
-import { canManageGreenBeanLot } from "./workbench/stockAccess";
+import { canManageGreenBeanLot, isAdminViewer } from "./workbench/stockAccess";
 import { canManageParchmentLot } from "./workbench/recordAccess";
 import {
   useParchmentWithdrawalHistory,
@@ -199,13 +194,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const { data, setData, refreshData } = useDataContext();
   const { addToast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>("kanban");
-  const isAdmin = currentUser.roles?.includes(UserRole.Admin);
+  // A super admin counts as an Admin whatever roles the account lists.
+  const isAdmin = isAdminViewer(currentUser);
   // Processors may correct or remove a farmer's cherry lot until it is
   // processed; the backend enforces the "unprocessed only" rule.
   const canManageCherryLots =
-    currentUser.roles?.some(
-      (role) => role === UserRole.Processor || role === UserRole.Admin,
-    ) ?? false;
+    isAdmin || (currentUser.roles?.includes(UserRole.Processor) ?? false);
   // Withdraw, Set price, QC Score and the Available/Withdrawn switch only
   // where the backend allows them: the lot's creator or an Admin. Another
   // processor's lot (or a roaster's) is still listed, without those
@@ -412,7 +406,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   // Crop Year Selection State
   const [cropYearId, setCropYearId] = useState<string>("");
 
-  // Date States for Complete Batch Modal
+  // Record Process drying dates
   const [dryingStartDate, setDryingStartDate] = useState("");
   const [dryingEndDate, setDryingEndDate] = useState("");
 
@@ -1440,10 +1434,26 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     }
   };
 
+  // Record Process keeps its values in workbench state, so a cancelled lot's
+  // drying dates, output or process type would otherwise be saved on the next
+  // lot. Cleared whenever the popup opens and when it is cancelled.
+  const resetRecordProcessForm = () => {
+    setParchmentWeightInput('');
+    setDryingStartDate("");
+    setDryingEndDate("");
+    setSelectedProcessType(
+      defaultProcessTypeName(
+        data.processTypes,
+        data.processTypes.length === 0 ? EMPTY_LIST_PROCESS_TYPE : undefined,
+      ),
+    );
+  };
+
   const openModal = (type: string, item: any) => {
     if (type === "startProcessing") {
       setSelectedHarvestLot(item);
-      setParchmentWeightInput('');
+      resetRecordProcessForm();
+      setFormError(null);
       // Auto-select crop year from harvest lot if available, otherwise default to current
       if (item?.cropYearId) {
         setCropYearId(item.cropYearId);
@@ -3460,7 +3470,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         <ModalPortal>
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div
-              className={`bg-white rounded-2xl shadow-2xl w-full ${modal === "completeBatch" ? "max-w-4xl" : "max-w-2xl"} max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col`}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col"
             >
               <form
                 onSubmit={handleSubmit}
@@ -3492,7 +3502,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     {/* Compact Header */}
                     <div className="flex items-center justify-between mb-5">
                       <div className="flex items-center gap-3">
-                        <div className="p-2.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-md">
+                        <div className="p-2.5 bg-blue-600 rounded-xl shadow-md">
                           <PlayCircle className="h-6 w-6 text-white" />
                         </div>
                         <div>
@@ -3654,7 +3664,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         {/* Compact Header */}
                         <div className="flex items-center justify-between mb-5">
                           <div className="flex items-center gap-3">
-                            <div className="p-2.5 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl shadow-md">
+                            <div className="p-2.5 bg-amber-600 rounded-xl shadow-md">
                               <PackageCheck className="h-6 w-6 text-white" />
                             </div>
                             <div>
@@ -3878,7 +3888,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     {/* Compact Header */}
                     <div className="flex items-center justify-between mb-5">
                       <div className="flex items-center gap-3">
-                        <div className="p-2.5 bg-indigo-600 rounded-xl shadow-md">
+                        <div className="p-2.5 bg-blue-600 rounded-xl shadow-md">
                           <Minus className="h-6 w-6 text-white" />
                         </div>
                         <div>
@@ -3972,7 +3982,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           value={withdrawalAmount}
                           onChange={(e) => setWithdrawalAmount(e.target.value)}
                           placeholder="0.0"
-                          className="block w-full h-[46px] border border-gray-300 rounded-xl px-4 text-lg font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                          className="block w-full h-[46px] border border-gray-300 rounded-xl px-4 text-lg font-bold text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
                         />
                       </div>
                       <div className="col-span-3">
@@ -3983,7 +3993,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           type="text"
                           name="purpose"
                           placeholder="e.g., Order #123, Sample roast..."
-                          className="block w-full h-[46px] border border-gray-300 rounded-xl px-4 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                          className="block w-full h-[46px] border border-gray-300 rounded-xl px-4 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all"
                         />
                       </div>
                     </div>
@@ -4046,6 +4056,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       setFormError(null);
                       setSelectedHarvestLot(null);
                       setCropYearId("");
+                      if (modal === "startProcessing") {
+                        resetRecordProcessForm();
+                      }
                       if (modal === "hullAndGrade") {
                         resetHullAndGradeForm();
                       }
@@ -4057,7 +4070,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   </button>
                   <button
                     type="submit"
-                    className="inline-flex items-center justify-center gap-2 px-6 py-2.5 border border-transparent shadow-lg text-sm font-semibold rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed transition-all"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-2.5 border border-transparent shadow-sm text-sm font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed transition-all"
                     disabled={
                       isSubmitting ||
                       (modal === "hullAndGrade" &&

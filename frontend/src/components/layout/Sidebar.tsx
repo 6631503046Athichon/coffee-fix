@@ -31,6 +31,8 @@ interface NavSection {
 interface SidebarProps {
   navItems: NavItem[]
   currentUserRoles: UserRole[]
+  /** A super admin counts as an Admin whatever roles the account lists. */
+  isSuperAdmin?: boolean
   /** Mobile drawer state. The toggle lives in the Header so it sits in the
    *  header row instead of floating over it. */
   isMobileOpen: boolean
@@ -61,11 +63,13 @@ const ROASTER_ONLY_HREFS = ['/roaster', '/roast-logbook', '/sales', '/customers'
 const Sidebar: React.FC<SidebarProps> = ({
   navItems,
   currentUserRoles,
+  isSuperAdmin = false,
   isMobileOpen,
   onMobileClose,
 }) => {
   const normalizedRoles = currentUserRoles.map((role) => String(role).trim().toLowerCase())
-  const hasRole = (role: UserRole) => normalizedRoles.includes(String(role).toLowerCase())
+  const hasRole = (role: UserRole) =>
+    normalizedRoles.includes(String(role).toLowerCase()) || (isSuperAdmin && role === UserRole.Admin)
   const focusRoasterWorkspace = hasRole(UserRole.Roaster) && !hasRole(UserRole.Admin)
 
   // Filter nav items: show if user has ANY of the required roles.
@@ -87,9 +91,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   // Group items by section
   const groupedItems = SECTIONS.map((section) => {
     const items = filteredNavItems.filter((item) => item.section === section.id)
-    const hasAccess = section.roles.some((role) =>
-      normalizedRoles.includes(String(role).toLowerCase()),
-    )
+    const hasAccess = section.roles.some(hasRole)
     return { section, items, hasAccess }
   }).filter((group) => group.items.length > 0 && group.hasAccess)
 

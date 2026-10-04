@@ -55,6 +55,9 @@ const roaster = user('roaster-1', ['Roaster'])
 const cupper = user('cupper-1', ['Cupper'])
 const headJudge = user('judge-1', ['HeadJudge'])
 const farmer = user('farmer-1', ['Farmer'])
+// The farmer's farm, which every lot below was grown on: a farmer-only user
+// opens only their own farms' lot chain by id (lib/farmAccess).
+const FARMER_FARM = 'farm-1'
 const admin = user('admin-1', ['Admin'])
 const superAdmin = user('super-1', ['Processor'], true)
 
@@ -111,6 +114,7 @@ const greenLot = () => ({
   grade: 'Grade A',
   createdById: 'processor-1',
   currentWeightKg: 40,
+  parchmentLot: { harvestLot: { farmId: FARMER_FARM } },
   withdrawalHistory: [greenSale()],
   roasterInventory: [
     { id: 'inv-1', roasterId: 'roaster-1', greenBeanLotId: 'gbl-1', claimedWeightKg: 10, remainingWeightKg: 8 },
@@ -197,6 +201,7 @@ beforeEach(() => {
     model.findMany?.mockResolvedValue([])
   }
   mockPrisma.greenBeanLot.count.mockResolvedValue(1)
+  mockPrisma.farm.findMany.mockResolvedValue([{ id: FARMER_FARM }])
 })
 
 describe('lib/withdrawalPrivacy', () => {
@@ -499,7 +504,12 @@ describe('the withdrawal purpose is private like the sale', () => {
       // The detail route loads no withdrawal history. Keep it that way, or
       // run it through parchmentLotForViewer like the list.
       mockAuthUser = viewer
-      mockPrisma.parchmentLot.findUnique.mockResolvedValue({ id: 'pl-1', processType: 'Washed', processingBatch: null })
+      mockPrisma.parchmentLot.findUnique.mockResolvedValue({
+        id: 'pl-1',
+        processType: 'Washed',
+        processingBatch: null,
+        harvestLot: { id: 'hl-1', farmId: FARMER_FARM },
+      })
       const { GET } = await import('@/app/api/parchment-lots/[id]/route')
       const response = await GET(request('/api/parchment-lots/pl-1'), params('pl-1'))
       expect(response.status).toBe(200)

@@ -22,6 +22,7 @@ import {
   reweighLot,
   type ReweighResult,
 } from "@/lib/lotCorrections";
+import { chainFarmIds, requireChainFarm } from "@/lib/farmAccess";
 
 // GET /api/green-bean-lots/:id
 export async function GET(
@@ -57,6 +58,8 @@ export async function GET(
                 id: true,
                 farmerName: true,
                 cherryVariety: true,
+                // The farm it was grown on, for the farmer check below.
+                farmId: true,
               },
             },
           },
@@ -119,6 +122,13 @@ export async function GET(
         { status: 404 },
       );
     }
+
+    // A farmer-only user opens only green beans hulled from their own and
+    // shared farms' parchment, as on the list (lib/farmAccess).
+    requireChainFarm(
+      await chainFarmIds(user),
+      greenBeanLot.parchmentLot?.harvestLot?.farmId,
+    );
 
     // Withdrawal sale details and purpose, and other roasters' stock rows,
     // only for the lot's owner and Admin; see lib/withdrawalPrivacy.

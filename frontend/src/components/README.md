@@ -50,13 +50,13 @@ Wired against `services/auth/authService.ts` and `AuthContext`.
 - `ProcessorWorkbench.tsx` — large kanban-style workbench (process + grade)
 - `ParchmentTab.tsx` — parchment stock view
 - `InvoiceReceipt.tsx` — invoice printout
-- `processor/workbench/` — `KanbanCard`, `KanbanColumn`, `Pagination`,
+- `processor/workbench/` — `Pagination`,
   `DebouncedSearchInput`, `GradeDropdown`, `ProcessTypeChips` / `ProcessTypePill` /
   `processTypeColors.ts` (process-type colours from the admin Process Types list),
   `CropYearChips`, `ModalPortal`, `GradePriceInput` / `GradeSplitValue` / `gradePrice.ts`
   (optional Price / kg on every grade-split row, total value line), `scoring.ts`, `constants.ts`
-- `processor/modals/` — `CompleteBatchModal`, `HullAndGradeModal`,
-  `ParchmentWithdrawModal`, `StartProcessingModal`
+- `processor/modals/` — `SetPriceModal`, `EditHarvestLotModal`, `EditProcessingBatchModal`,
+  `EditParchmentLotModal`, `EditGreenBeanLotModal`, `EditWithdrawalModal`, `VoidWithdrawalModal`
 
 ## `roaster/`
 - `RoasterWorkbench.tsx` — main roaster page

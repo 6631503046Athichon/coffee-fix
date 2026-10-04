@@ -2,7 +2,7 @@
 
 Single source of truth: `schema.prisma`. Seed in `seed.ts`.
 
-Schema changes ship as hand-written SQL in `prisma/sql/` (`001_…`, `002_…`, … `006_…`),
+Schema changes ship as hand-written SQL in `prisma/sql/` (`001_…`, `002_…`, … `007_…`),
 because deploys run `prisma generate` and never push the schema. Apply a file
 to the database **before** deploying the backend that reads it, from
 `backend/`:
@@ -63,6 +63,24 @@ instance). Raw SQL, so `User.updatedAt` does not move. NULL means no calls
 yet. Apply it **before** the backend that reads them: until they exist, every
 `User` read fails, sign-in included.
 
+`sql/007_password_changed_at.sql` (audit F30) adds one nullable column to
+`User`: `passwordChangedAt`. Every password change sets it: the email reset
+(`auth/reset-password`), first-login setup (`auth/first-login-update`), and
+`PUT /api/users/:id` (the user's own change and an Admin's edit or reset).
+`requireAuth` (`lib/middleware`) refuses a token whose `iat` is before it,
+compared in whole seconds as `iat` is, so a change signs out every other
+session and a stolen cookie stops working. The session that made the change
+gets a fresh cookie (`refreshSessionCookie`) and stays signed in; an Admin
+resetting someone else's password keeps their own session. An Admin who
+sets their own password through the Admin edit (User Management) keeps the
+session too, but that edit sets `mustChangePassword` as every Admin reset
+does, so their next page is the first-login setup. The 10 s auth
+cache keeps the column too and is dropped on the instance that saved the
+change; another instance may still accept an older token for up to 10 s.
+NULL means no change since the column was added, so the deploy signs nobody
+out. Apply it **before** the backend that reads it: until it exists, every
+`User` read fails, sign-in included.
+
 Read-only reports live in `prisma/sql/checks/` and run with the same command;
 they only `SELECT`, so they are safe at any time.
 `checks/004_harvest_lot_damage_check.sql` lists the harvest lots the old edit
@@ -78,7 +96,7 @@ the weight of a processed one. Lots with no farm are visible to Admins only.
 ### Identity & access
 | Model | Purpose |
 |---|---|
-| `User` | account, roles (`UserRole[]`), `isSuperAdmin`, must-change-* flags. `aiWindowStartedAt` / `aiWindowCalls` = the shared AI call count (`sql/006_ai_rate_limit`) |
+| `User` | account, roles (`UserRole[]`), `isSuperAdmin`, must-change-* flags. `aiWindowStartedAt` / `aiWindowCalls` = the shared AI call count (`sql/006_ai_rate_limit`). `passwordChangedAt` = last password change; tokens issued before it are refused (`sql/007_password_changed_at`) |
 | `PasswordResetToken` | one-shot reset tokens for `auth/reset-password` |
 | `FarmCollaborator` | join row giving a non-owner user access to a farm |
 

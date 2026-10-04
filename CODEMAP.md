@@ -174,8 +174,8 @@ Every file lives in a domain folder; the root holds only those folders and a `RE
 - `farmer/` — `FarmerDashboard`, `FarmManagement`, `AddFarmPage`, `HarvestLotsManagement`, `HarvestLotDetail`, `FarmSoilPanel`, `FarmWeatherPanel`, `FarmerDataHub`, `GAPComplianceHelper`
   - `farmer/modals/` — `HarvestLotModal`
 - `processor/` — `ProcessorWorkbench` (large), `ParchmentTab`, `InvoiceReceipt`
-  - `processor/workbench/` — sub-components: `KanbanCard`, `KanbanColumn`, `Pagination`, `DebouncedSearchInput`, `GradeDropdown`, `ProcessTypeDropdown`, `CropYearChips`, `ModalPortal`, `GradePriceInput` + `GradeSplitValue` + `gradePrice.ts` (optional Price / kg on grade-split rows and the total value line), `scoring.ts`, `constants.ts`
-  - `processor/modals/` — `CompleteBatchModal`, `HullAndGradeModal`, `ParchmentWithdrawModal`, `StartProcessingModal`
+  - `processor/workbench/` — sub-components: `Pagination`, `DebouncedSearchInput`, `GradeDropdown`, `ProcessTypeChips` / `ProcessTypePill` / `processTypeColors.ts` (process-type colours from the admin list), `CropYearChips`, `ModalPortal`, `GradePriceInput` + `GradeSplitValue` + `gradePrice.ts` (optional Price / kg on grade-split rows and the total value line), `scoring.ts`, `constants.ts`
+  - `processor/modals/` — `SetPriceModal`, `EditHarvestLotModal`, `EditProcessingBatchModal`, `EditParchmentLotModal`, `EditGreenBeanLotModal`, `EditWithdrawalModal`, `VoidWithdrawalModal` (Record Process and Hull & Grade are popups inside `ProcessorWorkbench`)
 - `roaster/` — `RoasterWorkbench`, `InternalLotsTable`, `ExternalLotsTable`, `RoastLogPanel`
 - `sales/` — `CustomerManagement`, `SalesLog` (route `/sales`), `saleDisplay` (shared chips and formatters), `SaleReceipt` (print-only receipt)
   - `sales/modals/` — `CreateCustomerModal`, `SaleOrderModal` (sell / edit; an Admin recording a new sale picks the roaster in "Sell for" (their own stock is "Me" at the top), or gets one as `sellerId` from Start roast → Sell, and the lists load that roaster's stock), `SaleDetailsModal` (status chips, print, delete)
