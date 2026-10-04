@@ -1020,11 +1020,41 @@ describe('Withdrawal history invoice', { timeout: 20000 }, () => {
     expect(screen.getByRole('button', { name: 'Invoice' })).toBeInTheDocument()
   })
 
+  // Someone else's lot as the backend sends it: type, kg, date and who
+  // recorded it, without the purpose or the sale columns.
+  const hiddenSaleLot = (): GreenBeanLot => ({
+    ...saleLot({}),
+    createdById: 'p-2',
+    withdrawalHistory: [{
+      amountKg: 5, withdrawalType: 'Sale', date: '2026-09-20', withdrawnByName: 'Proc Two',
+      saleDetailsHidden: true,
+    }],
+  })
+  const historyModal = () =>
+    screen.getByText('Withdrawal History', { selector: 'h2' }).closest('.rounded-2xl') as HTMLElement
+
   it("offers no invoice on a sale the backend withheld (someone else's lot)", () => {
     // Without the sale columns the invoice would be a blank INV-DRAFT at 0.00.
-    openHistory(saleLot({ purpose: 'Sold to a cafe', saleDetailsHidden: true }))
-    expect(screen.getByText('Sold to a cafe')).toBeInTheDocument()
+    openHistory(hiddenSaleLot())
     expect(screen.queryByRole('button', { name: 'Invoice' })).not.toBeInTheDocument()
+  })
+
+  it('shows a dash for the purpose the backend withheld with the sale', () => {
+    // People type customer names and order numbers into the purpose, so only
+    // the lot's owner and Admin get it.
+    openHistory(hiddenSaleLot())
+    const modal = historyModal()
+    expect(within(modal).getByText('Purpose').nextElementSibling).toHaveTextContent(/^—$/)
+    // The rest of the row still shows.
+    expect(within(modal).getByText('5.00 kg')).toBeInTheDocument()
+    expect(within(modal).getByText('Proc Two')).toBeInTheDocument()
+    expect(within(modal).getByText('Sale', { selector: 'span' })).toBeInTheDocument()
+    expect(modal).not.toHaveTextContent('undefined')
+  })
+
+  it("shows the purpose on the owner's own sale", () => {
+    openHistory(saleLot({ purpose: 'Order 42 for Cafe Doi', customerName: 'Cafe Doi', salePrice: 400 }))
+    expect(within(historyModal()).getByText('Purpose').nextElementSibling).toHaveTextContent('Order 42 for Cafe Doi')
   })
 })
 

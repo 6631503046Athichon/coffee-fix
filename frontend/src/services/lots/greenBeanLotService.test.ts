@@ -44,4 +44,19 @@ describe('transformGreenBeanLotFromBackend', () => {
     expect(lot.parchmentProcessType).toBeUndefined()
     expect(transformGreenBeanLotFromBackend(backendLot()).parchmentProcessType).toBeUndefined()
   })
+
+  // On someone else's lot the backend withholds the purpose with the sale.
+  it('maps a withdrawal sent without its purpose and keeps the hidden flag', () => {
+    const lot = transformGreenBeanLotFromBackend(backendLot({
+      withdrawalHistory: [{
+        id: 'gw-1', amountKg: 5, withdrawalType: 'RoastingStock', date: '2026-09-20T00:00:00.000Z',
+        withdrawnByName: 'Proc Two', saleDetailsHidden: true,
+      }],
+    }))
+    const [row] = lot.withdrawalHistory!
+    expect(row).toMatchObject({
+      amountKg: 5, withdrawalType: 'Roasting Stock', date: '2026-09-20', saleDetailsHidden: true,
+    })
+    expect(row.purpose).toBeUndefined()
+  })
 })

@@ -111,8 +111,8 @@ export async function GET(
       );
     }
 
-    // Withdrawal sale details and other roasters' stock rows only for the
-    // lot's owner and Admin; see lib/withdrawalPrivacy.
+    // Withdrawal sale details and purpose, and other roasters' stock rows,
+    // only for the lot's owner and Admin; see lib/withdrawalPrivacy.
     return NextResponse.json({
       greenBeanLot: greenBeanLotForViewer(user, greenBeanLot),
     });

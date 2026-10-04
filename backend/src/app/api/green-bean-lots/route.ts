@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
     ])
 
     return NextResponse.json({
-      // Withdrawal sale details only for the lot's owner and Admin.
+      // Withdrawal sale details and purpose only for the lot's owner and Admin.
       greenBeanLots: greenBeanLots.map(lot => greenBeanLotForViewer(user, lot)),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     })

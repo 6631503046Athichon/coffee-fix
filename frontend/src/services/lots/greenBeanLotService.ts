@@ -47,7 +47,8 @@ interface BackendGreenBeanLot {
 interface BackendWithdrawal {
   amountKg: number;
   withdrawalType: string;
-  purpose: string;
+  // Absent when saleDetailsHidden: the backend withholds it with the sale.
+  purpose?: string;
   notes?: string;
   date: string;
   withdrawnBy?: string;

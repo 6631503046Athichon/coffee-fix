@@ -137,7 +137,7 @@ const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({ visible, onClose, lot, 
             </div>
             <div className="p-4 rounded-xl border border-gray-200">
               <p className="text-sm font-semibold text-gray-700 mb-2">Notes</p>
-              <p className="text-sm text-gray-700 whitespace-pre-line">{entry.notes || entry.purpose || '-'}</p>
+              <p className="text-sm text-gray-700 whitespace-pre-line">{entry.notes || entry.purpose || '—'}</p>
             </div>
           </div>
         </div>

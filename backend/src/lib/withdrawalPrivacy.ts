@@ -12,9 +12,11 @@ import { isAdminUser } from '@/lib/saleOrders'
 //   - green-bean lot: greenBeanLot.createdById
 //   - parchment lot:  parchmentLot -> processingBatch.createdById (a lot with
 //                     no batch, e.g. an Excel import, is Admin-only)
-// Everyone else gets the history without the sale: type, kg, date, purpose
-// and who recorded it, with `saleDetailsHidden: true` so the client knows the
-// sale columns were withheld rather than never entered (and offers no invoice).
+// Everyone else gets the history without the sale: type, kg, date and who
+// recorded it, with `saleDetailsHidden: true` so the client knows the sale
+// columns were withheld rather than never entered (and offers no invoice).
+// The free-text `purpose` is withheld with the sale: people type customer
+// names and order numbers into it.
 
 /**
  * Columns anyone who can open the lot may read. Listed rather than stripped,
@@ -28,7 +30,6 @@ export const PUBLIC_WITHDRAWAL_FIELDS = [
   'parchmentLotId',
   'withdrawalType',
   'amountKg',
-  'purpose',
   'date',
   'createdAt',
   'withdrawnBy',

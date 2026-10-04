@@ -653,3 +653,30 @@ describe('Green-bean stock holds only lots the user may draw from (F12)', () => 
     expect(screen.queryByText('Unknown', { selector: 'span' })).not.toBeInTheDocument()
   })
 })
+
+describe('Source history withdrawals', () => {
+  it('lists a withdrawal sent without its purpose cleanly', () => {
+    // On someone else's lot the backend withholds the purpose with the sale:
+    // the row keeps its type and kg, with no dangling separator.
+    const washed: ParchmentLot = {
+      ...newParchment, id: 'pl-w', displayId: 'PL-2026-3', processType: 'Washed',
+      currentWeightKg: 0, status: 'Hulled',
+    }
+    const lot: GreenBeanLot = {
+      ...newLot('gbl-h', 'GBL-2026-50', 'Grade A', 6), parchmentLotId: 'pl-w',
+      withdrawalHistory: [{ amountKg: 4, withdrawalType: 'Sale', date: '2026-09-20', saleDetailsHidden: true }],
+    }
+    render(
+      <Harness
+        refreshData={async () => {}}
+        initial={{ harvestLots: [], parchmentLots: [washed], greenBeanLots: [lot] }}
+      />,
+    )
+    fireEvent.click(screen.getByLabelText('View source history'))
+    const rows = screen.getByText('Withdrawals (1)').nextElementSibling as HTMLElement
+    expect(rows).toHaveTextContent('Sale')
+    expect(rows).toHaveTextContent('4')
+    expect(rows).not.toHaveTextContent('·')
+    expect(rows).not.toHaveTextContent('undefined')
+  })
+})

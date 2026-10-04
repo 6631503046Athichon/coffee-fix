@@ -44,7 +44,9 @@ export interface GreenBeanLot {
   withdrawalHistory?: {
     amountKg: number;
     withdrawalType: "Sale" | "Roasting Stock" | "Sample" | "Export" | "Other";
-    purpose: string; // Legacy field / additional description
+    // Legacy field / additional description. Withheld with the sale (see
+    // saleDetailsHidden) on someone else's lot: it can name the customer.
+    purpose?: string;
     notes?: string; // Admin-editable notes
     date: string;
     withdrawnBy?: string; // User ID who performed withdrawal

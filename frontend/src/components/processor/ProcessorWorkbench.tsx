@@ -4664,14 +4664,19 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                 </div>
                               )}
 
-                            {/* Purpose/Notes */}
-                            {(entry.purpose || entry.notes) && (
+                            {/* Purpose/Notes. On someone else's lot the
+                                backend withholds the purpose with the sale
+                                (people type customer names into it), so the
+                                row shows a dash. */}
+                            {(entry.purpose ||
+                              entry.notes ||
+                              entry.saleDetailsHidden) && (
                               <div className="mb-3">
                                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">
                                   {entry.notes ? "Notes" : "Purpose"}
                                 </p>
                                 <p className="text-sm text-gray-900">
-                                  {entry.notes || entry.purpose}
+                                  {entry.notes || entry.purpose || "—"}
                                 </p>
                               </div>
                             )}

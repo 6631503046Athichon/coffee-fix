@@ -12,7 +12,8 @@ export interface ParchmentWithdrawalRecord {
   id: string;
   amountKg: number;
   withdrawalType: "Sale" | "RoastingStock" | "HullAndGrade" | "Sample" | "Export" | "Other";
-  purpose: string;
+  // Withheld with the sale on someone else's lot: it can name the customer.
+  purpose?: string;
   notes?: string;
   date: string;
   withdrawnBy?: string;
@@ -25,6 +26,9 @@ export interface ParchmentWithdrawalRecord {
   targetRoasterId?: string;
   roastProfileNotes?: string;
   cuppingScore?: number;
+  // Set by the backend when the viewer does not own the lot: the purpose and
+  // the sale columns above were withheld.
+  saleDetailsHidden?: boolean;
 }
 
 export enum ParchmentSourceType {

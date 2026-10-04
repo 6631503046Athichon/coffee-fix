@@ -184,6 +184,8 @@ export function transformParchmentLotFromBackend(backendLot: any): ParchmentLot 
           targetRoasterId: w.targetRoasterId || undefined,
           roastProfileNotes: w.roastProfileNotes || undefined,
           cuppingScore: w.cuppingScore || undefined,
+          // Purpose and sale withheld: the viewer does not own the lot.
+          saleDetailsHidden: w.saleDetailsHidden || undefined,
         }))
       : undefined,
     createdAt: backendLot.createdAt

@@ -59,8 +59,8 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    // Withdrawal sale details only for the lot's owner and Admin; see
-    // lib/withdrawalPrivacy.
+    // Withdrawal sale details and purpose only for the lot's owner and
+    // Admin; see lib/withdrawalPrivacy.
     return NextResponse.json({
       parchmentLots: parchmentLots.map(lot => parchmentLotForViewer(user, lot)),
     })

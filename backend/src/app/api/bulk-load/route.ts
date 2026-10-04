@@ -336,8 +336,9 @@ export async function GET(request: NextRequest) {
         gapLogs,
         processingBatches,
         parchmentLots,
-        // Withdrawal sale details (customer, address, price, invoice) only
-        // for the lot's owner and Admin; see lib/withdrawalPrivacy.
+        // Withdrawal sale details (customer, address, price, invoice) and
+        // the free-text purpose only for the lot's owner and Admin; see
+        // lib/withdrawalPrivacy.
         greenBeanLots: greenBeanLots.map(lot => greenBeanLotForViewer(user, lot)),
         roasterInventory,
         roastBatches,

@@ -2,8 +2,13 @@
  * F8: green-bean and parchment withdrawals carry the sale behind them
  * (customer, delivery address, price, total, invoice number, target roaster).
  * Lots are readable by every role, so only the lot's owner and Admin may see
- * those columns; everyone else gets type, kg, date and purpose. One helper
- * (lib/withdrawalPrivacy) shapes every route that returns withdrawal history.
+ * those columns; everyone else gets type, kg, date and who recorded it. One
+ * helper (lib/withdrawalPrivacy) shapes every route that returns withdrawal
+ * history.
+ *
+ * The free-text `purpose` is private too: people type customer names and
+ * order numbers into it. The owner, Admin and super admin still see it, on
+ * every lot for Admin.
  */
 
 import { describe, test, expect, jest, beforeEach } from '@jest/globals'
@@ -15,7 +20,7 @@ const mockPrisma: any = {
   weatherRecord: { findMany: jest.fn() },
   gAPLogEntry: { findMany: jest.fn() },
   processingBatch: { findMany: jest.fn() },
-  parchmentLot: { findMany: jest.fn() },
+  parchmentLot: { findMany: jest.fn(), findUnique: jest.fn() },
   greenBeanLot: { findMany: jest.fn(), findUnique: jest.fn(), count: jest.fn() },
   roasterInventoryItem: { findMany: jest.fn() },
   roastBatch: { findMany: jest.fn() },
@@ -55,6 +60,7 @@ const superAdmin = user('super-1', ['Processor'], true)
 
 // Columns nobody but the owner and Admin may read.
 const SALE_FIELDS = [
+  'purpose',
   'customerName',
   'deliveryAddress',
   'salePrice',
@@ -91,7 +97,6 @@ const greenPublic = {
   greenBeanLotId: 'gbl-1',
   amountKg: 5,
   withdrawalType: 'Sale',
-  purpose: 'Sale to cafe',
   date: '2026-09-20T00:00:00.000Z',
   withdrawnBy: 'processor-1',
   withdrawnByName: 'Proc One',
@@ -145,7 +150,6 @@ const parchmentPublic = {
   parchmentLotId: 'pl-1',
   amountKg: 20,
   withdrawalType: 'Sale',
-  purpose: 'Sale to mill',
   date: '2026-09-21T00:00:00.000Z',
   withdrawnBy: 'processor-1',
   withdrawnByName: 'Proc One',
@@ -196,7 +200,7 @@ beforeEach(() => {
 })
 
 describe('lib/withdrawalPrivacy', () => {
-  test('publicWithdrawal keeps only type, kg, date, purpose and who recorded it', async () => {
+  test('publicWithdrawal keeps only type, kg, date and who recorded it', async () => {
     const { publicWithdrawal } = await import('@/lib/withdrawalPrivacy')
     expect(publicWithdrawal(greenSale())).toEqual(greenPublic)
     expect(publicWithdrawal(parchmentRoastingStock())).toEqual(parchmentPublic)
@@ -387,5 +391,196 @@ describe('GET /api/bulk-load?phase=2', () => {
     mockPrisma.greenBeanLot.findMany.mockResolvedValue([greenLot()])
     const body = await phase2()
     expect(body.greenBeanLots[0].withdrawalHistory).toEqual([greenSale()])
+  })
+})
+
+describe('the withdrawal purpose is private like the sale', () => {
+  // People type customer names and order numbers into `purpose`, so it goes
+  // only where the sale goes: the lot's owner, Admin and super admin.
+  const GREEN_PURPOSE = 'Sale to cafe'
+  const PARCHMENT_PURPOSE = 'Sale to mill'
+
+  // Lots of three different owners: two Processors and a Roaster who bought
+  // green beans. None of them is a viewer below other than the owner.
+  const greenLots = () => [
+    greenLot(),
+    { ...greenLot(), id: 'gbl-2', createdById: 'processor-3' },
+    { ...greenLot(), id: 'gbl-3', createdById: 'roaster-9' },
+  ]
+  const parchmentLots = () => [
+    parchmentLot('processor-1'),
+    { ...parchmentLot('processor-3'), id: 'pl-2' },
+    // Excel import: no batch, so no owner on record.
+    { ...parchmentLot(null), id: 'pl-3' },
+  ]
+
+  type LoadGreen = (lots: any[]) => Promise<any[]>
+
+  // Each route that returns green-bean withdrawals, as the lots it sends.
+  const greenRoutes: [string, LoadGreen][] = [
+    ['GET /api/bulk-load?phase=2', async lots => {
+      mockPrisma.greenBeanLot.findMany.mockResolvedValue(lots)
+      const { GET } = await import('@/app/api/bulk-load/route')
+      const response = await GET(request('/api/bulk-load?phase=2'))
+      expect(response.status).toBe(200)
+      return (await response.json()).greenBeanLots
+    }],
+    ['GET /api/green-bean-lots', async lots => {
+      mockPrisma.greenBeanLot.findMany.mockResolvedValue(lots)
+      const { GET } = await import('@/app/api/green-bean-lots/route')
+      const response = await GET(request('/api/green-bean-lots'))
+      expect(response.status).toBe(200)
+      return (await response.json()).greenBeanLots
+    }],
+    ['GET /api/green-bean-lots/:id', async lots => {
+      const { GET } = await import('@/app/api/green-bean-lots/[id]/route')
+      const shown: any[] = []
+      for (const lot of lots) {
+        mockPrisma.greenBeanLot.findUnique.mockResolvedValueOnce(lot)
+        const response = await GET(request(`/api/green-bean-lots/${lot.id}`), params(lot.id))
+        expect(response.status).toBe(200)
+        shown.push((await response.json()).greenBeanLot)
+      }
+      return shown
+    }],
+  ]
+
+  const parchmentList = async (lots: any[]) => {
+    mockPrisma.parchmentLot.findMany.mockResolvedValue(lots)
+    const { GET } = await import('@/app/api/parchment-lots/route')
+    const response = await GET(request('/api/parchment-lots'))
+    expect(response.status).toBe(200)
+    return (await response.json()).parchmentLots
+  }
+
+  const purposeNonOwners: [string, any][] = [
+    ['a Processor', otherProcessor],
+    ['a Roaster', roaster],
+    ['a Cupper', cupper],
+    ['a Farmer', farmer],
+    ['a HeadJudge', headJudge],
+  ]
+
+  // Every route crossed with every viewer, for test.each.
+  const routeViewers = (viewers: [string, any][]) =>
+    greenRoutes.flatMap(([route, load]) =>
+      viewers.map(([who, viewer]): [string, string, any, LoadGreen] => [route, who, viewer, load]))
+
+  describe('non-owners get no purpose', () => {
+    test.each(routeViewers(purposeNonOwners))('%s: %s gets no purpose on green-bean withdrawals', async (_route, _who, viewer, load) => {
+      mockAuthUser = viewer
+      const lots = await load(greenLots())
+      expect(lots).toHaveLength(3)
+      for (const lot of lots) {
+        expect(lot.withdrawalHistory).toHaveLength(1)
+        const [row] = lot.withdrawalHistory
+        expect(row).not.toHaveProperty('purpose')
+        expect(row.saleDetailsHidden).toBe(true)
+        // Still told what happened: type, kg, date and who recorded it.
+        expect(row).toMatchObject({ withdrawalType: 'Sale', amountKg: 5, withdrawnByName: 'Proc One' })
+        expectNoSaleFields(lot.withdrawalHistory)
+      }
+      // Nowhere else in the payload either.
+      expect(JSON.stringify(lots)).not.toContain(GREEN_PURPOSE)
+    })
+
+    test.each(purposeNonOwners)('GET /api/parchment-lots: %s gets no purpose on parchment withdrawals', async (_who, viewer) => {
+      mockAuthUser = viewer
+      const lots = await parchmentList(parchmentLots())
+      expect(lots).toHaveLength(3)
+      for (const lot of lots) {
+        expect(lot.withdrawalHistory).toEqual([parchmentPublic])
+        expect(lot.withdrawalHistory[0]).not.toHaveProperty('purpose')
+      }
+      expect(JSON.stringify(lots)).not.toContain(PARCHMENT_PURPOSE)
+    })
+
+    test.each(purposeNonOwners)('GET /api/parchment-lots/:id: %s gets no withdrawals at all', async (_who, viewer) => {
+      // The detail route loads no withdrawal history. Keep it that way, or
+      // run it through parchmentLotForViewer like the list.
+      mockAuthUser = viewer
+      mockPrisma.parchmentLot.findUnique.mockResolvedValue({ id: 'pl-1', processType: 'Washed', processingBatch: null })
+      const { GET } = await import('@/app/api/parchment-lots/[id]/route')
+      const response = await GET(request('/api/parchment-lots/pl-1'), params('pl-1'))
+      expect(response.status).toBe(200)
+      expect(mockPrisma.parchmentLot.findUnique.mock.calls[0][0].include).not.toHaveProperty('withdrawalHistory')
+      expect((await response.json()).parchmentLot).not.toHaveProperty('withdrawalHistory')
+    })
+
+    test.each(purposeNonOwners)('GET /api/bulk-load?phase=2: %s gets no parchment withdrawals and no purpose on stock rows', async (_who, viewer) => {
+      mockAuthUser = viewer
+      const { GET } = await import('@/app/api/bulk-load/route')
+      const response = await GET(request('/api/bulk-load?phase=2'))
+      expect(response.status).toBe(200)
+      // Parchment lots come without their withdrawal history.
+      expect(mockPrisma.parchmentLot.findMany.mock.calls[0][0].include).not.toHaveProperty('withdrawalHistory')
+      // A Roaster's stock rows carry the last few withdrawals of the lot they
+      // came from, column-listed without the purpose or the sale.
+      const stockQuery = mockPrisma.roasterInventoryItem.findMany.mock.calls[0]?.[0]
+      if (stockQuery) {
+        const select = stockQuery.include.greenBeanLot.include.withdrawalHistory.select
+        for (const field of SALE_FIELDS) expect(select).not.toHaveProperty(field)
+      }
+    })
+
+    test("the owner with several roles gets no purpose on another owner's lot", async () => {
+      mockAuthUser = ownerFarmerProcessor
+      for (const [, load] of greenRoutes) {
+        const [, theirs, roasters] = await load(greenLots())
+        expect(theirs.withdrawalHistory).toEqual([greenPublic])
+        expect(roasters.withdrawalHistory).toEqual([greenPublic])
+      }
+      const [, theirs, imported] = await parchmentList(parchmentLots())
+      expect(theirs.withdrawalHistory).toEqual([parchmentPublic])
+      expect(imported.withdrawalHistory).toEqual([parchmentPublic])
+    })
+  })
+
+  describe('the owner, Admin and super admin get the purpose and the whole sale', () => {
+    const owners: [string, any][] = [
+      ['the owner', owner],
+      ['the owner with several roles', ownerFarmerProcessor],
+    ]
+
+    test.each(routeViewers(owners))('%s: %s gets the purpose on their own lot', async (_route, _who, viewer, load) => {
+      mockAuthUser = viewer
+      const [mine] = await load(greenLots())
+      expect(mine.withdrawalHistory[0].purpose).toBe(GREEN_PURPOSE)
+      expect(mine.withdrawalHistory).toEqual([greenSale()])
+    })
+
+    test.each(owners)('GET /api/parchment-lots: %s gets the purpose on their own lot', async (_who, viewer) => {
+      mockAuthUser = viewer
+      const [mine] = await parchmentList(parchmentLots())
+      expect(mine.withdrawalHistory[0].purpose).toBe(PARCHMENT_PURPOSE)
+      expect(mine.withdrawalHistory).toEqual([parchmentRoastingStock()])
+    })
+
+    const admins: [string, any][] = [
+      ['an Admin', admin],
+      ['a super admin', superAdmin],
+    ]
+
+    test.each(routeViewers(admins))("%s: %s gets the purpose and every sale column on other owners' lots", async (_route, _who, viewer, load) => {
+      mockAuthUser = viewer
+      const lots = await load(greenLots())
+      expect(lots.map((lot: any) => lot.createdById)).toEqual(['processor-1', 'processor-3', 'roaster-9'])
+      for (const lot of lots) {
+        expect(lot.withdrawalHistory[0].purpose).toBe(GREEN_PURPOSE)
+        expect(lot.withdrawalHistory[0]).not.toHaveProperty('saleDetailsHidden')
+        expect(lot.withdrawalHistory).toEqual([greenSale()])
+      }
+    })
+
+    test.each(admins)("GET /api/parchment-lots: %s gets the purpose and every sale column on other owners' lots", async (_who, viewer) => {
+      mockAuthUser = viewer
+      const lots = await parchmentList(parchmentLots())
+      expect(lots).toHaveLength(3)
+      for (const lot of lots) {
+        expect(lot.withdrawalHistory[0].purpose).toBe(PARCHMENT_PURPOSE)
+        expect(lot.withdrawalHistory[0]).not.toHaveProperty('saleDetailsHidden')
+        expect(lot.withdrawalHistory).toEqual([parchmentRoastingStock()])
+      }
+    })
   })
 })

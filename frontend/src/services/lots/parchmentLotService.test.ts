@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../api'
-import { createParchmentWithdrawal } from './parchmentLotService'
+import { createParchmentWithdrawal, transformParchmentLotFromBackend } from './parchmentLotService'
 
 const parchmentJson = {
   id: 'pl-1',
@@ -71,5 +71,34 @@ describe('createParchmentWithdrawal', () => {
       purpose: 'Sample',
     })
     expect(result.greenBeanLots).toEqual([])
+  })
+})
+
+describe('transformParchmentLotFromBackend', () => {
+  const sale = {
+    id: 'pw-1', amountKg: 20, withdrawalType: 'Sale', date: '2026-09-21T00:00:00.000Z',
+    withdrawnByName: 'Proc One',
+  }
+
+  // On someone else's lot the backend withholds the purpose with the sale.
+  it('maps a withdrawal sent without its purpose and keeps the hidden flag', () => {
+    const lot = transformParchmentLotFromBackend({
+      ...parchmentJson,
+      withdrawalHistory: [{ ...sale, saleDetailsHidden: true }],
+    })
+    const [row] = lot.withdrawalHistory!
+    expect(row).toMatchObject({ id: 'pw-1', amountKg: 20, withdrawalType: 'Sale', saleDetailsHidden: true })
+    expect(row.purpose).toBeUndefined()
+    expect(row.customerName).toBeUndefined()
+  })
+
+  it("keeps the owner's purpose and sale, with no hidden flag", () => {
+    const lot = transformParchmentLotFromBackend({
+      ...parchmentJson,
+      withdrawalHistory: [{ ...sale, purpose: 'Order 7 for Mill Co', customerName: 'Mill Co', salePrice: 150 }],
+    })
+    const [row] = lot.withdrawalHistory!
+    expect(row).toMatchObject({ purpose: 'Order 7 for Mill Co', customerName: 'Mill Co', salePrice: 150 })
+    expect(row.saleDetailsHidden).toBeUndefined()
   })
 })
