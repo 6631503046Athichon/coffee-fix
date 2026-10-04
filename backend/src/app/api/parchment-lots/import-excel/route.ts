@@ -240,14 +240,14 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Create parchment lots in a transaction. We pre-allocate all N displayIds
-    // in ONE read against the committed table state (outside the tx), then run
-    // N creates inside the tx. The previous implementation re-ran
-    // `nextDisplayId` inside each iteration — O(N) findMany scans, i.e. O(N^2)
-    // total IO for large imports. Inter-request races are still possible (a
-    // concurrent importer commits between our pre-read and our writes), so the
-    // whole block is wrapped in `withDisplayIdRetry` to recover from P2002 on
-    // displayId by re-allocating from a fresh read.
+    // Create parchment lots in a transaction. We reserve all N displayIds up
+    // front (outside the tx) as one block from the DocumentSequence counter
+    // (lib/documentSequence), then run N creates inside the tx. Calling
+    // `nextDisplayId` per row would rescan the table for every row. A
+    // concurrent allocator gets numbers after our block, so the only clash
+    // left is a row written without the counter; the whole block is wrapped
+    // in `withDisplayIdRetry` to recover from P2002 on displayId by reserving
+    // a fresh block.
     const createdLots = await withDisplayIdRetry(async () => {
       const displayIds = await nextDisplayIds(prisma.parchmentLot, 'PCH', validRows.length)
       return prisma.$transaction(async (tx) => {

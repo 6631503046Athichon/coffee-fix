@@ -14,6 +14,15 @@
  */
 
 import { describe, test, expect, jest, beforeEach, afterEach } from '@jest/globals'
+import { createMemorySequence } from './helpers/memorySequence'
+
+// The numbers come from the DocumentSequence counter (lib/documentSequence).
+const mockSequence = createMemorySequence()
+
+jest.mock('@/lib/prisma', () => ({
+  __esModule: true,
+  default: { $queryRaw: (...args: any[]) => (mockSequence.queryRaw as any)(...args) },
+}))
 
 const NativeDatePrototype = Date.prototype
 
@@ -62,6 +71,7 @@ function at(iso: string) {
 
 beforeEach(() => {
   onUtcServer()
+  mockSequence.reset()
 })
 
 afterEach(() => {

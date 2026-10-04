@@ -219,12 +219,14 @@ export async function POST(
       ? amount * price
       : null
 
-    // Allocate sequential displayIds in a single max-read. Looping over
-    // `nextDisplayId` would return the same string each iteration because the
-    // prior tx.create rows aren't committed yet — `nextDisplayIds(N)` returns
-    // [max+1 .. max+N] from one read. Wrap the entire transaction in the
-    // retry helper so concurrent allocators rewind the whole withdrawal +
-    // green-bean creates if displayId collides at commit time.
+    // Reserve one displayId per graded lot up front: `nextDisplayIds(N)` takes
+    // a block of N numbers from the DocumentSequence counter
+    // (lib/documentSequence) in one statement, so a concurrent allocator gets
+    // numbers after the block and a deleted lot's number is never handed out
+    // again. The entire transaction is wrapped in the retry helper so a
+    // displayId collision at commit time (a row written without the counter)
+    // rewinds the whole withdrawal + green-bean creates and retries with
+    // fresh numbers.
     // Resolves to the green bean lots a Hull & Grade created (empty for any
     // other type), so the response can hand them back with their prices.
     const createdGreenBeanLots = await withDisplayIdRetry(async () => {

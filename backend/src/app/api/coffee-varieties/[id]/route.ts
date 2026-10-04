@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { findVarietyNameClash, varietyNameTakenMessage } from '@/lib/coffeeVarieties'
 
 // GET /api/coffee-varieties/[id] - Get single coffee variety
 export async function GET(
@@ -69,15 +70,18 @@ export async function PUT(
       )
     }
 
-    // If name is being changed, check for duplicates
-    if (normalizedName && normalizedName !== existing.name) {
-      const duplicate = await prisma.coffeeVariety.findUnique({
-        where: { name: normalizedName }
-      })
-      if (duplicate) {
+    // If the name is being changed, refuse one that matches another variety
+    // ignoring case and spaces. Only a rename is checked, so a pair of
+    // case-duplicates saved before this check can still be edited or
+    // deactivated; changing just the case of this variety's own name is fine.
+    // The stored name is trimmed too, so an older name saved with stray
+    // spaces is not taken for a rename when it is saved unchanged.
+    if (normalizedName && normalizedName !== existing.name.trim()) {
+      const clash = await findVarietyNameClash(normalizedName, id)
+      if (clash) {
         return NextResponse.json(
-          { error: 'Coffee variety with this name already exists' },
-          { status: 400 }
+          { error: varietyNameTakenMessage(clash.name) },
+          { status: 409 }
         )
       }
     }

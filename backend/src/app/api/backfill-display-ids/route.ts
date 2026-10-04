@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
+import { reserveSequence } from "@/lib/documentSequence";
 
 export const dynamic = "force-dynamic";
 
@@ -82,7 +83,8 @@ async function backfillModel(
     byYear.get(year)!.push(record);
   }
 
-  // For each year, find the current max and assign sequential IDs
+  // For each year, read the highest number in use (the counter's floor) and
+  // give each record the next number from the DocumentSequence counter
   const details: Record<string, number> = {};
   let totalUpdated = 0;
 
@@ -90,35 +92,35 @@ async function backfillModel(
     const maxNum = await getMaxNumForYearPrefix(delegate, prefix, year);
     const yearPrefix = `${prefix}-${year}-`;
 
-    let counter = maxNum;
     let yearUpdated = 0;
 
     for (const record of records) {
-      counter++;
-      const candidateId = `${yearPrefix}${counter}`;
-
       if (dryRun) {
         yearUpdated++;
         continue;
       }
 
+      // Each number comes from the DocumentSequence counter, never below the
+      // year's highest number, so a deleted record's number is not handed out
+      // again. A dry run takes none.
       // Attempt to write with retry loop on P2002 unique constraint collision
       let success = false;
       let retries = 0;
       const maxRetries = 3;
+      let candidateId = "";
 
       while (!success && retries < maxRetries) {
+        candidateId = `${yearPrefix}${await reserveSequence(`${prefix}-${year}`, maxNum)}`;
         try {
           await delegate.update({
             where: { id: record.id },
-            data: { displayId: `${yearPrefix}${counter}` },
+            data: { displayId: candidateId },
           });
           success = true;
           yearUpdated++;
         } catch (err: any) {
           if (err?.code === "P2002") {
-            // Collision: increment counter and try the next candidate
-            counter++;
+            // Collision: the next attempt takes the next number
             retries++;
           } else {
             // Re-throw non-collision errors

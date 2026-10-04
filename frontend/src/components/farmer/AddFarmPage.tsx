@@ -486,9 +486,14 @@ const AddFarmPage: React.FC = () => {
 				setIsSubmitting(false);
 				return;
 			}
+			// The loaded farm carries its name as both farmName and name, and
+			// farmName is what the backend gets, so both take the edited name
+			// (an emptied name included) or the old one would be sent again.
+			const editedFarmName = farmName.trim() || undefined;
 			const updatedFarm: Farm = {
 				...existing,
-				name: farmName.trim() || undefined,
+				farmName: editedFarmName,
+				name: editedFarmName,
 				farmerName: ownerDisplayName,
 				ownerNames: sanitizedOwners,
 				caretakerNames: sanitizedFarmers,

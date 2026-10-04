@@ -8,10 +8,11 @@ import ToastContainer from '../common/ToastContainer'
 import { CuppingSessionType, GreenBeanSourceType, ParchmentSourceType, ProcessingBatchStatus, SCA_SENSORY_ATTRIBUTES, UserRole } from '../../types'
 import type { AppData, CuppingSession, Customer, GreenBeanLot, HarvestLot, ParchmentLot, ProcessType } from '../../types'
 import { addProcessingBatch } from '../../services/processing/processingBatchService'
-import { createWithdrawal, updateGreenBeanLotAvailability, updateGreenBeanLotPrice, updateGreenBeanLotScore } from '../../services/lots/greenBeanLotService'
+import { createWithdrawal, generatePublicTraceId, getPublicTraceUrl, updateGreenBeanLotAvailability, updateGreenBeanLotPrice, updateGreenBeanLotScore } from '../../services/lots/greenBeanLotService'
 import { addCustomer } from '../../services/sales/customerService'
 import { deleteHarvestLot, updateHarvestLotDetails } from '../../services/lots/harvestLotService'
 import { createParchmentWithdrawal } from '../../services/lots/parchmentLotService'
+import { api } from '../../services/api'
 import ProcessorWorkbench from './ProcessorWorkbench'
 
 vi.mock('../../services/processing/processingBatchService', async (importOriginal) => ({
@@ -25,6 +26,9 @@ vi.mock('../../services/lots/greenBeanLotService', async (importOriginal) => ({
   updateGreenBeanLotScore: vi.fn(),
   updateGreenBeanLotAvailability: vi.fn(),
   createWithdrawal: vi.fn(),
+  generatePublicTraceId: vi.fn(),
+  // jsdom has no canvas: hand back the URL the QR would encode.
+  generateQRDataUrl: vi.fn(async (url: string) => `data:image/png;qr,${encodeURIComponent(url)}`),
 }))
 
 vi.mock('../../services/sales/customerService', async (importOriginal) => ({
@@ -1001,11 +1005,12 @@ describe('QC Score', { timeout: 20000 }, () => {
     fireEvent.click(within(modal).getByRole('button', { name: 'Save Score' }))
 
     await waitFor(() => expect(updateGreenBeanLotScore).toHaveBeenCalledTimes(1))
+    // The Tasting Notes & Comments go to the server with the score (qcNotes).
     expect(updateGreenBeanLotScore).toHaveBeenCalledWith('gbl-1', 86, {
       cuppingFragrance: 8, cuppingFlavor: 8, cuppingAftertaste: 8, cuppingAcidity: 8,
       cuppingBody: 8, cuppingBalance: 8, cuppingOverall: 8,
       cuppingUniformity: 10, cuppingCleanCup: 10, cuppingSweetness: 10,
-    })
+    }, 'Stone fruit')
     expect(screen.queryByRole('heading', { name: 'QC Score' })).not.toBeInTheDocument()
 
     await waitFor(() => expect(onData.mock.lastCall![0].greenBeanLots[0].processorScore).toBe(86))
@@ -1069,6 +1074,66 @@ describe('QC Score', { timeout: 20000 }, () => {
     expect(within(modal).getByText('Clean Cup').nextElementSibling).toHaveTextContent('8')
     expect(within(modal).getByText('Final Score').nextElementSibling).toHaveTextContent('83.75')
   })
+
+  // The notes used to live only in the in-browser QC session, so they were
+  // gone after a reload. Now they are saved on the lot (qcNotes).
+  it('prefills the notes saved on the lot when the browser holds no QC session', () => {
+    render(
+      <Harness
+        initial={{ ...INITIAL_APP_DATA, greenBeanLots: [{ ...scoredLot(86), qcNotes: 'Saved on the server' }] }}
+        refreshData={async () => {}}
+      />,
+    )
+    const modal = openQcScore()
+
+    expect(within(modal).getByPlaceholderText(/Describe flavor notes/)).toHaveValue('Saved on the server')
+  })
+
+  it('prefers the notes saved on the lot over the QC session copy', () => {
+    render(
+      <Harness
+        initial={{
+          ...INITIAL_APP_DATA,
+          greenBeanLots: [{ ...scoredLot(84), qcNotes: 'Server note' }],
+          cuppingSessions: [qcSession({ Overall: 84 }, 84, 'Browser note')],
+        }}
+        refreshData={async () => {}}
+      />,
+    )
+    const modal = openQcScore()
+
+    expect(within(modal).getByPlaceholderText(/Describe flavor notes/)).toHaveValue('Server note')
+  })
+
+  it('reopening QC Score after saving shows the saved notes, and emptied notes are sent to clear them', async () => {
+    vi.mocked(updateGreenBeanLotScore).mockResolvedValue(scoredLot(86))
+    const onData = vi.fn()
+    render(
+      <Harness
+        initial={{ ...INITIAL_APP_DATA, greenBeanLots: [scoredLot()] }}
+        refreshData={async () => {}}
+        onData={onData}
+      />,
+    )
+    let modal = openQcScore()
+    for (const attr of SCA_SENSORY_ATTRIBUTES) {
+      fireEvent.change(within(modal).getByLabelText(attr), { target: { value: '8' } })
+    }
+    fireEvent.change(within(modal).getByPlaceholderText(/Describe flavor notes/), { target: { value: '  Honey, clean  ' } })
+    fireEvent.click(within(modal).getByRole('button', { name: 'Save Score' }))
+    await waitFor(() => expect(updateGreenBeanLotScore).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(onData.mock.lastCall![0].greenBeanLots[0].qcNotes).toBe('Honey, clean'))
+
+    modal = openQcScore()
+    const notesBox = within(modal).getByPlaceholderText(/Describe flavor notes/)
+    expect(notesBox).toHaveValue('Honey, clean')
+    expect(notesBox).toHaveAttribute('maxLength', '2000')
+
+    fireEvent.change(notesBox, { target: { value: '' } })
+    fireEvent.click(within(modal).getByRole('button', { name: 'Save Score' }))
+    await waitFor(() => expect(updateGreenBeanLotScore).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(updateGreenBeanLotScore).mock.calls[1][3]).toBe('')
+  })
 })
 
 describe('Withdrawal history invoice', { timeout: 20000 }, () => {
@@ -1079,8 +1144,8 @@ describe('Withdrawal history invoice', { timeout: 20000 }, () => {
     withdrawalHistory: [{ amountKg: 5, withdrawalType: 'Sale', purpose: 'Sale', date: '2026-09-20', ...sale }],
   })
 
-  const openHistory = (lot: GreenBeanLot) => {
-    render(<Harness initial={{ ...INITIAL_APP_DATA, greenBeanLots: [lot] }} refreshData={async () => {}} />)
+  const openHistory = (lot: GreenBeanLot, roles?: UserRole[]) => {
+    render(<Harness initial={{ ...INITIAL_APP_DATA, greenBeanLots: [lot] }} refreshData={async () => {}} roles={roles} />)
     fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
     fireEvent.click(screen.getByRole('button', { name: 'View Withdrawal History' }))
   }
@@ -1125,6 +1190,69 @@ describe('Withdrawal history invoice', { timeout: 20000 }, () => {
   it("shows the purpose on the owner's own sale", () => {
     openHistory(saleLot({ purpose: 'Order 42 for Cafe Doi', customerName: 'Cafe Doi', salePrice: 400 }))
     expect(within(historyModal()).getByText('Purpose').nextElementSibling).toHaveTextContent('Order 42 for Cafe Doi')
+  })
+
+  // The invoice's QR opens the PUBLIC trace page. Creating that link from the
+  // invoice must stick to the lot: a reopened invoice that offered the button
+  // again would replace the id and break QR codes already printed.
+  describe('public trace link', () => {
+    const fullSale = { customerName: 'Cafe Doi', salePrice: 400, currency: 'THB', totalAmount: 2000, invoiceNumber: 'INV-7' }
+    const createLinkButton = () => screen.queryByRole('button', { name: 'Create public trace link' })
+    const openInvoice = () => fireEvent.click(screen.getByRole('button', { name: 'Invoice' }))
+    // The invoice's close button is the icon-only one next to Print.
+    const closeInvoice = () =>
+      fireEvent.click(screen.getByRole('button', { name: 'Print' }).nextElementSibling as HTMLElement)
+
+    beforeEach(() => vi.clearAllMocks())
+
+    it('keeps the link the owner created, so a reopened invoice shows the same QR', async () => {
+      vi.mocked(generatePublicTraceId).mockResolvedValue({
+        publicTraceId: 'pub-new',
+        publicUrl: '/trace/pub-new',
+        greenBeanLot: { id: 'gbl-1', publicTraceId: 'pub-new', qrGeneratedAt: '2026-10-05T00:00:00Z' },
+      })
+      const publicUrl = getPublicTraceUrl('pub-new')
+      expect(publicUrl).toContain('/#/trace/pub-new')
+
+      openHistory(saleLot(fullSale))
+      openInvoice()
+      fireEvent.click(createLinkButton() as HTMLElement)
+      expect(await screen.findByText(publicUrl)).toBeInTheDocument()
+
+      // The invoice's own state goes with it; only the stored lot carries the id.
+      closeInvoice()
+      expect(screen.queryByText(publicUrl)).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'View Withdrawal History' }))
+      openInvoice()
+
+      expect(screen.getByText(publicUrl)).toBeInTheDocument()
+      expect(await screen.findByRole('img', { name: 'Traceability QR' }))
+        .toHaveAttribute('src', `data:image/png;qr,${encodeURIComponent(publicUrl)}`)
+      expect(createLinkButton()).not.toBeInTheDocument()
+      expect(screen.queryByText(/#\/traceability\//)).not.toBeInTheDocument()
+      expect(generatePublicTraceId).toHaveBeenCalledTimes(1)
+      expect(generatePublicTraceId).toHaveBeenCalledWith('gbl-1')
+    })
+
+    it("offers an Admin the link on someone else's lot", () => {
+      // The backend sends an Admin the full sale on any lot.
+      openHistory({ ...saleLot(fullSale), createdById: 'p-2' }, [UserRole.Admin])
+      openInvoice()
+
+      expect(createLinkButton()).toBeInTheDocument()
+      expect(screen.queryByTestId('invoice-trace-unavailable')).not.toBeInTheDocument()
+      expect(generatePublicTraceId).not.toHaveBeenCalled()
+    })
+
+    it('shows a Processor who does not own the lot a note instead of the button', () => {
+      // Only the owner or an Admin may create the link (the endpoint returns
+      // 403 otherwise), so the workbench must not pass a blanket yes.
+      openHistory({ ...saleLot(fullSale), createdById: 'p-2' })
+      openInvoice()
+
+      expect(createLinkButton()).not.toBeInTheDocument()
+      expect(screen.getByTestId('invoice-trace-unavailable')).toBeInTheDocument()
+    })
   })
 })
 
@@ -1231,5 +1359,95 @@ describe('Withdraw, Set price, QC Score and the availability switch only on lots
     expect(screen.getAllByRole('button', { name: 'Withdraw' })).toHaveLength(4)
     expect(screen.getAllByRole('button', { name: 'Price' })).toHaveLength(4)
     expect(screen.getAllByRole('button', { name: 'QC Score' })).toHaveLength(4)
+  })
+})
+
+// The prod case: PCH-2026-5 (16 kg) was hulled into GBL-2026-6 (8 kg) and
+// GBL-2026-7 (4 kg). bulk-load sends parchment lots without their withdrawals,
+// so the Edit green bean lot popup loads them to show the Hull & Grade limit
+// before saving.
+describe('Edit green bean lot: the Hull & Grade limit', { timeout: 20000 }, () => {
+  const HULLED_AT = '2026-09-20T03:00:00.000Z'
+  // As bulk-load stores it: no withdrawalHistory.
+  const parchment: ParchmentLot = {
+    id: 'pl-5', displayId: 'PCH-2026-5', sourceType: ParchmentSourceType.Internal, processingBatchId: 'pb-5',
+    initialWeightKg: 16, currentWeightKg: 0, moistureContent: 11, processType: 'Washed', status: 'Hulled',
+  }
+  const greenLot = (n: number, kg: number, extra: Partial<GreenBeanLot> = {}): GreenBeanLot => ({
+    id: `gbl-${n}`, displayId: `GBL-2026-${n}`, sourceType: GreenBeanSourceType.Internal,
+    parchmentLotId: 'pl-5', parchmentWithdrawalId: 'pw-hull', createdById: 'processor', grade: 'Grade A',
+    initialWeightKg: kg, currentWeightKg: kg, availabilityStatus: 'Available', cuppingScores: [],
+    withdrawalHistory: [], createdAt: '2026-09-20T03:00:01.000Z', ...extra,
+  })
+  const parchmentList = {
+    parchmentLots: [{
+      id: 'pl-5',
+      withdrawalHistory: [
+        { id: 'pw-hull', amountKg: 16, withdrawalType: 'HullAndGrade', purpose: 'Hull', date: HULLED_AT },
+      ],
+    }],
+  }
+
+  let getSpy: ReturnType<typeof vi.spyOn>
+  let putSpy: ReturnType<typeof vi.spyOn>
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getSpy = vi.spyOn(api, 'get').mockImplementation((async (endpoint: string) =>
+      endpoint === '/parchment-lots' ? parchmentList : {}) as typeof api.get)
+    putSpy = vi.spyOn(api, 'put').mockRejectedValue(new Error('not expected'))
+  })
+  afterEach(() => {
+    getSpy.mockRestore()
+    putSpy.mockRestore()
+  })
+
+  const editPopup = () =>
+    screen.getByRole('heading', { name: 'Edit green bean lot' }).closest('form') as HTMLElement
+
+  it('loads the parchment\'s Hull & Grade, shows the limit and refuses 4 kg -> 9 kg without sending', async () => {
+    const onData = vi.fn()
+    render(
+      <Harness
+        initial={{ ...INITIAL_APP_DATA, parchmentLots: [parchment], greenBeanLots: [greenLot(6, 8), greenLot(7, 4)] }}
+        refreshData={async () => {}}
+        onData={onData}
+      />,
+    )
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit green bean lot GBL-2026-7' })[0])
+
+    expect(await screen.findByTestId('edit-green-bean-hull-limit')).toHaveTextContent(
+      'At most 8.00 kg: its Hull & Grade hulled 16.00 kg of parchment and the other green bean lots weigh 8.00 kg.',
+    )
+    expect(getSpy).toHaveBeenCalledWith('/parchment-lots', { processingBatchId: 'pb-5' })
+    // Kept on the stored parchment lot, as its history popup does.
+    expect(onData.mock.lastCall![0].parchmentLots[0].withdrawalHistory).toHaveLength(1)
+
+    const popup = editPopup()
+    fireEvent.change(within(popup).getByLabelText('Lot weight (kg)'), { target: { value: '9' } })
+    fireEvent.click(within(popup).getByRole('button', { name: 'Save changes' }))
+
+    expect(within(popup).getByText(
+      /Green beans cannot weigh more than the parchment they were hulled from\. At most 8\.00 kg/,
+    )).toBeInTheDocument()
+    expect(putSpy).not.toHaveBeenCalled()
+  })
+
+  it('loads nothing for a lot no Hull & Grade made', () => {
+    const external = greenLot(9, 4, {
+      sourceType: GreenBeanSourceType.External, parchmentLotId: undefined, parchmentWithdrawalId: undefined,
+    })
+    render(
+      <Harness
+        initial={{ ...INITIAL_APP_DATA, parchmentLots: [parchment], greenBeanLots: [external] }}
+        refreshData={async () => {}}
+      />,
+    )
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit green bean lot GBL-2026-9' })[0])
+
+    expect(screen.getByRole('heading', { name: 'Edit green bean lot' })).toBeInTheDocument()
+    expect(screen.queryByTestId('edit-green-bean-hull-limit')).not.toBeInTheDocument()
+    expect(getSpy).not.toHaveBeenCalledWith('/parchment-lots', expect.anything())
   })
 })

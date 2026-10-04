@@ -195,10 +195,12 @@ export async function POST(request: NextRequest) {
     } | null = null
 
     for (let attempt = 0; attempt < MAX_ORDER_NUMBER_ATTEMPTS; attempt++) {
-      const orderNumber = await getNextSaleOrderNumber()
-
       try {
         result = await prisma.$transaction(async (tx) => {
+          // Taken first, inside the transaction: a sale that fails gives its
+          // number back, and a deleted sale's number is never handed out
+          // again (lib/documentSequence).
+          const orderNumber = await getNextSaleOrderNumber(undefined, tx)
           const order = await tx.saleOrder.create({
             data: {
               orderNumber,
@@ -245,7 +247,8 @@ export async function POST(request: NextRequest) {
 
         break
       } catch (error) {
-        // Another sale took this number first; read the next one and retry.
+        // The number is already on a sale (one recorded without the counter):
+        // the next attempt takes the next number.
         if (isUniqueConstraintError(error)) {
           continue
         }

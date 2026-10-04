@@ -37,6 +37,9 @@ DATABASE_URL="postgresql://user:password@localhost:5432/coffee_lab?schema=public
 # JWT Secret (generate a random string for production)
 JWT_SECRET="your-super-secret-jwt-key-change-this-in-production"
 
+# Seed account password, required by npm run db:seed (or set every SEED_<ROLE>_PASSWORD; see prisma/seed.ts)
+SEED_DEFAULT_PASSWORD="choose-a-strong-seed-password"
+
 # Frontend URL (for CORS)
 FRONTEND_URL="http://localhost:5173"
 
@@ -148,7 +151,7 @@ The API will be available at `http://localhost:3001`
 - `GET /api/green-bean-lots/:id` - Get green bean lot by ID
 - `PUT /api/green-bean-lots/:id` - Update green bean lot
 - `POST /api/green-bean-lots/:id/withdrawals` - Create withdrawal
-- `POST /api/green-bean-lots/:id/generate-public-id` - Generate public trace ID
+- `POST /api/green-bean-lots/:id/generate-public-id` - Get or create the public trace ID (an existing one is kept unless the body is `{ "regenerate": true }`)
 - `GET /api/green-bean-lots/:id/qr` - Get QR code for traceability
 
 ### Public Traceability

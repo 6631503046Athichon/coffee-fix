@@ -15,8 +15,13 @@
 
 import { describe, test, expect, jest, beforeEach } from '@jest/globals'
 import { NextRequest } from 'next/server'
+import { createMemorySequence } from './helpers/memorySequence'
+
+// lib/documentSequence's counter: nextDisplayId takes its numbers here.
+const mockSequence = createMemorySequence()
 
 const mockPrisma: any = {
+  $queryRaw: jest.fn(mockSequence.queryRaw),
   harvestLot: {
     findUnique: jest.fn(),
     findMany: jest.fn(),
@@ -223,6 +228,7 @@ async function get() {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockSequence.reset()
   mockAuthUser = null
   mockPrisma.harvestLot.findMany.mockResolvedValue([])
   mockPrisma.harvestLot.create.mockImplementation(async (args: any) => ({ id: 'new-lot', ...args.data }))

@@ -13,6 +13,7 @@
 
 import { describe, test, expect, jest, beforeEach } from '@jest/globals'
 import { NextRequest } from 'next/server'
+import { createMemorySequence } from './helpers/memorySequence'
 
 const mockTx: any = {
   greenBeanLot: { create: jest.fn() },
@@ -21,7 +22,11 @@ const mockTx: any = {
   pricingHistory: { create: jest.fn() },
 }
 
+// lib/documentSequence's counter: nextDisplayId takes its numbers here.
+const mockSequence = createMemorySequence()
+
 const mockPrisma: any = {
+  $queryRaw: jest.fn(mockSequence.queryRaw),
   greenBeanLot: { findMany: jest.fn(), create: jest.fn() },
   parchmentLot: { findUnique: jest.fn() },
   user: { findUnique: jest.fn() },
@@ -93,6 +98,7 @@ const hulledLots = () => mockTx.greenBeanLot.create.mock.calls.map((call: any[])
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockSequence.reset()
   mockAuthUser = null
   batchOwner = 'processor-1'
   mockPrisma.greenBeanLot.findMany.mockResolvedValue([])

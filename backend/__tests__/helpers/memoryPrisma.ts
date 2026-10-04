@@ -18,7 +18,13 @@
  * transaction callback gets `tx`, which can also write and `$queryRaw` (row
  * locks are recorded in `locks` and return no rows). A callback that throws
  * leaves the tables as they were, like a rolled-back transaction.
+ *
+ * Both also run lib/documentSequence's counter upsert ("DocumentSequence",
+ * read back with `sequences()`): numbers taken on `client` stay taken, ones
+ * taken on `tx` go back with a rolled-back transaction.
  */
+
+import { createMemorySequence, isSequenceStatement } from './memorySequence'
 
 type Row = Record<string, any>
 
@@ -28,6 +34,12 @@ const many = (model: string, foreign: string): Relation => ({ model, kind: 'many
 const one = (model: string, local: string): Relation => ({ model, kind: 'one', local, foreign: 'id' })
 
 const RELATIONS: Record<string, Record<string, Relation>> = {
+  harvestLot: {
+    farm: one('farm', 'farmId'),
+    cropYear: one('cropYear', 'cropYearId'),
+    processingBatches: many('processingBatch', 'harvestLotId'),
+    parchmentLots: many('parchmentLot', 'harvestLotId'),
+  },
   processingBatch: {
     parchmentLots: many('parchmentLot', 'processingBatchId'),
   },
@@ -70,6 +82,8 @@ const COMPOUND_KEYS: Record<string, string[]> = {
 
 export const MODELS = [
   'user',
+  'farm',
+  'cropYear',
   'harvestLot',
   'processingBatch',
   'dryingLogEntry',
@@ -84,6 +98,8 @@ export const MODELS = [
   'cuppingSample',
   'cuppingScore',
   'pricingHistory',
+  'saleOrder',
+  'invoice',
 ] as const
 
 export type ModelName = (typeof MODELS)[number]
@@ -338,8 +354,12 @@ export function createMemoryPrisma() {
     }
   }
 
+  // The DocumentSequence counter (lib/documentSequence).
+  const sequence = createMemorySequence()
+
   const tx: Row = Object.fromEntries(MODELS.map(model => [model, writeDelegate(model)]))
   tx.$queryRaw = async (strings: TemplateStringsArray, ...values: unknown[]) => {
+    if (isSequenceStatement(strings)) return sequence.reserve(values)
     // A Prisma.join(...) value is a fragment of its own: one ? per item.
     const fragments = values.map(value => (isSqlFragment(value) ? value : null))
     const text = strings.reduce(
@@ -353,12 +373,20 @@ export function createMemoryPrisma() {
   }
 
   const client: Row = Object.fromEntries(MODELS.map(model => [model, readDelegate(model)]))
+  // Numbers are taken outside the transaction too (they commit on their
+  // own); any other raw statement belongs inside one.
+  client.$queryRaw = async (strings: TemplateStringsArray, ...values: unknown[]) => {
+    if (isSequenceStatement(strings)) return sequence.reserve(values)
+    throw new Error('memoryPrisma: $queryRaw outside a transaction')
+  }
   client.$transaction = async (callback: (txClient: Row) => Promise<unknown>) => {
     const snapshot = structuredClone(tables)
+    const sequenceSnapshot = sequence.snapshot()
     try {
       return await callback(tx)
     } catch (error) {
       tables = snapshot
+      sequence.restore(sequenceSnapshot)
       throw error
     }
   }
@@ -378,10 +406,13 @@ export function createMemoryPrisma() {
       tables[model].push(full)
       return full
     },
+    /** The DocumentSequence counter: series key ("HL-2026") -> last number handed out. */
+    sequences: () => sequence.counters(),
     reset: () => {
       tables = emptyTables()
       nextId = 1
       locks.length = 0
+      sequence.reset()
     },
   }
 }

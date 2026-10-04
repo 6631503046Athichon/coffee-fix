@@ -145,10 +145,12 @@ export async function POST(request: NextRequest) {
     let invoice: { id: string } | null = null
 
     for (let attempt = 0; attempt < MAX_ORDER_NUMBER_ATTEMPTS; attempt++) {
-      const invoiceNumber = await getNextInvoiceNumber()
-
       try {
         invoice = await prisma.$transaction(async (tx) => {
+          // Taken first, inside the transaction: an invoice that fails gives
+          // its number back, and a deleted invoice's number is never handed
+          // out again (lib/documentSequence).
+          const invoiceNumber = await getNextInvoiceNumber(undefined, tx)
           const inv = await tx.invoice.create({
             data: {
               invoiceNumber,
@@ -183,8 +185,9 @@ export async function POST(request: NextRequest) {
 
         break
       } catch (error) {
-        // Another invoice took this number first; read the next one and retry.
-        // After the last attempt the 409 below answers.
+        // The number is already on an invoice (one recorded without the
+        // counter): the next attempt takes the next number. After the last
+        // attempt the 409 below answers.
         if (isUniqueConstraintError(error)) {
           continue
         }

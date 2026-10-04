@@ -455,6 +455,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
 
   useEffect(() => {
     if (scoringLot && processorUser) {
+      // The notes saved on the lot (qcNotes) win over the in-browser QC
+      // session's copy, which is gone after a reload.
+      const savedNotes = scoringLot.qcNotes;
       const qcSessionId = `CS-QC-${processorUser.id}`;
       const qcSession = data.cuppingSessions.find((s) => s.id === qcSessionId);
       if (qcSession) {
@@ -468,7 +471,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           if (scoreEntry) {
             // Check if it's a detailed score
             if (Object.keys(scoreEntry.scores).length > 1) {
-              setNotes(scoreEntry.notes);
+              setNotes(savedNotes ?? scoreEntry.notes ?? "");
               const newSensoryScores = { ...initialSensoryScores };
               SCA_SENSORY_ATTRIBUTES.forEach((attr) => {
                 if (scoreEntry.scores[attr] !== undefined) {
@@ -494,14 +497,15 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               // reading the total as the Overall attribute. Its notes still
               // load, and the header keeps showing the stored total.
               resetAllScoreForms();
-              setNotes(scoreEntry.notes);
+              setNotes(savedNotes ?? scoreEntry.notes ?? "");
             }
             return;
           }
         }
       }
-      // If no score found, reset everything
+      // If no score found, reset everything but the notes saved on the lot
       resetAllScoreForms();
+      setNotes(savedNotes ?? "");
     }
   }, [scoringLot, processorUser, data.cuppingSessions, resetAllScoreForms]);
 
@@ -669,6 +673,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             cuppingScores: newCuppingScores,
             processorScore: totalScore,
             ...cuppingDetailUpdate,
+            // Saved on the lot too, so reopening QC Score shows them.
+            qcNotes: notes.trim() || undefined,
           };
         }
         return gbl;
@@ -687,6 +693,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         scoringLot.id,
         totalScore,
         cuppingDetailUpdate,
+        notes,
       );
       addToast({
         type: "success",
@@ -750,6 +757,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const withdrawalCorrections = useWithdrawalCorrections();
   const parchmentHistory = useParchmentWithdrawalHistory(
     selectedParchmentForHistory,
+  );
+  // The Edit green bean lot popup holds a lot a Hull & Grade made to the
+  // parchment that Hull & Grade hulled, which it reads from the parchment
+  // lot's withdrawals: bulk-load does not carry them, so load them while the
+  // popup is open (the popup reads the stored lot, so the limit shows once
+  // they arrive).
+  useParchmentWithdrawalHistory(
+    editingGreenBean && madeByHullAndGrade(editingGreenBean)
+      ? (data.parchmentLots.find(
+          (p) => p.id === editingGreenBean.parchmentLotId,
+        ) ?? null)
+      : null,
   );
 
   const openParchmentEdit = (lot: ParchmentLot) => {
@@ -1001,6 +1020,23 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       type: "success",
       message: `Parchment lot ${formatParchmentId(saved)} updated.`,
     });
+  };
+
+  // The invoice created the lot's public trace link. Keep it on the lot, so
+  // a reopened invoice shows that QR rather than offering to create (and so
+  // replace) the link again.
+  const handleInvoicePublicTraceId = (lotId: string, publicTraceId: string) => {
+    setData((prev) => ({
+      ...prev,
+      greenBeanLots: prev.greenBeanLots.map((g) =>
+        g.id === lotId ? { ...g, publicTraceId } : g,
+      ),
+    }));
+    setInvoiceView((prev) =>
+      prev && prev.lot.id === lotId
+        ? { ...prev, lot: { ...prev.lot, publicTraceId } }
+        : prev,
+    );
   };
 
   const handleGreenBeanSaved = (saved: GreenBeanLot) => {
@@ -4331,6 +4367,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     rows={4}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
+                    // The backend keeps at most 2000 characters (qcNotes).
+                    maxLength={2000}
                     placeholder="Describe flavor notes, aroma, body, aftertaste..."
                     className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-base focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm transition-all resize-none"
                   ></textarea>
@@ -5330,6 +5368,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                 )
               : undefined
           }
+          greenBeanLots={data.greenBeanLots}
           onClose={() => setEditingGreenBean(null)}
           onSaved={handleGreenBeanSaved}
           onError={handleCorrectionError}
@@ -5341,6 +5380,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           onClose={() => setInvoiceView(null)}
           lot={invoiceView.lot}
           entry={invoiceView.lot.withdrawalHistory![invoiceView.entryIndex]}
+          canGeneratePublicLink={canManageLot(invoiceView.lot)}
+          onPublicTraceIdGenerated={(publicTraceId) =>
+            handleInvoicePublicTraceId(invoiceView.lot.id, publicTraceId)
+          }
         />
       )}
     </div>

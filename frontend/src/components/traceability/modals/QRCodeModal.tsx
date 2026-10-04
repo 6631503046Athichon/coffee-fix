@@ -106,11 +106,13 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
     };
   }, []);
 
-  const handleGeneratePublicId = async (autoClose = false) => {
+  // First-time generation (auto or the retry button) never replaces an id the
+  // server already holds; only the explicit Regenerate action does.
+  const handleGeneratePublicId = async ({ regenerate = false, autoClose = false } = {}) => {
     setIsGenerating(true);
     setError(null);
     try {
-      const result = await generatePublicTraceId(lotId);
+      const result = await generatePublicTraceId(lotId, regenerate);
       setCurrentPublicId(result.publicTraceId);
       if (onPublicIdGenerated) {
         onPublicIdGenerated(result.publicTraceId);
@@ -299,7 +301,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
             <div className="border-t border-gray-200 pt-4">
               <Button
                 variant="outline"
-                onClick={() => handleGeneratePublicId(true)}
+                onClick={() => handleGeneratePublicId({ regenerate: true, autoClose: true })}
                 disabled={isGenerating}
                 loading={isGenerating}
                 fullWidth

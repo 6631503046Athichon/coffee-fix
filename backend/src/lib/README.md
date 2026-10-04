@@ -62,8 +62,12 @@ Zod schemas, one file per domain (`farm`, `harvestLot`, `parchmentLot`,
   leaking into Prisma writes (see `safe-parsing.test.ts`).
 - `parseDateOnly(value)` — turn `YYYY-MM-DD` into a `Date` anchored at 12:00 UTC
   so the calendar date is stable in every timezone (see `parse-date-only.test.ts`).
-- `nextDisplayId(model, prefix)` — compute the next `PREFIX-YYYY-N` ID.
-- `nextDisplayIds(model, prefix, count)` — batch variant.
+- `nextDisplayId(model, prefix, db?)` — take the next `PREFIX-YYYY-N` ID from
+  the persistent counter (`documentSequence.ts`), never below the highest
+  number in `model`'s table. A deleted record's number is never reused.
+  Pass `db` (a `$transaction` client) to take it inside that transaction.
+- `nextDisplayIds(model, prefix, count, db?)` — batch variant: reserves the
+  whole block in one statement (Hull & Grade, Excel import).
 - `withDisplayIdRetry(fn)` — wrap a `nextDisplayId + create` pair so a P2002
   unique-violation triggers a retry rather than a 500. ALWAYS use this when
   inserting a row that has a `displayId`.
@@ -80,7 +84,17 @@ Generate temporary username / password for admin-created users (`first-login`
 flow forces a change).
 
 ## `documentNumbers.ts`
-Sale-order and invoice number formatting.
+Sale-order and invoice numbers (`ORD-2026-0001`, `INV-2026-0001`), taken from
+the same counter as display IDs, so a deleted order's number is never reused.
+`getNextSaleOrderNumber(year?, tx)` / `getNextInvoiceNumber(year?, tx)` run
+first inside the create transaction, so a failed sale gives its number back.
+
+## `documentSequence.ts`
+`reserveSequence(key, floor, count?, db?)` — the counter behind every document
+number: one `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` on
+`DocumentSequence` (`prisma/sql/009_document_sequences.sql`), keyed by prefix
+and year (`HL-2026`, `ORD-2026`), never below `floor` (the highest number in
+the real table). Tests answer it with `__tests__/helpers/memorySequence`.
 
 ## `saleOrders.ts` — selling roasted coffee and green beans
 Type-only imports, so routes and tests can use it without mocks.

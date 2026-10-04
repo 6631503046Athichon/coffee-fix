@@ -1,4 +1,9 @@
 import prisma from './prisma'
+import { reserveSequence } from './documentSequence'
+import type { SaleTx } from './saleOrders'
+
+/** The app's client, or the client a `prisma.$transaction` callback gets. */
+type NumberDb = typeof prisma | SaleTx
 
 const DEFAULT_PAD_LENGTH = 4
 
@@ -17,9 +22,22 @@ function formatSequenceNumber(prefix: string, year: number, sequence: number): s
   return `${prefix}-${year}-${String(sequence).padStart(DEFAULT_PAD_LENGTH, '0')}`
 }
 
-export async function getNextSaleOrderNumber(year = new Date().getFullYear()): Promise<string> {
+// The numbers come from the persistent counter (lib/documentSequence), so a
+// deleted order's or invoice's number is never handed out again. The latest
+// number in the table is the floor the counter never goes below, so it
+// carries on from existing data. orderNumber / invoiceNumber stay @unique:
+// the callers retry on P2002 and get a fresh number.
+//
+// Pass the transaction client as `db` and take the number first thing in the
+// transaction that creates the record: a sale or invoice that fails then
+// gives its number back instead of leaving a gap.
+
+export async function getNextSaleOrderNumber(
+  year = new Date().getFullYear(),
+  db: NumberDb = prisma,
+): Promise<string> {
   const prefix = 'ORD'
-  const latestOrder = await prisma.saleOrder.findFirst({
+  const latestOrder = await db.saleOrder.findFirst({
     where: {
       orderNumber: {
         startsWith: `${prefix}-${year}-`,
@@ -33,13 +51,17 @@ export async function getNextSaleOrderNumber(year = new Date().getFullYear()): P
     },
   })
 
-  const nextSequence = parseSequenceNumber(latestOrder?.orderNumber ?? '', prefix, year) + 1
+  const floor = parseSequenceNumber(latestOrder?.orderNumber ?? '', prefix, year)
+  const nextSequence = await reserveSequence(`${prefix}-${year}`, floor, 1, db)
   return formatSequenceNumber(prefix, year, nextSequence)
 }
 
-export async function getNextInvoiceNumber(year = new Date().getFullYear()): Promise<string> {
+export async function getNextInvoiceNumber(
+  year = new Date().getFullYear(),
+  db: NumberDb = prisma,
+): Promise<string> {
   const prefix = 'INV'
-  const latestInvoice = await prisma.invoice.findFirst({
+  const latestInvoice = await db.invoice.findFirst({
     where: {
       invoiceNumber: {
         startsWith: `${prefix}-${year}-`,
@@ -53,7 +75,8 @@ export async function getNextInvoiceNumber(year = new Date().getFullYear()): Pro
     },
   })
 
-  const nextSequence = parseSequenceNumber(latestInvoice?.invoiceNumber ?? '', prefix, year) + 1
+  const floor = parseSequenceNumber(latestInvoice?.invoiceNumber ?? '', prefix, year)
+  const nextSequence = await reserveSequence(`${prefix}-${year}`, floor, 1, db)
   return formatSequenceNumber(prefix, year, nextSequence)
 }
 

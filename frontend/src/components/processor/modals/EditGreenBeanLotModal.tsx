@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Pencil } from "lucide-react";
 import type { GreenBeanLot, ParchmentLot } from "../../../types";
 import Modal from "../../common/Modal";
@@ -20,6 +20,11 @@ import {
   lotWeightError,
   sameKg,
 } from "../workbench/lotCorrections";
+import {
+  exceedsHull,
+  hullGreenLimit,
+  hullLimitText,
+} from "../workbench/hullGreenLimit";
 
 const PERMISSION_MESSAGE =
   "Only the processor who created this lot, or an admin, can edit it.";
@@ -33,6 +38,11 @@ export interface EditGreenBeanLotModalProps {
   lot: GreenBeanLot;
   /** The parchment lot it was hulled from, when loaded. */
   parchmentLot?: ParchmentLot;
+  /**
+   * The loaded green bean lots, so a lot a Hull & Grade made is held to the
+   * parchment it hulled (with the other lots it made) before saving.
+   */
+  greenBeanLots?: GreenBeanLot[];
   onClose: () => void;
   onSaved: (updatedLot: GreenBeanLot) => void;
   /** Called with the message whenever saving fails (e.g. to raise a toast). */
@@ -42,11 +52,14 @@ export interface EditGreenBeanLotModalProps {
 /**
  * Corrects a green-bean lot's grade or weight (F24). The weight is the lot's
  * whole weight: the kg left moves with it, and the backend refuses (409) a
- * weight below what was already withdrawn, sent to a roaster or sold.
+ * weight below what was already withdrawn, sent to a roaster or sold. A lot a
+ * Hull & Grade made can only grow while that Hull & Grade's lots weigh no
+ * more than the parchment it hulled (backend 400, shown here before saving).
  */
 const EditGreenBeanLotModal: React.FC<EditGreenBeanLotModalProps> = ({
   lot,
   parchmentLot,
+  greenBeanLots,
   onClose,
   onSaved,
   onError,
@@ -68,6 +81,16 @@ const EditGreenBeanLotModal: React.FC<EditGreenBeanLotModalProps> = ({
     weight.trim() !== "" && Number.isFinite(typedWeight)
       ? kgLeftAfter(lot, typedWeight)
       : null;
+  const hullLimit = useMemo(
+    () => hullGreenLimit(lot, parchmentLot, greenBeanLots ?? []),
+    [lot, parchmentLot, greenBeanLots],
+  );
+  // Lowering a lot never makes its Hull & Grade outweigh the parchment.
+  const overHull = (weightKg: number) =>
+    hullLimit !== null &&
+    weightKg > lot.initialWeightKg &&
+    exceedsHull(hullLimit, weightKg);
+  const typedOverHull = leftAfter !== null && overHull(typedWeight);
   const source = parchmentLot
     ? formatParchmentId(parchmentLot)
     : lot.sourceType === "External"
@@ -87,7 +110,9 @@ const EditGreenBeanLotModal: React.FC<EditGreenBeanLotModalProps> = ({
     if (weight.trim() !== initialWeight) {
       const weightError = lotWeightError(weight, outKg);
       if (weightError) nextErrors.initialWeightKg = weightError;
-      else if (!sameKg(lot.initialWeightKg, typedWeight)) {
+      else if (hullLimit && overHull(typedWeight)) {
+        nextErrors.initialWeightKg = `Green beans cannot weigh more than the parchment they were hulled from. ${hullLimitText(hullLimit)}`;
+      } else if (!sameKg(lot.initialWeightKg, typedWeight)) {
         changes.initialWeightKg = typedWeight;
       }
     }
@@ -209,6 +234,14 @@ const EditGreenBeanLotModal: React.FC<EditGreenBeanLotModalProps> = ({
             : "Nothing withdrawn yet."}
           {leftAfter !== null && ` ${leftAfter.toFixed(2)} kg left in stock after saving.`}
         </p>
+        {hullLimit && (
+          <p
+            className={`mt-1 text-xs ${typedOverHull ? "font-medium text-red-600" : "text-gray-500"}`}
+            data-testid="edit-green-bean-hull-limit"
+          >
+            {hullLimitText(hullLimit)}
+          </p>
+        )}
 
         {error && (
           <p

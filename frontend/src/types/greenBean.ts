@@ -83,6 +83,8 @@ export interface GreenBeanLot {
   cuppingUniformity?: number;
   cuppingCleanCup?: number;
   cuppingSweetness?: number;
+  /** The processor's QC Score "Tasting Notes & Comments", saved with the score. */
+  qcNotes?: string;
   withdrawalHistory?: GreenBeanWithdrawalRecord[];
   pricePerKg?: number;
   currency?: string;

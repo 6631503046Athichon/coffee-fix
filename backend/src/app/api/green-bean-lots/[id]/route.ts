@@ -23,6 +23,17 @@ import {
   type ReweighResult,
 } from "@/lib/lotCorrections";
 import { chainFarmIds, requireChainFarm } from "@/lib/farmAccess";
+import {
+  OverHullError,
+  hullLimitOf,
+  exceedsHull,
+  madeByHullAndGrade,
+  maxGreenKg,
+} from "@/lib/hullGreenWeight";
+
+// The processor's QC "Tasting Notes & Comments" (GreenBeanLot.qcNotes). Not
+// exported: a route file may only export its handlers.
+const QC_NOTES_MAX = 2000;
 
 // GET /api/green-bean-lots/:id
 export async function GET(
@@ -140,7 +151,8 @@ export async function GET(
   }
 }
 
-// PATCH /api/green-bean-lots/:id (for processorScore updates)
+// PATCH /api/green-bean-lots/:id (for processorScore updates, with the QC
+// Score popup's notes as qcNotes)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -178,9 +190,10 @@ export async function PATCH(
       cuppingUniformity,
       cuppingCleanCup,
       cuppingSweetness,
+      qcNotes,
     } = body;
 
-    const updateData: Record<string, number> = {};
+    const updateData: Record<string, number | string | null> = {};
     const fieldsToUpdate: Record<string, unknown> = {
       processorScore,
       cuppingFragrance,
@@ -206,6 +219,26 @@ export async function PATCH(
         );
       }
       updateData[field] = parsed;
+      hasUpdates = true;
+    }
+
+    // The QC Score popup's "Tasting Notes & Comments": trimmed, and empty (or
+    // null) clears them. Same owner-or-Admin rule as the score, checked above.
+    if (qcNotes !== undefined) {
+      if (qcNotes !== null && typeof qcNotes !== "string") {
+        return NextResponse.json(
+          { error: "QC notes must be text" },
+          { status: 400 },
+        );
+      }
+      const notes = typeof qcNotes === "string" ? qcNotes.trim() : "";
+      if (notes.length > QC_NOTES_MAX) {
+        return NextResponse.json(
+          { error: `QC notes must be at most ${QC_NOTES_MAX} characters` },
+          { status: 400 },
+        );
+      }
+      updateData.qcNotes = notes || null;
       hasUpdates = true;
     }
 
@@ -272,6 +305,11 @@ export async function PUT(
         availabilityStatus: true,
         createdById: true,
         currency: true,
+        // Where the lot came from, for the Hull & Grade weight check below.
+        sourceType: true,
+        parchmentLotId: true,
+        parchmentWithdrawalId: true,
+        createdAt: true,
       },
     });
 
@@ -435,6 +473,15 @@ export async function PUT(
       };
     }
 
+    // A lot a Hull & Grade made can only grow while that Hull & Grade's lots
+    // still weigh no more than the parchment it hulled, as when it was
+    // recorded (parchment-lots/:id/withdrawals). Lowering one never makes
+    // that worse, so it is not checked.
+    const checkHull =
+      reweigh !== null &&
+      reweigh.initialWeightKg > existingLot.initialWeightKg &&
+      madeByHullAndGrade(existingLot);
+
     // Update the lot AND write the pricing-history audit row in a single
     // transaction. Previously the audit log was a fire-and-forget call after
     // the update committed — if the audit insert failed, the price change
@@ -442,10 +489,22 @@ export async function PUT(
     // price update rolls back together with the audit on any failure.
     // A weight correction goes first, guarded on the weights as read: a
     // withdrawal in between makes it match nothing instead of being
-    // overwritten, and the whole edit is refused.
+    // overwritten, and the whole edit is refused. The Hull & Grade check
+    // runs first, on the transaction.
     let updatedLot;
     try {
       updatedLot = await prisma.$transaction(async (tx) => {
+        if (reweigh && checkHull) {
+          // Parchment lot first, as a Hull & Grade and its void take it, so
+          // two corrections of lots from one hull cannot both slip past.
+          if (existingLot.parchmentLotId) {
+            await tx.$queryRaw`SELECT "id" FROM "ParchmentLot" WHERE "id" = ${existingLot.parchmentLotId} FOR NO KEY UPDATE`;
+          }
+          const limit = await hullLimitOf(tx, existingLot);
+          if (limit && exceedsHull(limit, reweigh.initialWeightKg)) {
+            throw new OverHullError(limit);
+          }
+        }
         if (reweigh) {
           const guarded = await tx.greenBeanLot.updateMany({
             where: {
@@ -522,6 +581,12 @@ export async function PUT(
         return NextResponse.json(
           { error: LOT_CHANGED_MESSAGE },
           { status: 409 },
+        );
+      }
+      if (error instanceof OverHullError) {
+        return NextResponse.json(
+          { error: error.message, maxWeightKg: maxGreenKg(error.limit) },
+          { status: 400 },
         );
       }
       throw error;

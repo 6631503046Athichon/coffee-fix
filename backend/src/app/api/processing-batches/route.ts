@@ -217,8 +217,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Wrap displayId allocation + the whole transaction in a retry helper.
-    // If a concurrent caller wins the race on either PB or PCH ids, the entire
-    // transaction rolls back and we re-read max for both prefixes.
+    // Both ids come from the DocumentSequence counter (lib/documentSequence),
+    // so concurrent callers never share one; if either collides with a row
+    // written without the counter, the entire transaction rolls back and we
+    // take fresh PB and PCH numbers.
     let processingBatch;
     try {
       processingBatch = await withDisplayIdRetry(async () => {

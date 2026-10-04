@@ -249,6 +249,9 @@ model GreenBeanLot {
   cuppingUniformity     Float?
   cuppingCleanCup       Float?
   cuppingSweetness      Float?
+  /// The processor's QC "Tasting Notes & Comments", saved with the QC score
+  /// (PATCH /api/green-bean-lots/:id). Not a cupping-session column (prisma/sql/008).
+  qcNotes               String?
   /// The Hull & Grade parchment withdrawal that made this lot (prisma/sql/005).
   /// Null on lots made any other way and on lots hulled before 005.
   parchmentWithdrawalId String?
@@ -768,6 +771,18 @@ model PasswordResetToken {
   @@index([token])
   @@index([userId])
   @@index([expiresAt])
+}
+
+/// The last number handed out per document series, so a number is never
+/// handed out twice, not even after its record was deleted. `key` is the
+/// prefix and year ("HL-2026", "PB-2026", "PCH-2026", "GBL-2026", "ORD-2026",
+/// "INV-2026"). Written only by lib/documentSequence (one INSERT ... ON
+/// CONFLICT, never below the highest number in the real table).
+/// See prisma/sql/009_document_sequences.sql.
+model DocumentSequence {
+  key       String   @id
+  lastValue Int
+  updatedAt DateTime @default(now())
 }
 
 enum UserRole {

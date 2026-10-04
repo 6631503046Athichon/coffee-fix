@@ -1,3 +1,7 @@
+// Type-only: the counter (and with it the Prisma client) is loaded only when
+// a number is taken, so the plain helpers here stay free of runtime imports.
+import type { SequenceClient } from './documentSequence'
+
 /**
  * Safely parse float value
  * Returns null if value is undefined, null, or not a valid number
@@ -119,69 +123,21 @@ export function businessYear(now: Date = new Date()): number {
 }
 
 /**
- * Generate the next sequential displayId for a given prefix.
- * Format: {PREFIX}-{YEAR}-{NUMBER} e.g. HL-2026-1, PB-2026-2
- * Queries the table for the highest existing number in the current year
- * (Thai time, see businessYear).
- *
- * NOTE: This read-then-compute is racy on its own — two concurrent callers
- * compute the same `maxNum + 1`. The Prisma schema marks `displayId` as
- * `@unique`, so the database rejects the second insert with P2002. Wrap the
- * `nextDisplayId` + `create` pair in `withDisplayIdRetry` so the second
- * caller re-reads max and retries.
+ * The highest N among this year's `PREFIX-YEAR-N` ids in the table (0 when
+ * there are none): the floor the document counter never goes below.
  *
  * IMPLEMENTATION NOTE: a `findFirst({ orderBy: { displayId: 'desc' } })`
  * fast path would let Postgres pick the max via index, but only if the
  * numeric suffix is fixed-width zero-padded (e.g. `HL-2026-0007`). Current
  * production data and the `__tests__/display-id.test.ts` contract both use
  * unpadded suffixes (`HL-2026-7`), where lexical desc order returns `-9`
- * before `-10`. A switch would therefore require a data migration AND a
- * test update — both intentionally out of scope here. Leaving the linear
- * scan in place is correct; revisit if the table grows past ~10k rows per
- * year per prefix.
+ * before `-10`. Leaving the linear scan in place is correct; revisit if the
+ * table grows past ~10k rows per year per prefix.
  */
-export async function nextDisplayId(
+async function highestDisplayNumber(
   model: { findMany: (args: any) => Promise<any[]> },
-  prefix: string
-): Promise<string> {
-  const yearPrefix = `${prefix}-${businessYear()}-`
-
-  const items = await model.findMany({
-    where: {
-      displayId: { startsWith: yearPrefix },
-    },
-    select: { displayId: true },
-  })
-
-  let maxNum = 0
-  for (const item of items) {
-    const num = parseInt((item.displayId as string).replace(yearPrefix, ''))
-    if (!isNaN(num) && num > maxNum) maxNum = num
-  }
-
-  return `${yearPrefix}${maxNum + 1}`
-}
-
-/**
- * Allocate N sequential displayIds in one read, e.g. for a HullAndGrade
- * withdrawal that creates several green-bean lots in one transaction.
- *
- * Calling `nextDisplayId()` in a loop is wrong: each iteration re-reads the
- * same DB max (the prior in-loop creates aren't committed yet), so every
- * iteration returns the same string and the unique constraint blows up at
- * insert time. This helper reads max once and returns
- * `[max+1, max+2, ..., max+count]`.
- *
- * Pair with `withDisplayIdRetry` to handle concurrent allocators.
- */
-export async function nextDisplayIds(
-  model: { findMany: (args: any) => Promise<any[]> },
-  prefix: string,
-  count: number,
-): Promise<string[]> {
-  if (count <= 0) return []
-  const yearPrefix = `${prefix}-${businessYear()}-`
-
+  yearPrefix: string,
+): Promise<number> {
   const items = await model.findMany({
     where: { displayId: { startsWith: yearPrefix } },
     select: { displayId: true },
@@ -192,8 +148,61 @@ export async function nextDisplayIds(
     const num = parseInt((item.displayId as string).replace(yearPrefix, ''))
     if (!isNaN(num) && num > maxNum) maxNum = num
   }
+  return maxNum
+}
 
-  return Array.from({ length: count }, (_, i) => `${yearPrefix}${maxNum + 1 + i}`)
+/**
+ * Generate the next sequential displayId for a given prefix.
+ * Format: {PREFIX}-{YEAR}-{NUMBER} e.g. HL-2026-1, PB-2026-2, in the current
+ * year (Thai time, see businessYear).
+ *
+ * The number comes from the persistent counter (lib/documentSequence), so it
+ * is never handed out twice: deleting HL-2026-8 and creating a lot gives
+ * HL-2026-9, not a second HL-2026-8. The counter never goes below the
+ * highest number in `model`'s table, so it carries on from existing data.
+ *
+ * Pass `db` (a `$transaction` client) to allocate inside that transaction;
+ * by default it allocates on its own, committed at once.
+ *
+ * The `displayId` column stays `@unique`, so a row written without the
+ * counter (e.g. by an old server during a deploy) still makes the insert fail
+ * with P2002 rather than duplicate it. Wrap the `nextDisplayId` + `create`
+ * pair in `withDisplayIdRetry` so the caller takes a fresh number and retries.
+ */
+export async function nextDisplayId(
+  model: { findMany: (args: any) => Promise<any[]> },
+  prefix: string,
+  db?: SequenceClient,
+): Promise<string> {
+  const [displayId] = await nextDisplayIds(model, prefix, 1, db)
+  return displayId
+}
+
+/**
+ * Allocate N sequential displayIds at once, e.g. for a HullAndGrade
+ * withdrawal that creates several green-bean lots in one transaction.
+ *
+ * Reserves the whole block `[n, n+1, ..., n+count-1]` with one counter
+ * statement (and one read of the table's highest number), so a concurrent
+ * allocator gets numbers after the block, never inside it.
+ *
+ * Pair with `withDisplayIdRetry` to handle rows written without the counter.
+ */
+export async function nextDisplayIds(
+  model: { findMany: (args: any) => Promise<any[]> },
+  prefix: string,
+  count: number,
+  db?: SequenceClient,
+): Promise<string[]> {
+  if (count <= 0) return []
+  const year = businessYear()
+  const yearPrefix = `${prefix}-${year}-`
+
+  const floor = await highestDisplayNumber(model, yearPrefix)
+  const { reserveSequence } = await import('./documentSequence')
+  const first = await reserveSequence(`${prefix}-${year}`, floor, count, db)
+
+  return Array.from({ length: count }, (_, i) => `${yearPrefix}${first + i}`)
 }
 
 /**
@@ -214,9 +223,10 @@ function isDisplayIdConflict(err: unknown): boolean {
 
 /**
  * Run an operation that allocates a `displayId` and creates a row. If the
- * insert collides with another concurrent allocator (Prisma P2002 on
- * `displayId`), retry up to `maxRetries` times — each retry re-reads max so
- * the loser sees the winner's row and bumps its own number.
+ * insert collides with an existing row (Prisma P2002 on `displayId`, e.g. one
+ * written without the counter), retry up to `maxRetries` times — each retry
+ * takes a fresh number from the counter, which also re-reads the table's
+ * highest number, so it lands past the row it hit.
  *
  * Use this to wrap the entire `nextDisplayId(...) + tx.create(...)` block
  * (or the whole `$transaction` if `nextDisplayId` is mixed with other

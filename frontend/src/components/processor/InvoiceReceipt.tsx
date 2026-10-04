@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { GreenBeanLot } from '../../types';
-import { FileText, Printer, X } from 'lucide-react';
-import { generateQRDataUrl, getPublicTraceUrl, getTraceabilityLotUrl } from '../../services/lots/greenBeanLotService';
+import { FileText, Link2, Printer, X } from 'lucide-react';
+import { generatePublicTraceId, generateQRDataUrl, getPublicTraceUrl } from '../../services/lots/greenBeanLotService';
 import { formatGreenBeanId } from '../../utils/formatDisplayId';
 
 interface InvoiceReceiptProps {
@@ -10,20 +10,44 @@ interface InvoiceReceiptProps {
   onClose: () => void;
   lot: GreenBeanLot;
   entry: NonNullable<GreenBeanLot['withdrawalHistory']>[number];
+  /**
+   * The viewer may create the lot's public trace link: the lot's creator or
+   * an Admin, as POST /green-bean-lots/:id/generate-public-id requires.
+   */
+  canGeneratePublicLink?: boolean;
+  /** Called with the new public trace id once the viewer has created it. */
+  onPublicTraceIdGenerated?: (publicTraceId: string) => void;
 }
 
-const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({ visible, onClose, lot, entry }) => {
+const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({
+  visible,
+  onClose,
+  lot,
+  entry,
+  canGeneratePublicLink = false,
+  onPublicTraceIdGenerated,
+}) => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  // A public id created from this invoice, kept for the lot it was made for.
+  const [generated, setGenerated] = useState<{ lotId: string; publicTraceId: string } | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const generatingRef = useRef(false);
 
-  const traceabilityUrl = useMemo(() => {
-    if (lot.publicTraceId) {
-      return getPublicTraceUrl(lot.publicTraceId);
-    }
+  const publicTraceId =
+    lot.publicTraceId || (generated?.lotId === lot.id ? generated.publicTraceId : '');
 
-    return getTraceabilityLotUrl(lot.id);
-  }, [lot.id, lot.publicTraceId]);
+  // The customer scans this, so it must be the PUBLIC trace page. The
+  // internal #/traceability/<lotId> page is behind a login. With no public
+  // id yet there is no QR: publishing the lot is the owner's explicit choice.
+  const traceabilityUrl = useMemo(
+    () => (publicTraceId ? getPublicTraceUrl(publicTraceId) : ''),
+    [publicTraceId]
+  );
 
   useEffect(() => {
+    setQrDataUrl('');
+    if (!traceabilityUrl) return;
     let canceled = false;
     (async () => {
       try {
@@ -35,6 +59,25 @@ const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({ visible, onClose, lot, 
     })();
     return () => { canceled = true; };
   }, [traceabilityUrl]);
+
+  const handleCreatePublicLink = async () => {
+    if (generatingRef.current) return;
+    generatingRef.current = true;
+    setIsGenerating(true);
+    setGenerateError(null);
+    try {
+      // No regenerate flag: if this copy of the lot is stale and the lot is
+      // already public, the server hands back the existing id unchanged.
+      const result = await generatePublicTraceId(lot.id);
+      setGenerated({ lotId: lot.id, publicTraceId: result.publicTraceId });
+      onPublicTraceIdGenerated?.(result.publicTraceId);
+    } catch (err: unknown) {
+      setGenerateError(err instanceof Error && err.message ? err.message : 'Could not create the public trace link.');
+    } finally {
+      generatingRef.current = false;
+      setIsGenerating(false);
+    }
+  };
 
   if (!visible) return null;
 
@@ -126,15 +169,41 @@ const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({ visible, onClose, lot, 
 
           {/* QR and notes */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            <div className="p-4 rounded-xl border border-gray-200">
-              <p className="text-sm font-semibold text-gray-700 mb-2">Scan for Traceability</p>
-              {qrDataUrl ? (
-                <img src={qrDataUrl} alt="Traceability QR" className="w-40 h-40" />
-              ) : (
-                <div className="w-40 h-40 bg-gray-100 animate-pulse rounded" />
-              )}
-              <p className="text-xs text-gray-500 mt-2 break-all">{traceabilityUrl}</p>
-            </div>
+            {traceabilityUrl ? (
+              <div className="p-4 rounded-xl border border-gray-200" data-testid="invoice-trace-qr">
+                <p className="text-sm font-semibold text-gray-700 mb-2">Scan for Traceability</p>
+                {qrDataUrl ? (
+                  <img src={qrDataUrl} alt="Traceability QR" className="w-40 h-40" />
+                ) : (
+                  <div className="w-40 h-40 bg-gray-100 animate-pulse rounded" />
+                )}
+                <p className="text-xs text-gray-500 mt-2 break-all">{traceabilityUrl}</p>
+              </div>
+            ) : canGeneratePublicLink ? (
+              // On screen only: nothing about the link is printed until it exists.
+              <div className="p-4 rounded-xl border border-dashed border-gray-300 print:hidden" data-testid="invoice-trace-create">
+                <p className="text-sm font-semibold text-gray-700 mb-1">Scan for Traceability</p>
+                <p className="text-xs text-gray-500 mb-3">
+                  This lot has no public trace page yet. Creating the link makes the lot's trace page viewable by anyone who has it.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleCreatePublicLink}
+                  disabled={isGenerating}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <Link2 className="h-3.5 w-3.5" />
+                  {isGenerating ? 'Creating link...' : 'Create public trace link'}
+                </button>
+                {generateError && (
+                  <p className="text-xs text-red-600 mt-2" role="alert">{generateError}</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500 print:hidden" data-testid="invoice-trace-unavailable">
+                No public trace link for this lot yet, so no QR code is shown. The lot's owner or an Admin can create one.
+              </p>
+            )}
             <div className="p-4 rounded-xl border border-gray-200">
               <p className="text-sm font-semibold text-gray-700 mb-2">Notes</p>
               <p className="text-sm text-gray-700 whitespace-pre-line">{entry.notes || entry.purpose || '—'}</p>

@@ -38,6 +38,7 @@ interface BackendGreenBeanLot {
   cuppingUniformity?: number | null;
   cuppingCleanCup?: number | null;
   cuppingSweetness?: number | null;
+  qcNotes?: string | null;
   pricePerKg?: number | null;
   currency?: string | null;
   priceSetDate?: string | null;
@@ -141,10 +142,19 @@ export const updateGreenBeanLotScore = async (
   id: string,
   processorScore: number,
   cuppingDetails?: CuppingDetailUpdate,
+  /**
+   * The QC Score popup's "Tasting Notes & Comments". Sent trimmed; empty
+   * clears the saved notes. Left out, the saved notes stay as they are.
+   */
+  qcNotes?: string,
 ): Promise<GreenBeanLot> => {
   const response = await api.patch<{ greenBeanLot: BackendGreenBeanLot }>(
     `/green-bean-lots/${id}`,
-    { processorScore, ...(cuppingDetails || {}) },
+    {
+      processorScore,
+      ...(cuppingDetails || {}),
+      ...(qcNotes !== undefined && { qcNotes: qcNotes.trim() || null }),
+    },
   );
   return transformGreenBeanLotFromBackend(response.greenBeanLot);
 };
@@ -278,6 +288,7 @@ export function transformGreenBeanLotFromBackend(backendLot: BackendGreenBeanLot
     cuppingUniformity: backendLot.cuppingUniformity ?? undefined,
     cuppingCleanCup: backendLot.cuppingCleanCup ?? undefined,
     cuppingSweetness: backendLot.cuppingSweetness ?? undefined,
+    qcNotes: backendLot.qcNotes ?? undefined,
     pricePerKg: backendLot.pricePerKg ?? undefined,
     currency: backendLot.currency ?? undefined,
     priceSetDate: backendLot.priceSetDate
@@ -443,11 +454,18 @@ export interface GeneratePublicIdResponse {
 }
 
 /**
- * Generate a public trace ID for a green bean lot
+ * Get a green bean lot's public trace ID, creating it if the lot has none.
+ * A lot that already has one gets it back unchanged (printed QR codes keep
+ * working). Pass `regenerate` only for an explicit "Regenerate": it replaces
+ * the id and invalidates every QR code printed with the old one.
  */
-export const generatePublicTraceId = async (lotId: string): Promise<GeneratePublicIdResponse> => {
+export const generatePublicTraceId = async (
+  lotId: string,
+  regenerate = false
+): Promise<GeneratePublicIdResponse> => {
   const response = await api.post<GeneratePublicIdResponse>(
-    `/green-bean-lots/${lotId}/generate-public-id`
+    `/green-bean-lots/${lotId}/generate-public-id`,
+    regenerate ? { regenerate: true } : undefined
   );
   return response;
 };

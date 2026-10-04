@@ -2,7 +2,7 @@
 
 Single source of truth: `schema.prisma`. Seed in `seed.ts`.
 
-Schema changes ship as hand-written SQL in `prisma/sql/` (`001_…`, `002_…`, … `007_…`),
+Schema changes ship as hand-written SQL in `prisma/sql/` (`001_…`, `002_…`, … `009_…`),
 because deploys run `prisma generate` and never push the schema. Apply a file
 to the database **before** deploying the backend that reads it, from
 `backend/`:
@@ -81,6 +81,25 @@ NULL means no change since the column was added, so the deploy signs nobody
 out. Apply it **before** the backend that reads it: until it exists, every
 `User` read fails, sign-in included.
 
+`sql/008_green_bean_qc_notes.sql` adds one nullable text column to
+`GreenBeanLot`: `qcNotes`, the processor's QC "Tasting Notes & Comments".
+`PATCH /api/green-bean-lots/:id` saves it with the QC score (trimmed, at most
+2000 characters, empty = NULL; same owner-or-Admin rule as the score) and every
+lot read returns it, so the QC Score popup opens on it again. It is not a
+cupping-session column. NULL means no notes. Apply it **before** the backend
+that reads it: until it exists, every `GreenBeanLot` read fails.
+
+`sql/009_document_sequences.sql` adds the `DocumentSequence` table: the last
+number handed out per series (`HL-2026`, `PB-2026`, `PCH-2026`, `GBL-2026`,
+`ORD-2026`, `INV-2026`), so a deleted record's number is never handed out
+again (it was: HL-2026-8, GBL-2026-8 and ORD-2026-0002 were each used twice).
+It also seeds every series with the highest number its table holds, never
+lowering a counter, so it is safe to re-run. The live backend never reads the
+table, so it keeps working once it has run; apply it **before** the backend
+that uses it, which cannot create a lot, batch, sale order or invoice until it
+exists. A number deleted before it runs cannot be known and may be used once
+more.
+
 Read-only reports live in `prisma/sql/checks/` and run with the same command;
 they only `SELECT`, so they are safe at any time.
 `checks/004_harvest_lot_damage_check.sql` lists the harvest lots the old edit
@@ -117,7 +136,7 @@ the weight of a processed one. Lots with no farm are visible to Admins only.
 | `PhysicalTestResults` | one-to-one physical test on a processing batch |
 | `ParchmentLot` | dried parchment output from a `ProcessingBatch` |
 | `ParchmentWithdrawal` | withdrawal from a parchment lot (sale / sample / loss). `voidedAt` set = void: its kg are back on the lot and it counts for nothing (`sql/005`) |
-| `GreenBeanLot` | hulled green bean output. Can come from a `ParchmentLot` or external import. `parchmentWithdrawalId` = the Hull & Grade that made it (`sql/005`) |
+| `GreenBeanLot` | hulled green bean output. Can come from a `ParchmentLot` or external import. `parchmentWithdrawalId` = the Hull & Grade that made it (`sql/005`). `qcNotes` = the processor's QC notes (`sql/008`) |
 | `GreenBeanWithdrawal` | withdrawal from a green bean lot. `targetRoasterId` = the roaster whose stock got the kg; `voidedAt` set = void, as above (`sql/005`) |
 
 ### Ownership chain (used by `requireOwnership`)
@@ -154,6 +173,7 @@ batch. A green bean withdrawal inherits from its green bean lot.
 | `Invoice` | invoice header, `status: InvoiceStatus` |
 | `InvoiceItem` | invoice line items |
 | `PricingHistory` | append-only price snapshots |
+| `DocumentSequence` | last number handed out per document series (`key` = prefix + year, e.g. `HL-2026`, `ORD-2026`). Written only by `lib/documentSequence` (`sql/009`) |
 
 ### Cupping — HANDS-OFF (see `CLAUDE.md`)
 `CuppingSession`, `CuppingSample`, `CuppingSessionJudge`, `JudgeScore`,
@@ -168,6 +188,8 @@ batch. A green bean withdrawal inherits from its green bean lot.
 
 ## Display IDs
 Many models carry a `displayId @unique` like `HL-2026-7`, `PB-2026-12`,
-`PL-2026-3`, `GB-2026-2`. Generate them via `lib/utils.ts → withDisplayIdRetry`
-to handle the race on concurrent inserts. The `backfill-display-ids` API route
-exists to populate legacy rows.
+`PCH-2026-3`, `GBL-2026-2`. Take them with `lib/utils.ts → nextDisplayId` /
+`nextDisplayIds` inside `withDisplayIdRetry`: the number comes from the
+`DocumentSequence` counter (`sql/009`), so it is never handed out twice, not
+even after a delete. The `backfill-display-ids` API route exists to populate
+legacy rows and takes its numbers from the same counter.

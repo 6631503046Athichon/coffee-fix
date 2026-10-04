@@ -10,6 +10,7 @@
 
 import { describe, test, expect, jest, beforeEach } from '@jest/globals'
 import { NextRequest } from 'next/server'
+import { createMemorySequence } from './helpers/memorySequence'
 import { businessYear, todayDateOnly } from '@/lib/utils'
 
 // Writes must go through the transaction client. The top-level client and
@@ -33,7 +34,11 @@ const txMock: any = {
   },
 }
 
+// lib/documentSequence's counter: nextDisplayId takes its numbers here.
+const mockSequence = createMemorySequence()
+
 const mockPrisma: any = {
+  $queryRaw: jest.fn(mockSequence.queryRaw),
   greenBeanLot: {
     findUnique: jest.fn(),
     findMany: jest.fn(async () => []),
@@ -131,6 +136,7 @@ const pricingRequest = (body: unknown) =>
 describe('green bean lot pricing', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockSequence.reset()
     mockAuthUser = null
     mockPrisma.greenBeanLot.findUnique.mockResolvedValue(existingLot)
     txMock.greenBeanLot.update.mockImplementation(async ({ where, data }: any) => ({

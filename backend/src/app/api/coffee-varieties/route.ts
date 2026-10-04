@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { findVarietyNameClash, varietyNameTakenMessage } from '@/lib/coffeeVarieties'
 
 // This route depends on auth cookies/headers, so it must be dynamic.
 export const dynamic = 'force-dynamic'
@@ -71,15 +72,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if variety already exists
-    const existing = await prisma.coffeeVariety.findUnique({
-      where: { name: normalizedName }
-    })
-
-    if (existing) {
+    // Refuse a name that only differs from an existing one by case or spaces
+    const clash = await findVarietyNameClash(normalizedName)
+    if (clash) {
       return NextResponse.json(
-        { error: 'Coffee variety with this name already exists' },
-        { status: 400 }
+        { error: varietyNameTakenMessage(clash.name) },
+        { status: 409 }
       )
     }
 

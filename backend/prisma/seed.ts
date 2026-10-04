@@ -1,16 +1,37 @@
+// Seed passwords come from the environment - never from this file. The
+// repository is public and production has these accounts, so the seed stops
+// with an error (before writing anything) when a password is not set; there
+// is no built-in fallback.
+//
+//   SEED_DEFAULT_PASSWORD     used for every role below that has no value of its own
+//   SEED_ADMIN_PASSWORD       admin, admin2
+//   SEED_FARMER_PASSWORD      farmer1, farmer2
+//   SEED_PROCESSOR_PASSWORD   processor1
+//   SEED_ROASTER_PASSWORD     roaster1
+//   SEED_HEADJUDGE_PASSWORD   headjudge
+//   SEED_CUPPER_PASSWORD      cupper1, cupper2
+//
+// Put them in the (git-ignored) env file you run the seed with:
+//   npx tsx --env-file=.env prisma/seed.ts
+// Running the seed against a database that already has these accounts
+// RESETS their passwords to these values.
 import {
   PrismaClient,
   UserRole,
 } from "@prisma/client";
 import { hashPassword } from "../src/lib/auth";
+import { resolveSeedPasswords } from "./seedPasswords";
 
 const prisma = new PrismaClient();
 
 async function main() {
+  // Read every password first so a missing one stops the seed before it writes.
+  const seedPasswords = resolveSeedPasswords();
+
   console.log("Starting seed...");
 
   // Create default admin user
-  const adminPassword = await hashPassword("admin123");
+  const adminPassword = await hashPassword(seedPasswords.Admin);
   const admin = await prisma.user.upsert({
     where: { email: "6631503046@lamduan.mfu.ac.th" },
     update: {
@@ -36,7 +57,7 @@ async function main() {
   console.log("Created/Updated admin user:", admin.email);
 
   // Create second admin user for ownership transfer
-  const secondAdminPassword = await hashPassword("admin123");
+  const secondAdminPassword = await hashPassword(seedPasswords.Admin);
   const secondAdmin = await prisma.user.upsert({
     where: { email: "admin2@coffee.com" },
     update: {
@@ -66,49 +87,49 @@ async function main() {
     {
       email: "farmer@coffee.com",
       username: "farmer1",
-      password: await hashPassword("farmer123"),
+      password: await hashPassword(seedPasswords.Farmer),
       name: "Farmer User",
       roles: [UserRole.Farmer],
     },
     {
       email: "farmer2@coffee.com",
       username: "farmer2",
-      password: await hashPassword("farmer123"),
+      password: await hashPassword(seedPasswords.Farmer),
       name: "Farmer 2 User",
       roles: [UserRole.Farmer],
     },
     {
       email: "processor@coffee.com",
       username: "processor1",
-      password: await hashPassword("processor123"),
+      password: await hashPassword(seedPasswords.Processor),
       name: "Processor User",
       roles: [UserRole.Processor],
     },
     {
       email: "roaster@coffee.com",
       username: "roaster1",
-      password: await hashPassword("roaster123"),
+      password: await hashPassword(seedPasswords.Roaster),
       name: "Roaster User",
       roles: [UserRole.Roaster],
     },
     {
       email: "headjudge@coffee.com",
       username: "headjudge",
-      password: await hashPassword("headjudge123"),
+      password: await hashPassword(seedPasswords.HeadJudge),
       name: "Head Judge User",
       roles: [UserRole.HeadJudge],
     },
     {
       email: "cupper@coffee.com",
       username: "cupper1",
-      password: await hashPassword("cupper123"),
+      password: await hashPassword(seedPasswords.Cupper),
       name: "Cupper User",
       roles: [UserRole.Cupper],
     },
     {
       email: "cupper2@coffee.com",
       username: "cupper2",
-      password: await hashPassword("cupper123"),
+      password: await hashPassword(seedPasswords.Cupper),
       name: "Cupper 2 User",
       roles: [UserRole.Cupper],
     },

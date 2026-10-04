@@ -14,13 +14,18 @@
 
 import { describe, test, expect, jest, beforeEach } from '@jest/globals'
 import { NextRequest } from 'next/server'
+import { createMemorySequence } from './helpers/memorySequence'
 import { businessYear } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
 // Prisma mock
 // ---------------------------------------------------------------------------
 
+// lib/documentSequence's counter: nextDisplayId takes its numbers here.
+const mockSequence = createMemorySequence()
+
 const mockPrisma: any = {
+  $queryRaw: jest.fn(mockSequence.queryRaw),
   harvestLot: {
     findUnique: jest.fn(),
     update: jest.fn(),
@@ -76,6 +81,8 @@ function resetMockPrisma() {
   mockPrisma.parchmentLot.deleteMany.mockImplementation(async () => ({ count: 0 }))
   mockPrisma.parchmentLot.updateMany.mockImplementation(async () => ({ count: 1 }))
   mockPrisma.$transaction.mockImplementation(async (callback: any) => callback(mockPrisma))
+  mockPrisma.$queryRaw.mockImplementation(mockSequence.queryRaw)
+  mockSequence.reset()
 }
 resetMockPrisma()
 

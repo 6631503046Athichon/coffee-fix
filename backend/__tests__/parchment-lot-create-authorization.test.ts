@@ -13,8 +13,13 @@
 
 import { describe, test, expect, jest, beforeEach } from '@jest/globals'
 import { NextRequest } from 'next/server'
+import { createMemorySequence } from './helpers/memorySequence'
+
+// lib/documentSequence's counter: nextDisplayId takes its numbers here.
+const mockSequence = createMemorySequence()
 
 const mockPrisma: any = {
+  $queryRaw: jest.fn(mockSequence.queryRaw),
   processingBatch: {
     findUnique: jest.fn(),
   },
@@ -99,6 +104,7 @@ const createdData = () => mockPrisma.parchmentLot.create.mock.calls[0][0].data
 describe('POST /api/parchment-lots', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockSequence.reset()
     mockAuthUser = null
     mockPrisma.processingBatch.findUnique.mockImplementation(async ({ where }: any) => batches[where.id] ?? null)
   })

@@ -6,6 +6,15 @@ import DebouncedSearchInput from '@/components/processor/workbench/DebouncedSear
 
 const SPECIES_OPTIONS = ['Arabica', 'Robusta', 'Liberica', 'Excelsa'];
 
+// Variety names are unique ignoring case and surrounding spaces; the server
+// applies the same rule. The cards on screen may be narrowed by the search or
+// species filter, so the check reads the whole registry.
+const findVarietyNameClash = async (name: string, excludeId?: string): Promise<CoffeeVariety | null> => {
+  const key = name.trim().toLowerCase();
+  const all = await getAllCoffeeVarieties();
+  return all.find(v => v.id !== excludeId && v.name.trim().toLowerCase() === key) || null;
+};
+
 // Custom Dropdown Component
 const CustomDropdown: React.FC<{
   value: string;
@@ -184,9 +193,28 @@ const CoffeeVarietiesManager: React.FC = () => {
       return;
     }
 
+    // Only a new name is checked, so a case-duplicate saved before this rule
+    // can still be edited or deactivated (the server does the same). The
+    // stored name is trimmed too, so an older name with stray spaces saved
+    // unchanged is not taken for a rename.
+    const isNewName = !editingVariety || normalizedName !== editingVariety.name.trim();
+
     setIsSubmitting(true);
 
     try {
+      if (isNewName) {
+        let clash: CoffeeVariety | null = null;
+        try {
+          clash = await findVarietyNameClash(normalizedName, editingVariety?.id);
+        } catch {
+          // The server runs the same check, so a failed lookup only skips the early warning.
+        }
+        if (clash) {
+          setModalError(`Coffee variety "${clash.name.trim()}" already exists (names are not case-sensitive)`);
+          return;
+        }
+      }
+
       const payload = {
         name: normalizedName,
         species: normalizedSpecies,
