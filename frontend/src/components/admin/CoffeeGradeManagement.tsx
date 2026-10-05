@@ -5,6 +5,7 @@ import { addCoffeeGrade, updateCoffeeGrade, deleteCoffeeGrade } from '../../serv
 import { Plus, Edit, Trash2, CheckCircle, XCircle, AlertCircle, X, Save, Bean, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
 import { ModalPortal } from '../common/ModalPortal';
 import AdminConfirmModal from './modals/AdminConfirmModal';
+import { showAppToast } from '../../utils/appToast';
 
 const PAGE_SIZE = 10;
 
@@ -148,7 +149,10 @@ const CoffeeGradeManagement: React.FC = () => {
       const updated = await updateCoffeeGrade(grade.id, { isActive: !grade.isActive });
       if (updated) applyGrade(updated);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to update status');
+      showAppToast({
+        type: 'error',
+        message: err instanceof Error && err.message ? err.message : 'Failed to update status',
+      });
     }
   };
 
@@ -172,7 +176,10 @@ const CoffeeGradeManagement: React.FC = () => {
       if (movedGrade) applyGrade(movedGrade);
       if (movedNeighbour) applyGrade(movedNeighbour);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to reorder grades');
+      showAppToast({
+        type: 'error',
+        message: err instanceof Error && err.message ? err.message : 'Failed to reorder grades',
+      });
     }
   };
 

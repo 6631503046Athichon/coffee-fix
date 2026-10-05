@@ -25,7 +25,17 @@ interface DatePickerProps {
      * `label`. Made up when left out.
      */
     id?: string;
+    /**
+     * Border, radius, padding and focus of the field itself, in place of the
+     * default look, so a form can match its other inputs. `className` only
+     * reaches the wrapper around the label and the field.
+     */
+    triggerClassName?: string;
 }
+
+// The field's own look, unless a caller passes `triggerClassName`.
+const DEFAULT_TRIGGER =
+    'px-4 py-2.5 border-2 border-gray-300 rounded-xl hover:border-blue-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 shadow-sm';
 
 /**
  * Whether any of `field` is still on screen: inside the window and inside
@@ -52,7 +62,8 @@ const DatePicker: React.FC<DatePickerProps> = ({
     placeholder = "Select date",
     required = false,
     className = "",
-    id
+    id,
+    triggerClassName
 }) => {
     const madeUpId = useId();
     const fieldId = id || `date-picker-${madeUpId}`;
@@ -303,7 +314,7 @@ const DatePicker: React.FC<DatePickerProps> = ({
                 aria-labelledby={label ? `${labelId} ${valueId}` : undefined}
                 aria-expanded={isOpen}
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between px-4 py-2.5 border-2 border-gray-300 rounded-xl bg-white hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 shadow-sm min-w-0"
+                className={`w-full flex items-center justify-between bg-white min-w-0 focus:outline-none ${triggerClassName ?? DEFAULT_TRIGGER}`}
             >
                 <span id={valueId} className={`text-sm font-medium truncate flex-1 text-left mr-2 ${selectedDate ? 'text-gray-900' : 'text-gray-500'}`}>
                     {selectedDate ? formatDisplayDate(selectedDate) : placeholder}

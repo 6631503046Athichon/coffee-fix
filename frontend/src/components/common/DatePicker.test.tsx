@@ -72,6 +72,26 @@ describe('DatePicker', () => {
 
     expect(screen.getByRole('button', { name: 'Select date' })).toBeInTheDocument()
   })
+
+  it('keeps its own field look unless a form passes triggerClassName', () => {
+    render(
+      <>
+        <DatePicker value="2026-10-05" onChange={() => {}} label="Default" />
+        <DatePicker
+          value="2026-10-06"
+          onChange={() => {}}
+          label="Matched"
+          triggerClassName="rounded-lg border border-gray-300 px-3"
+        />
+      </>,
+    )
+
+    const plain = screen.getByRole('button', { name: 'Default 5 October 2026' })
+    expect(plain).toHaveClass('border-2', 'rounded-xl', 'px-4', 'w-full')
+    const matched = screen.getByRole('button', { name: 'Matched 6 October 2026' })
+    expect(matched).toHaveClass('rounded-lg', 'border', 'px-3', 'w-full', 'flex', 'bg-white')
+    expect(matched).not.toHaveClass('border-2', 'rounded-xl', 'px-4')
+  })
 })
 
 describe('DatePicker name', () => {

@@ -37,11 +37,18 @@ const { auth, addToast } = vi.hoisted(() => ({
 
 vi.mock('../../../contexts/AuthContext', () => ({ useAuth: () => auth }))
 vi.mock('../../../contexts/ToastContext', () => ({ useToast: () => ({ addToast }) }))
-// The real calendar popover is not what these tests are about.
+// The real calendar popover is not what these tests are about. The field
+// look the form hands over lands on the stand-in, so it can be checked.
 vi.mock('../../common/DatePicker', () => ({
-  default: ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
-    <input value={value} onChange={(e) => onChange(e.target.value)} />
-  ),
+  default: ({
+    value,
+    onChange,
+    triggerClassName,
+  }: {
+    value: string
+    onChange: (v: string) => void
+    triggerClassName?: string
+  }) => <input value={value} onChange={(e) => onChange(e.target.value)} className={triggerClassName} />,
 }))
 vi.mock('../../../services/sales/saleOrderService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../services/sales/saleOrderService')>()),
@@ -131,6 +138,58 @@ describe('SaleOrderModal', { timeout: 20000 }, () => {
     expect(getSellableGreenLots).toHaveBeenCalledWith(undefined)
     // A roaster sells only their own stock: no seller to pick.
     expect(screen.queryByRole('group', { name: 'Sell for' })).not.toBeInTheDocument()
+  })
+
+  it('draws the date field like the pickers and inputs next to it', async () => {
+    renderModal({ initialCustomerId: 'cust-1' })
+    await screen.findByRole('group', { name: 'Item for line 1' })
+
+    const date = within(group('Sale date')).getByRole('textbox')
+    // 1px border and rounded-lg like common/Select, not the date picker's own
+    // 2px border and rounded-xl.
+    expect(date).toHaveClass('rounded-lg', 'border', 'border-gray-300', 'py-2.5', 'focus:ring-blue-500')
+    expect(date).not.toHaveClass('border-2', 'rounded-xl', '!border-red-300')
+    expect(screen.getByLabelText('Kg')).toHaveClass('rounded-lg', 'border', 'py-2.5', 'text-sm')
+    expect(screen.getByLabelText('Price / kg')).toHaveClass('rounded-lg', 'border', 'py-2.5', 'text-sm')
+
+    fireEvent.change(date, { target: { value: '' } })
+    expect(within(group('Sale date')).getByRole('textbox')).toHaveClass('!border-red-300')
+  })
+
+  it('keeps the lines, their count and Add line in one Coffee box', async () => {
+    renderModal({ initialCustomerId: 'cust-1' })
+    await screen.findByRole('group', { name: 'Item for line 1' })
+
+    const box = screen.getByRole('region', { name: 'Coffee' })
+    expect(within(box).getByText('1 / 30 lines')).toBeInTheDocument()
+    fireEvent.click(within(box).getByRole('button', { name: 'Add line' }))
+    expect(within(box).getByRole('group', { name: 'Item for line 2' })).toBeInTheDocument()
+    expect(within(box).getByText('2 / 30 lines')).toBeInTheDocument()
+
+    fireEvent.click(within(box).getByRole('button', { name: 'Remove line 2' }))
+    expect(within(box).queryByRole('group', { name: 'Item for line 2' })).not.toBeInTheDocument()
+    // The last line cannot go.
+    expect(within(box).getByRole('button', { name: 'Remove line 1' })).toBeDisabled()
+  })
+
+  it('says what a new sale is for under the title', async () => {
+    renderModal({ initialCustomerId: 'cust-1' })
+    expect(screen.getByText('Roasted coffee or green beans to a customer')).toBeInTheDocument()
+    await screen.findByRole('group', { name: 'Item for line 1' })
+  })
+
+  it('shows the status of the sale being edited under the title, outside its name', async () => {
+    const order = sale({
+      status: 'Delivered',
+      items: [saleItem({ quantity: 2, roast: roast({ id: 'rb-1' }) })],
+    })
+    renderModal({ order })
+
+    const title = screen.getByRole('heading', { name: 'Edit sale ORD-2026-0001' })
+    expect(screen.getByRole('dialog', { name: 'Edit sale ORD-2026-0001' })).toBeInTheDocument()
+    expect(title.nextElementSibling).toHaveTextContent('Delivered')
+    expect(screen.queryByText('Roasted coffee or green beans to a customer')).not.toBeInTheDocument()
+    await screen.findByRole('group', { name: 'Item for line 1' })
   })
 
   it('adds back the kg this sale already holds when editing', async () => {

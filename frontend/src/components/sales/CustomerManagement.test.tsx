@@ -1,6 +1,6 @@
 import React from 'react'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { UserRole } from '../../types'
 import type { User } from '../../types'
@@ -61,7 +61,7 @@ describe('CustomerManagement', { timeout: 20000 }, () => {
     const row = await screen.findByRole('row', { name: /Blue Door/ })
     await waitFor(() => expect(handle.current.customers.map((c) => c.id)).toEqual(['cust-2', 'cust-1']))
 
-    fireEvent.click(within(row).getByRole('button', { name: 'Sell' }))
+    fireEvent.click(within(row).getByRole('button', { name: 'Sell to Blue Door' }))
     const dialog = screen.getByRole('dialog', { name: 'Sell coffee' })
     expect(within(within(dialog).getByRole('group', { name: 'Customer' })).getByRole('button')).toHaveTextContent(
       'Blue Door (Distributor)',
@@ -82,7 +82,7 @@ describe('CustomerManagement', { timeout: 20000 }, () => {
     )
 
     const row = await screen.findByRole('row', { name: /Blue Door/ })
-    fireEvent.click(within(row).getByRole('button', { name: 'Sell' }))
+    fireEvent.click(within(row).getByRole('button', { name: 'Sell to Blue Door' }))
     const dialog = screen.getByRole('dialog', { name: 'Sell coffee' })
     // From here on the server lists it too.
     vi.mocked(getAllCustomers).mockResolvedValue([blueDoor, aroma, created])
@@ -120,15 +120,15 @@ describe('CustomerManagement delete', { timeout: 20000 }, () => {
       </MemoryRouter>,
     )
 
-  const openDelete = async (name: RegExp) => {
-    const row = await screen.findByRole('row', { name })
-    fireEvent.click(within(row).getByRole('button', { name: 'Delete' }))
+  const openDelete = async (name: string) => {
+    const row = await screen.findByRole('row', { name: new RegExp(name) })
+    fireEvent.click(within(row).getByRole('button', { name: `Delete customer ${name}` }))
     return screen.getByRole('dialog')
   }
 
   it('says up front that a customer with sales cannot be deleted, and offers only Close', async () => {
     renderPage({ saleOrders: [sale({ id: 'sale-1' }), sale({ id: 'sale-2', orderNumber: 'ORD-2026-0002' })] })
-    const dialog = await openDelete(/Cafe Aroma/)
+    const dialog = await openDelete('Cafe Aroma')
 
     expect(dialog).toHaveTextContent('Customer cannot be deleted')
     expect(dialog).toHaveTextContent('Cafe Aroma has 2 sales, so it cannot be deleted.')
@@ -142,7 +142,7 @@ describe('CustomerManagement delete', { timeout: 20000 }, () => {
 
   it('counts cancelled sales too, as the server does', async () => {
     renderPage({ saleOrders: [sale({ status: 'Cancelled' })] })
-    const dialog = await openDelete(/Cafe Aroma/)
+    const dialog = await openDelete('Cafe Aroma')
 
     expect(dialog).toHaveTextContent('Cafe Aroma has 1 cancelled sale, so it cannot be deleted.')
     expect(within(dialog).getByRole('button', { name: 'Delete customer' })).toBeDisabled()
@@ -153,7 +153,7 @@ describe('CustomerManagement delete', { timeout: 20000 }, () => {
       new ApiError('This customer has sales recorded (by you or another roaster), so it cannot be deleted.', 409),
     )
     renderPage()
-    const dialog = await openDelete(/Blue Door/)
+    const dialog = await openDelete('Blue Door')
 
     expect(dialog).toHaveTextContent('Delete Blue Door? This cannot be undone.')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete customer' }))
@@ -167,7 +167,7 @@ describe('CustomerManagement delete', { timeout: 20000 }, () => {
   it('still deletes a customer with no sales', async () => {
     vi.mocked(deleteCustomer).mockResolvedValue(undefined)
     renderPage()
-    const dialog = await openDelete(/Blue Door/)
+    const dialog = await openDelete('Blue Door')
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete customer' }))
 
@@ -205,5 +205,144 @@ describe('CustomerManagement access', { timeout: 20000 }, () => {
 
     expect(screen.getByText('Access Denied')).toBeInTheDocument()
     expect(getAllCustomers).not.toHaveBeenCalled()
+  })
+})
+
+describe('CustomerManagement layout', { timeout: 20000 }, () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    auth.currentUser = roasterUser
+    vi.mocked(getAllCustomers).mockResolvedValue([blueDoor, aroma])
+  })
+
+  const LocationProbe = () => {
+    const location = useLocation()
+    return <p data-testid="location">{location.pathname + location.search}</p>
+  }
+
+  const renderPage = (over: Parameters<typeof appData>[0] = {}) =>
+    render(
+      <MemoryRouter initialEntries={['/customers']}>
+        <TestDataProvider initial={appData({ customers: [blueDoor, aroma], ...over })}>
+          <CustomerManagement />
+          <LocationProbe />
+        </TestDataProvider>
+      </MemoryRouter>,
+    )
+
+  const card = (name: string) => {
+    const items = within(screen.getByRole('list', { name: 'Customers' })).getAllByRole('listitem')
+    const found = items.find((item) => item.textContent?.includes(name))
+    if (!found) throw new Error(`No card for ${name}`)
+    return found
+  }
+
+  it('gives the table row and the phone card the same named actions and sales summary', async () => {
+    renderPage({ saleOrders: [sale({ id: 'sale-1', orderDate: '2026-10-05' })] })
+    const row = await screen.findByRole('row', { name: /Cafe Aroma/ })
+
+    for (const scope of [row, card('Cafe Aroma')]) {
+      for (const name of ['Sell to Cafe Aroma', 'Sales to Cafe Aroma', 'Edit customer Cafe Aroma', 'Delete customer Cafe Aroma']) {
+        expect(within(scope).getByRole('button', { name })).toBeInTheDocument()
+      }
+    }
+    expect(row).toHaveTextContent('1 sale')
+    expect(row).toHaveTextContent('last 5 Oct 2026')
+    expect(card('Cafe Aroma')).toHaveTextContent('1 sale · last 5 Oct 2026')
+    expect(card('Blue Door')).toHaveTextContent('No sales yet')
+  })
+
+  it('opens the edit popup filled in, and the sales log for the customer', async () => {
+    renderPage()
+    const row = await screen.findByRole('row', { name: /Blue Door/ })
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Edit customer Blue Door' }))
+    const dialog = screen.getByRole('dialog', { name: 'Edit Customer: Blue Door' })
+    expect(within(dialog).getByLabelText('Customer Name *')).toHaveValue('Blue Door')
+    expect(within(dialog).getByRole('radio', { name: 'Distributor' })).toBeChecked()
+    expect(within(dialog).getByRole('button', { name: 'Save Changes' })).toBeEnabled()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Sales to Blue Door' }))
+    expect(screen.getByTestId('location')).toHaveTextContent('/sales?customer=cust-2')
+  })
+
+  it('counts the customers the search leaves', async () => {
+    renderPage()
+    await screen.findByRole('row', { name: /Blue Door/ })
+    expect(screen.getByText('2 customers')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search customers' }), { target: { value: 'door' } })
+
+    expect(screen.getByText('1 of 2 customers')).toBeInTheDocument()
+    expect(screen.queryByRole('row', { name: /Cafe Aroma/ })).not.toBeInTheDocument()
+  })
+
+  it('cuts long text with an ellipsis in a fixed-layout table instead of wrapping word by word or scrolling sideways', async () => {
+    const longName = 'The Very Long Named Specialty Coffee Roasting Company of Chiang Mai'
+    vi.mocked(getAllCustomers).mockResolvedValue([customer({ id: 'cust-9', name: longName })])
+    renderPage()
+    const row = await screen.findByRole('row', { name: /Very Long Named/ })
+
+    const table = row.closest('table') as HTMLTableElement
+    expect(table).toHaveClass('table-fixed', 'w-full')
+    expect(table.parentElement).not.toHaveClass('overflow-x-auto')
+    const name = within(row).getByText(longName)
+    expect(name).toHaveClass('truncate')
+    expect(name).toHaveAttribute('title', longName)
+  })
+
+  it('retries a load that failed', async () => {
+    vi.mocked(getAllCustomers).mockRejectedValueOnce(new Error('Network down'))
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderPage()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Network down')
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    expect(await screen.findByRole('row', { name: /Blue Door/ })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    consoleError.mockRestore()
+  })
+
+  it('creates a customer with the type picked from the chips', async () => {
+    const created = customer({ id: 'cust-new', name: 'Green Leaf', type: 'Distributor', contactPhone: '082 111 2222' })
+    vi.mocked(addCustomer).mockResolvedValue(created)
+    renderPage()
+    await screen.findByRole('row', { name: /Blue Door/ })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create Customer' }))
+    const dialog = screen.getByRole('dialog', { name: 'Create New Customer' })
+    expect(within(dialog).getByRole('radio', { name: 'Roaster' })).toBeChecked()
+    expect(within(dialog).getByRole('button', { name: 'Create Customer' })).toBeDisabled()
+
+    fireEvent.change(within(dialog).getByLabelText('Customer Name *'), { target: { value: 'Green Leaf' } })
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Distributor' }))
+    fireEvent.change(within(dialog).getByLabelText('Contact Phone'), { target: { value: '082 111 2222' } })
+    vi.mocked(getAllCustomers).mockResolvedValue([blueDoor, aroma, created])
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create Customer' }))
+
+    await waitFor(() =>
+      expect(addCustomer).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Green Leaf', type: 'Distributor', contactPhone: '082 111 2222' }),
+      ),
+    )
+    expect(await within(dialog).findByRole('status')).toHaveTextContent('Customer "Green Leaf" created successfully!')
+    expect(await screen.findByRole('row', { name: /Green Leaf/ })).toBeInTheDocument()
+  })
+
+  it('shows a refused save in the popup and keeps it open', async () => {
+    vi.mocked(addCustomer).mockRejectedValue(new Error('A customer with this name already exists'))
+    renderPage()
+    await screen.findByRole('row', { name: /Blue Door/ })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create Customer' }))
+    const dialog = screen.getByRole('dialog', { name: 'Create New Customer' })
+    fireEvent.change(within(dialog).getByLabelText('Customer Name *'), { target: { value: 'Blue Door' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create Customer' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('A customer with this name already exists')
+    expect(within(dialog).getByRole('button', { name: 'Create Customer' })).toBeEnabled()
   })
 })

@@ -9,6 +9,37 @@ export const SALE_CURRENCIES = ['THB', 'USD', 'EUR', 'JPY', 'CNY']
 
 export const MAX_SALE_LINES = 30
 
+// The sales pages' one look, used by the Sales log, Customers and the sale and
+// customer popups (and so by the roaster's Sell popup): 11px uppercase labels,
+// 42px fields with a 1px border (like common/Select inside a text-sm wrapper),
+// 40px buttons whose labels never wrap, and 32px icon-only row actions.
+export const LABEL_TEXT = 'text-[11px] font-semibold uppercase tracking-wider text-gray-500'
+export const FIELD_LABEL = `mb-1.5 block ${LABEL_TEXT}`
+/** A text field. The caller adds the border colour and the focus colour. */
+export const FIELD =
+  'block w-full rounded-lg border bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:outline-none focus:ring-2'
+export const BLUE_FOCUS = 'focus:border-blue-500 focus:ring-blue-500'
+/** common/DatePicker's field, drawn like the Selects next to it. */
+export const dateTrigger = (focus: string): string =>
+  'rounded-lg border border-gray-300 px-3 py-2.5 shadow-sm hover:bg-gray-50 focus:ring-2 ' + focus
+export const BTN_SHAPE =
+  'inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50'
+export const OUTLINE_BTN = `${BTN_SHAPE} border border-gray-300 bg-white text-gray-700 hover:bg-gray-50`
+export const PRIMARY_BTN = `${BTN_SHAPE} bg-blue-600 text-white hover:bg-blue-700`
+export const DANGER_BTN = `${BTN_SHAPE} bg-red-600 text-white hover:bg-red-700`
+export const ICON_BTN =
+  'inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-blue-600'
+export const ICON_BTN_DANGER =
+  'inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-red-50 hover:text-red-600'
+
+/** The left stripe of a sale card or row says its status at a glance. */
+export const SALE_STATUS_STRIPE: Record<SaleOrderStatus, string> = {
+  Draft: 'border-l-gray-300',
+  Confirmed: 'border-l-blue-500',
+  Delivered: 'border-l-green-500',
+  Cancelled: 'border-l-red-300',
+}
+
 const STATUS_CHIP_CLASSES: Record<SaleOrderStatus, string> = {
   Draft: 'bg-gray-100 text-gray-700',
   Confirmed: 'bg-blue-50 text-blue-700',

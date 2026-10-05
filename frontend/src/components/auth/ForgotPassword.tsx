@@ -2,6 +2,18 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Coffee, Mail, ArrowLeft } from 'lucide-react';
 import { forgotPassword } from '../../services/auth/authService';
+import { showAppToast } from '../../utils/appToast';
+
+// Copies the development reset link and says how it went in the site toast.
+// The clipboard is missing on plain http and the browser can refuse it.
+const copyResetUrl = async (url: string) => {
+  try {
+    await navigator.clipboard.writeText(url);
+    showAppToast({ type: 'success', message: 'Reset link copied' });
+  } catch {
+    showAppToast({ type: 'error', message: "Couldn't copy the link. Select it and copy it by hand." });
+  }
+};
 
 const ForgotPassword: React.FC = () => {
   const navigate = useNavigate();
@@ -99,10 +111,8 @@ const ForgotPassword: React.FC = () => {
                           {devResetUrl}
                         </a>
                         <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(devResetUrl);
-                            alert('Reset URL copied to clipboard!');
-                          }}
+                          type="button"
+                          onClick={() => copyResetUrl(devResetUrl)}
                           className="text-xs text-blue-600 hover:text-blue-700 underline"
                         >
                           Copy Link

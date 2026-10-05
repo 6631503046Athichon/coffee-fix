@@ -6,6 +6,7 @@ import { Plus, Edit, Trash2, CheckCircle, XCircle, AlertCircle, X, Save, Tag, Ch
 import { ModalPortal } from '../common/ModalPortal';
 import AdminConfirmModal from './modals/AdminConfirmModal';
 import { formatDateDisplay } from '../../utils/formatters';
+import { showAppToast } from '../../utils/appToast';
 
 const PAGE_SIZE = 10;
 
@@ -155,8 +156,11 @@ const ActivityTypeManagement: React.FC = () => {
           activityTypes: prev.activityTypes.map(t => t.id === updated.id ? updated : t),
         }));
       }
-    } catch (err: any) {
-      alert(err instanceof Error ? err.message : 'Failed to update status');
+    } catch (err) {
+      showAppToast({
+        type: 'error',
+        message: err instanceof Error && err.message ? err.message : 'Failed to update status',
+      });
     }
   };
 

@@ -20,6 +20,7 @@ import ProcessTypePill, { PARCHMENT_PILL_SHAPE } from '../processor/workbench/Pr
 import { ModalPortal } from '../common/ModalPortal';
 import AdminConfirmModal from './modals/AdminConfirmModal';
 import { formatDateDisplay } from '../../utils/formatters';
+import { showAppToast } from '../../utils/appToast';
 
 type UsedByHue = Partial<Record<ProcessTypeHue, string[]>>;
 
@@ -352,8 +353,11 @@ const ProcessTypeManagement: React.FC = () => {
         ...prev,
         processTypes: prev.processTypes.map(type => type.id === updated.id ? updated : type),
       }));
-    } catch (err: any) {
-      alert(err instanceof Error ? err.message : 'Failed to update status');
+    } catch (err) {
+      showAppToast({
+        type: 'error',
+        message: err instanceof Error && err.message ? err.message : 'Failed to update status',
+      });
     }
   };
 

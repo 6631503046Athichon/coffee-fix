@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { Customer } from '../../../types';
 import { Modal } from '../../common/Modal';
-import { Button } from '../../common/Button';
-import { Input } from '../../common/Input';
-import Select from '../../common/Select';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, Pencil, Save, UserPlus, X } from 'lucide-react';
 import { addCustomer, updateCustomer } from '../../../services/sales/customerService';
+import { BLUE_FOCUS, FIELD, FIELD_LABEL, OUTLINE_BTN, PRIMARY_BTN } from '../saleDisplay';
+
+// The sale popups' field skin (saleDisplay): 42px tall, 1px border, rounded-lg.
+const field = `${FIELD} border-gray-300 ${BLUE_FOCUS}`;
+
+const Required: React.FC = () => <span className="text-red-500"> *</span>;
 
 interface CreateCustomerModalProps {
   isOpen: boolean;
@@ -22,6 +25,16 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
   editCustomer,
 }) => {
   const isEditMode = !!editCustomer;
+  const uid = useId();
+  const ids = {
+    title: `${uid}-title`,
+    name: `${uid}-name`,
+    type: `${uid}-type`,
+    email: `${uid}-email`,
+    phone: `${uid}-phone`,
+    address: `${uid}-address`,
+    notes: `${uid}-notes`,
+  };
 
   const [name, setName] = useState('');
   const [type, setType] = useState<'Roaster' | 'Distributor' | 'Retailer' | 'Other'>('Roaster');
@@ -33,7 +46,7 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
   const [error, setError] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
 
-  const customerTypes = ['Roaster', 'Distributor', 'Retailer', 'Other'];
+  const customerTypes = ['Roaster', 'Distributor', 'Retailer', 'Other'] as const;
 
   useEffect(() => {
     if (isOpen) {
@@ -121,109 +134,189 @@ const CreateCustomerModal: React.FC<CreateCustomerModalProps> = ({
     }
   };
 
+  const title = isEditMode ? `Edit Customer: ${editCustomer?.name}` : 'Create New Customer';
+  const HeaderIcon = isEditMode ? Pencil : UserPlus;
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={isEditMode ? `Edit Customer: ${editCustomer?.name}` : 'Create New Customer'}
-      maxWidth="2xl"
+      maxWidth="xl"
+      showCloseButton={false}
+      ariaLabelledBy={ids.title}
+      className="!p-5 !rounded-xl"
       mobileFullScreen
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {successMessage && (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-2">
-            <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-green-800 flex-1">{successMessage}</p>
+      {/* On phones the popup is a full-screen sheet: the form fills it so the
+          footer sits at the bottom even when the form is short. */}
+      <form onSubmit={handleSubmit} className="flex flex-col max-sm:min-h-[calc(100dvh-2rem)]">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex-shrink-0 rounded-lg bg-blue-600 p-2">
+              <HeaderIcon className="h-5 w-5 text-white" />
+            </div>
+            <div className="min-w-0">
+              <h2 id={ids.title} className="truncate text-lg font-bold text-gray-900" title={title}>
+                {title}
+              </h2>
+              <p className="mt-0.5 text-xs text-gray-500">
+                {isEditMode ? 'Update the details of this customer' : 'Someone you sell coffee to'}
+              </p>
+            </div>
           </div>
-        )}
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-2">
-            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-red-800 flex-1">{error}</p>
-          </div>
-        )}
-
-        <div>
-          <Input
-            label="Customer Name *"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g., Roaster ABC"
-            required
-            fullWidth
-          />
+          {/* Same name as the Modal's own close button, which this replaces. */}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close modal"
+            className="flex-shrink-0 rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            Customer Type *
-          </label>
-          <Select
-            value={type}
-            onChange={(v) => setType(v as typeof type)}
-            options={customerTypes}
-            placeholder="Select customer type..."
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="flex-1 space-y-4">
           <div>
-            <Input
-              label="Contact Email"
-              type="email"
-              value={contactEmail}
-              onChange={(e) => setContactEmail(e.target.value)}
-              placeholder="customer@example.com"
-              fullWidth
+            <label htmlFor={ids.name} className={FIELD_LABEL}>
+              Customer Name<Required />
+            </label>
+            <input
+              id={ids.name}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Roaster ABC"
+              required
+              className={field}
             />
           </div>
+
+          <div role="radiogroup" aria-labelledby={`${ids.type}-label`}>
+            <span id={`${ids.type}-label`} className={FIELD_LABEL}>
+              Customer Type<Required />
+            </span>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {customerTypes.map((t) => (
+                <label key={t} className="relative cursor-pointer">
+                  <input
+                    type="radio"
+                    name={ids.type}
+                    value={t}
+                    checked={type === t}
+                    onChange={() => setType(t)}
+                    className="peer sr-only"
+                  />
+                  <span
+                    className={`flex h-10 items-center justify-center whitespace-nowrap rounded-lg border px-2 text-sm font-semibold transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-blue-500 ${
+                      type === t
+                        ? 'border-blue-600 bg-blue-50 text-blue-700'
+                        : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {t}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-3">
+            <div className="min-w-0">
+              <label htmlFor={ids.email} className={FIELD_LABEL}>
+                Contact Email
+              </label>
+              <input
+                id={ids.email}
+                type="email"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+                placeholder="customer@example.com"
+                className={field}
+              />
+            </div>
+            <div className="min-w-0">
+              <label htmlFor={ids.phone} className={FIELD_LABEL}>
+                Contact Phone
+              </label>
+              <input
+                id={ids.phone}
+                type="tel"
+                value={contactPhone}
+                onChange={(e) => setContactPhone(e.target.value)}
+                placeholder="+66 123 456 7890"
+                className={field}
+              />
+            </div>
+          </div>
+
           <div>
-            <Input
-              label="Contact Phone"
-              value={contactPhone}
-              onChange={(e) => setContactPhone(e.target.value)}
-              placeholder="+66 123 456 7890"
-              fullWidth
+            <label htmlFor={ids.address} className={FIELD_LABEL}>
+              Address
+            </label>
+            <textarea
+              id={ids.address}
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="123 Main St, City, Country"
+              rows={2}
+              className={`${field} resize-none`}
+            />
+          </div>
+
+          <div>
+            <label htmlFor={ids.notes} className={FIELD_LABEL}>
+              Notes
+            </label>
+            <textarea
+              id={ids.notes}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Additional notes about this customer..."
+              rows={2}
+              className={`${field} resize-none`}
             />
           </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            Address
-          </label>
-          <textarea
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            placeholder="123 Main St, City, Country"
-            rows={3}
-            className="block w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white hover:border-gray-400 placeholder-gray-400 text-sm resize-none"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            Notes
-          </label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Additional notes about this customer..."
-            rows={3}
-            className="block w-full px-3 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white hover:border-gray-400 placeholder-gray-400 text-sm resize-none"
-          />
-        </div>
-
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-          <Button variant="secondary" onClick={onClose} type="button" disabled={isSubmitting}>
-            Cancel
-          </Button>
-          <Button variant="primary" type="submit" disabled={isSubmitting || !name.trim()}>
-            {isSubmitting
-              ? isEditMode ? 'Saving...' : 'Creating...'
-              : isEditMode ? 'Save Changes' : 'Create Customer'}
-          </Button>
+        {/* Stays in view while the form scrolls, with what happened to the save. */}
+        <div className="sticky -bottom-5 z-10 -mx-5 -mb-5 mt-5 rounded-b-xl border-t border-gray-200 bg-gray-50 px-5 py-3 max-sm:-bottom-4 max-sm:-mx-4 max-sm:-mb-4 max-sm:rounded-none max-sm:px-4">
+          {successMessage && (
+            <div role="status" className="mb-2 flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-green-600" />
+              <p className="min-w-0 flex-1 break-words text-xs font-medium text-green-800">{successMessage}</p>
+            </div>
+          )}
+          {error && (
+            <div role="alert" className="mb-2 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-600" />
+              <p className="min-w-0 flex-1 break-words text-xs font-medium text-red-700">{error}</p>
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className={`${OUTLINE_BTN} flex-1 sm:flex-none`}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting || !name.trim()}
+              className={`${PRIMARY_BTN} flex-1 sm:flex-none`}
+            >
+              {isSubmitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : isEditMode ? (
+                <Save className="h-4 w-4" />
+              ) : (
+                <UserPlus className="h-4 w-4" />
+              )}
+              {isSubmitting
+                ? isEditMode ? 'Saving...' : 'Creating...'
+                : isEditMode ? 'Save Changes' : 'Create Customer'}
+            </button>
+          </div>
         </div>
       </form>
     </Modal>

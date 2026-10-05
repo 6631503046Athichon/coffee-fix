@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Download, Loader2, Pencil, Plus, Receipt, Search, Trash2, Users } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, Loader2, Pencil, Plus, Receipt, Search, Trash2, Users, X } from 'lucide-react'
 import { UserRole } from '../../types'
 import type { SaleOrder, SaleOrderStatus, User } from '../../types'
 import { useDataContext } from '../../hooks/useDataContext'
@@ -12,8 +12,18 @@ import { compareSalesNewestFirst } from '../../services/sales/saleOrderService'
 import SaleOrderModal from './modals/SaleOrderModal'
 import SaleDetailsModal from './modals/SaleDetailsModal'
 import {
+  BLUE_FOCUS,
+  FIELD,
+  FIELD_LABEL,
+  ICON_BTN,
+  ICON_BTN_DANGER,
+  LABEL_TEXT,
+  OUTLINE_BTN,
+  PRIMARY_BTN,
   SALE_STATUSES,
+  SALE_STATUS_STRIPE,
   SaleStatusChip,
+  dateTrigger,
   describeLine,
   formatKg,
   formatMoney,
@@ -81,14 +91,62 @@ const itemsSummary = (order: SaleOrder): string[] => {
   return lines
 }
 
-const outlineButton =
-  'inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50'
-const primaryButton =
-  'inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700'
-const rowEditButton =
-  'inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50'
-const rowDeleteButton =
-  'inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50'
+// The status dot on each filter pill matches the stripe on the sale cards.
+const STATUS_DOT: Record<SaleOrderStatus, string> = {
+  Draft: 'bg-gray-400',
+  Confirmed: 'bg-blue-500',
+  Delivered: 'bg-green-500',
+  Cancelled: 'bg-red-400',
+}
+
+const PAGER_BUTTON =
+  'inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40'
+const BOX = 'rounded-lg border border-gray-200 bg-white'
+
+/** One summary figure, drawn like the KPI cards on the Parchment page. */
+const SummaryTile: React.FC<{
+  label: string
+  stripe: string
+  sub: string
+  className?: string
+  children: React.ReactNode
+}> = ({ label, stripe, sub, className = '', children }) => (
+  <div
+    className={`min-w-0 rounded-md border border-gray-200 border-l-4 ${stripe} bg-white px-3 py-2.5 sm:px-4 sm:py-3 ${className}`}
+  >
+    <p className={LABEL_TEXT}>{label}</p>
+    <div className="mt-1.5 font-bold leading-tight text-gray-900">{children}</div>
+    <p className="mt-1 text-[10px] text-gray-400">{sub}</p>
+  </div>
+)
+
+/** The edit and delete icons on a sale row or card; neither opens the row itself. */
+const RowActions: React.FC<{
+  orderNumber: string
+  onEdit: (e: React.MouseEvent) => void
+  onDelete: (e: React.MouseEvent) => void
+}> = ({ orderNumber, onEdit, onDelete }) => (
+  <div className="flex flex-shrink-0 items-center">
+    <button
+      type="button"
+      onClick={onEdit}
+      title="Edit sale"
+      aria-label={`Edit sale ${orderNumber}`}
+      className={ICON_BTN}
+    >
+      <Pencil className="h-4 w-4" />
+    </button>
+    <button
+      type="button"
+      onClick={onDelete}
+      title="Delete sale"
+      aria-label={`Delete sale ${orderNumber}`}
+      className={ICON_BTN_DANGER}
+    >
+      <Trash2 className="h-4 w-4" />
+    </button>
+  </div>
+)
 
 interface SalesLogProps {
   currentUser: User
@@ -348,10 +406,11 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
           <button
             type="button"
             onClick={() => setPanel({ kind: 'create', customerId })}
-            className={`${primaryButton} mt-3`}
+            className={`${PRIMARY_BTN} mt-3 max-w-full`}
+            title={`Sell to ${selectedCustomerName}`}
           >
-            <Plus className="h-4 w-4" />
-            Sell to {selectedCustomerName}
+            <Plus className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 truncate">Sell to {selectedCustomerName}</span>
           </button>
         </div>
       )
@@ -365,7 +424,7 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
           <button
             type="button"
             onClick={() => setPanel({ kind: 'create', customerId: customerId || undefined })}
-            className={`${primaryButton} mt-3`}
+            className={`${PRIMARY_BTN} mt-3`}
           >
             <Plus className="h-4 w-4" />
             New sale
@@ -376,7 +435,7 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
     return (
       <div className="px-4 py-10 text-center">
         <p className="font-semibold text-gray-800">No sales match these filters</p>
-        <button type="button" onClick={clearFilters} className={`${outlineButton} mt-3`}>
+        <button type="button" onClick={clearFilters} className={`${OUTLINE_BTN} mt-3`}>
           Clear filters
         </button>
       </div>
@@ -388,27 +447,27 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
   return (
     <div className="mx-auto max-w-6xl space-y-3">
       {/* Header */}
-      <div className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 sm:px-5 sm:py-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-blue-600 p-2">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex-shrink-0 rounded-lg bg-blue-600 p-2">
               <Receipt className="h-5 w-5 text-white" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">Sales</h1>
-              <p className="text-sm text-gray-500">Coffee you have sold</p>
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Sales</h1>
+              <p className="mt-0.5 text-xs text-gray-500">Coffee you have sold</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => navigate('/customers')} className={outlineButton}>
+            <button
+              type="button"
+              onClick={() => navigate('/customers')}
+              className={`${OUTLINE_BTN} flex-1 sm:flex-none`}
+            >
               <Users className="h-4 w-4" />
               Customers
             </button>
-            <button
-              type="button"
-              onClick={handleExport}
-              className={outlineButton}
-            >
+            <button type="button" onClick={handleExport} className={`${OUTLINE_BTN} flex-1 sm:flex-none`}>
               <Download className="h-4 w-4" />
               Export CSV
             </button>
@@ -416,7 +475,7 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
             <button
               type="button"
               onClick={() => setPanel({ kind: 'create', customerId: customerId || undefined })}
-              className={primaryButton}
+              className={`${PRIMARY_BTN} flex-1 sm:flex-none`}
             >
               <Plus className="h-4 w-4" />
               New sale
@@ -426,22 +485,32 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
       </div>
 
       {/* Filters */}
-      <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-3">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div role="group" aria-labelledby="sales-from-label">
-            <span id="sales-from-label" className="mb-1 block text-xs font-semibold text-gray-600">
+      <div className={`${BOX} p-3`}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div role="group" aria-labelledby="sales-from-label" className="min-w-0">
+            <span id="sales-from-label" className={FIELD_LABEL}>
               From
             </span>
-            <DatePicker value={from} onChange={changeFrom} placeholder="Any date" />
+            <DatePicker
+              value={from}
+              onChange={changeFrom}
+              placeholder="Any date"
+              triggerClassName={dateTrigger(BLUE_FOCUS)}
+            />
           </div>
-          <div role="group" aria-labelledby="sales-to-label">
-            <span id="sales-to-label" className="mb-1 block text-xs font-semibold text-gray-600">
+          <div role="group" aria-labelledby="sales-to-label" className="min-w-0">
+            <span id="sales-to-label" className={FIELD_LABEL}>
               To
             </span>
-            <DatePicker value={to} onChange={changeTo} placeholder="Any date" />
+            <DatePicker
+              value={to}
+              onChange={changeTo}
+              placeholder="Any date"
+              triggerClassName={dateTrigger(BLUE_FOCUS)}
+            />
           </div>
-          <div role="group" aria-labelledby="sales-customer-label">
-            <span id="sales-customer-label" className="mb-1 block text-xs font-semibold text-gray-600">
+          <div role="group" aria-labelledby="sales-customer-label" className="min-w-0 text-sm">
+            <span id="sales-customer-label" className={FIELD_LABEL}>
               Customer
             </span>
             <Select
@@ -450,47 +519,57 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
               onChange={(v) => setCustomerId(v ? String(v) : '')}
             />
           </div>
-          <div>
-            <label htmlFor="sales-search" className="mb-1 block text-xs font-semibold text-gray-600">
+          <div className="min-w-0">
+            <label htmlFor="sales-search" className={FIELD_LABEL}>
               Search
             </label>
             <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 id="sales-search"
                 type="search"
                 value={search}
                 onChange={(e) => changeSearch(e.target.value)}
                 placeholder="Sale #, customer, roast, grade…"
-                className="block w-full rounded-lg border border-gray-300 py-2.5 pl-8 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={`${FIELD} border-gray-300 pl-9 ${BLUE_FOCUS}`}
               />
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
           <div role="group" aria-label="Status" className="flex flex-wrap gap-1.5">
-            {STATUS_FILTERS.map((value) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={status === value}
-                onClick={() => changeStatus(value)}
-                className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
-                  status === value
-                    ? 'border-blue-600 bg-blue-600 text-white'
-                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                {value}
-              </button>
-            ))}
+            {STATUS_FILTERS.map((value) => {
+              const on = status === value
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => changeStatus(value)}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                    on
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {value !== 'All' && (
+                    <span
+                      aria-hidden="true"
+                      className={`h-1.5 w-1.5 rounded-full ${on ? 'bg-white' : STATUS_DOT[value]}`}
+                    />
+                  )}
+                  {value}
+                </button>
+              )
+            })}
           </div>
           {filtersActive && (
             <button
               type="button"
               onClick={clearFilters}
-              className="ml-auto text-xs font-semibold text-blue-600 hover:underline"
+              className="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50"
             >
+              <X className="h-3.5 w-3.5" />
               Clear filters
             </button>
           )}
@@ -499,59 +578,80 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
 
       {/* Totals (cancelled sales left out) */}
       {!noRowsYet && (
-        <div
-          aria-label="Totals"
-          className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
-        >
-          <span>
-            <span className="text-gray-500">Sales</span>{' '}
-            <span className="font-semibold text-gray-900" data-testid="totals-count">
+        <section aria-label="Totals" className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <SummaryTile
+            label="Sales"
+            stripe="border-l-blue-500"
+            sub={filtersActive ? 'Matching the filters' : 'All sales'}
+          >
+            <span className="text-2xl/tight tabular-nums" data-testid="totals-count">
               {counted.length}
             </span>
-          </span>
-          <span>
-            <span className="text-gray-500">Kg sold</span>{' '}
-            <span className="font-semibold text-gray-900" data-testid="totals-kg">
-              {anyGreenCounted
-                ? `${formatKg(kgSold - greenKgSold)} roasted · ${formatKg(greenKgSold)} green`
-                : formatKg(kgSold)}
+          </SummaryTile>
+          <SummaryTile
+            label="Kg sold"
+            stripe="border-l-amber-500"
+            sub={anyGreenCounted ? 'Green beans are counted apart' : 'Roasted coffee'}
+          >
+            {/* Green beans are not added to roasted coffee: they are counted
+                apart, one line each (read out as "6 roasted · 5 green"). */}
+            <span data-testid="totals-kg">
+              {anyGreenCounted ? (
+                <>
+                  <span className="block">
+                    <span className="text-xl/tight tabular-nums">{formatKg(kgSold - greenKgSold)}</span>
+                    <span className="text-sm font-medium text-gray-400"> roasted</span>
+                  </span>
+                  <span className="sr-only"> · </span>
+                  <span className="block">
+                    <span className="text-xl/tight tabular-nums">{formatKg(greenKgSold)}</span>
+                    <span className="text-sm font-medium text-gray-400"> green</span>
+                  </span>
+                </>
+              ) : (
+                <span className="text-2xl/tight tabular-nums">{formatKg(kgSold)}</span>
+              )}
             </span>
-          </span>
-          <span>
-            <span className="text-gray-500">Total</span>{' '}
-            <span className="font-semibold text-gray-900" data-testid="totals-money">
+            {!anyGreenCounted && <span className="text-sm font-medium text-gray-400"> kg</span>}
+          </SummaryTile>
+          <SummaryTile
+            label="Total"
+            stripe="border-l-green-500"
+            sub="Cancelled sales are not counted"
+            className="col-span-2"
+          >
+            <span className="break-words text-xl/tight tabular-nums sm:text-2xl/tight" data-testid="totals-money">
               {totalsByCurrency(counted) || '—'}
             </span>
-          </span>
-          <span className="text-xs text-gray-400 sm:ml-auto">Cancelled sales are not counted</span>
-        </div>
+          </SummaryTile>
+        </section>
       )}
 
       {/* List */}
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-        {noRowsYet && saleOrdersStatus === 'loading' ? (
-          <div className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-gray-500">
-            <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-            Loading sales…
-          </div>
-        ) : noRowsYet && saleOrdersStatus === 'failed' ? (
-          <div className="px-4 py-10 text-center">
-            <p className="font-semibold text-gray-800">Couldn&apos;t load sales</p>
-            <button type="button" onClick={() => void refreshData()} className={`${outlineButton} mt-3`}>
-              Retry
-            </button>
-          </div>
-        ) : filtered.length === 0 ? (
-          renderEmpty()
-        ) : (
-          <>
-            {/* Wide screens (xl, 1280px+): table. Date and status sit with the
-                sale number so the items keep room to read. */}
-            <div className="hidden overflow-x-auto xl:block">
+      {noRowsYet && saleOrdersStatus === 'loading' ? (
+        <div className={`${BOX} flex items-center justify-center gap-2 px-4 py-10 text-sm text-gray-500`}>
+          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+          Loading sales…
+        </div>
+      ) : noRowsYet && saleOrdersStatus === 'failed' ? (
+        <div className={`${BOX} px-4 py-10 text-center`}>
+          <p className="font-semibold text-gray-800">Couldn&apos;t load sales</p>
+          <button type="button" onClick={() => void refreshData()} className={`${OUTLINE_BTN} mt-3`}>
+            Retry
+          </button>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className={BOX}>{renderEmpty()}</div>
+      ) : (
+        <>
+          {/* Wide screens (xl, 1280px+): table. Date and status sit with the
+              sale number so the items keep room to read. */}
+          <div className={`${BOX} hidden overflow-hidden xl:block`}>
+            <div className="overflow-x-auto">
               <table aria-label="Sales" className="w-full text-left text-sm">
-                <thead className="border-b border-gray-200 bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <thead className="border-b border-gray-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
                   <tr>
-                    <th className="px-3 py-2">Sale</th>
+                    <th className="border-l-4 border-l-transparent px-3 py-2">Sale</th>
                     <th className="px-3 py-2">Customer</th>
                     <th className="px-3 py-2">Items</th>
                     <th className="px-3 py-2 text-right">Total</th>
@@ -572,39 +672,47 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
                           cancelled ? 'text-gray-400' : 'text-gray-800'
                         }`}
                       >
-                        <td className="whitespace-nowrap px-3 py-2">
+                        {/* The status shows as the row's left stripe, as on the cards. */}
+                        <td
+                          className={`whitespace-nowrap border-l-4 px-3 py-2.5 ${
+                            SALE_STATUS_STRIPE[order.status] ?? SALE_STATUS_STRIPE.Draft
+                          }`}
+                        >
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold">{order.orderNumber}</span>
+                            <span className={`font-semibold ${cancelled ? '' : 'text-gray-900'}`}>
+                              {order.orderNumber}
+                            </span>
                             <SaleStatusChip status={order.status} />
                           </div>
-                          <p className="text-xs text-gray-500">{formatSaleDate(order.orderDate)}</p>
+                          <p className="mt-0.5 text-xs text-gray-500">{formatSaleDate(order.orderDate)}</p>
                         </td>
-                        <td className="min-w-[8rem] px-3 py-2">
-                          <p>{saleCustomerName(order)}</p>
+                        <td className="min-w-[8rem] px-3 py-2.5">
+                          <p className="font-medium">{saleCustomerName(order)}</p>
                           {isAdmin && order.creatorName && (
                             <p className="text-xs text-gray-500">by {order.creatorName}</p>
                           )}
                         </td>
-                        <td className="min-w-[13rem] px-3 py-2 text-[13px] leading-snug">
+                        <td className="min-w-[13rem] px-3 py-2.5 text-[13px] leading-snug">
                           {itemsSummary(order).map((line, i) => (
                             <p key={i} className={cancelled ? '' : 'text-gray-600'}>
                               {line}
                             </p>
                           ))}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums">
+                        <td
+                          className={`whitespace-nowrap px-3 py-2.5 text-right font-semibold tabular-nums ${
+                            cancelled ? 'line-through' : 'text-gray-900'
+                          }`}
+                        >
                           {formatMoney(order.totalAmount, order.currency)}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2 text-right">
-                          <div className="inline-flex gap-1.5">
-                            <button type="button" onClick={(e) => editRow(e, order.id)} className={rowEditButton}>
-                              <Pencil className="h-3 w-3" />
-                              Edit
-                            </button>
-                            <button type="button" onClick={(e) => deleteRow(e, order.id)} className={rowDeleteButton}>
-                              <Trash2 className="h-3 w-3" />
-                              Delete
-                            </button>
+                        <td className="whitespace-nowrap px-3 py-1.5 text-right">
+                          <div className="inline-flex">
+                            <RowActions
+                              orderNumber={order.orderNumber}
+                              onEdit={(e) => editRow(e, order.id)}
+                              onDelete={(e) => deleteRow(e, order.id)}
+                            />
                           </div>
                         </td>
                       </tr>
@@ -613,95 +721,102 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
                 </tbody>
               </table>
             </div>
+          </div>
 
-            {/* Below xl (phones, tablets, 1024px laptops): compact rows */}
-            <ul className="divide-y divide-gray-100 xl:hidden" aria-label="Sales">
-              {pageRows.map((order) => {
-                const cancelled = order.status === 'Cancelled'
-                return (
-                  <li
-                    key={order.id}
-                    tabIndex={0}
-                    onClick={() => openDetails(order.id)}
-                    onKeyDown={(e) => rowKeyDown(e, order.id)}
-                    className={`flex cursor-pointer flex-col gap-1.5 px-3 py-2.5 text-sm hover:bg-gray-50 focus:bg-blue-50 focus:outline-none sm:flex-row sm:items-start sm:justify-between sm:gap-4 ${
-                      cancelled ? 'text-gray-400' : 'text-gray-800'
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="font-semibold">{order.orderNumber}</span>
-                        <SaleStatusChip status={order.status} />
-                        <span className="text-xs text-gray-500">{formatSaleDate(order.orderDate)}</span>
-                      </div>
-                      <p className={cancelled ? '' : 'text-gray-700'}>
-                        {saleCustomerName(order)}
-                        {isAdmin && order.creatorName && (
-                          <span className="text-xs text-gray-500"> · by {order.creatorName}</span>
-                        )}
-                      </p>
-                      <div className="mt-0.5">
-                        {itemsSummary(order).map((line, i) => (
-                          <p key={i} className={`text-xs ${cancelled ? '' : 'text-gray-600'}`}>
-                            {line}
-                          </p>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex flex-shrink-0 items-center justify-between gap-2 sm:flex-col sm:items-end">
-                      <span className="font-semibold tabular-nums">
-                        {formatMoney(order.totalAmount, order.currency)}
+          {/* Below xl (phones, tablets, 1024px laptops): cards with the status
+              as the left stripe, like the cards on the Workbench. */}
+          <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:hidden" aria-label="Sales">
+            {pageRows.map((order) => {
+              const cancelled = order.status === 'Cancelled'
+              const customer = saleCustomerName(order)
+              return (
+                <li
+                  key={order.id}
+                  tabIndex={0}
+                  onClick={() => openDetails(order.id)}
+                  onKeyDown={(e) => rowKeyDown(e, order.id)}
+                  aria-label={`Sale ${order.orderNumber}, ${customer}, ${formatMoney(order.totalAmount, order.currency)}`}
+                  className={`min-w-0 cursor-pointer rounded-lg border border-gray-200 border-l-4 bg-white p-3 text-sm hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                    SALE_STATUS_STRIPE[order.status] ?? SALE_STATUS_STRIPE.Draft
+                  } ${cancelled ? 'text-gray-400' : 'text-gray-800'}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pt-1">
+                      <span
+                        className={`truncate font-semibold ${cancelled ? '' : 'text-gray-900'}`}
+                        title={order.orderNumber}
+                      >
+                        {order.orderNumber}
                       </span>
-                      <div className="flex gap-1.5">
-                        <button type="button" onClick={(e) => editRow(e, order.id)} className={rowEditButton}>
-                          <Pencil className="h-3 w-3" />
-                          Edit
-                        </button>
-                        <button type="button" onClick={(e) => deleteRow(e, order.id)} className={rowDeleteButton}>
-                          <Trash2 className="h-3 w-3" />
-                          Delete
-                        </button>
-                      </div>
+                      <SaleStatusChip status={order.status} />
                     </div>
-                  </li>
-                )
-              })}
-            </ul>
+                    <div className="-mr-1.5 -mt-1">
+                      <RowActions
+                        orderNumber={order.orderNumber}
+                        onEdit={(e) => editRow(e, order.id)}
+                        onDelete={(e) => deleteRow(e, order.id)}
+                      />
+                    </div>
+                  </div>
+                  <p className="mt-1 truncate font-medium" title={customer}>
+                    {customer}
+                    {isAdmin && order.creatorName && (
+                      <span className="text-xs font-normal text-gray-500"> · by {order.creatorName}</span>
+                    )}
+                  </p>
+                  <div className="mt-1 space-y-0.5">
+                    {itemsSummary(order).map((line, i) => (
+                      <p key={i} className={`truncate text-xs ${cancelled ? '' : 'text-gray-500'}`} title={line}>
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2 border-t border-gray-100 pt-2">
+                    <span className="flex-shrink-0 text-xs text-gray-500">{formatSaleDate(order.orderDate)}</span>
+                    <span
+                      className={`truncate font-bold tabular-nums ${cancelled ? 'line-through' : 'text-gray-900'}`}
+                    >
+                      {formatMoney(order.totalAmount, order.currency)}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
 
-            {pageCount > 1 && (
-              <div className="flex items-center justify-between border-t border-gray-200 px-3 py-2 text-sm text-gray-600">
-                <span>
-                  {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of{' '}
-                  {filtered.length}
+          {pageCount > 1 && (
+            <div className={`${BOX} flex items-center justify-between gap-2 px-3 py-2 text-sm text-gray-600`}>
+              <span className="tabular-nums">
+                {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of{' '}
+                {filtered.length}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  aria-label="Previous page"
+                  className={PAGER_BUTTON}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="px-2 tabular-nums">
+                  Page {currentPage} of {pageCount}
                 </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    aria-label="Previous page"
-                    className="rounded-md border border-gray-300 p-1.5 hover:bg-gray-50 disabled:opacity-40"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                  <span className="px-2">
-                    Page {currentPage} of {pageCount}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPage(currentPage + 1)}
-                    disabled={currentPage === pageCount}
-                    aria-label="Next page"
-                    className="rounded-md border border-gray-300 p-1.5 hover:bg-gray-50 disabled:opacity-40"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setPage(currentPage + 1)}
+                  disabled={currentPage === pageCount}
+                  aria-label="Next page"
+                  className={PAGER_BUTTON}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
               </div>
-            )}
-          </>
-        )}
-      </div>
+            </div>
+          )}
+        </>
+      )}
 
       {panel?.kind === 'create' && (
         <SaleOrderModal

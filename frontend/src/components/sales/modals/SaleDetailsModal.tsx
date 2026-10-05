@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, Loader2, Pencil, Printer, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Loader2, Pencil, Printer, Receipt, Trash2, X } from 'lucide-react'
 import { UserRole } from '../../../types'
 import type { SaleOrder, SaleOrderStatus } from '../../../types'
 import Modal from '../../common/Modal'
@@ -14,7 +14,13 @@ import {
 } from '../../../services/sales/saleOrderService'
 import SaleReceipt from '../SaleReceipt'
 import {
+  BTN_SHAPE,
+  DANGER_BTN,
+  FIELD_LABEL,
   GreenBeansTag,
+  LABEL_TEXT,
+  OUTLINE_BTN,
+  PRIMARY_BTN,
   RoastLevelTag,
   SALE_STATUSES,
   SaleStatusChip,
@@ -54,6 +60,8 @@ const STATUS_CHIP_ON: Record<SaleOrderStatus, string> = {
   Delivered: 'border-green-600 bg-green-50 text-green-700',
   Cancelled: 'border-red-500 bg-red-50 text-red-700',
 }
+
+const DANGER_OUTLINE_BTN = `${BTN_SHAPE} border border-red-200 bg-white text-red-600 hover:bg-red-50`
 
 const money = (n: number) =>
   n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -190,22 +198,25 @@ const SaleDetailsDialog: React.FC<Omit<SaleDetailsModalProps, 'order'> & { order
         mobileFullScreen
       >
         <div className="flex flex-col max-sm:min-h-[calc(100dvh-2rem)]">
-          {/* Header */}
-          <div className="mb-3 flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 id={titleId} className="text-lg font-semibold text-gray-900">
+          {/* Header, as on the Sell coffee popup */}
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex-shrink-0 rounded-lg bg-blue-600 p-2">
+                <Receipt className="h-5 w-5 text-white" />
+              </div>
+              <div className="min-w-0">
+                <h2 id={titleId} className="truncate text-lg font-bold text-gray-900">
                   Sale {order.orderNumber}
                 </h2>
-                <SaleStatusChip status={order.status} />
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
+                  <SaleStatusChip status={order.status} />
+                  <span>{formatSaleDate(order.orderDate)}</span>
+                  {/* The sale's owner (createdBy) is its seller, also when an
+                      Admin recorded it for them (sellerId), so it is named as
+                      the seller, not as who recorded it. */}
+                  {isAdmin && order.creatorName && <span>· Seller: {order.creatorName}</span>}
+                </div>
               </div>
-              <p className="mt-0.5 text-xs text-gray-500">
-                {formatSaleDate(order.orderDate)}
-                {/* The sale's owner (createdBy) is its seller, also when an
-                    Admin recorded it for them (sellerId), so it is named as
-                    the seller, not as who recorded it. */}
-                {isAdmin && order.creatorName ? ` · Seller: ${order.creatorName}` : ''}
-              </p>
             </div>
             <button
               type="button"
@@ -217,13 +228,11 @@ const SaleDetailsDialog: React.FC<Omit<SaleDetailsModalProps, 'order'> & { order
             </button>
           </div>
 
-          <div className="flex-1 space-y-3 text-sm">
+          <div className="flex-1 space-y-4 text-sm">
             {/* Sold to */}
-            <div className="rounded-lg border border-gray-200 px-3 py-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                Sold to
-              </p>
-              <div className="mt-0.5 flex flex-wrap items-center gap-2">
+            <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+              <p className={FIELD_LABEL}>Sold to</p>
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold text-gray-900">{saleCustomerName(order)}</span>
                 {customerType && (
                   <span
@@ -235,7 +244,7 @@ const SaleDetailsDialog: React.FC<Omit<SaleDetailsModalProps, 'order'> & { order
                   </span>
                 )}
               </div>
-              {order.customerPhone && <p className="text-gray-600">{order.customerPhone}</p>}
+              {order.customerPhone && <p className="mt-0.5 text-gray-600">{order.customerPhone}</p>}
               {order.customerAddress && (
                 <p className="whitespace-pre-line text-gray-600">{order.customerAddress}</p>
               )}
@@ -243,7 +252,7 @@ const SaleDetailsDialog: React.FC<Omit<SaleDetailsModalProps, 'order'> & { order
 
             {/* Status */}
             <div>
-              <p id="sale-status-label" className="mb-1 text-xs font-semibold text-gray-600">
+              <p id="sale-status-label" className={FIELD_LABEL}>
                 Status
               </p>
               <div role="group" aria-labelledby="sale-status-label" className="flex flex-wrap gap-1.5">
@@ -270,69 +279,89 @@ const SaleDetailsDialog: React.FC<Omit<SaleDetailsModalProps, 'order'> & { order
               </div>
             </div>
 
-            {/* Lines */}
-            <div className="rounded-lg border border-gray-200">
-              <ul className="divide-y divide-gray-100">
-                {order.items.map((item) => (
-                  <li key={item.id} className="flex items-start justify-between gap-3 px-3 py-2">
-                    <div className="min-w-0">
-                      {item.roast ? (
-                        <>
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span className="font-semibold text-gray-900">{item.roast.label}</span>
-                            <span className="text-xs text-gray-500">
-                              {formatSaleDate(item.roast.roastDate)}
-                            </span>
-                            <RoastLevelTag level={item.roast.roastLevel} />
-                          </div>
-                          <p className="text-gray-600">{describeBean(item) || 'Roasted coffee'}</p>
-                        </>
-                      ) : item.green ? (
-                        <>
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span className="font-semibold text-gray-900">{item.green.label}</span>
-                            <GreenBeansTag />
-                            {item.green.greenBeanLotDisplayId && (
+            {/* Lines: one box, numbered like the lines on the Sell coffee popup */}
+            <section aria-labelledby="sale-details-lines-label" className="rounded-lg border border-gray-200 bg-white">
+              <div className="flex items-center justify-between rounded-t-lg border-b border-gray-200 bg-gray-50 px-3 py-2">
+                <span id="sale-details-lines-label" className={LABEL_TEXT}>
+                  Coffee
+                </span>
+                <span className="text-xs text-gray-400">
+                  {order.items.length} line{order.items.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              {order.items.length > 0 ? (
+                <ol className="divide-y divide-gray-100">
+                  {order.items.map((item, index) => (
+                    <li key={item.id} className="flex items-start gap-2 px-3 py-2.5">
+                      <span
+                        aria-hidden="true"
+                        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-gray-100 text-xs font-bold text-gray-600"
+                      >
+                        {index + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        {item.roast ? (
+                          <>
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span className="font-semibold text-gray-900">{item.roast.label}</span>
                               <span className="text-xs text-gray-500">
-                                {item.green.greenBeanLotDisplayId}
+                                {formatSaleDate(item.roast.roastDate)}
                               </span>
-                            )}
-                          </div>
-                          <p className="text-gray-600">{describeBean(item) || 'Green beans'}</p>
-                        </>
-                      ) : (
-                        <p className="text-gray-700">{describeLine(item)}</p>
-                      )}
-                    </div>
-                    <div className="flex-shrink-0 text-right tabular-nums">
-                      <p className="text-xs text-gray-500">
-                        {formatKg(item.quantity)} kg × {money(item.pricePerKg)}
-                      </p>
-                      <p className="font-semibold text-gray-900">{money(item.subtotal)}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-3 py-2">
-                <span className="font-semibold text-gray-700">Total</span>
-                <span className="text-base font-bold tabular-nums text-gray-900">
+                              <RoastLevelTag level={item.roast.roastLevel} />
+                            </div>
+                            <p className="text-gray-600">{describeBean(item) || 'Roasted coffee'}</p>
+                          </>
+                        ) : item.green ? (
+                          <>
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span className="font-semibold text-gray-900">{item.green.label}</span>
+                              <GreenBeansTag />
+                              {item.green.greenBeanLotDisplayId && (
+                                <span className="text-xs text-gray-500">
+                                  {item.green.greenBeanLotDisplayId}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-gray-600">{describeBean(item) || 'Green beans'}</p>
+                          </>
+                        ) : (
+                          <p className="text-gray-700">{describeLine(item)}</p>
+                        )}
+                      </div>
+                      <div className="flex-shrink-0 text-right tabular-nums">
+                        <p className="text-xs text-gray-500">
+                          {formatKg(item.quantity)} kg × {money(item.pricePerKg)}
+                        </p>
+                        <p className="font-semibold text-gray-900">{money(item.subtotal)}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="px-3 py-3 text-gray-500">No coffee on this sale.</p>
+              )}
+              <div className="flex items-center justify-between gap-3 rounded-b-lg border-t border-gray-200 bg-gray-50 px-3 py-2.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Total</span>
+                <span className="text-lg font-bold tabular-nums text-gray-900">
                   {formatMoney(order.totalAmount, order.currency)}
                 </span>
               </div>
-            </div>
+            </section>
 
             {order.notes && (
               <div>
-                <p className="mb-1 text-xs font-semibold text-gray-600">Notes</p>
-                <p className="whitespace-pre-line rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700">
+                <p className={FIELD_LABEL}>Notes</p>
+                <p className="whitespace-pre-line rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-gray-700">
                   {order.notes}
                 </p>
               </div>
             )}
           </div>
 
-          {/* Footer */}
-          <div className="sticky bottom-0 mt-4 border-t border-gray-200 bg-white pt-3 shadow-[0_1.25rem_0_0_#fff]">
+          {/* Footer: pinned to the bottom edge of the popup (the negative
+              margins and offset cancel the popup's padding), as on the Sell
+              coffee popup. */}
+          <div className="sticky -bottom-5 z-10 -mx-5 -mb-5 mt-5 rounded-b-xl border-t border-gray-200 bg-gray-50 px-5 py-3 max-sm:-bottom-4 max-sm:-mx-4 max-sm:-mb-4 max-sm:rounded-none max-sm:px-4">
             {error && (
               <p
                 role="alert"
@@ -355,19 +384,14 @@ const SaleDetailsDialog: React.FC<Omit<SaleDetailsModalProps, 'order'> & { order
                 {release && <p className="mt-1 text-sm text-amber-800">{capitalize(release)}.</p>}
                 {deliveredWarning && <p className="mt-1 text-sm text-amber-800">{deliveredWarning}</p>}
                 <div className="mt-3 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setMode('view')}
-                    disabled={!!busy}
-                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                  >
+                  <button type="button" onClick={() => setMode('view')} disabled={!!busy} className={OUTLINE_BTN}>
                     Keep sale
                   </button>
                   <button
                     type="button"
                     onClick={() => changeStatus('Cancelled', true)}
                     disabled={!!busy}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+                    className={DANGER_BTN}
                   >
                     {busy === 'status' && <Loader2 className="h-4 w-4 animate-spin" />}
                     Cancel sale
@@ -402,16 +426,11 @@ const SaleDetailsDialog: React.FC<Omit<SaleDetailsModalProps, 'order'> & { order
                       setMode('view')
                     }}
                     disabled={!!busy}
-                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    className={OUTLINE_BTN}
                   >
                     Keep sale
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={!!busy}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
-                  >
+                  <button type="button" onClick={handleDelete} disabled={!!busy} className={DANGER_BTN}>
                     {busy === 'delete' ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
@@ -423,11 +442,7 @@ const SaleDetailsDialog: React.FC<Omit<SaleDetailsModalProps, 'order'> & { order
               </div>
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-                >
+                <button type="button" onClick={() => window.print()} className={OUTLINE_BTN}>
                   <Printer className="h-4 w-4" />
                   Print receipt
                 </button>
@@ -439,7 +454,7 @@ const SaleDetailsDialog: React.FC<Omit<SaleDetailsModalProps, 'order'> & { order
                       setMode('confirm-delete')
                     }}
                     disabled={!!busy}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                    className={DANGER_OUTLINE_BTN}
                   >
                     <Trash2 className="h-4 w-4" />
                     Delete
@@ -448,7 +463,7 @@ const SaleDetailsDialog: React.FC<Omit<SaleDetailsModalProps, 'order'> & { order
                     type="button"
                     onClick={() => onEdit(order)}
                     disabled={!!busy}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                    className={PRIMARY_BTN}
                   >
                     <Pencil className="h-4 w-4" />
                     Edit

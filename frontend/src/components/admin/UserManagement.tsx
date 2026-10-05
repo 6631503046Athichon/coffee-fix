@@ -12,6 +12,19 @@ import { ModalPortal } from '@/components/common/ModalPortal';
 import DebouncedSearchInput from '@/components/processor/workbench/DebouncedSearchInput';
 import AdminConfirmModal from '@/components/admin/modals/AdminConfirmModal';
 import { roleLabel } from '@/components/admin/roleLabels';
+import { showAppToast } from '@/utils/appToast';
+
+// Copies the new password and says how it went in the site toast. The
+// clipboard is missing on plain http and the browser can refuse it, so a
+// failure asks the admin to copy it by hand instead of claiming it worked.
+const copyPassword = async (password: string) => {
+    try {
+        await navigator.clipboard.writeText(password);
+        showAppToast({ type: 'success', message: 'Password copied' });
+    } catch {
+        showAppToast({ type: 'error', message: "Couldn't copy the password. Select it and copy it by hand." });
+    }
+};
 
 // Custom Dropdown Component
 interface DropdownOption {
@@ -127,6 +140,8 @@ const UserManagement: React.FC = () => {
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null);
     const [newPassword, setNewPassword] = useState<string>('');
+    const [resetBusy, setResetBusy] = useState(false);
+    const [resetError, setResetError] = useState('');
     const [deleting, setDeleting] = useState<User | null>(null);
     const [deleteBusy, setDeleteBusy] = useState(false);
     const [deleteError, setDeleteError] = useState('');
@@ -185,7 +200,7 @@ const UserManagement: React.FC = () => {
     };
 
     const handleResetPassword = async () => {
-        if (!resetPasswordUser) return;
+        if (!resetPasswordUser || resetBusy) return;
 
         // Generate a random password. The backend's password policy needs an
         // uppercase letter, a lowercase letter and a digit, so draw again
@@ -196,12 +211,16 @@ const UserManagement: React.FC = () => {
             generatedPassword = Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
         }
 
+        setResetBusy(true);
+        setResetError('');
         try {
             await updateUser(resetPasswordUser.id, { password: generatedPassword });
             setNewPassword(generatedPassword);
-        } catch (err: any) {
-            alert(err instanceof Error ? err.message : 'Failed to reset password');
-            setResetPasswordUser(null);
+        } catch (err) {
+            // Stay in the popup and say why, so the admin can try again or cancel.
+            setResetError(err instanceof Error && err.message ? err.message : 'Failed to reset password');
+        } finally {
+            setResetBusy(false);
         }
     };
 
@@ -549,6 +568,7 @@ const UserManagement: React.FC = () => {
                                                     onClick={() => {
                                                         setResetPasswordUser(user);
                                                         setNewPassword('');
+                                                        setResetError('');
                                                     }}
                                                     className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
                                                     title="Reset password"
@@ -660,18 +680,28 @@ const UserManagement: React.FC = () => {
                                             This will generate a new password for <strong>{resetPasswordUser.username}</strong>.
                                             The user will be required to change it on next login.
                                         </p>
+                                        {resetError && (
+                                            <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                                                {resetError}
+                                            </p>
+                                        )}
                                         <div className="flex justify-end gap-3">
                                             <button
-                                                onClick={() => setResetPasswordUser(null)}
-                                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                                                onClick={() => {
+                                                    setResetPasswordUser(null);
+                                                    setResetError('');
+                                                }}
+                                                disabled={resetBusy}
+                                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
                                                 Cancel
                                             </button>
                                             <button
                                                 onClick={handleResetPassword}
-                                                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700"
+                                                disabled={resetBusy}
+                                                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
-                                                Reset Password
+                                                {resetBusy ? 'Resetting...' : 'Reset Password'}
                                             </button>
                                         </div>
                                     </div>
@@ -688,10 +718,7 @@ const UserManagement: React.FC = () => {
                                                         {newPassword}
                                                     </code>
                                                     <button
-                                                        onClick={() => {
-                                                            navigator.clipboard.writeText(newPassword);
-                                                            alert('Password copied!');
-                                                        }}
+                                                        onClick={() => copyPassword(newPassword)}
                                                         className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
                                                     >
                                                         Copy

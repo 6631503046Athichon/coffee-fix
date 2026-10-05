@@ -341,7 +341,7 @@ describe('SalesLog', { timeout: 20000 }, () => {
     vi.mocked(getSellableRoasts).mockResolvedValue({ roasts: [], missingWeightCount: 0 })
     renderLog()
     const row = within(table()).getByRole('row', { name: 'Sale ORD-2026-0001' })
-    fireEvent.click(within(row).getByRole('button', { name: 'Edit' }))
+    fireEvent.click(within(row).getByRole('button', { name: 'Edit sale ORD-2026-0001' }))
 
     expect(screen.getByRole('dialog', { name: 'Edit sale ORD-2026-0001' })).toBeInTheDocument()
     expect(screen.getAllByRole('dialog')).toHaveLength(1)
@@ -351,7 +351,21 @@ describe('SalesLog', { timeout: 20000 }, () => {
   it('opens details on the delete confirmation from a row', () => {
     renderLog()
     const row = within(table()).getByRole('row', { name: 'Sale ORD-2026-0002' })
-    fireEvent.click(within(row).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(within(row).getByRole('button', { name: 'Delete sale ORD-2026-0002' }))
+
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    expect(screen.getByRole('alertdialog', { name: 'Delete sale ORD-2026-0002?' })).toBeInTheDocument()
+  })
+
+  it('names the edit and delete icons on each card after its sale', () => {
+    renderLog()
+    // The card's name carries the key facts (number, customer, total), not
+    // just the sale number
+    const card = within(screen.getByRole('list', { name: 'Sales' })).getByRole('listitem', {
+      name: /^Sale ORD-2026-0002, .+, .+/,
+    })
+    expect(within(card).getByRole('button', { name: 'Edit sale ORD-2026-0002' })).toHaveAttribute('title', 'Edit sale')
+    fireEvent.click(within(card).getByRole('button', { name: 'Delete sale ORD-2026-0002' }))
 
     expect(screen.getAllByRole('dialog')).toHaveLength(1)
     expect(screen.getByRole('alertdialog', { name: 'Delete sale ORD-2026-0002?' })).toBeInTheDocument()

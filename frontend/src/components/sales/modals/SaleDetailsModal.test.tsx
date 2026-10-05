@@ -91,6 +91,15 @@ describe('SaleDetailsModal', { timeout: 20000 }, () => {
     expect(within(dialog).queryByText(/Seller:/)).not.toBeInTheDocument()
   })
 
+  it('numbers the lines in one Coffee box with the total under them', () => {
+    renderDetails()
+    const lines = screen.getByRole('region', { name: 'Coffee' })
+
+    expect(within(lines).getAllByRole('listitem')).toHaveLength(2)
+    expect(lines).toHaveTextContent('2 lines')
+    expect(within(lines).getByText('1,750.00 THB')).toBeInTheDocument()
+  })
+
   it('names the seller for an admin, not as who recorded the sale', () => {
     auth.currentUser = adminUser
     renderDetails()

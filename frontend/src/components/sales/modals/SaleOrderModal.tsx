@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, Loader2, Plus, X } from 'lucide-react'
+import { AlertTriangle, Loader2, Plus, Receipt, Trash2, X } from 'lucide-react'
 import { UserRole } from '../../../types'
 import type {
   Customer,
@@ -29,8 +29,15 @@ import type { SaleLineInput } from '../../../services/sales/saleOrderService'
 import { getAllUsersOrThrow } from '../../../services/auth/userService'
 import { toRoaId } from '../../../utils/formatters'
 import {
+  BTN_SHAPE,
+  FIELD,
+  FIELD_LABEL,
+  LABEL_TEXT,
   MAX_SALE_LINES,
+  OUTLINE_BTN,
   SALE_CURRENCIES,
+  SaleStatusChip,
+  dateTrigger,
   describeLine,
   describeRoastOption,
   formatKg,
@@ -206,8 +213,17 @@ const TONES = {
 
 type Tone = (typeof TONES)[keyof typeof TONES]
 
+// One field look for the whole form (the shared sales look from saleDisplay):
+// every input, picker and read-only cell is 42px tall with a 1px border and
+// rounded-lg, like common/Select inside a text-sm wrapper.
+// The row above a field: the same height whether or not it holds a link.
+const LABEL_ROW = 'mb-1.5 flex h-5 items-center justify-between gap-2'
+const LINE_CAPTION = 'mb-1 block text-[11px] font-medium text-gray-500'
+const ALERT_RETRY =
+  'rounded-lg border border-red-300 bg-white px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50'
+
 const inputClass = (hasError: boolean, tone: Tone) =>
-  `block w-full rounded-lg border px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 ${
+  `${FIELD} ${
     hasError ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : `border-gray-300 ${tone.focus}`
   }`
 
@@ -777,20 +793,192 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
 
   // ---- render -----------------------------------------------------------
 
-  const fieldLabel = 'block text-xs font-semibold text-gray-600 mb-1'
   const missingWeightCount = sellable.status === 'done' ? sellable.missingWeightCount : 0
-  const partialFailure =
-    sellable.status === 'done' && !bothFailed && (!roastsLoaded || !greenLoaded)
+  // The lines themselves are on show (not a waiting, loading, failed, empty
+  // or older-sale state).
+  const showLines =
+    !isLegacy && !waitingForSeller && sellable.status === 'done' && !bothFailed && !nothingToSell
+  const partialFailure = showLines && (!roastsLoaded || !greenLoaded)
 
   const retryButton = (
-    <button
-      type="button"
-      onClick={retryLoad}
-      className="rounded-lg border border-red-300 bg-white px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
-    >
+    <button type="button" onClick={retryLoad} className={ALERT_RETRY}>
       Retry
     </button>
   )
+
+  // Inside the Coffee box, in place of the lines.
+  const linesBody =
+    isLegacy && order ? (
+      <>
+        <p className="border-b border-gray-100 px-3 py-2 text-xs text-gray-500">
+          Lines recorded before roast sales can&apos;t be edited.
+        </p>
+        <ul className="divide-y divide-gray-100 text-sm">
+          {order.items.map((item) => (
+            <li key={item.id} className="flex justify-between gap-3 px-3 py-2.5">
+              <span className="min-w-0 text-gray-700">{describeLine(item)}</span>
+              <span className="whitespace-nowrap font-semibold tabular-nums text-gray-900">
+                {formatMoney(item.subtotal, order.currency)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </>
+    ) : waitingForSeller ? (
+      <p className="px-3 py-3 text-sm text-gray-500">
+        Choose who you are selling for to see their roasted coffee and green beans.
+      </p>
+    ) : sellable.status === 'loading' ? (
+      <p className="flex items-center gap-2 px-3 py-3 text-sm text-gray-500">
+        <Loader2 className={`h-4 w-4 animate-spin ${tone.spinner}`} />
+        Loading {whose} stock…
+      </p>
+    ) : bothFailed ? (
+      <div
+        role="alert"
+        className="flex flex-wrap items-center justify-between gap-2 rounded-b-lg bg-red-50 px-3 py-3 text-sm text-red-700"
+      >
+        <span>
+          Couldn&apos;t load {whose} stock. {sellable.roastsError || sellable.greenError}
+        </span>
+        {retryButton}
+      </div>
+    ) : nothingToSell ? (
+      <div className="px-3 py-3 text-sm text-gray-700">
+        <p>
+          {sellingForOther
+            ? 'This roaster has nothing left to sell: no roasted coffee with a roasted weight and no green beans in stock.'
+            : embedded
+              ? 'Nothing left to sell. Log a roast with its roasted weight, or claim green beans into your stock.'
+              : 'Nothing left to sell. Log a roast with its roasted weight, or claim green beans into your stock, in the Roaster Workbench.'}
+        </p>
+        {!embedded && (
+          <button
+            type="button"
+            onClick={() => {
+              onClose()
+              navigate('/roaster')
+            }}
+            className={`mt-2 rounded-lg px-3 py-1.5 text-xs font-semibold text-white ${tone.primary}`}
+          >
+            Go to Roaster Workbench
+          </button>
+        )}
+      </div>
+    ) : (
+      <>
+        <ol className="divide-y divide-gray-100">
+          {lines.map((line, index) => {
+            const check = lineChecks[index]
+            const kgId = `${line.key}-kg`
+            const priceId = `${line.key}-price`
+            const showKgError = check.overMax || (submitted && !!check.kgError)
+            const lineOptions = sourceOptions.map((option) => ({
+              value: option.key,
+              label: optionLabel(option),
+              disabled: lines.some((other) => other.key !== line.key && other.source === option.key),
+            }))
+            const subtotal = (
+              Number.isFinite(check.kg) && Number.isFinite(check.price) ? round2(check.kg * check.price) : 0
+            ).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            return (
+              <li key={line.key} className="px-3 py-3">
+                <div className="flex items-start gap-2">
+                  <span
+                    aria-hidden="true"
+                    className="mt-2.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-gray-100 text-xs font-bold text-gray-600"
+                  >
+                    {index + 1}
+                  </span>
+                  <div
+                    className="min-w-0 flex-1 text-sm"
+                    role="group"
+                    aria-label={`Item for line ${index + 1}`}
+                  >
+                    <Select
+                      options={lineOptions}
+                      value={line.source || null}
+                      onChange={(v) => chooseSource(line.key, v ? String(v) : '')}
+                      placeholder="Choose roasted coffee or green beans"
+                      colorTheme={tone.select}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setLines((prev) => prev.filter((l) => l.key !== line.key))}
+                    disabled={lines.length === 1}
+                    aria-label={`Remove line ${index + 1}`}
+                    title={lines.length === 1 ? 'A sale needs at least one line' : 'Remove line'}
+                    className="flex h-[42px] w-9 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+                {(check.unloaded || submitted) && check.source && (
+                  <p className="mt-1 text-xs text-red-600 sm:pl-8">{check.source}</p>
+                )}
+                <div className="mt-2 grid grid-cols-3 gap-2 sm:pl-8">
+                  <div className="min-w-0">
+                    <label htmlFor={kgId} className={LINE_CAPTION}>
+                      Kg
+                    </label>
+                    <input
+                      id={kgId}
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      placeholder="0.000"
+                      value={line.kg}
+                      onChange={(e) => updateLine(line.key, { kg: e.target.value })}
+                      aria-invalid={showKgError}
+                      className={inputClass(showKgError, tone)}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <label htmlFor={priceId} className={LINE_CAPTION}>
+                      Price / kg
+                    </label>
+                    <input
+                      id={priceId}
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      placeholder="0.00"
+                      value={line.price}
+                      onChange={(e) => updateLine(line.key, { price: e.target.value, priceAuto: false })}
+                      aria-invalid={submitted && !!check.priceError}
+                      className={inputClass(submitted && !!check.priceError, tone)}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <span className={LINE_CAPTION}>Subtotal</span>
+                    <p
+                      title={subtotal}
+                      className="truncate rounded-lg border border-transparent bg-gray-50 px-3 py-2.5 text-right text-sm font-semibold tabular-nums text-gray-900"
+                    >
+                      {subtotal}
+                    </p>
+                  </div>
+                </div>
+                {showKgError && <p className="mt-1 text-xs text-red-600 sm:pl-8">{check.kgError}</p>}
+                {submitted && check.priceError && (
+                  <p className="mt-1 text-xs text-red-600 sm:pl-8">{check.priceError}</p>
+                )}
+              </li>
+            )
+          })}
+        </ol>
+        <button
+          type="button"
+          onClick={() => setLines((prev) => [...prev, newLine()])}
+          disabled={lines.length >= MAX_SALE_LINES}
+          className={`flex w-full items-center justify-center gap-1.5 rounded-b-lg border-t border-dashed border-gray-200 px-3 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${tone.link} ${tone.soft}`}
+        >
+          <Plus className="h-4 w-4" />
+          Add line
+        </button>
+      </>
+    )
 
   const form = (
     // On phones the popup is a full-screen sheet: the form fills it so the
@@ -801,10 +989,25 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
       className={embedded ? 'flex flex-1 flex-col' : 'flex flex-col max-sm:min-h-[calc(100dvh-2rem)]'}
     >
       {!embedded && (
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 id={titleId} className="text-lg font-semibold text-gray-900">
-            {order ? `Edit sale ${order.orderNumber}` : 'Sell coffee'}
-          </h2>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex-shrink-0 rounded-lg bg-blue-600 p-2">
+              <Receipt className="h-5 w-5 text-white" aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <h2 id={titleId} className="truncate text-lg font-bold text-gray-900">
+                {order ? `Edit sale ${order.orderNumber}` : 'Sell coffee'}
+              </h2>
+              {/* Outside the h2, so the dialog keeps its name. */}
+              <p className="mt-0.5 text-xs text-gray-500">
+                {order ? (
+                  <SaleStatusChip status={order.status} />
+                ) : (
+                  'Roasted coffee or green beans to a customer'
+                )}
+              </p>
+            </div>
+          </div>
           <button
             type="button"
             onClick={close}
@@ -816,14 +1019,16 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
         </div>
       )}
 
-      <div className="flex-1 space-y-3">
+      <div className="flex-1 space-y-4">
         {/* Admin, new sale: the roaster it is recorded for. The sale is theirs
             and every line comes from their stock. */}
         {pickSeller && (
-          <div role="group" aria-labelledby="sale-seller-label">
-            <span id="sale-seller-label" className={fieldLabel}>
-              Sell for
-            </span>
+          <div role="group" aria-labelledby="sale-seller-label" className="text-sm">
+            <div className={LABEL_ROW}>
+              <span id="sale-seller-label" className={LABEL_TEXT}>
+                Sell for
+              </span>
+            </div>
             <Select
               options={sellerOptions}
               value={pickedSellerId || null}
@@ -838,11 +1043,7 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
                 className="mt-1 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700"
               >
                 <span>Couldn&apos;t load the roasters.</span>
-                <button
-                  type="button"
-                  onClick={retryUsers}
-                  className="rounded-lg border border-red-300 bg-white px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
-                >
+                <button type="button" onClick={retryUsers} className={ALERT_RETRY}>
                   Retry
                 </button>
               </div>
@@ -851,54 +1052,62 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
           </div>
         )}
 
-        {/* Customer. The New customer button sits outside the group, so the
-            group holds only the picker and its error. */}
-        <div>
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <span id="sale-customer-label" className="text-xs font-semibold text-gray-600">
-              Customer
-            </span>
-            <button
-              type="button"
-              onClick={openNewCustomer}
-              className={
-                noCustomers
-                  ? `inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold text-white ${tone.primary}`
-                  : `inline-flex items-center gap-1 text-xs font-semibold ${tone.link}`
-              }
-            >
-              <Plus className="h-3.5 w-3.5" />
-              New customer
-            </button>
+        {/* Customer (the whole row on phones), sale date and currency. The
+            date column fits the longest date, "30 September 2026". */}
+        <div className="grid grid-cols-[minmax(0,1fr)_6.5rem] gap-x-3 gap-y-4 sm:grid-cols-[minmax(0,1fr)_12rem_7rem]">
+          {/* The New customer button sits outside the group, so the group
+              holds only the picker and its error. */}
+          <div className="col-span-2 min-w-0 sm:col-span-1">
+            <div className={LABEL_ROW}>
+              <span id="sale-customer-label" className={LABEL_TEXT}>
+                Customer
+              </span>
+              <button
+                type="button"
+                onClick={openNewCustomer}
+                className={
+                  noCustomers
+                    ? `inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold text-white ${tone.primary}`
+                    : `inline-flex items-center gap-1 text-xs font-semibold ${tone.link}`
+                }
+              >
+                <Plus className="h-3.5 w-3.5" />
+                New customer
+              </button>
+            </div>
+            <div role="group" aria-labelledby="sale-customer-label" className="text-sm">
+              <Select
+                options={customerOptions}
+                value={customerId || null}
+                onChange={(v) => setCustomerId(v ? String(v) : '')}
+                placeholder={noCustomers ? 'No customers yet' : 'Choose a customer'}
+                disabled={noCustomers}
+                colorTheme={tone.select}
+              />
+              {submitted && customerError && (
+                <p className="mt-1 text-xs text-red-600">{customerError}</p>
+              )}
+            </div>
           </div>
-          <div role="group" aria-labelledby="sale-customer-label">
-            <Select
-              options={customerOptions}
-              value={customerId || null}
-              onChange={(v) => setCustomerId(v ? String(v) : '')}
-              placeholder={noCustomers ? 'No customers yet' : 'Choose a customer'}
-              disabled={noCustomers}
-              colorTheme={tone.select}
+          <div role="group" aria-labelledby="sale-date-label" className="min-w-0">
+            <div className={LABEL_ROW}>
+              <span id="sale-date-label" className={LABEL_TEXT}>
+                Sale date
+              </span>
+            </div>
+            <DatePicker
+              value={orderDate}
+              onChange={setOrderDate}
+              triggerClassName={dateTrigger(tone.focus) + (dateError ? ' !border-red-300' : '')}
             />
-            {submitted && customerError && (
-              <p className="mt-1 text-xs text-red-600">{customerError}</p>
-            )}
-          </div>
-        </div>
-
-        {/* Date and currency */}
-        <div className="grid grid-cols-[minmax(0,1fr)_7rem] gap-3">
-          <div role="group" aria-labelledby="sale-date-label">
-            <span id="sale-date-label" className={fieldLabel}>
-              Sale date
-            </span>
-            <DatePicker value={orderDate} onChange={setOrderDate} />
             {dateError && <p className="mt-1 text-xs text-red-600">{dateError}</p>}
           </div>
-          <div role="group" aria-labelledby="sale-currency-label">
-            <span id="sale-currency-label" className={fieldLabel}>
-              Currency
-            </span>
+          <div role="group" aria-labelledby="sale-currency-label" className="min-w-0 text-sm">
+            <div className={LABEL_ROW}>
+              <span id="sale-currency-label" className={LABEL_TEXT}>
+                Currency
+              </span>
+            </div>
             <Select
               options={SALE_CURRENCIES}
               value={currency}
@@ -908,19 +1117,12 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
           </div>
         </div>
 
-        {/* Lines */}
-        <div>
-          <div className="mb-1 flex items-center justify-between">
-            <span className={fieldLabel}>Coffee</span>
-            {!isLegacy && linesReady && (
-              <span className="text-xs text-gray-400">
-                {lines.length} / {MAX_SALE_LINES} lines
-              </span>
-            )}
-          </div>
-
+        {/* Lines: notes about the stock first, then one box with a head, the
+            numbered lines and Add line. No overflow-hidden on the box: it
+            would cut off the item pickers' option lists. */}
+        <div className="space-y-2">
           {missingWeightCount > 0 && (
-            <p className="mb-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
               <span>
                 {missingWeightCount === 1
@@ -929,200 +1131,43 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
               </span>
             </p>
           )}
-
-          {isLegacy && order ? (
-            <div className="rounded-lg border border-gray-200">
-              <p className="border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
-                Lines recorded before roast sales can&apos;t be edited.
-              </p>
-              <ul className="divide-y divide-gray-100 text-sm">
-                {order.items.map((item) => (
-                  <li key={item.id} className="flex justify-between gap-3 px-3 py-2">
-                    <span className="text-gray-700">{describeLine(item)}</span>
-                    <span className="whitespace-nowrap tabular-nums text-gray-900">
-                      {formatMoney(item.subtotal, order.currency)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : waitingForSeller ? (
-            <p className="rounded-lg border border-dashed border-gray-300 px-3 py-3 text-sm text-gray-500">
-              Choose who you are selling for to see their roasted coffee and green beans.
-            </p>
-          ) : sellable.status === 'loading' ? (
-            <p className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-3 text-sm text-gray-500">
-              <Loader2 className={`h-4 w-4 animate-spin ${tone.spinner}`} />
-              Loading {whose} stock…
-            </p>
-          ) : bothFailed ? (
+          {partialFailure && (
             <div
               role="alert"
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700"
             >
               <span>
-                Couldn&apos;t load {whose} stock. {sellable.roastsError || sellable.greenError}
+                {roastsLoaded
+                  ? `Couldn't load ${whose} green beans.`
+                  : `Couldn't load ${whose} roasted coffee.`}
               </span>
               {retryButton}
             </div>
-          ) : nothingToSell ? (
-            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-700">
-              <p>
-                {sellingForOther
-                  ? 'This roaster has nothing left to sell: no roasted coffee with a roasted weight and no green beans in stock.'
-                  : embedded
-                    ? 'Nothing left to sell. Log a roast with its roasted weight, or claim green beans into your stock.'
-                    : 'Nothing left to sell. Log a roast with its roasted weight, or claim green beans into your stock, in the Roaster Workbench.'}
-              </p>
-              {!embedded && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose()
-                    navigate('/roaster')
-                  }}
-                  className={`mt-2 rounded-lg px-3 py-1.5 text-xs font-semibold text-white ${tone.primary}`}
-                >
-                  Go to Roaster Workbench
-                </button>
+          )}
+          {showLines && initialGreenGone && lines.every((line) => !line.source) && (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800">
+              {initialGreenLotId ? toRoaId(initialGreenLotId) : 'That lot'} has no green beans left
+              to sell. Choose another item.
+            </p>
+          )}
+          <section aria-labelledby="sale-lines-label" className="rounded-lg border border-gray-200 bg-white">
+            <div className="flex items-center justify-between gap-2 rounded-t-lg border-b border-gray-200 bg-gray-50 px-3 py-2">
+              <span id="sale-lines-label" className={LABEL_TEXT}>
+                Coffee
+              </span>
+              {showLines && (
+                <span className="text-xs text-gray-400">
+                  {lines.length} / {MAX_SALE_LINES} lines
+                </span>
               )}
             </div>
-          ) : (
-            <>
-              {partialFailure && (
-                <div
-                  role="alert"
-                  className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700"
-                >
-                  <span>
-                    {roastsLoaded
-                      ? `Couldn't load ${whose} green beans.`
-                      : `Couldn't load ${whose} roasted coffee.`}
-                  </span>
-                  {retryButton}
-                </div>
-              )}
-              {initialGreenGone && lines.every((line) => !line.source) && (
-                <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800">
-                  {initialGreenLotId ? toRoaId(initialGreenLotId) : 'That lot'} has no green beans
-                  left to sell. Choose another item.
-                </p>
-              )}
-              <ol className="space-y-2">
-                {lines.map((line, index) => {
-                  const check = lineChecks[index]
-                  const kgId = `${line.key}-kg`
-                  const priceId = `${line.key}-price`
-                  const showKgError = check.overMax || (submitted && !!check.kgError)
-                  const lineOptions = sourceOptions.map((option) => ({
-                    value: option.key,
-                    label: optionLabel(option),
-                    disabled: lines.some(
-                      (other) => other.key !== line.key && other.source === option.key,
-                    ),
-                  }))
-                  const subtotal =
-                    Number.isFinite(check.kg) && Number.isFinite(check.price)
-                      ? round2(check.kg * check.price)
-                      : 0
-                  return (
-                    <li key={line.key} className="rounded-lg border border-gray-200 p-2.5">
-                      <div className="flex items-start gap-2">
-                        <div
-                          className="min-w-0 flex-1 text-sm"
-                          role="group"
-                          aria-label={`Item for line ${index + 1}`}
-                        >
-                          <Select
-                            options={lineOptions}
-                            value={line.source || null}
-                            onChange={(v) => chooseSource(line.key, v ? String(v) : '')}
-                            placeholder="Choose roasted coffee or green beans"
-                            colorTheme={tone.select}
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setLines((prev) => prev.filter((l) => l.key !== line.key))}
-                          disabled={lines.length === 1}
-                          aria-label={`Remove line ${index + 1}`}
-                          className="mt-1.5 rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                      {(check.unloaded || submitted) && check.source && (
-                        <p className="mt-1 text-xs text-red-600">{check.source}</p>
-                      )}
-                      <div className="mt-2 grid grid-cols-3 gap-2">
-                        <div>
-                          <label htmlFor={kgId} className="mb-0.5 block text-xs text-gray-500">
-                            Kg
-                          </label>
-                          <input
-                            id={kgId}
-                            type="text"
-                            inputMode="decimal"
-                            autoComplete="off"
-                            placeholder="0.000"
-                            value={line.kg}
-                            onChange={(e) => updateLine(line.key, { kg: e.target.value })}
-                            aria-invalid={showKgError}
-                            className={inputClass(showKgError, tone)}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor={priceId} className="mb-0.5 block text-xs text-gray-500">
-                            Price / kg
-                          </label>
-                          <input
-                            id={priceId}
-                            type="text"
-                            inputMode="decimal"
-                            autoComplete="off"
-                            placeholder="0.00"
-                            value={line.price}
-                            onChange={(e) =>
-                              updateLine(line.key, { price: e.target.value, priceAuto: false })
-                            }
-                            aria-invalid={submitted && !!check.priceError}
-                            className={inputClass(submitted && !!check.priceError, tone)}
-                          />
-                        </div>
-                        <div>
-                          <span className="mb-0.5 block text-xs text-gray-500">Subtotal</span>
-                          <p className="truncate py-1.5 text-right text-sm font-semibold tabular-nums text-gray-900">
-                            {subtotal.toLocaleString('en-US', {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                      {showKgError && <p className="mt-1 text-xs text-red-600">{check.kgError}</p>}
-                      {submitted && check.priceError && (
-                        <p className="mt-1 text-xs text-red-600">{check.priceError}</p>
-                      )}
-                    </li>
-                  )
-                })}
-              </ol>
-              <button
-                type="button"
-                onClick={() => setLines((prev) => [...prev, newLine()])}
-                disabled={lines.length >= MAX_SALE_LINES}
-                className={`mt-2 inline-flex items-center gap-1 rounded-lg border border-dashed border-gray-300 px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${tone.link} ${tone.soft}`}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add line
-              </button>
-            </>
-          )}
+            {linesBody}
+          </section>
         </div>
 
         {/* Notes */}
         <div>
-          <label htmlFor="sale-notes" className={fieldLabel}>
+          <label htmlFor="sale-notes" className={FIELD_LABEL}>
             Notes
           </label>
           <textarea
@@ -1132,16 +1177,19 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
             maxLength={1000}
             rows={2}
             placeholder="Delivery, payment or anything else about this sale"
-            className={`block w-full resize-none rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 ${tone.focus}`}
+            className={`${FIELD} resize-none border-gray-300 ${tone.focus}`}
           />
         </div>
       </div>
 
+      {/* Pinned to the bottom of the popup, edge to edge: the negative
+          offsets undo the popup's padding (p-5, p-4 on phones; p-8 in the
+          Start roast popup). */}
       <div
         className={
           embedded
             ? 'sticky -bottom-8 z-10 -mx-8 -mb-8 mt-6 rounded-b-3xl border-t border-[#e8ece8] bg-white px-8 py-4 max-sm:-bottom-4 max-sm:-mx-4 max-sm:-mb-4 max-sm:px-4 max-sm:rounded-none'
-            : 'sticky bottom-0 mt-4 border-t border-gray-200 bg-white pt-3 shadow-[0_1.25rem_0_0_#fff]'
+            : 'sticky -bottom-5 z-10 -mx-5 -mb-5 mt-5 rounded-b-xl border-t border-gray-200 bg-gray-50 px-5 py-3 max-sm:-bottom-4 max-sm:-mx-4 max-sm:-mb-4 max-sm:rounded-none max-sm:px-4'
         }
       >
         {error && (
@@ -1154,24 +1202,23 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
         )}
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Total</p>
-            <p className="truncate text-base font-bold tabular-nums text-gray-900" data-testid="sale-total">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Total</p>
+            <p
+              title={formatMoney(total, currency)}
+              className="truncate text-base font-bold tabular-nums text-gray-900 sm:text-xl"
+              data-testid="sale-total"
+            >
               {formatMoney(total, currency)}
             </p>
           </div>
           <div className="flex flex-shrink-0 gap-2">
-            <button
-              type="button"
-              onClick={close}
-              disabled={saving}
-              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            >
+            <button type="button" onClick={close} disabled={saving} className={OUTLINE_BTN}>
               Cancel
             </button>
             <button
               type="submit"
               disabled={saving}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 ${tone.primary}`}
+              className={`${BTN_SHAPE} text-white ${tone.primary}`}
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               {order ? 'Save changes' : 'Record sale'}
