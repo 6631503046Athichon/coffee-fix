@@ -563,7 +563,7 @@ describe('RoasterWorkbench Start roast popup', { timeout: 20000 }, () => {
     const earlier = roastOf({ id: 'rb-old', flavorNotes: 'Cocoa, Honey' })
     vi.mocked(createRoastBatch).mockResolvedValue({
       // The server records the roast for the owner of the beans.
-      roastBatch: roastOf({ id: 'rb-new', roastDate: '2026-09-23' }),
+      roastBatch: roastOf({ id: '0000d431-aaaa-4bbb-8ccc-dddddddddddd', roastDate: '2026-09-23' }),
       updatedInventory: { ...stock(), remainingWeightKg: 10 },
     } as Awaited<ReturnType<typeof createRoastBatch>>)
     renderWorkbench(
@@ -586,6 +586,10 @@ describe('RoasterWorkbench Start roast popup', { timeout: 20000 }, () => {
     expect(vi.mocked(createRoastBatch).mock.calls[0][0]).toMatchObject({
       roasterInventoryId: 'inv-1',
       flavorNotes: 'Cocoa, Honey',
+    })
+    expect(addToast).toHaveBeenCalledWith({
+      type: 'success',
+      message: 'Roast RB-4321 logged (2 kg)',
     })
     expect(screen.getAllByRole('button', { name: /^View details of roast/ })).toHaveLength(2)
   })

@@ -1,6 +1,7 @@
 import prisma from '@/lib/prisma'
 import { requireOwnership, requireRole, type AuthenticatedUser } from '@/lib/middleware'
 import { parseStrictDateOnly, parseStrictNumber, todayDateOnly } from '@/lib/utils'
+import type { SaleTx } from '@/lib/saleOrders'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -104,4 +105,18 @@ export async function loadBatchForDryingLogs(user: AuthenticatedUser, batchId: s
   if (!batch) return null
   requireOwnership(user, batch.createdById, ['Admin'])
   return batch
+}
+
+/**
+ * Moves the batch's updatedAt, inside the transaction that changes one of its
+ * readings. data-version stamps the batch list by updatedAt and row count, and
+ * a reading is not a batch row, so without this other sessions never learn to
+ * reload the readings. False when the batch is gone.
+ */
+export async function touchBatch(tx: SaleTx, batchId: string): Promise<boolean> {
+  const { count } = await tx.processingBatch.updateMany({
+    where: { id: batchId },
+    data: { updatedAt: new Date() },
+  })
+  return count > 0
 }

@@ -3,6 +3,7 @@ import { Leaf, Plus, Edit, Trash2, Search, X, AlertCircle, ChevronDown } from 'l
 import { getAllCoffeeVarieties, addCoffeeVariety, updateCoffeeVariety, deleteCoffeeVariety, CoffeeVariety } from '@/services/reference/coffeeVarietyService';
 import { ModalPortal } from '@/components/common/ModalPortal';
 import DebouncedSearchInput from '@/components/processor/workbench/DebouncedSearchInput';
+import AdminConfirmModal from '@/components/admin/modals/AdminConfirmModal';
 
 const SPECIES_OPTIONS = ['Arabica', 'Robusta', 'Liberica', 'Excelsa'];
 
@@ -88,6 +89,9 @@ const CoffeeVarietiesManager: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [speciesFilter, setSpeciesFilter] = useState('');
+  const [deleting, setDeleting] = useState<CoffeeVariety | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   // Modal states
   const [showModal, setShowModal] = useState(false);
@@ -239,18 +243,23 @@ const CoffeeVarietiesManager: React.FC = () => {
     }
   };
 
-  const handleDelete = async (variety: CoffeeVariety) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${variety.name}"? This action cannot be undone.`
-    );
+  const askDelete = (variety: CoffeeVariety) => {
+    setDeleteError('');
+    setDeleting(variety);
+  };
 
-    if (!confirmed) return;
-
+  const confirmDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    setDeleteError('');
     try {
-      await deleteCoffeeVariety(variety.id);
+      await deleteCoffeeVariety(deleting.id);
+      setDeleting(null);
       fetchVarieties();
-    } catch (err: any) {
-      alert(err.message || 'Failed to delete coffee variety');
+    } catch (err) {
+      setDeleteError(err instanceof Error && err.message ? err.message : 'Failed to delete coffee variety');
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -360,16 +369,22 @@ const CoffeeVarietiesManager: React.FC = () => {
                 </div>
                 <div className="flex gap-1">
                   <button
+                    type="button"
                     onClick={() => handleOpenModal(variety)}
+                    aria-label={`Edit ${variety.name}`}
+                    title="Edit variety"
                     className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded"
                   >
-                    <Edit className="h-4 w-4" />
+                    <Edit className="h-4 w-4" aria-hidden="true" />
                   </button>
                   <button
-                    onClick={() => handleDelete(variety)}
+                    type="button"
+                    onClick={() => askDelete(variety)}
+                    aria-label={`Delete ${variety.name}`}
+                    title="Delete variety"
                     className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -560,6 +575,18 @@ const CoffeeVarietiesManager: React.FC = () => {
           </div>
         </ModalPortal>
       )}
+
+      <AdminConfirmModal
+        isOpen={!!deleting}
+        title="Delete variety?"
+        message={`Delete "${deleting?.name}"? This cannot be undone.`}
+        confirmLabel="Delete variety"
+        cancelLabel="Keep it"
+        busy={deleteBusy}
+        error={deleteError}
+        onCancel={() => setDeleting(null)}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 };

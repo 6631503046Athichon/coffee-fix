@@ -18,6 +18,7 @@ import { csvDate, csvFilename, downloadCsv } from '../../utils/exportCSV';
 import { formatDateDisplay } from '../../utils/formatters';
 import { todayDateOnly } from '../../utils/dateOnly';
 import { canRemoveGapLog, isAdminUser, isFarmMember } from '../../utils/farmAccess';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -45,7 +46,14 @@ const GAPComplianceHelper: React.FC = () => {
     const [currentPage, setCurrentPage] = React.useState(1);
     
     const [editingLog, setEditingLog] = React.useState<GAPLogEntry | null>(null);
-    
+
+    // The delete confirm popup, and the delete it runs (one at a time: a fast
+    // double click must not send two DELETEs).
+    const [logToDelete, setLogToDelete] = React.useState<GAPLogEntry | null>(null);
+    const [isDeletingLog, setIsDeletingLog] = React.useState(false);
+    const [deleteLogError, setDeleteLogError] = React.useState<string | null>(null);
+    const deletingLogRef = React.useRef(false);
+
     const reportContentRef = React.useRef<HTMLDivElement>(null);
     const formRef = React.useRef<HTMLDivElement>(null);
 
@@ -269,18 +277,39 @@ const GAPComplianceHelper: React.FC = () => {
         setNotes('');
     };
     
-    const handleDelete = async (logId: string) => {
-        if (confirm('Are you sure you want to delete this activity log?')) {
-            try {
-                await deleteGAPLog(logId);
-                setData(prev => ({
-                    ...prev,
-                    gapLogs: prev.gapLogs.filter(log => log.id !== logId)
-                }));
-            } catch (error) {
-                console.error('Failed to delete GAP log:', error);
-                alert('Failed to delete activity log. Please try again.');
-            }
+    const askDelete = (log: GAPLogEntry) => {
+        setDeleteLogError(null);
+        setLogToDelete(log);
+    };
+
+    const closeDeleteConfirm = () => {
+        if (deletingLogRef.current) return;
+        setLogToDelete(null);
+        setDeleteLogError(null);
+    };
+
+    const confirmDelete = async () => {
+        if (!logToDelete || deletingLogRef.current) return;
+        deletingLogRef.current = true;
+        setIsDeletingLog(true);
+        setDeleteLogError(null);
+        const logId = logToDelete.id;
+        try {
+            await deleteGAPLog(logId);
+            setData(prev => ({
+                ...prev,
+                gapLogs: prev.gapLogs.filter(log => log.id !== logId)
+            }));
+            if (editingLog?.id === logId) handleCancelEdit();
+            setLogToDelete(null);
+        } catch (error) {
+            console.error('Failed to delete GAP log:', error);
+            setDeleteLogError(
+                error instanceof Error && error.message ? error.message : 'Failed to delete activity log. Please try again.',
+            );
+        } finally {
+            deletingLogRef.current = false;
+            setIsDeletingLog(false);
         }
     };
     
@@ -297,6 +326,18 @@ const GAPComplianceHelper: React.FC = () => {
             return plotMatch && activityMatch;
         });
     }, [data.gapLogs, plotFilter, activityFilter, currentUser, canViewLog]);
+
+    // Any log the user may see, before the filters: none means first use, not
+    // filters that match nothing.
+    const hasAnyVisibleLog = React.useMemo(
+        () => !!currentUser && data.gapLogs.some(log => canViewLog(log)),
+        [currentUser, data.gapLogs, canViewLog],
+    );
+    const filtersActive = plotFilter !== 'All' || activityFilter !== 'All';
+    const clearFilters = () => {
+        setPlotFilter('All');
+        setActivityFilter('All');
+    };
 
     // Reset page when filters change
     React.useEffect(() => {
@@ -339,10 +380,9 @@ const GAPComplianceHelper: React.FC = () => {
         [data.activityTypes],
     );
 
-    // Exports every log that matches the farm and activity filters, across all pages.
+    // Exports every log that matches the farm and activity filters, across
+    // all pages. With none, downloadCsv says there is nothing to export.
     const handleExportCSV = () => {
-        if (filteredLogs.length === 0) return;
-
         const headers = ['Date', 'Farm', 'Location', 'Activity Type', 'Product/Method', 'Quantity', 'Notes'];
         const rows = filteredLogs.map(log => {
             const logFarm = log.farmId ? farmMap.get(log.farmId) : undefined;
@@ -466,7 +506,7 @@ const GAPComplianceHelper: React.FC = () => {
                                 <DatePicker
                                     value={date}
                                     onChange={setDate}
-                                    label="Date *"
+                                    label="Date"
                                     required
                                 />
                             </div>
@@ -549,7 +589,6 @@ const GAPComplianceHelper: React.FC = () => {
                         <div className="flex items-center gap-2">
                             <Button
                                 onClick={handleExportCSV}
-                                disabled={filteredLogs.length === 0}
                                 variant="outline"
                                 icon={<Download className="h-4 w-4" />}
                             >
@@ -570,8 +609,20 @@ const GAPComplianceHelper: React.FC = () => {
                             <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
                                 <FileText className="h-8 w-8 text-gray-400" />
                             </div>
-                            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Activity Logs yet</h3>
-                            <p className="text-sm text-gray-500 mb-4">Start logging your agricultural activities to track GAP Compliance</p>
+                            {hasAnyVisibleLog && filtersActive ? (
+                                <>
+                                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No logs match these filters</h3>
+                                    <p className="text-sm text-gray-500 mb-4">Try another farm or activity type, or clear the filters to see every log.</p>
+                                    <Button type="button" variant="outline" onClick={clearFilters}>
+                                        Clear filters
+                                    </Button>
+                                </>
+                            ) : (
+                                <>
+                                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No Activity Logs yet</h3>
+                                    <p className="text-sm text-gray-500 mb-4">Start logging your agricultural activities to track GAP Compliance</p>
+                                </>
+                            )}
                         </div>
                     ) : (
                         <div className="overflow-hidden">
@@ -599,7 +650,7 @@ const GAPComplianceHelper: React.FC = () => {
                                                 <div className="font-semibold text-gray-900">{primaryLabel}</div>
                                                 {secondaryLabel && <div className="text-xs text-gray-500 mt-0.5">{secondaryLabel}</div>}
                                             </td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{formatDateDisplay(log.date, { year: 'numeric', month: 'short', day: 'numeric' }, '', 'th-TH')}</td>
+                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{formatDateDisplay(log.date)}</td>
                                             <td className="px-4 py-3 whitespace-nowrap">
                                                 <Badge variant="primary">
                                                     {log.activityType}
@@ -627,7 +678,7 @@ const GAPComplianceHelper: React.FC = () => {
                                                     </button>
                                                     {canRemoveLog(log) && (
                                                     <button
-                                                        onClick={() => handleDelete(log.id)}
+                                                        onClick={() => askDelete(log)}
                                                         className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
                                                         title="Delete"
                                                     >
@@ -710,7 +761,6 @@ const GAPComplianceHelper: React.FC = () => {
                     </Button>
                     <Button
                         onClick={handleExportCSV}
-                        disabled={filteredLogs.length === 0}
                         variant="outline"
                         icon={<Download className="h-4 w-4" />}
                     >
@@ -745,7 +795,7 @@ const GAPComplianceHelper: React.FC = () => {
                                     <tr>
                                         <td className="pr-4 py-0.5 text-gray-500 font-medium">Date Issued</td>
                                         <td className="py-0.5 text-gray-800 font-semibold">
-                                            {new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                            {formatDateDisplay(new Date())}
                                         </td>
                                     </tr>
                                     <tr>
@@ -813,7 +863,7 @@ const GAPComplianceHelper: React.FC = () => {
                                                         {typeLogs.map((log, idx) => (
                                                             <tr key={log.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                                                                 <td className="px-4 py-2 border-b border-gray-200 text-gray-500 text-xs">{idx + 1}</td>
-                                                                <td className="px-4 py-2 border-b border-gray-200 text-gray-700">{formatDateDisplay(log.date, { year: 'numeric', month: 'short', day: 'numeric' }, '', 'th-TH')}</td>
+                                                                <td className="px-4 py-2 border-b border-gray-200 text-gray-700">{formatDateDisplay(log.date)}</td>
                                                                 <td className="px-4 py-2 border-b border-gray-200 text-gray-800">
                                                                     {log.productUsed}
                                                                     {section.isOther && (
@@ -842,6 +892,24 @@ const GAPComplianceHelper: React.FC = () => {
                     </div>
                 </div>
             </Modal>
+
+            <ConfirmDeleteModal
+                isOpen={logToDelete !== null}
+                titleId="delete-gap-log-title"
+                title="Delete activity log?"
+                message={logToDelete && (
+                    <>
+                        Delete the <span className="font-semibold">{logToDelete.activityType}</span> log of{' '}
+                        {formatDateDisplay(logToDelete.date)} ({logToDelete.productUsed})? This cannot be undone.
+                    </>
+                )}
+                confirmLabel={isDeletingLog ? 'Deleting...' : 'Delete log'}
+                cancelLabel="Cancel"
+                busy={isDeletingLog}
+                error={deleteLogError}
+                onCancel={closeDeleteConfirm}
+                onConfirm={confirmDelete}
+            />
         </div>
     );
 };

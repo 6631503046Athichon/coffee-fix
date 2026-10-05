@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { vi } from 'vitest'
+import { afterEach, beforeEach, vi } from 'vitest'
 import { INITIAL_APP_DATA } from '../../constants'
 import { DataContext } from '../../hooks/useDataContext'
 import { ToastProvider, useToast } from '../../contexts/ToastContext'
@@ -10,7 +10,7 @@ import {
   ProcessingBatchStatus,
   UserRole,
 } from '../../types'
-import type { AppData, Customer, GreenBeanLot, HarvestLot, ParchmentLot, ProcessType, User } from '../../types'
+import type { AppData, CropYear, Customer, GreenBeanLot, HarvestLot, ParchmentLot, ProcessType, User } from '../../types'
 import { BATCH_NOT_GRADED_MESSAGE, processAndGradeBatch } from '../../services/processing/processingBatchService'
 import { createWithdrawal } from '../../services/lots/greenBeanLotService'
 import { addCustomer } from '../../services/sales/customerService'
@@ -113,6 +113,20 @@ const addGrade = (grade: string) => {
 
 describe('Process & Grade price', () => {
   beforeEach(() => vi.clearAllMocks())
+
+  it('clears the error banner once the form is edited', () => {
+    render(<Harness refreshData={async () => {}} />)
+    fireEvent.click(screen.getByText('Process & Grade', { selector: 'button' }))
+    fireEvent.change(screen.getByPlaceholderText('e.g. 85.0'), { target: { value: '500' } })
+    fireEvent.change(screen.getByPlaceholderText('e.g. 12.0'), { target: { value: '11' } })
+    fireEvent.click(saveButton())
+    const error = 'Parchment weight (500.00 kg) cannot exceed the cherry lot weight (400.00 kg).'
+    expect(screen.getByText(error)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByPlaceholderText('e.g. 85.0'), { target: { value: '100' } })
+    expect(screen.queryByText(error)).not.toBeInTheDocument()
+    expect(processAndGradeBatch).not.toHaveBeenCalled()
+  })
 
   it('puts an optional THB price input directly after the weight on every grade split', () => {
     render(<Harness refreshData={async () => {}} />)
@@ -506,6 +520,50 @@ describe('Green bean Withdraw Stock', () => {
     expect(createWithdrawal).toHaveBeenCalledTimes(2)
   }, 15000)
 
+  it("starts the Sale price from the lots' price when every lot in the bucket has the same", async () => {
+    vi.mocked(createWithdrawal)
+      .mockResolvedValueOnce(drawn(older, 0))
+      .mockResolvedValueOnce(drawn(newer, 9))
+    const priced = { pricePerKg: 12.5, currency: 'USD' }
+    render(<Harness refreshData={async () => {}} initial={{
+      ...stock, greenBeanLots: [{ ...newer, ...priced }, { ...older, ...priced }],
+    }} />)
+    openWithdraw()
+
+    expect((within(popup()).getByLabelText('Price per kg') as HTMLInputElement).value).toBe('12.5')
+    expect(within(popup()).getByRole('button', { name: 'USD' })).toBeInTheDocument()
+    fireEvent.change(amount(), { target: { value: '7' } })
+    expect(within(popup()).getByText('Total').nextElementSibling).toHaveTextContent('87.50 USD')
+    save()
+
+    await waitFor(() => expect(createWithdrawal).toHaveBeenCalledTimes(2))
+    expect(vi.mocked(createWithdrawal).mock.calls.map(([, input]) => [input.salePrice, input.currency]))
+      .toEqual([[12.5, 'USD'], [12.5, 'USD']])
+  }, 15000)
+
+  it('leaves the Sale price empty when the lots in the bucket have different prices', () => {
+    render(<Harness refreshData={async () => {}} initial={{
+      ...stock,
+      greenBeanLots: [
+        { ...newer, pricePerKg: 240, currency: 'THB' },
+        { ...older, pricePerKg: 220, currency: 'THB' },
+      ],
+    }} />)
+    openWithdraw()
+
+    expect((within(popup()).getByLabelText('Price per kg') as HTMLInputElement).value).toBe('')
+    expect(within(popup()).getByRole('button', { name: 'THB' })).toBeInTheDocument()
+  })
+
+  it('leaves the Sale price empty when only some lots in the bucket have a price', () => {
+    render(<Harness refreshData={async () => {}} initial={{
+      ...stock, greenBeanLots: [{ ...newer, pricePerKg: 220, currency: 'THB' }, older],
+    }} />)
+    openWithdraw()
+
+    expect((within(popup()).getByLabelText('Price per kg') as HTMLInputElement).value).toBe('')
+  })
+
   it('starts the next withdrawal without the last customer, price or address', () => {
     render(<Harness refreshData={async () => {}} initial={stock} />)
     openWithdraw()
@@ -546,6 +604,44 @@ describe('Green bean Withdraw Stock', () => {
     ])
     await waitFor(() => expect(screen.queryByText('Withdraw Stock')).not.toBeInTheDocument())
   }, 15000)
+})
+
+describe('Process & Grade crop year', () => {
+  const cropYear = (start: number): CropYear => ({
+    id: `cy-${start}`,
+    year: `${start}/${start + 1}`,
+    startDate: `${start}-10-01T00:00:00.000Z`,
+    endDate: `${start + 1}-09-30T00:00:00.000Z`,
+  })
+  const cropYears = [2023, 2024, 2025, 2026, 2027].map(cropYear)
+
+  beforeEach(() => {
+    // 5 October 2026 in Bangkok: the chips offer 2025/2026 to 2027/2028.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-05T03:00:00.000Z'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const chip = (label: string) => screen.queryByText(label, { selector: 'button span' })?.closest('button') ?? null
+
+  it("keeps the lot's own older year as a chip after another year is picked", () => {
+    render(<Harness refreshData={async () => {}} initial={{
+      cropYears, harvestLots: [{ ...cherry, cropYearId: 'cy-2023' }],
+    }} />)
+    fireEvent.click(screen.getByText('Process & Grade', { selector: 'button' }))
+
+    expect(chip('2023/2024')).toHaveClass('bg-green-600')
+    expect(chip('2024/2025')).toBeNull()
+
+    fireEvent.click(chip('2026/2027')!)
+    expect(chip('2026/2027')).toHaveClass('bg-green-600')
+    // The lot's year is still there to switch back to.
+    expect(chip('2023/2024')).not.toBeNull()
+    fireEvent.click(chip('2023/2024')!)
+    expect(chip('2023/2024')).toHaveClass('bg-green-600')
+  })
 })
 
 describe('Process type colours', () => {
@@ -699,6 +795,20 @@ describe('Green-bean stock holds only lots the user may draw from (F12)', () => 
     )
     expect(screen.getAllByText('Natural', { selector: 'span' }).length).toBeGreaterThan(0)
     expect(screen.queryByText('Unknown', { selector: 'span' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Unknown process', { selector: 'span' })).not.toBeInTheDocument()
+  })
+
+  it('groups a lot with no process on record as "Unknown process", in normal case', () => {
+    const noProcess = lot('none', 5, '2026-09-10T00:00:00Z', { parchmentLotId: 'pl-not-loaded' })
+    render(
+      <Harness
+        refreshData={async () => {}}
+        initial={{ harvestLots: [], parchmentLots: [], greenBeanLots: [noProcess] }}
+      />,
+    )
+    const labels = screen.getAllByText('Unknown process', { selector: 'span' })
+    expect(labels.length).toBeGreaterThan(0)
+    for (const label of labels) expect(label).not.toHaveClass('uppercase')
   })
 })
 

@@ -60,6 +60,36 @@ export const findCurrentCropYearId = (years: CropYear[], now: Date = new Date())
 }
 
 /**
+ * The crop years Record Process (Workbench) and Process & Grade (Parchment
+ * page) offer, newest first: the current season and the one either side of
+ * it, so both popups show the same choices. The season turns on 1 October,
+ * on the Thai calendar day like findCurrentCropYearId. `keepIds` are always
+ * kept: pass the lot's own crop year (not the year now picked), so a lot
+ * filed under an older year keeps that chip after another one is picked and
+ * can be switched back, plus the picked one. When no year carries a
+ * "YYYY/YYYY" label in the window, every year is offered rather than none.
+ */
+export const selectableCropYears = (
+  years: CropYear[],
+  keepIds: string | null | undefined | (string | null | undefined)[] = [],
+  now: Date = new Date(),
+): CropYear[] => {
+  const kept = new Set((Array.isArray(keepIds) ? keepIds : [keepIds]).filter(Boolean))
+  const [year, month] = toDateOnly(now).split('-').map(Number)
+  const active = month >= 10 ? year : year - 1
+  const labels = new Set([
+    `${active - 1}/${active}`,
+    `${active}/${active + 1}`,
+    `${active + 1}/${active + 2}`,
+  ])
+  const inWindow = years.filter((y) => labels.has(y.year) || kept.has(y.id))
+  const offered = inWindow.some((y) => labels.has(y.year)) ? inWindow : years
+  return [...offered].sort(
+    (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
+  )
+}
+
+/**
  * Cherry weight to display for a harvest lot in the processor views, and the
  * client-side ceiling for the parchment figure typed into Record Process.
  *

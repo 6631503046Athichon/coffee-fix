@@ -1,15 +1,22 @@
 import React, { useState } from 'react'
-import { Flame, Package, Pencil, PlusCircle, Trash2 } from 'lucide-react'
+import { ChevronDown, Flame, Package, Pencil, PlusCircle, Trash2 } from 'lucide-react'
 import { Button } from '../common/Button'
 import { Modal } from '../common/Modal'
 import type { ExternalDisplayLot } from '../../types/displayTypes'
 import { toFixed2, toRoaId } from '../../utils/formatters'
 import { useStablePageHeight } from '../../hooks/useStablePageHeight'
 import LotsPagination from './LotsPagination'
-import { formatPurchaseDate } from './purchasedLots'
+import { formatPurchaseDate, usedUpLotDeletable } from './purchasedLots'
 
 interface ExternalLotsTableProps {
   lots: ExternalDisplayLot[]
+  /**
+   * Purchased lots off the shelf (used up), listed collapsed under the shelf
+   * with View details and Edit (and Delete while nothing was taken from them).
+   * Only the ones the viewer may manage are passed, newest first; the list
+   * shows the first USED_UP_SHOWN of them until "Show all" is clicked.
+   */
+  usedUpLots?: ExternalDisplayLot[]
   onRoast: (lot: ExternalDisplayLot) => void
   onAddExternal: () => void
   /** Edit and Delete show on the lots this returns true for (their buyer, or an Admin). */
@@ -27,11 +34,15 @@ interface ExternalLotsTableProps {
   loadingLotId?: string | null
 }
 
+/** How many used-up lots the list shows before "Show all". */
+const USED_UP_SHOWN = 20
+
 const iconButton =
   'flex h-8 w-8 items-center justify-center rounded-lg border border-[#dfe9df] text-[#557262] transition-colors hover:bg-[#e6f0e8]'
 
 const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
   lots,
+  usedUpLots = [],
   onRoast,
   onAddExternal,
   canManage,
@@ -53,8 +64,17 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
     pageSize,
   )
   const [detailsId, setDetailsId] = useState<string | null>(null)
-  const detailsLot = lots.find((l) => l.id === detailsId)
+  const [showUsedUp, setShowUsedUp] = useState(false)
+  const [showAllUsedUp, setShowAllUsedUp] = useState(false)
+  const shownUsedUpLots = showAllUsedUp ? usedUpLots : usedUpLots.slice(0, USED_UP_SHOWN)
+  const detailsLot =
+    lots.find((l) => l.id === detailsId) ?? usedUpLots.find((l) => l.id === detailsId)
   const manageable = (lot: ExternalDisplayLot) => (canManage ? canManage(lot) : false)
+  const isUsedUp = (lot: ExternalDisplayLot) => usedUpLots.some((l) => l.id === lot.id)
+  // A used-up lot was nearly always drawn from, which the server refuses to
+  // delete: Delete shows only while nothing was taken from it.
+  const deletable = (lot: ExternalDisplayLot) =>
+    manageable(lot) && (!isUsedUp(lot) || usedUpLotDeletable(lot))
 
   const closeDetails = () => setDetailsId(null)
 
@@ -103,9 +123,13 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
         {lots.length === 0 ? (
           <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
             <Package className="mb-3 h-9 w-9 text-[#a8b8ac]" />
-            <p className="text-sm font-bold text-[#55635a]">No purchased lots yet</p>
+            <p className="text-sm font-bold text-[#55635a]">
+              {usedUpLots.length > 0 ? 'No purchased lots on the shelf' : 'No purchased lots yet'}
+            </p>
             <p className="mt-1 text-xs text-[#8b9a90]">
-              Add an external lot when new coffee arrives.
+              {usedUpLots.length > 0
+                ? 'Used-up lots are listed below. Add a lot when new coffee arrives.'
+                : 'Add an external lot when new coffee arrives.'}
             </p>
           </div>
         ) : (
@@ -153,7 +177,7 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
                           <Pencil className="h-4 w-4" aria-hidden="true" />
                         </button>
                       )}
-                      {manageable(lot) && onDelete && (
+                      {deletable(lot) && onDelete && (
                         <button
                           type="button"
                           onClick={() => onDelete(lot)}
@@ -208,6 +232,115 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
         />
       )}
 
+      {/* Used up: off the shelf, still open to view and correct. Collapsed. */}
+      {usedUpLots.length > 0 && (
+        <div className="border-t border-[#e6ebe5] bg-[#fafcf9] px-4 py-3 sm:px-5">
+          <button
+            type="button"
+            onClick={() => setShowUsedUp((v) => !v)}
+            aria-expanded={showUsedUp}
+            aria-controls="used-up-purchased-lots"
+            className="flex w-full items-center gap-2 text-left text-sm font-bold text-[#55635a] transition-colors hover:text-[#294936]"
+          >
+            <ChevronDown
+              className={`h-4 w-4 transition-transform ${showUsedUp ? '' : '-rotate-90'}`}
+              aria-hidden="true"
+            />
+            Used up
+            <span className="rounded-full bg-[#e9f2ec] px-2 py-0.5 text-xs text-[#2e6848]">
+              {usedUpLots.length}
+            </span>
+            <span className="ml-auto text-xs font-medium text-[#8b9a90]">
+              Out of kg or withdrawn
+            </span>
+          </button>
+          {showUsedUp && (
+            <>
+              <ul
+                id="used-up-purchased-lots"
+                className="mt-3 divide-y divide-[#edf1ec] overflow-hidden rounded-xl border border-[#dfe9df] bg-white"
+              >
+                {shownUsedUpLots.map((lot) => {
+                  const ownerName = ownerNameOf?.(lot)
+                  const roaId = toRoaId(lot.id)
+                  return (
+                    <li key={lot.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="font-mono text-sm font-bold text-[#294936]">{roaId}</p>
+                        <p className="truncate text-xs text-[#8b9a90]">
+                          {[
+                            lot.variety && lot.variety !== 'N/A' ? lot.variety : '',
+                            lot.process && lot.process !== 'N/A' ? lot.process : '',
+                            `${toFixed2(lot.initialWeightKg)} kg bought`,
+                            // Set Withdrawn with coffee still in it: say what is left.
+                            lot.currentWeightKg > 0
+                              ? `Withdrawn, ${toFixed2(lot.currentWeightKg)} kg left`
+                              : '',
+                            ownerName ? `by ${ownerName}` : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setDetailsId(lot.id)}
+                          className={iconButton}
+                          title="View Details"
+                          aria-label={`View details of ${roaId}`}
+                        >
+                          <Package className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                        {manageable(lot) && onEdit && (
+                          <button
+                            type="button"
+                            onClick={() => onEdit(lot)}
+                            className={iconButton}
+                            title="Edit lot"
+                            aria-label={`Edit ${roaId}`}
+                          >
+                            <Pencil className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        )}
+                        {deletable(lot) && onDelete && (
+                          <button
+                            type="button"
+                            onClick={() => onDelete(lot)}
+                            className={`${iconButton} hover:!border-red-200 hover:!bg-red-50 hover:text-red-600`}
+                            title="Delete lot"
+                            aria-label={`Delete ${roaId}`}
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+              {usedUpLots.length > USED_UP_SHOWN && (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-[#8b9a90]">
+                  <span>
+                    {showAllUsedUp
+                      ? `All ${usedUpLots.length} used-up lots`
+                      : `Newest ${USED_UP_SHOWN} of ${usedUpLots.length}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowAllUsedUp((v) => !v)}
+                    aria-controls="used-up-purchased-lots"
+                    className="rounded-lg border border-[#dfe9df] bg-white px-3 py-1.5 font-bold text-[#2e6848] transition-colors hover:bg-[#edf5ee]"
+                  >
+                    {showAllUsedUp ? 'Show fewer' : `Show all ${usedUpLots.length}`}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {/* Lot details: a centred popup, with Edit and Delete for its buyer. */}
       <Modal
         isOpen={!!detailsLot}
@@ -229,7 +362,7 @@ const ExternalLotsTable: React.FC<ExternalLotsTableProps> = ({
                 : undefined
             }
             onDelete={
-              manageable(detailsLot) && onDelete
+              deletable(detailsLot) && onDelete
                 ? () => {
                     closeDetails()
                     onDelete(detailsLot)

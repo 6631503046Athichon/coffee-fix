@@ -5,7 +5,7 @@
 // for the same fields, refuse the same input and send the same payload.
 
 import { UserRole } from '../../../types'
-import type { Customer, User } from '../../../types'
+import type { Customer, GreenBeanLot, User } from '../../../types'
 import type { CreateWithdrawalInput } from '../../../services/lots/greenBeanLotService'
 
 export type WithdrawalType =
@@ -39,7 +39,7 @@ export const EMPTY_WITHDRAW_DETAILS: WithdrawDetails = {
 export const WITHDRAW_CURRENCIES = ['THB', 'USD', 'EUR']
 
 export const ROASTER_REQUIRED_MESSAGE =
-  'กรุณาเลือก Roaster ที่ต้องการส่ง stock ให้'
+  'Pick the roaster to send this stock to.'
 
 export type WithdrawDetailsPayload = Pick<
   CreateWithdrawalInput,
@@ -96,12 +96,54 @@ export const withdrawSaleTotal = (
   return price > 0 && amountKg > 0 ? amountKg * price : null
 }
 
-/** "1,234.50 THB" */
-export const formatWithdrawTotal = (total: number, currency: string): string =>
-  `${total.toLocaleString(undefined, {
+/**
+ * A money amount with thousands separators and 2 decimals, "1,234.50": the
+ * notation of the popups' totals, used for every price and value the
+ * processor pages show.
+ */
+export const formatMoney = (value: number): string =>
+  (Number(value) || 0).toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })} ${currency}`
+  })
+
+/** "1,234.50 THB" */
+export const formatWithdrawTotal = (total: number, currency: string): string =>
+  `${formatMoney(total)} ${currency}`
+
+/**
+ * The fields a Withdraw Stock of `lot` opens with: empty, except that a lot
+ * with a set price fills the Sale price per kg and currency from it (still
+ * editable). A currency the picker does not offer is not filled, and neither
+ * is its price, so a price is never shown in the wrong currency.
+ */
+export const withdrawDetailsForLot = (
+  lot: Pick<GreenBeanLot, 'pricePerKg' | 'currency'> | null | undefined,
+): WithdrawDetails => {
+  const price = lot?.pricePerKg
+  const currency = lot?.currency || 'THB'
+  if (!price || price <= 0 || !WITHDRAW_CURRENCIES.includes(currency)) {
+    return EMPTY_WITHDRAW_DETAILS
+  }
+  return { ...EMPTY_WITHDRAW_DETAILS, salePrice: String(price), currency }
+}
+
+/**
+ * The fields a Withdraw Stock drawn across several lots opens with (the
+ * Parchment page's process type + grade bucket): the lots' price and
+ * currency when every one of them has the same (withdrawDetailsForLot),
+ * otherwise empty, so no single lot's price stands for the others.
+ */
+export const withdrawDetailsForLots = (
+  lots: Pick<GreenBeanLot, 'pricePerKg' | 'currency'>[],
+): WithdrawDetails => {
+  const [first, ...rest] = lots.map(withdrawDetailsForLot)
+  if (!first) return EMPTY_WITHDRAW_DETAILS
+  const samePrice = rest.every(
+    (d) => d.salePrice === first.salePrice && d.currency === first.currency,
+  )
+  return samePrice ? first : EMPTY_WITHDRAW_DETAILS
+}
 
 /**
  * Customer picker options, by name. The customer is optional, so once one is

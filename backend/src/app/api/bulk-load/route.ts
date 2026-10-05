@@ -4,6 +4,7 @@ import { requireAuth, handleApiError } from '@/lib/middleware'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { serializeHarvestLot } from '@/lib/harvestLot'
 import { greenBeanLotForViewer } from '@/lib/withdrawalPrivacy'
+import { stockRowWithoutImporterFor, withoutImporterFor } from '@/lib/importerPrivacy'
 import { chainScope, memberFarmIds } from '@/lib/farmAccess'
 import { upkeepCropYears } from '@/lib/cropYears'
 
@@ -359,12 +360,15 @@ export async function GET(request: NextRequest) {
         weatherRecords,
         gapLogs,
         processingBatches,
-        parchmentLots,
+        // A bought-in lot's importer (externalSource.importedBy, a user id)
+        // only for Admin and the importer, as GET /api/parchment-lots; the
+        // same for the parchment behind each roaster stock row below.
+        parchmentLots: parchmentLots.map(lot => withoutImporterFor(user, lot)),
         // Withdrawal sale details (customer, address, price, invoice) and
         // the free-text purpose only for the lot's owner and Admin; see
         // lib/withdrawalPrivacy.
         greenBeanLots: greenBeanLots.map(lot => greenBeanLotForViewer(user, lot)),
-        roasterInventory,
+        roasterInventory: roasterInventory.map(item => stockRowWithoutImporterFor(user, item)),
         roastBatches,
       })
     }

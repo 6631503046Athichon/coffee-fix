@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { CheckCircle, AlertCircle, Info, XCircle, X } from 'lucide-react';
 import { useToast, Toast } from '../../contexts/ToastContext';
+import { onAppToast } from '../../utils/appToast';
 
 const toastConfig = {
   success: {
@@ -61,7 +62,11 @@ const ToastItem: React.FC<{ toast: Toast; onClose: () => void }> = ({ toast, onC
 };
 
 export const ToastContainer: React.FC = () => {
-  const { toasts, removeToast } = useToast();
+  const { toasts, addToast, removeToast } = useToast();
+
+  // Toasts from plain helpers that cannot reach the context (utils/appToast),
+  // e.g. an export with nothing to export.
+  useEffect(() => onAppToast(addToast), [addToast]);
 
   if (toasts.length === 0) return null;
 

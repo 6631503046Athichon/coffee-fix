@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Cloud, Thermometer, Droplets, CloudRain, RefreshCw, X, CheckCircle, Edit3, Trash2, Loader2, ChevronLeft, ChevronRight, Calendar, ArrowRight, Download } from 'lucide-react';
 import { Button, Input, Modal } from '../common';
 import Select from '../common/Select';
@@ -18,6 +18,7 @@ import { formatDateDisplay } from '../../utils/formatters';
 import { csvDate, csvDateTime, csvFilename, downloadCsv } from '../../utils/exportCSV';
 import { canManageFarm, isAdminUser } from '../../utils/farmAccess';
 import { todayDateOnly } from '../../utils/dateOnly';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
 
 interface FarmWeatherPanelProps {
   farm: Farm | null;
@@ -60,6 +61,12 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
   const [weatherFormError, setWeatherFormError] = useState<string | null>(null);
   const [weatherToast, setWeatherToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // The delete confirm popup
+  const [recordToDelete, setRecordToDelete] = useState<WeatherRecord | null>(null);
+  const [isDeletingRecord, setIsDeletingRecord] = useState(false);
+  const [recordDeleteError, setRecordDeleteError] = useState<string | null>(null);
+  const deletingRecordRef = useRef(false);
 
   // API states
   const [isFetchingWeather, setIsFetchingWeather] = useState(false);
@@ -227,8 +234,10 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
   };
 
   const handleExportCsv = async () => {
-    if (!farm || selectedFarmRecords.length === 0) return;
+    if (!farm) return;
     setExportError(null);
+    // No records in the range: downloadCsv says there is nothing to export,
+    // as every Export CSV does.
     if (!panelRecordsCapped) {
       writeWeatherCsv(farm, selectedFarmRecords);
       return;
@@ -245,7 +254,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
       });
       if (records.length >= EXPORT_RECORD_LIMIT) {
         setExportError(
-          `ช่วงวันที่นี้มีข้อมูลเกิน ${EXPORT_RECORD_LIMIT.toLocaleString()} รายการ กรุณาเลือกช่วงวันที่ให้สั้นลงแล้วส่งออกอีกครั้ง`,
+          `ช่วงวันที่นี้มีข้อมูลเกิน ${EXPORT_RECORD_LIMIT.toLocaleString('en-US')} รายการ กรุณาเลือกช่วงวันที่ให้สั้นลงแล้วส่งออกอีกครั้ง`,
         );
       } else if (records.length < panelRecords.length) {
         // getAllWeatherRecords returns [] when the request fails.
@@ -311,7 +320,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
         if (weatherData.humidity) {
           setHumidity(weatherData.humidity.toString());
         }
-        setNotes(`ดึงข้อมูลจาก Open-Meteo API เมื่อ ${new Date().toLocaleString('th-TH')}`);
+        setNotes(`ดึงข้อมูลจาก Open-Meteo API เมื่อ ${new Date().toLocaleString('th-TH-u-ca-gregory')}`);
         setRecordDate(todayDateOnly());
 
         setWeatherToast({ type: 'success', message: 'ดึงข้อมูลสำเร็จ กรุณากดบันทึกเพื่อยืนยัน' });
@@ -403,9 +412,8 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
       }, 4000);
     } catch (error: any) {
       console.error('Failed to save weather record:', error);
-      const errorMessage = error?.message || 'ไม่สามารถบันทึกข้อมูลอากาศได้ กรุณาลองอีกครั้ง';
-      setWeatherFormError(errorMessage);
-      setWeatherToast({ type: 'error', message: errorMessage });
+      // Shown once, in the error box (not again as a toast).
+      setWeatherFormError(error?.message || 'ไม่สามารถบันทึกข้อมูลอากาศได้ กรุณาลองอีกครั้ง');
       setIsSubmitting(false);
     }
   };
@@ -427,10 +435,24 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
     resetForm();
   };
 
-  const handleWeatherDelete = async (recordId: string) => {
-    if (!confirm('ยืนยันการลบข้อมูลอากาศนี้?')) {
-      return;
-    }
+  const askWeatherDelete = (record: WeatherRecord) => {
+    setRecordDeleteError(null);
+    setRecordToDelete(record);
+  };
+
+  const closeWeatherDelete = () => {
+    if (deletingRecordRef.current) return;
+    setRecordToDelete(null);
+    setRecordDeleteError(null);
+  };
+
+  // One delete at a time: a fast double click must not send two DELETEs.
+  const confirmWeatherDelete = async () => {
+    if (!recordToDelete || deletingRecordRef.current) return;
+    deletingRecordRef.current = true;
+    setIsDeletingRecord(true);
+    setRecordDeleteError(null);
+    const recordId = recordToDelete.id;
     try {
       await deleteWeatherRecord(recordId);
       setData(prev => ({
@@ -441,12 +463,15 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
       if (editingRecordId === recordId) {
         handleWeatherCancelEdit();
       }
+      setRecordToDelete(null);
       setWeatherToast({ type: 'success', message: 'ลบข้อมูลอากาศแล้ว' });
       setTimeout(() => setWeatherToast(null), 3000);
     } catch (error: any) {
       console.error('Failed to delete weather record:', error);
-      setWeatherToast({ type: 'error', message: 'ไม่สามารถลบข้อมูลอากาศได้' });
-      setTimeout(() => setWeatherToast(null), 3000);
+      setRecordDeleteError('ไม่สามารถลบข้อมูลอากาศได้ กรุณาลองใหม่');
+    } finally {
+      deletingRecordRef.current = false;
+      setIsDeletingRecord(false);
     }
   };
 
@@ -473,7 +498,6 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                 <Cloud className="h-6 w-6 text-blue-600" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-blue-700">{farm.id}</p>
                 <h3 className="text-xl font-bold text-gray-900">{farm.name ?? farm.location}</h3>
                 <p className="text-sm text-gray-600">{farm.location}</p>
                 <p className="text-sm text-gray-600">เจ้าของ: {farm.ownerName ?? farm.farmerName}</p>
@@ -821,7 +845,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                     <>
                       ในช่วงที่เลือก{' '}
                       <span className="font-semibold text-gray-700">
-                        {selectedFarmRecords.length.toLocaleString()}
+                        {selectedFarmRecords.length.toLocaleString('en-US')}
                         {panelRecordsCapped && '+'}
                       </span>{' '}
                       รายการ
@@ -833,7 +857,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                   variant="outline"
                   size="sm"
                   onClick={handleExportCsv}
-                  disabled={isLoadingRecords || isExporting || selectedFarmRecords.length === 0}
+                  disabled={isLoadingRecords || isExporting}
                   icon={
                     isExporting
                       ? <Loader2 className="h-4 w-4 animate-spin" />
@@ -1000,7 +1024,7 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
                               type="button"
                               onClick={event => {
                                 event.stopPropagation();
-                                handleWeatherDelete(record.id);
+                                askWeatherDelete(record);
                               }}
                               className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100"
                               aria-label="ลบข้อมูลอากาศ"
@@ -1070,6 +1094,21 @@ const FarmWeatherPanel: React.FC<FarmWeatherPanelProps> = ({ farm, isOpen = true
         </div>
       )}
       </div>
+
+      <ConfirmDeleteModal
+        isOpen={recordToDelete !== null}
+        titleId="delete-weather-record-title"
+        title="ลบข้อมูลอากาศนี้?"
+        message={recordToDelete && (
+          <>ข้อมูลอากาศวันที่ {formatDateDisplay(recordToDelete.recordDate)} จะถูกลบถาวร</>
+        )}
+        confirmLabel={isDeletingRecord ? 'กำลังลบ...' : 'ยืนยันการลบ'}
+        cancelLabel="ยกเลิก"
+        busy={isDeletingRecord}
+        error={recordDeleteError}
+        onCancel={closeWeatherDelete}
+        onConfirm={confirmWeatherDelete}
+      />
     </Modal>
   );
 };

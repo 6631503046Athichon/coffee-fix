@@ -2,9 +2,12 @@
 import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useToggleScrollAnchor } from '../../hooks/useToggleScrollAnchor';
-import { ArrowLeft, User, MapPin, Weight, Calendar, Tag, Info, CheckCircle, Award, ExternalLink, Package, Coffee, Star } from 'lucide-react';
+import { ArrowLeft, User, MapPin, Weight, Calendar, Tag, Info, CheckCircle, Award, ExternalLink, Package, Coffee, Star, Edit } from 'lucide-react';
 import { formatDateDisplay } from '../../utils/formatters';
+import { canManageHarvestLot } from '../../utils/farmAccess';
+import HarvestLotEditModal from './modals/HarvestLotEditModal';
 
 
 const DetailItem: React.FC<{ icon: React.ElementType; label: string; value: string | number | React.ReactNode; }> = ({ icon: Icon, label, value }) => (
@@ -57,6 +60,8 @@ const HarvestLotDetail: React.FC = () => {
     const { lotId } = useParams<{ lotId: string }>();
     const navigate = useNavigate();
     const { data } = useDataContext();
+    const { currentUser } = useAuth();
+    const [isEditOpen, setIsEditOpen] = useState(false);
     const [openStep, setOpenStep] = useState<TimelineStepKey | null>(null);
     // Only one step is open at a time, so opening a step can close a tall one
     // above it (Green Bean lists every lot). Keep the clicked title in place.
@@ -67,7 +72,7 @@ const HarvestLotDetail: React.FC = () => {
     };
 
     const formatDate = (date?: string | Date | null) =>
-        formatDateDisplay(date, undefined, 'N/A', 'en-US');
+        formatDateDisplay(date, undefined, 'N/A');
 
     const lot = data.harvestLots.find(h => h.id === lotId);
     // Read-only: show the farm the lot is stored on, never guess one. This
@@ -77,6 +82,8 @@ const HarvestLotDetail: React.FC = () => {
         || (lot?.farmId ? data.farms.find(f => f.id === lot.farmId) : undefined)
         || null;
     const farmLabel = farm?.farmName || farm?.name || (lot?.farmId ? 'N/A' : 'Not linked to a farm');
+    // The same people the Data Hub lets edit a lot: an Admin, or its owner.
+    const canEdit = !!lot && !!currentUser && canManageHarvestLot(currentUser, lot, data.farms);
 
     if (!lot) {
         return (
@@ -141,9 +148,22 @@ const HarvestLotDetail: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2">
                     <div className="bg-white shadow-sm rounded-xl overflow-hidden border border-gray-200">
-                        <div className="p-6 border-b border-gray-200">
-                            <h1 className="text-2xl font-bold text-gray-900">Harvest Lot Details</h1>
-                            <p className="text-gray-600 text-sm">Lot ID: {lot.displayId || lot.id.substring(0, 8).toUpperCase()}</p>
+                        <div className="p-6 border-b border-gray-200 flex items-start justify-between gap-4">
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-900">Harvest Lot Details</h1>
+                                <p className="text-gray-600 text-sm">Lot ID: {lot.displayId || lot.id.substring(0, 8).toUpperCase()}</p>
+                            </div>
+                            {canEdit && (
+                                <button
+                                    type="button"
+                                    onClick={() => setIsEditOpen(true)}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 flex-shrink-0"
+                                    aria-label={`Edit harvest lot ${lot.displayId || lot.id.substring(0, 8).toUpperCase()}`}
+                                >
+                                    <Edit className="h-4 w-4" />
+                                    Edit
+                                </button>
+                            )}
                         </div>
                         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 divide-y md:divide-y-0">
                             <DetailItem icon={User} label="Farmer Name" value={lot.farmerName} />
@@ -151,7 +171,7 @@ const HarvestLotDetail: React.FC = () => {
                             <DetailItem icon={Tag} label="Cherry Variety" value={lot.cherryVariety} />
                             <DetailItem icon={Weight} label="Weight (kg)" value={lot.weightKg} />
                             <DetailItem icon={MapPin} label="Farm Plot Location" value={lot.farmPlotLocation} />
-                            <DetailItem icon={Calendar} label="Harvest Date" value={lot.harvestDate} />
+                            <DetailItem icon={Calendar} label="Harvest Date" value={formatDate(lot.harvestDate)} />
                             <DetailItem icon={Info} label="Current Status" value={statusBadge} />
                         </div>
                     </div>
@@ -308,6 +328,15 @@ const HarvestLotDetail: React.FC = () => {
             </div>
             {/* Holds page height when a tall step closes near the bottom; see useToggleScrollAnchor. */}
             <div ref={stepSpacerRef} aria-hidden="true" />
+
+            {/* The Data Hub's edit popup */}
+            {canEdit && currentUser && (
+                <HarvestLotEditModal
+                    lot={isEditOpen ? lot : null}
+                    currentUser={currentUser}
+                    onClose={() => setIsEditOpen(false)}
+                />
+            )}
         </div>
     );
 };

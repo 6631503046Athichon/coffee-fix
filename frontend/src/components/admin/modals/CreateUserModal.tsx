@@ -3,6 +3,8 @@ import { UserRole } from '../../../types'
 import { createUser } from '../../../services/auth/userService'
 import { X, Copy, Check, AlertCircle, UserPlus } from 'lucide-react'
 import { ModalPortal } from '../../common/ModalPortal'
+import { roleLabel } from '../roleLabels'
+import AdminConfirmModal from './AdminConfirmModal'
 
 interface CreateUserModalProps {
   isOpen: boolean
@@ -25,6 +27,8 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
   const [error, setError] = useState('')
   const [generatedCredentials, setGeneratedCredentials] = useState<GeneratedCredentials | null>(null)
   const [copiedField, setCopiedField] = useState<'username' | 'password' | null>(null)
+  // Asking before the generated credentials are closed away unsaved.
+  const [confirmingClose, setConfirmingClose] = useState(false)
   // Set once the backend has created the user: however the popup is then
   // closed (Done, X, Cancel), the list behind it is refreshed so the new
   // account shows and the Admin does not create it a second time.
@@ -123,6 +127,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
     setError('')
     setGeneratedCredentials(null)
     setCopiedField(null)
+    setConfirmingClose(false)
   }
 
   const handleClose = () => {
@@ -131,10 +136,8 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
     // credentials the next time it opens (F45).
     if (loading) return
     if (generatedCredentials) {
-      const confirmed = window.confirm(
-        'You have not saved the generated credentials. Are you sure you want to close?'
-      )
-      if (!confirmed) return
+      setConfirmingClose(true)
+      return
     }
     closeModal()
   }
@@ -224,7 +227,7 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
                           onChange={() => handleRoleToggle(role)}
                           className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                         />
-                        <span className="text-sm font-medium text-gray-700">{role}</span>
+                        <span className="text-sm font-medium text-gray-700">{roleLabel(role)}</span>
                       </label>
                     ))}
                   </div>
@@ -378,6 +381,16 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({ isOpen, onClose, onUs
           </div>
         </div>
       </div>
+      <AdminConfirmModal
+        isOpen={confirmingClose}
+        title="Close without saving the credentials?"
+        message="They will not be shown again. Copy the username and password first if you have not shared them yet."
+        confirmLabel="Close anyway"
+        cancelLabel="Go back"
+        danger={false}
+        onCancel={() => setConfirmingClose(false)}
+        onConfirm={closeModal}
+      />
     </ModalPortal>
   )
 }

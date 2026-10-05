@@ -8,6 +8,7 @@ export {
   isRecentItem,
   formatParchmentStatus,
   findCurrentCropYearId,
+  selectableCropYears,
   getHarvestLotCherryWeight,
   getReadyHarvestLots,
 } from './constants'
@@ -70,6 +71,15 @@ export {
   formatBaht,
 } from './gradePrice'
 
+export {
+  greenBeanLotFacts,
+  greenBeanSearchFields,
+  harvestLotSearchFields,
+  matchesLotSearch,
+  parchmentLotFacts,
+  parchmentSearchFields,
+} from './lotSearch'
+
 export { default as WithdrawDetailsFields } from './WithdrawDetailsFields'
 export { useWithdrawDetails } from './useWithdrawDetails'
 export {
@@ -77,12 +87,15 @@ export {
   ROASTER_REQUIRED_MESSAGE,
   WITHDRAW_CURRENCIES,
   buildWithdrawDetailsPayload,
+  formatMoney,
   formatWithdrawTotal,
   pickWithdrawCustomer,
   upsertCustomer,
   withdrawCustomerOptions,
   withdrawDetailsError,
   withdrawRoasterOptions,
+  withdrawDetailsForLot,
+  withdrawDetailsForLots,
   withdrawSaleTotal,
 } from './withdrawDetails'
 export type {

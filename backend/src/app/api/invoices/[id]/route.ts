@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 import { updateInvoiceSchema, validateBody } from '@/lib/validations'
+import { withParchmentImporterFor } from '@/lib/importerPrivacy'
 
 const updateInvoiceRequestSchema = updateInvoiceSchema.pick({
   status: true,
@@ -67,7 +68,14 @@ export async function GET(
     // SECURITY: Ownership — a Roaster reads only invoices on their own sales.
     requireOwnership(user, invoice.saleOrder.createdBy, ['Admin'])
 
-    return NextResponse.json({ invoice })
+    // The parchment behind each line's green bean lot may be bought in: its
+    // importer (externalSource.importedBy, a user id) is for Admin and the
+    // importer only (lib/importerPrivacy).
+    const items = invoice.items.map(item => ({
+      ...item,
+      greenBeanLot: withParchmentImporterFor(user, item.greenBeanLot),
+    }))
+    return NextResponse.json({ invoice: { ...invoice, items } })
   } catch (error) {
     return handleApiError(error)
   }

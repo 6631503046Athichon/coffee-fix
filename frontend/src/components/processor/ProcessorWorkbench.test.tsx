@@ -13,6 +13,8 @@ import { addCustomer } from '../../services/sales/customerService'
 import { deleteHarvestLot, updateHarvestLotDetails } from '../../services/lots/harvestLotService'
 import { createParchmentWithdrawal } from '../../services/lots/parchmentLotService'
 import { api } from '../../services/api'
+import { formatDateDisplay } from '../../utils/formatters'
+import { formatProcessingBatchId } from '../../utils/formatDisplayId'
 import ProcessorWorkbench from './ProcessorWorkbench'
 
 vi.mock('../../services/processing/processingBatchService', async (importOriginal) => ({
@@ -168,6 +170,109 @@ describe('Record Process', { timeout: 20000 }, () => {
       harvestLotId: other.id, processType: 'Natural', parchmentWeightKg: 70,
       dryingStartDate: '', dryingEndDate: '', baggingDate: '',
     }))
+  })
+})
+
+describe('Record Process messages', { timeout: 20000 }, () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const openForm = () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Record Process' }))
+    return screen.getByRole('button', { name: 'Save' }).closest('form')!
+  }
+
+  it('says in English which batch was recorded', async () => {
+    vi.mocked(addProcessingBatch).mockResolvedValue(batch)
+    render(<Harness initial={{ ...INITIAL_APP_DATA, harvestLots: [lot] }} refreshData={async () => {}} withToasts />)
+    const form = openForm()
+    fireEvent.change(form.querySelector('[name="parchmentWeightKg"]')!, { target: { value: '80' } })
+    fireEvent.change(form.querySelector('[name="moistureContent"]')!, { target: { value: '11' } })
+    fireEvent.submit(form)
+    expect(await screen.findByText(`Processing batch ${formatProcessingBatchId(batch)} recorded.`)).toBeInTheDocument()
+  })
+
+  it('clears the error banner once the field that caused it is edited', () => {
+    render(<Harness initial={{ ...INITIAL_APP_DATA, harvestLots: [lot] }} refreshData={async () => {}} />)
+    const form = openForm()
+    const output = form.querySelector('[name="parchmentWeightKg"]')!
+    fireEvent.change(output, { target: { value: '500' } })
+    fireEvent.change(form.querySelector('[name="moistureContent"]')!, { target: { value: '11' } })
+    fireEvent.submit(form)
+    const error = 'Parchment weight (500.00 kg) cannot exceed the cherry lot weight (400.00 kg).'
+    expect(within(form).getByText(error)).toBeInTheDocument()
+
+    fireEvent.change(output, { target: { value: '80' } })
+    expect(within(form).queryByText(error)).not.toBeInTheDocument()
+    expect(addProcessingBatch).not.toHaveBeenCalled()
+  })
+})
+
+describe('Workbench search, money and dates', { timeout: 20000 }, () => {
+  const cherry: HarvestLot = {
+    ...lot, id: 'hl-src', displayId: 'HL-2026-1', status: 'Complete', farmerName: 'Somchai Doi', cherryVariety: 'Typica',
+  }
+  const waiting: HarvestLot = { ...lot, id: 'hl-wait', displayId: 'HL-2026-2', farmerName: 'Malee Hill', cherryVariety: 'Geisha' }
+  const parchment: ParchmentLot = {
+    id: 'pl-src', displayId: 'PCH-2026-1', sourceType: ParchmentSourceType.Internal, harvestLotId: 'hl-src',
+    initialWeightKg: 100, currentWeightKg: 60, moistureContent: 11, processType: 'Honey', status: 'AwaitingHulling',
+  }
+  const green: GreenBeanLot = {
+    id: 'gbl-src', displayId: 'GBL-2026-5', sourceType: GreenBeanSourceType.Internal, parchmentLotId: 'pl-src',
+    createdById: 'processor', grade: 'Grade A', initialWeightKg: 40, currentWeightKg: 40,
+    availabilityStatus: 'Available', cuppingScores: [], withdrawalHistory: [], pricePerKg: 25, currency: 'THB',
+  }
+  const renderAll = () =>
+    render(
+      <Harness
+        initial={{ ...INITIAL_APP_DATA, harvestLots: [cherry, waiting], parchmentLots: [parchment], greenBeanLots: [green] }}
+        refreshData={async () => {}}
+      />,
+    )
+  const search = (placeholder: string, value: string) =>
+    act(() => {
+      fireEvent.change(screen.getByPlaceholderText(placeholder), { target: { value } })
+    })
+
+  beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }))
+  afterEach(() => vi.useRealTimers())
+
+  const settle = () => act(() => { vi.runOnlyPendingTimers() })
+
+  it('finds green bean and parchment lots by farmer, variety and source lot', () => {
+    renderAll()
+    search('Search lot, farmer, grade...', 'somchai')
+    settle()
+    expect(screen.getByText('GBL-2026-5')).toBeInTheDocument()
+    search('Search lot, farmer, grade...', 'typica')
+    settle()
+    expect(screen.getByText('GBL-2026-5')).toBeInTheDocument()
+    search('Search lot, farmer, grade...', 'pch-2026-1')
+    settle()
+    expect(screen.getByText('GBL-2026-5')).toBeInTheDocument()
+    search('Search lot, farmer, grade...', 'malee')
+    settle()
+    expect(screen.queryByText('GBL-2026-5')).not.toBeInTheDocument()
+
+    search('Search lot, farmer, process...', 'somchai')
+    settle()
+    expect(screen.getByText('PCH-2026-1')).toBeInTheDocument()
+    search('Search lot, farmer, process...', 'honey')
+    settle()
+    expect(screen.getByText('PCH-2026-1')).toBeInTheDocument()
+    search('Search lot, farmer, process...', 'geisha')
+    settle()
+    expect(screen.queryByText('PCH-2026-1')).not.toBeInTheDocument()
+
+    search('Search lot, farmer, variety...', 'malee')
+    settle()
+    expect(screen.getByText('HL-2026-2')).toBeInTheDocument()
+  })
+
+  it('shows card money with thousands separators and dates in the app format', () => {
+    renderAll()
+    expect(screen.getByText(/1,000\.00 total/)).toBeInTheDocument()
+    // The shared display helper, as on every other page.
+    expect(screen.getByText(formatDateDisplay('2026-09-15'))).toBeInTheDocument()
   })
 })
 
@@ -427,12 +532,14 @@ describe('Withdraw Stock roaster and total', { timeout: 20000 }, () => {
     fireEvent.click(screen.getByRole('button', { name: 'Roast' }))
     setAmount('5')
     fireEvent.submit(form())
-    expect(screen.getByText('กรุณาเลือก Roaster ที่ต้องการส่ง stock ให้')).toBeInTheDocument()
+    expect(screen.getByText('Pick the roaster to send this stock to.')).toBeInTheDocument()
     expect(createWithdrawal).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Select Roaster...' }))
     expect(screen.queryByRole('button', { name: 'Other Processor' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Hill Roastery' }))
+    // The banner went with the edit that fixed it.
+    expect(screen.queryByText('Pick the roaster to send this stock to.')).not.toBeInTheDocument()
     fireEvent.submit(form())
 
     await waitFor(() => expect(createWithdrawal).toHaveBeenCalledTimes(1))
@@ -520,6 +627,44 @@ describe('Withdraw Stock roaster and total', { timeout: 20000 }, () => {
     })
   })
 
+  it('says in English which lot and roaster the stock went to', async () => {
+    vi.mocked(createWithdrawal).mockResolvedValueOnce({
+      greenBeanLot: { ...stockLot, currentWeightKg: 37 },
+      roasterInventoryItem: { id: 'inv-9', roasterId: 'r-1', greenBeanLotId: 'gbl-1', claimedWeightKg: 3, remainingWeightKg: 3 },
+    })
+    render(
+      <Harness initial={{ ...INITIAL_APP_DATA, greenBeanLots: [stockLot], users }} refreshData={async () => {}} withToasts />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Roast' }))
+    setAmount('3')
+    fireEvent.click(screen.getByRole('button', { name: 'Select Roaster...' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Hill Roastery' }))
+    fireEvent.submit(form())
+    expect(await screen.findByText('Sent 3 kg of GBL-2026-1 to Hill Roastery.')).toBeInTheDocument()
+  })
+
+  it('says in English how much was withdrawn from which lot', async () => {
+    vi.mocked(createWithdrawal).mockResolvedValueOnce({ greenBeanLot: { ...stockLot, currentWeightKg: 39.5 } })
+    render(<Harness initial={{ ...INITIAL_APP_DATA, greenBeanLots: [stockLot] }} refreshData={async () => {}} withToasts />)
+    fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
+    setAmount('0.5')
+    fireEvent.submit(form())
+    expect(await screen.findByText('Withdrew 0.5 kg from GBL-2026-1.')).toBeInTheDocument()
+  })
+
+  it("starts a Sale at the lot's set price and currency, still editable", () => {
+    const priced = { ...stockLot, pricePerKg: 250, currency: 'USD' }
+    render(<Harness initial={{ ...INITIAL_APP_DATA, greenBeanLots: [priced] }} refreshData={async () => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sale' }))
+    const price = screen.getByLabelText('Price per kg') as HTMLInputElement
+    expect(price.value).toBe('250')
+    expect(screen.getByRole('button', { name: 'USD' })).toBeInTheDocument()
+    fireEvent.change(price, { target: { value: '260' } })
+    expect(price.value).toBe('260')
+  })
+
   it('shows the Sale total in the picked currency', () => {
     render(<Harness initial={{ ...INITIAL_APP_DATA, greenBeanLots: [stockLot] }} refreshData={async () => {}} />)
     fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
@@ -540,12 +685,16 @@ describe('Cherry lot edit and delete', { timeout: 20000 }, () => {
     farm: { id: 'farm-1', farmName: 'Doi Farm' },
   }
 
+  // The delete asks in the site's confirm popup, never window.confirm.
   let confirmSpy: ReturnType<typeof vi.spyOn>
   beforeEach(() => {
     vi.clearAllMocks()
     confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
   afterEach(() => confirmSpy.mockRestore())
+  const deletePopup = () => screen.getByRole('dialog', { name: /^Delete cherry lot / })
+  const confirmDelete = () =>
+    fireEvent.click(within(deletePopup()).getByRole('button', { name: 'Delete lot' }))
 
   it('gives a super admin the edit and delete controls whatever roles the account lists', () => {
     // The sidebar and the route let a super admin in as an Admin, and the
@@ -596,7 +745,10 @@ describe('Cherry lot edit and delete', { timeout: 20000 }, () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete cherry lot HL-2026-44' }))
 
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('HL-2026-44'))
+    expect(deletePopup()).toHaveAccessibleName('Delete cherry lot HL-2026-44 from Farmer?')
+    expect(deleteHarvestLot).not.toHaveBeenCalled()
+    confirmDelete()
+    expect(confirmSpy).not.toHaveBeenCalled()
     await waitFor(() => expect(onData.mock.lastCall![0].harvestLots).toEqual([]))
     // The workbench always asks the backend to refuse a lot processed since
     // the list loaded, whoever is signed in.
@@ -605,9 +757,10 @@ describe('Cherry lot edit and delete', { timeout: 20000 }, () => {
   })
 
   it('keeps the lot when the delete is not confirmed', () => {
-    confirmSpy.mockReturnValue(false)
     render(<Harness initial={{ ...INITIAL_APP_DATA, harvestLots: [cherryLot] }} refreshData={async () => {}} />)
     fireEvent.click(screen.getByRole('button', { name: 'Delete cherry lot HL-2026-44' }))
+    fireEvent.click(within(deletePopup()).getByRole('button', { name: 'Keep' }))
+    expect(screen.queryByRole('dialog', { name: /^Delete cherry lot / })).not.toBeInTheDocument()
     expect(deleteHarvestLot).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Record Process' })).toBeInTheDocument()
   })
@@ -618,6 +771,7 @@ describe('Cherry lot edit and delete', { timeout: 20000 }, () => {
     const refreshData = vi.fn(async () => {})
     render(<Harness initial={{ ...INITIAL_APP_DATA, harvestLots: [cherryLot] }} refreshData={refreshData} withToasts />)
     fireEvent.click(screen.getByRole('button', { name: 'Delete cherry lot HL-2026-44' }))
+    confirmDelete()
 
     expect(await screen.findByText("You don't have permission to delete harvest lot.")).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Record Process' })).toBeInTheDocument()
@@ -633,6 +787,7 @@ describe('Cherry lot edit and delete', { timeout: 20000 }, () => {
     const refreshData = vi.fn(async () => {})
     render(<Harness initial={{ ...INITIAL_APP_DATA, harvestLots: [cherryLot] }} refreshData={refreshData} withToasts />)
     fireEvent.click(screen.getByRole('button', { name: 'Delete cherry lot HL-2026-44' }))
+    confirmDelete()
 
     expect(await screen.findByText(message)).toBeInTheDocument()
     expect(refreshData).toHaveBeenCalledTimes(1)
@@ -666,6 +821,7 @@ describe('Cherry lot edit and delete', { timeout: 20000 }, () => {
     fireEvent.click(screen.getByRole('button', { name: '2' }))
     expect(screen.getAllByRole('button', { name: 'Record Process' })).toHaveLength(1)
     fireEvent.click(screen.getByRole('button', { name: 'Delete cherry lot HL-2026-1' }))
+    confirmDelete()
 
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Record Process' })).toHaveLength(5))
     expect(screen.queryByRole('button', { name: 'Delete cherry lot HL-2026-1' })).not.toBeInTheDocument()
@@ -860,6 +1016,32 @@ describe('Hull & Grade price', { timeout: 20000 }, () => {
     expect(form).toHaveTextContent('Ready to confirm')
     expect(valueLine(form)).toHaveTextContent('14,440.00 THB value')
     expect(valueLine(form)).not.toHaveTextContent('grades priced')
+  })
+
+  it('clears the error banner when a grade is picked, a row is added or a row is removed', () => {
+    render(<Harness initial={hullData} refreshData={async () => {}} />)
+    const form = openHull()
+    const error = 'Please enter weights for the graded lots.'
+    const failSave = () => {
+      fireEvent.submit(form)
+      expect(within(form).getByText(error)).toBeInTheDocument()
+    }
+
+    // The grade list is a row of buttons, not a native input, so the
+    // form-level change handler never sees the pick.
+    failSave()
+    fireEvent.click(within(form).getAllByText('Grade A')[0].closest('button')!)
+    fireEvent.click(within(form).getByText('Grade B', { selector: 'button' }))
+    expect(within(form).queryByText(error)).not.toBeInTheDocument()
+
+    failSave()
+    fireEvent.click(within(form).getByText('Add Grade', { selector: 'button' }))
+    expect(within(form).queryByText(error)).not.toBeInTheDocument()
+
+    failSave()
+    fireEvent.click(within(form).getByLabelText('Remove row 2'))
+    expect(within(form).queryByText(error)).not.toBeInTheDocument()
+    expect(createParchmentWithdrawal).not.toHaveBeenCalled()
   })
 })
 
@@ -1304,7 +1486,7 @@ describe('Withdrawal history invoice', { timeout: 20000 }, () => {
   const openHistory = (lot: GreenBeanLot, roles?: UserRole[]) => {
     render(<Harness initial={{ ...INITIAL_APP_DATA, greenBeanLots: [lot] }} refreshData={async () => {}} roles={roles} />)
     fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
-    fireEvent.click(screen.getByRole('button', { name: 'View Withdrawal History' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Withdrawal history of green bean lot / }))
   }
 
   it("offers the invoice on the owner's sale", () => {
@@ -1344,6 +1526,31 @@ describe('Withdrawal history invoice', { timeout: 20000 }, () => {
     expect(modal).not.toHaveTextContent('undefined')
   })
 
+  it('opens an invoice from the lot owner with a Total row, no made-up number, and the app formats', () => {
+    render(
+      <Harness
+        initial={{
+          ...INITIAL_APP_DATA,
+          users: [{ id: 'processor', name: 'Doi Processing', roles: [UserRole.Processor] }],
+          greenBeanLots: [saleLot({ customerName: 'Cafe Doi', salePrice: 1250, currency: 'THB', totalAmount: 6250, withdrawnByName: 'Clerk' })],
+        }}
+        refreshData={async () => {}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Withdrawal history of green bean lot / }))
+    const modal = historyModal()
+    expect(within(modal).getByText(formatDateDisplay('2026-09-20'))).toBeInTheDocument()
+    expect(modal).toHaveTextContent('1,250.00 THB/kg')
+    expect(modal).toHaveTextContent('6,250.00 THB')
+
+    fireEvent.click(within(modal).getByRole('button', { name: 'Invoice' }))
+    expect(screen.getByTestId('invoice-seller')).toHaveTextContent('Doi Processing')
+    expect(screen.getByTestId('invoice-total')).toHaveTextContent('Total6,250.00 THB')
+    expect(screen.getByText('No invoice number')).toBeInTheDocument()
+    expect(screen.queryByText(/INV-DRAFT/)).not.toBeInTheDocument()
+  })
+
   it("shows the purpose on the owner's own sale", () => {
     openHistory(saleLot({ purpose: 'Order 42 for Cafe Doi', customerName: 'Cafe Doi', salePrice: 400 }))
     expect(within(historyModal()).getByText('Purpose').nextElementSibling).toHaveTextContent('Order 42 for Cafe Doi')
@@ -1356,9 +1563,8 @@ describe('Withdrawal history invoice', { timeout: 20000 }, () => {
     const fullSale = { customerName: 'Cafe Doi', salePrice: 400, currency: 'THB', totalAmount: 2000, invoiceNumber: 'INV-7' }
     const createLinkButton = () => screen.queryByRole('button', { name: 'Create public trace link' })
     const openInvoice = () => fireEvent.click(screen.getByRole('button', { name: 'Invoice' }))
-    // The invoice's close button is the icon-only one next to Print.
     const closeInvoice = () =>
-      fireEvent.click(screen.getByRole('button', { name: 'Print' }).nextElementSibling as HTMLElement)
+      fireEvent.click(screen.getByRole('button', { name: 'Close invoice' }))
 
     beforeEach(() => vi.clearAllMocks())
 
@@ -1379,7 +1585,7 @@ describe('Withdrawal history invoice', { timeout: 20000 }, () => {
       // The invoice's own state goes with it; only the stored lot carries the id.
       closeInvoice()
       expect(screen.queryByText(publicUrl)).not.toBeInTheDocument()
-      fireEvent.click(screen.getByRole('button', { name: 'View Withdrawal History' }))
+      fireEvent.click(screen.getByRole('button', { name: /^Withdrawal history of green bean lot / }))
       openInvoice()
 
       expect(screen.getByText(publicUrl)).toBeInTheDocument()

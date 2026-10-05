@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  NOTHING_TO_EXPORT_MESSAGE,
   csvDate,
   csvDateTime,
   csvFilename,
@@ -8,6 +9,7 @@ import {
   localDateStamp,
   toCsv,
 } from './exportCSV';
+import { APP_TOAST_EVENT, type AppToast } from './appToast';
 
 describe('toCsv', () => {
   it('quotes every cell, doubles embedded quotes and ends rows with CRLF', () => {
@@ -108,6 +110,27 @@ describe('downloadCsv', () => {
 
     vi.runAllTimers();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:csv');
+  });
+
+  it('returns true once the file is handed to the browser', () => {
+    expect(downloadCsv('lots.csv', ['Lot'], [['GBL-1']])).toBe(true);
+  });
+
+  it('with no rows downloads nothing and says why in a toast', () => {
+    const toasts: AppToast[] = [];
+    const listen = (event: Event) => toasts.push((event as CustomEvent<AppToast>).detail);
+    window.addEventListener(APP_TOAST_EVENT, listen);
+    try {
+      expect(downloadCsv('gap-log_2026-09-23.csv', ['Date', 'Farm'], [])).toBe(false);
+    } finally {
+      window.removeEventListener(APP_TOAST_EVENT, listen);
+    }
+
+    expect(blobs).toHaveLength(0);
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(click).not.toHaveBeenCalled();
+    expect(toasts).toEqual([{ type: 'info', message: NOTHING_TO_EXPORT_MESSAGE }]);
+    expect(NOTHING_TO_EXPORT_MESSAGE).toBe('Nothing to export - no rows match the current filters');
   });
 });
 

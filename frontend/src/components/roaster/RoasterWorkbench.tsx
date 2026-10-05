@@ -34,6 +34,7 @@ import { FLAVOR_GROUPS } from './flavorGroups'
 import { toFixed2, clamp, toRoaId, toRoastBatchId } from '../../utils/formatters'
 import { claimGreenBeanLot, createRoastBatch } from '../../services/roaster/roasterService'
 import { createGreenBeanLot, deleteGreenBeanLot } from '../../services/lots/greenBeanLotService'
+import type { CreateGreenBeanLotInput } from '../../services/lots/greenBeanLotService'
 import { formatGreenBeanId } from '../../utils/formatDisplayId'
 import { isAdminUser } from '../../utils/farmAccess'
 import { useToast } from '../../contexts/ToastContext'
@@ -41,6 +42,7 @@ import { SaleOrderForm } from '../sales/modals/SaleOrderModal'
 import { formatKg } from '../sales/saleDisplay'
 import {
   emptyPurchasedLotForm,
+  newestPurchasedLotFirst,
   purchasedLotForm,
   purchasedLotUpdate,
   purchasedLotUsedKg,
@@ -137,6 +139,26 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
   const [deleteError, setDeleteError] = useState('')
 
   const isAdmin = currentUser.roles?.includes(UserRole.Admin)
+
+  // Admin only, Add External Lot: "Buying for" - the roaster the new lot is
+  // bought for, who then owns it. Admin's own stock by default.
+  const canBuyForOthers = isAdminUser(currentUser)
+  const [buyingForId, setBuyingForId] = useState(currentUser.id)
+  const buyingForOptions = useMemo(
+    () => [
+      { value: currentUser.id, label: `Me (${currentUser.name || 'Admin'})` },
+      ...data.users
+        .filter(
+          (user) =>
+            user.id !== currentUser.id &&
+            user.isActive !== false &&
+            !!user.roles?.includes(UserRole.Roaster),
+        )
+        .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
+        .map((user) => ({ value: user.id, label: user.name })),
+    ],
+    [data.users, currentUser.id, currentUser.name],
+  )
 
   // Whose a stock row or purchased lot is, for an Admin who sees everyone's.
   const userNameOf = useCallback(
@@ -254,6 +276,24 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         .map(mapLotForDisplay)
         .sort((a, b) => b.id.localeCompare(a.id)),
     [data.greenBeanLots, mapLotForDisplay, currentUser],
+  )
+
+  // Purchased lots off the shelf (all kg claimed, roasted or sold, or set
+  // Withdrawn): no Start roast, but their buyer (or an Admin) can still open,
+  // correct and, when nothing was taken from them, delete them.
+  const usedUpExternalLots = useMemo(
+    () =>
+      data.greenBeanLots
+        .filter(
+          (lot) =>
+            lot.sourceType === GreenBeanSourceType.External &&
+            !(lot.availabilityStatus === 'Available' && lot.currentWeightKg > 0) &&
+            canManagePurchasedLot(lot),
+        )
+        .map(mapLotForDisplay)
+        // Newest first by date added and lot number; ExternalLotsTable shows the first 20.
+        .sort(newestPurchasedLotFirst),
+    [data.greenBeanLots, mapLotForDisplay, canManagePurchasedLot],
   )
 
   const availableInternalLots = useMemo(
@@ -445,7 +485,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     e.preventDefault()
     const amount = parseFloat(claimAmount)
     if (!selectedLot || !amount || amount <= 0 || amount > selectedLot.currentWeightKg) {
-      addToast({ type: 'error', message: 'จำนวนที่ Claim ไม่ถูกต้อง' })
+      addToast({ type: 'error', message: 'Enter a valid kg to claim' })
       return
     }
     try {
@@ -454,12 +494,12 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         ...prev,
         roasterInventory: [...prev.roasterInventory, inventoryItem],
       }))
-      addToast({ type: 'success', message: `Claim ${amount} kg สำเร็จ!` })
+      addToast({ type: 'success', message: `Claimed ${formatKg(amount)} kg into stock` })
       setIsClaimModalOpen(false)
     } catch (err: unknown) {
       addToast({
         type: 'error',
-        message: err instanceof Error ? err.message : 'ไม่สามารถ Claim lot ได้',
+        message: err instanceof Error ? err.message : 'Could not claim the lot',
       })
     }
   }
@@ -620,19 +660,19 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     if (selectedExternalLot && !selectedInventoryItem) {
       if (isSubmittingRoast) return
       if (!batchRaw || batchRaw <= 0) {
-        addToast({ type: 'error', message: 'กรุณากรอก Batch Size ที่ถูกต้อง' })
+        addToast({ type: 'error', message: 'Enter a valid batch size' })
         return
       }
       if (!roastedRaw || roastedRaw <= 0) {
-        addToast({ type: 'error', message: 'กรุณากรอก Roasted Weight ที่ถูกต้อง' })
+        addToast({ type: 'error', message: 'Enter a valid roasted weight' })
         return
       }
       if (batchRaw > selectedExternalLot.currentWeightKg) {
-        addToast({ type: 'error', message: 'Batch เกิน น้ำหนักที่มี' })
+        addToast({ type: 'error', message: 'The batch is more than the kg left on this lot' })
         return
       }
       if (roastedRaw > batchRaw) {
-        addToast({ type: 'error', message: 'Roasted Weight ต้องไม่เกิน Batch Size' })
+        addToast({ type: 'error', message: 'Roasted weight cannot be more than the batch size' })
         return
       }
 
@@ -690,11 +730,14 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
           ),
         }))
         setPage(1)
-        addToast({ type: 'success', message: `บันทึก Roast Batch ${batch} kg สำเร็จ!` })
+        addToast({
+          type: 'success',
+          message: `Roast ${toRoastBatchId(roastBatch.id)} logged (${formatKg(batch)} kg)`,
+        })
         setIsLogRoastModalOpen(false)
         setSelectedExternalLot(null)
       } catch (err: any) {
-        addToast({ type: 'error', message: err?.message || 'ไม่สามารถบันทึก Roast Batch ได้' })
+        addToast({ type: 'error', message: err?.message || 'Could not log the roast' })
       } finally {
         setIsSubmittingRoast(false)
         setIsRoastingLotId(null)
@@ -707,19 +750,19 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     if (isSubmittingRoast) return
 
     if (!batchRaw || batchRaw <= 0) {
-      addToast({ type: 'error', message: 'กรุณากรอก Batch Size ที่ถูกต้อง' })
+      addToast({ type: 'error', message: 'Enter a valid batch size' })
       return
     }
     if (!roastedRaw || roastedRaw <= 0) {
-      addToast({ type: 'error', message: 'กรุณากรอก Roasted Weight ที่ถูกต้อง' })
+      addToast({ type: 'error', message: 'Enter a valid roasted weight' })
       return
     }
     if (batchRaw > selectedInventoryItem.remainingWeightKg) {
-      addToast({ type: 'error', message: 'Batch เกิน inventory ที่มี' })
+      addToast({ type: 'error', message: 'The batch is more than the kg left in stock' })
       return
     }
     if (roastedRaw > batchRaw) {
-      addToast({ type: 'error', message: 'Roasted Weight ต้องไม่เกิน Batch Size' })
+      addToast({ type: 'error', message: 'Roasted weight cannot be more than the batch size' })
       return
     }
 
@@ -751,12 +794,15 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
         ),
       }))
       setPage(1)
-      addToast({ type: 'success', message: `บันทึก Roast Batch ${batch} kg สำเร็จ!` })
+      addToast({
+        type: 'success',
+        message: `Roast ${toRoastBatchId(roastBatch.id)} logged (${formatKg(batch)} kg)`,
+      })
       setIsLogRoastModalOpen(false)
     } catch (err: unknown) {
       addToast({
         type: 'error',
-        message: err instanceof Error ? err.message : 'ไม่สามารถบันทึก Roast Batch ได้',
+        message: err instanceof Error ? err.message : 'Could not log the roast',
       })
     } finally {
       setIsSubmittingRoast(false)
@@ -984,6 +1030,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
               ) : (
                 <ExternalLotsTable
                   lots={pagedExternalLots as any}
+                  usedUpLots={usedUpExternalLots as any}
                   onRoast={(lot) => handleExternalRoast(lot as any)}
                   onAddExternal={openAddLot}
                   canManage={canManagePurchasedLot}
@@ -1771,10 +1818,17 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
               return
             }
 
+            // Admin only: the roaster the lot is bought for owns it (the
+            // server checks ownerId); buying for yourself sends no ownerId.
+            const buyerId =
+              canBuyForOthers && buyingForId && buyingForId !== currentUser.id ? buyingForId : ''
+            const buyerName = buyerId ? userNameOf(buyerId) || 'the roaster' : ''
+
             try {
               if (isAddingLot) return
               setIsAddingLot(true)
-              const lot = await createGreenBeanLot({
+              const input: CreateGreenBeanLotInput & { ownerId?: string } = {
+                ...(buyerId ? { ownerId: buyerId } : {}),
                 sourceType: 'External',
                 grade: newLotForm.grade || 'Grade A',
                 initialWeightKg: initial,
@@ -1791,15 +1845,22 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                   tasteNote: newLotForm.tasteNote || undefined,
                   supplierNotes: newLotForm.supplierNotes || undefined,
                 },
-              })
+              }
+              const lot = await createGreenBeanLot(input)
               setData((prev) => ({ ...prev, greenBeanLots: [lot, ...prev.greenBeanLots] }))
-              addToast({ type: 'success', message: `เพิ่ม External Lot สำเร็จ!` })
+              addToast({
+                type: 'success',
+                message: `Purchased lot ${lot.displayId || toRoaId(lot.id)} added${
+                  buyerName ? ` for ${buyerName}` : ''
+                }`,
+              })
               setIsAddLotModalOpen(false)
               setNewLotForm(emptyPurchasedLotForm())
+              setBuyingForId(currentUser.id)
             } catch (err: unknown) {
               addToast({
                 type: 'error',
-                message: err instanceof Error ? err.message : 'ไม่สามารถเพิ่ม Lot ได้',
+                message: err instanceof Error ? err.message : 'Could not add the lot',
               })
             } finally {
               setIsAddingLot(false)
@@ -1882,11 +1943,40 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
           </div>
 
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            {/* Admin, new lot: the roaster it is bought for, who then owns it. */}
+            {canBuyForOthers && !editingLot && (
+              <div
+                role="group"
+                aria-labelledby="purchased-lot-buyer-label"
+                className="md:col-span-2"
+              >
+                <span
+                  id="purchased-lot-buyer-label"
+                  className="mb-2 block text-sm font-bold text-gray-700"
+                >
+                  Buying for
+                </span>
+                <Select
+                  value={buyingForId}
+                  onChange={(v) => setBuyingForId(v ? String(v) : currentUser.id)}
+                  options={buyingForOptions}
+                  placeholder="Choose a roaster"
+                  colorTheme="emerald"
+                />
+                <p className="mt-1.5 text-xs text-gray-500">
+                  The lot goes into this roaster&apos;s purchased lots, as theirs.
+                </p>
+              </div>
+            )}
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                Origin / Supplier
+              <label
+                htmlFor="purchased-lot-origin"
+                className="block text-sm font-bold text-gray-700 mb-2"
+              >
+                Origin / Supplier <span className="text-[#d87832]">*</span>
               </label>
               <input
+                id="purchased-lot-origin"
                 className="block w-full border-2 border-gray-300 rounded-xl py-2.5 px-3"
                 value={newLotForm.originName}
                 onChange={(e) => setNewLotForm({ ...newLotForm, originName: e.target.value })}
@@ -1894,15 +1984,26 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">Producer</label>
+              <label
+                htmlFor="purchased-lot-producer"
+                className="block text-sm font-bold text-gray-700 mb-2"
+              >
+                Producer
+              </label>
               <input
+                id="purchased-lot-producer"
                 className="block w-full border-2 border-gray-300 rounded-xl py-2.5 px-3"
                 value={newLotForm.producerName}
                 onChange={(e) => setNewLotForm({ ...newLotForm, producerName: e.target.value })}
               />
             </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">Variety</label>
+            <div role="group" aria-labelledby="purchased-lot-variety-label">
+              <span
+                id="purchased-lot-variety-label"
+                className="block text-sm font-bold text-gray-700 mb-2"
+              >
+                Variety <span className="text-[#d87832]">*</span>
+              </span>
               <Select
                 value={newLotForm.variety}
                 onChange={(v) => setNewLotForm({ ...newLotForm, variety: (v as string) || '' })}
@@ -1910,10 +2011,13 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                 placeholder="Select variety..."
               />
             </div>
-            <div>
-              <label className="mb-2 block text-sm font-bold text-gray-700">
+            <div role="group" aria-labelledby="purchased-lot-process-label">
+              <span
+                id="purchased-lot-process-label"
+                className="mb-2 block text-sm font-bold text-gray-700"
+              >
                 Process Type <span className="text-[#d87832]">*</span>
-              </label>
+              </span>
               <Select
                 value={newLotForm.processType}
                 onChange={(v) => setNewLotForm({ ...newLotForm, processType: (v as string) || '' })}
@@ -1925,6 +2029,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             </div>
             <div>
               <DatePicker
+                id="external-lot-purchase-date"
                 value={newLotForm.purchaseDate}
                 onChange={(d) => setNewLotForm({ ...newLotForm, purchaseDate: d })}
                 label="Purchase Date"
@@ -1936,7 +2041,8 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                 htmlFor="purchased-lot-weight"
                 className="block text-sm font-bold text-gray-700 mb-2"
               >
-                {editingLot ? 'Lot Weight (kg)' : 'Initial Weight (kg)'}
+                {editingLot ? 'Lot Weight (kg)' : 'Initial Weight (kg)'}{' '}
+                <span className="text-[#d87832]">*</span>
               </label>
               <input
                 type="number"
@@ -1955,8 +2061,13 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                 </p>
               )}
             </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">Grade</label>
+            <div role="group" aria-labelledby="purchased-lot-grade-label">
+              <span
+                id="purchased-lot-grade-label"
+                className="block text-sm font-bold text-gray-700 mb-2"
+              >
+                Grade
+              </span>
               <Select
                 value={newLotForm.grade}
                 onChange={(v) => setNewLotForm({ ...newLotForm, grade: (v as string) || '' })}
@@ -1965,23 +2076,33 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">Price/kg (THB)</label>
+              <label
+                htmlFor="purchased-lot-price"
+                className="block text-sm font-bold text-gray-700 mb-2"
+              >
+                Price/kg (THB)
+              </label>
               <input
                 type="number"
                 step="0.01"
                 min="0"
+                id="purchased-lot-price"
                 className="block w-full border-2 border-gray-300 rounded-xl py-2.5 px-3"
                 value={newLotForm.pricePerKg}
                 onChange={(e) => setNewLotForm({ ...newLotForm, pricePerKg: e.target.value })}
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
+              <label
+                htmlFor="purchased-lot-total"
+                className="block text-sm font-bold text-gray-700 mb-2"
+              >
                 Total Price (THB)
               </label>
               <input
                 type="text"
                 readOnly
+                id="purchased-lot-total"
                 className="block w-full border-2 border-gray-200 bg-gray-50 rounded-xl py-2.5 px-3 font-semibold text-green-700"
                 value={
                   newLotForm.pricePerKg && newLotForm.initialWeightKg
@@ -1997,18 +2118,28 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-bold text-gray-700 mb-2">
+              <label
+                htmlFor="purchased-lot-taste-note"
+                className="block text-sm font-bold text-gray-700 mb-2"
+              >
                 Taste Note (optional)
               </label>
               <input
+                id="purchased-lot-taste-note"
                 className="block w-full border-2 border-gray-300 rounded-xl py-2.5 px-3"
                 value={newLotForm.tasteNote}
                 onChange={(e) => setNewLotForm({ ...newLotForm, tasteNote: e.target.value })}
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-bold text-gray-700 mb-2">Supplier Notes</label>
+              <label
+                htmlFor="purchased-lot-supplier-notes"
+                className="block text-sm font-bold text-gray-700 mb-2"
+              >
+                Supplier Notes
+              </label>
               <textarea
+                id="purchased-lot-supplier-notes"
                 rows={2}
                 className="block w-full border-2 border-gray-300 rounded-xl py-2.5 px-3 resize-none overflow-hidden"
                 value={newLotForm.supplierNotes}

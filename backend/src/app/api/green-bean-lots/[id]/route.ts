@@ -14,6 +14,7 @@ import {
   greenBeanAvailabilityStatusSchema,
 } from "@/lib/validations/common";
 import { greenBeanLotForViewer } from "@/lib/withdrawalPrivacy";
+import { withParchmentImporterFor } from "@/lib/importerPrivacy";
 import {
   LOT_CHANGED,
   LOT_CHANGED_MESSAGE,
@@ -213,9 +214,10 @@ export async function GET(
         : greenBeanLot;
 
     // Withdrawal sale details and purpose, and other roasters' stock rows,
-    // only for the lot's owner and Admin; see lib/withdrawalPrivacy.
+    // only for the lot's owner and Admin; see lib/withdrawalPrivacy. The
+    // parchment's importer only for Admin and the importer (lib/importerPrivacy).
     return NextResponse.json({
-      greenBeanLot: greenBeanLotForViewer(user, shaped),
+      greenBeanLot: withParchmentImporterFor(user, greenBeanLotForViewer(user, shaped)),
     });
   } catch (error) {
     return handleApiError(error);

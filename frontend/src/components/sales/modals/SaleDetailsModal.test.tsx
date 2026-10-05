@@ -88,13 +88,15 @@ describe('SaleDetailsModal', { timeout: 20000 }, () => {
     expect(within(dialog).getByText('081 234 5678')).toBeInTheDocument()
     expect(within(dialog).getAllByText('Grade A Typica Washed')).toHaveLength(2)
     expect(within(dialog).getByText('1,750.00 THB')).toBeInTheDocument()
-    expect(within(dialog).queryByText(/Recorded by/)).not.toBeInTheDocument()
+    expect(within(dialog).queryByText(/Seller:/)).not.toBeInTheDocument()
   })
 
-  it('tells an admin who recorded the sale', () => {
+  it('names the seller for an admin, not as who recorded the sale', () => {
     auth.currentUser = adminUser
     renderDetails()
-    expect(screen.getByText(/Recorded by Bean Roasters/)).toBeInTheDocument()
+    // The sale is the roaster's (createdBy), also when an Admin recorded it for them.
+    expect(screen.getByText(/Seller: Bean Roasters/)).toBeInTheDocument()
+    expect(screen.queryByText(/Recorded by/)).not.toBeInTheDocument()
   })
 
   it('asks before cancelling and says what goes back to stock', async () => {

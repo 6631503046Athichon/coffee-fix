@@ -56,11 +56,16 @@ export const Pagination = React.memo(
     const slots = getSlots()
 
     return (
-      <div className="flex justify-center items-center px-4 py-2 bg-gray-50 border-t border-gray-200">
+      <nav
+        aria-label="Pagination"
+        className="flex justify-center items-center px-4 py-2 bg-gray-50 border-t border-gray-200"
+      >
         <div className="flex items-center gap-1">
           <button
+            type="button"
             onClick={() => onPageChange(currentPage - 1)}
             disabled={currentPage === 1}
+            aria-label="Previous page"
             className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -76,8 +81,10 @@ export const Pagination = React.memo(
               </span>
             ) : (
               <button
+                type="button"
                 key={slot}
                 onClick={() => onPageChange(slot)}
+                aria-current={currentPage === slot ? 'page' : undefined}
                 className={`w-8 h-8 text-xs font-medium rounded-md transition-colors flex items-center justify-center ${
                   currentPage === slot
                     ? 'bg-blue-600 text-white'
@@ -90,14 +97,16 @@ export const Pagination = React.memo(
           )}
 
           <button
+            type="button"
             onClick={() => onPageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
+            aria-label="Next page"
             className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-100 rounded-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
-      </div>
+      </nav>
     )
   },
 )

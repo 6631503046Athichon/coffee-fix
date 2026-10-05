@@ -27,6 +27,9 @@ const mockPrisma: any = {
   parchmentLot: {
     findUnique: jest.fn(),
   },
+  user: {
+    findUnique: jest.fn(),
+  },
 }
 
 jest.mock('@/lib/prisma', () => ({
@@ -89,6 +92,17 @@ const parchmentLots: Record<string, { processingBatch: { createdById: string } |
   [NO_BATCH_LOT]: { processingBatch: null },
 }
 
+// Users an Admin may name as the buyer of a purchased lot ("Buying for").
+const BUYER_ROASTER = '66666666-6666-4666-8666-666666666666'
+const BUYER_INACTIVE = '77777777-7777-4777-8777-777777777777'
+const BUYER_PROCESSOR = '88888888-8888-4888-8888-888888888888'
+const BUYER_MISSING = '99999999-9999-4999-8999-999999999999'
+const buyers: Record<string, { roles: string[]; isActive: boolean }> = {
+  [BUYER_ROASTER]: { roles: ['Roaster'], isActive: true },
+  [BUYER_INACTIVE]: { roles: ['Roaster'], isActive: false },
+  [BUYER_PROCESSOR]: { roles: ['Processor'], isActive: true },
+}
+
 const internalLot = (parchmentLotId: string) => ({
   sourceType: 'Internal',
   parchmentLotId,
@@ -120,6 +134,9 @@ beforeEach(() => {
   mockAuthUser = null
   mockPrisma.parchmentLot.findUnique.mockImplementation(
     async (args: any) => parchmentLots[args.where.id] ?? null,
+  )
+  mockPrisma.user.findUnique.mockImplementation(
+    async (args: any) => buyers[args.where.id] ?? null,
   )
 })
 
@@ -214,5 +231,73 @@ describe('POST /api/green-bean-lots - Internal lots are Processor and Admin only
     expect(data.sourceType).toBe('External')
     expect(data.parchmentLotId).toBeNull()
     expect(data.createdById).toBe('roaster-1')
+  })
+})
+
+describe('POST /api/green-bean-lots - Admin buying a purchased lot for a roaster', () => {
+  test.each([
+    ['Admin', admin],
+    ['super admin', superAdmin],
+  ])('%s adds an External lot in the roaster\'s name (ownerId)', async (_label, user) => {
+    mockAuthUser = user
+    const response = await createLot({ ...externalLot(), ownerId: BUYER_ROASTER })
+
+    expect(response.status).toBe(201)
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: BUYER_ROASTER } }),
+    )
+    const { data } = (mockPrisma.greenBeanLot.create.mock.calls[0] as any[])[0]
+    expect(data.createdById).toBe(BUYER_ROASTER)
+    // The schema field is not a column: it never reaches the create.
+    expect(data).not.toHaveProperty('ownerId')
+  })
+
+  test('an Admin with no ownerId (or a null one) still buys for themselves', async () => {
+    mockAuthUser = admin
+    expect((await createLot(externalLot())).status).toBe(201)
+    expect((await createLot({ ...externalLot(), ownerId: null })).status).toBe(201)
+    const calls = mockPrisma.greenBeanLot.create.mock.calls as any[][]
+    expect(calls.map(([args]) => args.data.createdById)).toEqual(['admin-1', 'admin-1'])
+    expect(mockPrisma.user.findUnique).not.toHaveBeenCalled()
+  })
+
+  test('a Roaster cannot add a lot in another roaster\'s name', async () => {
+    mockAuthUser = roaster
+    const response = await createLot({ ...externalLot(), ownerId: BUYER_ROASTER })
+
+    expect(response.status).toBe(403)
+    expect(mockPrisma.greenBeanLot.create).not.toHaveBeenCalled()
+  })
+
+  test('a Processor cannot name an owner for their lot', async () => {
+    mockAuthUser = processor
+    const response = await createLot({ ...internalLot(PROCESSOR_1_LOT), ownerId: BUYER_ROASTER })
+
+    expect(response.status).toBe(403)
+    expect(mockPrisma.greenBeanLot.create).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    ['an inactive roaster', BUYER_INACTIVE],
+    ['a user who is not a roaster', BUYER_PROCESSOR],
+    ['an unknown user', BUYER_MISSING],
+  ])('the buyer must be an active roaster, not %s', async (_label, ownerId) => {
+    mockAuthUser = admin
+    const response = await createLot({ ...externalLot(), ownerId })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Choose an active roaster to buy for' })
+    expect(mockPrisma.greenBeanLot.create).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    ['an Internal lot', internalLot(PROCESSOR_1_LOT)],
+    ['an External lot from parchment', externalLot(NO_BATCH_LOT)],
+  ])('only a purchased lot without parchment is bought for a roaster, not %s', async (_label, body) => {
+    mockAuthUser = admin
+    const response = await createLot({ ...body, ownerId: BUYER_ROASTER })
+
+    expect(response.status).toBe(400)
+    expect(mockPrisma.greenBeanLot.create).not.toHaveBeenCalled()
   })
 })

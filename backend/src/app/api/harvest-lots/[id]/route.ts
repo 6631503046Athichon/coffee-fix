@@ -216,16 +216,82 @@ type GreenLotInUse = {
   displayId: string | null
   grade: string
   dependents: ReturnType<typeof greenLotDependents>
+  /** Why the lot is kept, as the refusal words it ("has 1 withdrawal", "was cupped"). */
+  reasons: string[]
 }
 
+// Beyond GREEN_LOT_USES_COUNT, the cascade keeps a green bean lot whose
+// record is out in the world or scored: a printed trace QR (its public page
+// would go 404), a processor's QC score, or a cupping (sample or score).
+// Only counted here; cupping itself is not changed.
+const KEPT_RECORD_REASONS = {
+  publicTrace: 'has a public trace QR',
+  qcScore: 'has QC scores',
+  cupped: 'was cupped',
+} as const
+
+const greenLotInUseSelect = {
+  id: true,
+  displayId: true,
+  grade: true,
+  publicTraceId: true,
+  processorScore: true,
+  _count: { select: { ...GREEN_LOT_USES_COUNT, cuppingScores: true } },
+} satisfies Prisma.GreenBeanLotSelect
+
+type GreenLotUseRow = Prisma.GreenBeanLotGetPayload<{ select: typeof greenLotInUseSelect }>
+
+/** Why the cascade must keep `lot`; empty when it may go with the chain. */
+function greenLotKeepReasons(lot: GreenLotUseRow): { dependents: GreenLotInUse['dependents']; reasons: string[] } {
+  const dependents = greenLotDependents(lot._count)
+  // Cupping samples are worded with the scores, as "was cupped".
+  const { cuppingSamples, ...stock } = dependents
+  const reasons: string[] = []
+  if (anyDependents(stock)) reasons.push(`has ${describeDependents(stock)}`)
+  if (lot.publicTraceId) reasons.push(KEPT_RECORD_REASONS.publicTrace)
+  if (lot.processorScore !== null && lot.processorScore !== undefined) reasons.push(KEPT_RECORD_REASONS.qcScore)
+  if (cuppingSamples > 0 || lot._count.cuppingScores > 0) reasons.push(KEPT_RECORD_REASONS.cupped)
+  return { dependents, reasons }
+}
+
+// "a", "a and b", "a, b and c".
+const joinWords = (words: string[]) =>
+  words.length <= 1 ? words.join('') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`
+
+// What each kept record keeps valid, as the refusal's advice words it.
+const KEPT_RECORD_NOUNS: Record<(typeof KEPT_RECORD_REASONS)[keyof typeof KEPT_RECORD_REASONS], string> = {
+  [KEPT_RECORD_REASONS.publicTrace]: 'printed trace QR',
+  [KEPT_RECORD_REASONS.qcScore]: 'QC scores',
+  [KEPT_RECORD_REASONS.cupped]: 'cupping results',
+}
+
+// The refusal names each green bean lot that must stay and why ("GBL-2026-7:
+// has a public trace QR; GBL-2026-6: has QC scores"), then what the Admin can
+// do. Withdrawals, roaster stock, roasts, sales and invoices can be voided or
+// settled, and then the delete goes through. A public trace QR, QC scores or
+// cupping results are not cleared here, so a lot with one keeps the chain.
 function greenLotsInUseMessage(lots: GreenLotInUse[]): string {
-  const list = lots
-    .map(lot => `${lot.displayId ?? lot.id} (${lot.grade}) has ${describeDependents(lot.dependents)}`)
-    .join('; ')
-  return (
-    `Green bean lots made from this lot are still in use, so nothing was deleted: ${list}. ` +
-    'Void their withdrawals, or settle their stock, roasts, sales and cupping first, then delete again.'
-  )
+  const label = (lot: GreenLotInUse) => lot.displayId ?? lot.id
+  const list = lots.map(lot => `${label(lot)}: ${joinWords(lot.reasons)}`).join('; ')
+  const keptRecords = new Set<string>(Object.values(KEPT_RECORD_REASONS))
+  const kept = lots.filter(lot => lot.reasons.some(reason => keptRecords.has(reason)))
+  const one = (group: GreenLotInUse[]) => group.length === 1
+  let advice: string
+  if (kept.length > 0) {
+    const records = Object.values(KEPT_RECORD_REASONS)
+      .filter(reason => kept.some(lot => lot.reasons.includes(reason)))
+      .map(reason => KEPT_RECORD_NOUNS[reason])
+    advice =
+      `${joinWords(kept.map(label))} must stay to keep ${one(kept) ? 'its' : 'their'} ${joinWords(records)} valid ` +
+      '(a trace QR, QC score or cupping result is not cleared here). ' +
+      'Keep this harvest lot and its chain, and correct it with Edit instead of deleting it.'
+  } else {
+    advice =
+      `To delete it, first void the withdrawals of ${joinWords(lots.map(label))}, or settle ` +
+      `${one(lots) ? 'its' : 'their'} roaster stock, roasts, sales and invoices, then delete again.`
+  }
+  const which = one(lots) ? 'a green bean lot made from this lot cannot' : 'green bean lots made from this lot cannot'
+  return `Nothing was deleted, because ${which} go with it. ${list}. ${advice}`
 }
 
 // Deletes a processed lot with its whole chain, for an Admin's ?cascade=1, in
@@ -235,27 +301,27 @@ function greenLotsInUseMessage(lots: GreenLotInUse[]): string {
 // first, while nothing uses them (lib/greenLotRemoval: no withdrawal that
 // still counts, no roaster stock holding kg, no roast, sale or invoice line,
 // no cupping sample; their voided withdrawals, empty roaster stock rows and
-// price history go with them). If any is used, nothing is deleted and the
-// refusal lists them for the Admin to void or settle first.
+// price history go with them) and while their record is not out in the world
+// or scored (no public trace QR, QC score or cupping score, see
+// KEPT_RECORD_REASONS). If any is used or kept, nothing is deleted and the
+// refusal lists them with why and what to do: void or settle them first, or
+// keep the chain (greenLotsInUseMessage).
 async function deleteChain(id: string): Promise<number> {
   return prisma.$transaction(async (tx) => {
     // The parchment first, as a Hull & Grade takes it, so no green bean lot is
     // made from it meanwhile; then those lots, as a withdrawal or claim takes them.
     await tx.$queryRaw`SELECT "id" FROM "ParchmentLot" WHERE "harvestLotId" = ${id} OR "processingBatchId" IN (SELECT "id" FROM "ProcessingBatch" WHERE "harvestLotId" = ${id}) ORDER BY "id" FOR UPDATE`
     await tx.$queryRaw`SELECT "id" FROM "GreenBeanLot" WHERE "parchmentLotId" IN (SELECT "id" FROM "ParchmentLot" WHERE "harvestLotId" = ${id} OR "processingBatchId" IN (SELECT "id" FROM "ProcessingBatch" WHERE "harvestLotId" = ${id})) ORDER BY "id" FOR UPDATE`
+    // The rows are locked above, so a QR, QC score or cupping score cannot
+    // land on them before this transaction ends.
     const greenLots = await tx.greenBeanLot.findMany({
       where: { parchmentLot: chainParchmentWhere(id) },
-      select: { id: true, displayId: true, grade: true, _count: { select: GREEN_LOT_USES_COUNT } },
+      select: greenLotInUseSelect,
       orderBy: { createdAt: 'asc' },
     })
-    const inUse = greenLots
-      .map(lot => ({
-        id: lot.id,
-        displayId: lot.displayId,
-        grade: lot.grade,
-        dependents: greenLotDependents(lot._count),
-      }))
-      .filter(lot => anyDependents(lot.dependents))
+    const inUse: GreenLotInUse[] = greenLots
+      .map(lot => ({ id: lot.id, displayId: lot.displayId, grade: lot.grade, ...greenLotKeepReasons(lot) }))
+      .filter(lot => lot.reasons.length > 0)
     if (inUse.length > 0) throw new ChainDeleteRefused(greenLotsInUseMessage(inUse), inUse)
 
     const ids = greenLots.map(lot => lot.id)

@@ -5,12 +5,19 @@ import { FileText, Link2, Printer, X } from 'lucide-react';
 import { generatePublicTraceId, generateQRDataUrl, getPublicTraceUrl } from '../../services/lots/greenBeanLotService';
 import { formatGreenBeanId } from '../../utils/formatDisplayId';
 import { toDateOnly, todayDateOnly } from '../../utils/dateOnly';
+import { formatDateDisplay } from '../../utils/formatters';
+import { formatMoney } from './workbench/withdrawDetails';
 
 interface InvoiceReceiptProps {
   visible: boolean;
   onClose: () => void;
   lot: GreenBeanLot;
   entry: NonNullable<GreenBeanLot['withdrawalHistory']>[number];
+  /**
+   * Who sells: the lot owner's name. Without it the invoice names whoever
+   * recorded the withdrawal.
+   */
+  sellerName?: string;
   /**
    * The viewer may create the lot's public trace link: the lot's creator or
    * an Admin, as POST /green-bean-lots/:id/generate-public-id requires.
@@ -25,6 +32,7 @@ const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({
   onClose,
   lot,
   entry,
+  sellerName,
   canGeneratePublicLink = false,
   onPublicTraceIdGenerated,
 }) => {
@@ -86,8 +94,10 @@ const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({
   const pricePerKg = entry.salePrice || 0;
   const qtyKg = entry.amountKg || 0;
   const total = entry.totalAmount != null ? entry.totalAmount : (qtyKg * pricePerKg);
-  const invoiceNumber = entry.invoiceNumber || 'INV-DRAFT';
-  const issueDate = toDateOnly(entry.date) || todayDateOnly();
+  // A sale without an invoice number says so, rather than showing a made-up one.
+  const invoiceNumber = entry.invoiceNumber || '';
+  const issueDate = formatDateDisplay(toDateOnly(entry.date) || todayDateOnly());
+  const seller = sellerName || entry.withdrawnByName || '';
 
   return ReactDOM.createPortal(
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
@@ -100,7 +110,9 @@ const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({
             </div>
             <div className="min-w-0">
               <h2 className="text-2xl font-extrabold text-gray-900">Invoice</h2>
-              <p className="text-sm text-gray-600 truncate" title={invoiceNumber}>{invoiceNumber}</p>
+              <p className="text-sm text-gray-600 truncate" title={invoiceNumber || undefined}>
+                {invoiceNumber || 'No invoice number'}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -116,6 +128,7 @@ const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({
             <button
               type="button"
               onClick={onClose}
+              aria-label="Close invoice"
               className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-gray-600 hover:bg-gray-100 border border-gray-200"
             >
               <X className="h-5 w-5" />
@@ -128,9 +141,19 @@ const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({
           {/* Invoice meta */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div className="space-y-1">
-              <p className="text-sm text-gray-500">Invoice Number</p>
-              <p className="text-lg font-bold text-gray-900">{invoiceNumber}</p>
-              <p className="text-sm text-gray-500 mt-4">Issue Date</p>
+              {seller && (
+                <div data-testid="invoice-seller" className="mb-4">
+                  <p className="text-sm text-gray-500">From</p>
+                  <p className="text-lg font-bold text-gray-900">{seller}</p>
+                </div>
+              )}
+              {invoiceNumber && (
+                <>
+                  <p className="text-sm text-gray-500">Invoice Number</p>
+                  <p className="text-lg font-bold text-gray-900">{invoiceNumber}</p>
+                </>
+              )}
+              <p className={`text-sm text-gray-500${invoiceNumber ? ' mt-4' : ''}`}>Issue Date</p>
               <p className="text-lg font-semibold text-gray-900">{issueDate}</p>
             </div>
             <div className="space-y-1 md:text-right">
@@ -161,10 +184,20 @@ const InvoiceReceipt: React.FC<InvoiceReceiptProps> = ({
                     <div className="text-sm text-gray-600">Grade: {lot.grade}{lot.sourceType === 'External' && lot.externalSource ? ` - ${lot.externalSource.processType}` : ''}</div>
                   </td>
                   <td className="px-4 py-4 text-right font-semibold text-gray-900">{qtyKg.toFixed(2)}</td>
-                  <td className="px-4 py-4 text-right text-gray-900">{pricePerKg.toFixed(2)} {currency}</td>
-                  <td className="px-4 py-4 text-right font-bold text-gray-900">{total.toFixed(2)} {currency}</td>
+                  <td className="px-4 py-4 text-right text-gray-900">{formatMoney(pricePerKg)} {currency}</td>
+                  <td className="px-4 py-4 text-right font-bold text-gray-900">{formatMoney(total)} {currency}</td>
                 </tr>
               </tbody>
+              <tfoot className="bg-gray-50 border-t border-gray-200">
+                <tr data-testid="invoice-total">
+                  <th scope="row" colSpan={3} className="px-4 py-3 text-right text-sm font-bold uppercase tracking-wider text-gray-600">
+                    Total
+                  </th>
+                  <td className="px-4 py-3 text-right text-lg font-extrabold text-gray-900 whitespace-nowrap">
+                    {formatMoney(total)} {currency}
+                  </td>
+                </tr>
+              </tfoot>
               </table>
             </div>
           </div>

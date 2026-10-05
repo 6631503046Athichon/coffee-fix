@@ -69,9 +69,12 @@ export const useWithdrawDetails = () => {
   }
   const closeEditCustomer = () => setEditingCustomer(null)
 
-  /** Clear the fields for the next withdrawal: no customer, price or roaster. */
-  const reset = () => {
-    setDetails(EMPTY_WITHDRAW_DETAILS)
+  /**
+   * Clear the fields for the next withdrawal: no customer, price or roaster,
+   * or `initial` (a lot's own price, see withdrawDetailsForLot).
+   */
+  const reset = (initial: WithdrawDetails = EMPTY_WITHDRAW_DETAILS) => {
+    setDetails(initial)
     newCustomerPendingRef.current = false
   }
 

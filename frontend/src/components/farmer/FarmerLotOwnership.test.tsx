@@ -145,12 +145,14 @@ describe('Admin harvest lot popup names the farm\'s owner as the farmer', { time
     { id: 'u-malee', name: 'Malee', roles: [UserRole.Farmer] },
   ]
 
+  // Opened from Harvest Lots filtered to Doi Farm: with two farms and no
+  // filter the popup would pick none.
   const ModalHarness: React.FC<{ open?: boolean }> = ({ open = true }) => {
     signIn(admin)
     const [data, setData] = useState<AppData>({ ...INITIAL_APP_DATA, farms, users })
     return (
       <DataContext.Provider value={{ data, setData, refreshData: async () => {}, isEditing: false, setIsEditing: () => {} }}>
-        <HarvestLotModal isOpen={open} onClose={() => {}} />
+        <HarvestLotModal isOpen={open} onClose={() => {}} defaultFarmId="farm-1" />
       </DataContext.Provider>
     )
   }

@@ -8,6 +8,7 @@ import { ChevronRight, ArrowUp, ArrowDown, Coffee, PlusCircle, ChevronLeft } fro
 import { PageHeader } from '../common/PageHeader';
 import { Button } from '../common/Button';
 import Select from '../common/Select';
+import { formatDateDisplay } from '../../utils/formatters';
 import HarvestLotModal from './modals/HarvestLotModal';
 
 
@@ -86,6 +87,13 @@ const HarvestLotsManagement: React.FC = () => {
     setCurrentPage(1);
   }, [statusFilter, farmFilter]);
 
+  // No lots at all is first use; lots hidden by the filters is not.
+  const hasAnyLots = myHarvestLots.length > 0;
+  const clearFilters = () => {
+    setStatusFilter('All');
+    setFarmFilter('All');
+  };
+
   const stats = useMemo(() => ({
     totalLots: farmFilteredLots.length,
     totalWeight: farmFilteredLots.reduce((sum, lot) => sum + lot.weightKg, 0),
@@ -153,7 +161,7 @@ const HarvestLotsManagement: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Total Weight</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalWeight.toLocaleString()} kg</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.totalWeight.toLocaleString('en-US')} kg</p>
             </div>
             <Coffee className="h-8 w-8 text-green-600" />
           </div>
@@ -223,18 +231,29 @@ const HarvestLotsManagement: React.FC = () => {
         </div>
         <div className="space-y-4 p-6 bg-gray-50">
           {sortedAndFilteredLots.length === 0 ? (
-            <div className="text-center py-12">
-              <Coffee className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500 text-lg font-medium">No harvest lots found</p>
-              <p className="text-gray-400 text-sm mb-4">Try adjusting your filters or add a new harvest lot</p>
-              <Button
-                variant="primary"
-                icon={<PlusCircle className="h-4 w-4" />}
-                onClick={handleOpenAddModal}
-              >
-                Add Your First Harvest Lot
-              </Button>
-            </div>
+            hasAnyLots ? (
+              <div className="text-center py-12">
+                <Coffee className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500 text-lg font-medium">No harvest lots match these filters</p>
+                <p className="text-gray-400 text-sm mb-4">Try another status or farm, or clear the filters to see every lot</p>
+                <Button type="button" variant="outline" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <Coffee className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500 text-lg font-medium">No harvest lots yet</p>
+                <p className="text-gray-400 text-sm mb-4">Register your first harvest to start tracking it</p>
+                <Button
+                  variant="primary"
+                  icon={<PlusCircle className="h-4 w-4" />}
+                  onClick={handleOpenAddModal}
+                >
+                  Add Your First Harvest Lot
+                </Button>
+              </div>
+            )
           ) : (
             pagedLots.map((lot: HarvestLot) => (
               (() => {
@@ -281,7 +300,7 @@ const HarvestLotsManagement: React.FC = () => {
                       </div>
                       <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
                         <p className="text-gray-500 text-xs uppercase font-semibold mb-1 tracking-wide">Harvest Date</p>
-                        <p className="text-gray-900 font-medium text-sm">{lot.harvestDate}</p>
+                        <p className="text-gray-900 font-medium text-sm">{formatDateDisplay(lot.harvestDate)}</p>
                       </div>
                     </div>
                   </div>
@@ -357,6 +376,7 @@ const HarvestLotsManagement: React.FC = () => {
           setSelectedFarm(null);
         }}
         farm={undefined}
+        defaultFarmId={farmFilter !== 'All' ? farmFilter : undefined}
       />
     </div>
   );

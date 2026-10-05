@@ -89,11 +89,26 @@ const FarmManagement: React.FC = () => {
 		}
 	}, [filteredFarms, selectedFarmId]);
 
-	const isSearching = trimmedSearch.length > 0;
-	const hasAnyFarms = scopedFarms.length > 0;
-	const showSearchEmptyState = filteredFarms.length === 0 && isSearching;
-	const showInitialEmptyState = filteredFarms.length === 0 && !isSearching && !hasAnyFarms;
-	const showFilterEmptyState = filteredFarms.length === 0 && !isSearching && hasAnyFarms;
+	// The farms the list shows before the search and variety filter (a farmer
+	// does not see archived ones): none means first use, not filters that
+	// match nothing.
+	const hasAnyFarms = scopedFarms.some(farm => isAdminView || !farm.archived);
+	const showInitialEmptyState = filteredFarms.length === 0 && !hasAnyFarms;
+	const showFilterEmptyState = filteredFarms.length === 0 && hasAnyFarms;
+	const clearFilters = () => {
+		setSearchTerm('');
+		setVarietyFilter('All');
+	};
+
+	// The map popup names the same owners as the card.
+	const mapFarms = useMemo(
+		() => filteredFarms.map(farm => (
+			farm.ownerNames && farm.ownerNames.length > 0
+				? { ...farm, ownerName: farm.ownerNames.join(', ') }
+				: farm
+		)),
+		[filteredFarms],
+	);
 
 	const stats = useMemo(() => {
 		const total = scopedFarms.length;
@@ -240,12 +255,6 @@ const FarmManagement: React.FC = () => {
 		: toast.type === 'success'
 			? 'bg-green-50 border-green-200 text-green-800'
 			: 'bg-red-50 border-red-200 text-red-700';
-	const emptyStateTitle = showSearchEmptyState
-		? 'No farms match your search'
-		: 'No farms yet';
-	const emptyStateDescription = showSearchEmptyState
-		? 'Try adjusting your search or clearing filters to see all farms'
-		: 'Start by adding your first farm to view details and track planted varieties';
 
 	return (
 		<div className="space-y-6">
@@ -253,7 +262,7 @@ const FarmManagement: React.FC = () => {
 				<div className="flex flex-col gap-4">
 					<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 						<div>
-							<h1 className="text-3xl font-bold text-gray-900">My Farm Management</h1>
+							<h1 className="text-3xl font-bold text-gray-900">{isAdminView ? 'Farm Management' : 'My Farm Management'}</h1>
 							<p className="text-gray-600">Add farm information, track varieties, and search farms quickly</p>
 						</div>
 						<Button variant="primary" icon={<PlusCircle className="h-5 w-5" />} onClick={handleOpenAddFarm} className="w-full sm:w-auto">
@@ -345,24 +354,23 @@ const FarmManagement: React.FC = () => {
 				</div>
 			</div>
 
-			{showInitialEmptyState || showSearchEmptyState ? (
+			{showInitialEmptyState ? (
 				<div className="bg-white rounded-2xl border border-dashed border-gray-300 p-12 text-center">
 					<Sprout className="h-12 w-12 mx-auto text-gray-300 mb-4" />
-					<h3 className="text-xl font-semibold text-gray-800 mb-2">{emptyStateTitle}</h3>
-					<p className="text-gray-500 mb-4">{emptyStateDescription}</p>
+					<h3 className="text-xl font-semibold text-gray-800 mb-2">No farms yet</h3>
+					<p className="text-gray-500 mb-4">Start by adding your first farm to view details and track planted varieties</p>
 					<div className="flex justify-center gap-3">
-						{showSearchEmptyState && (
-							<Button type="button" variant="outline" onClick={() => setSearchTerm('')}>Clear Search</Button>
-						)}
-						{showInitialEmptyState && (
-							<Button variant="primary" icon={<PlusCircle className="h-4 w-4" />} onClick={handleOpenAddFarm}>Add My First Farm</Button>
-						)}
+						<Button variant="primary" icon={<PlusCircle className="h-4 w-4" />} onClick={handleOpenAddFarm}>Add My First Farm</Button>
 					</div>
 				</div>
 			) : showFilterEmptyState ? (
-				<div className="bg-white rounded-2xl border border-dashed border-gray-200 p-10 text-center text-gray-500">
-					<p className="text-base font-semibold text-gray-700 mb-1">No farms match this filter</p>
-					<p className="text-sm">Try changing the filter or search again to see other listings</p>
+				<div className="bg-white rounded-2xl border border-dashed border-gray-300 p-12 text-center">
+					<Sprout className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+					<h3 className="text-xl font-semibold text-gray-800 mb-2">No farms match these filters</h3>
+					<p className="text-gray-500 mb-4">Try another search or variety, or clear the filters to see every farm</p>
+					<div className="flex justify-center gap-3">
+						<Button type="button" variant="outline" onClick={clearFilters}>Clear filters</Button>
+					</div>
 				</div>
 			) : viewMode === 'map' ? (
 				<div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
@@ -373,7 +381,7 @@ const FarmManagement: React.FC = () => {
 						</p>
 					</div>
 					<FarmMapView
-						farms={filteredFarms}
+						farms={mapFarms}
 						selectedFarmId={selectedFarmId}
 						onFarmClick={(farm) => setSelectedFarmId(farm.id)}
 						height="800px"
@@ -410,7 +418,7 @@ const FarmManagement: React.FC = () => {
 								<div className="flex items-center gap-2">
 									<h3 className="text-xl font-bold text-gray-900 leading-tight truncate">{farm.name ?? farm.location}</h3>
 									{currentUser && farm.ownerUserId !== currentUser.id && (farm.collaborators ?? []).some(c => c.userId === currentUser.id) && (
-										<span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200 whitespace-nowrap">ผู้ดูแล</span>
+										<span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200 whitespace-nowrap">Farmhand</span>
 									)}
 								</div>
 									<p className="text-sm text-gray-500 leading-relaxed truncate">{farm.location}</p>
@@ -595,7 +603,8 @@ const FarmManagement: React.FC = () => {
 									<div>
 										<p className="text-sm font-semibold text-red-800 mb-1">You are about to delete this farm</p>
 										<p className="text-sm text-red-700">
-											<strong>{farmToDelete.name ?? farmToDelete.location}</strong> ({farmToDelete.id})
+											<strong>{farmToDelete.name ?? farmToDelete.location}</strong>
+											{farmToDelete.name && farmToDelete.location ? ` • ${farmToDelete.location}` : ''}
 										</p>
 									</div>
 								</div>
@@ -651,7 +660,7 @@ const FarmManagement: React.FC = () => {
 									{relatedData.weatherRecords > 0 && (
 										<div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
 											<p className="text-sm text-blue-700">
-												<strong>Note:</strong> {relatedData.weatherRecords} weather records จะถูกลบโดยอัตโนมัติ
+												<strong>Note:</strong> {relatedData.weatherRecords} weather records will be deleted with the farm.
 											</p>
 										</div>
 									)}

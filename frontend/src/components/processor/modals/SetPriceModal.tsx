@@ -8,7 +8,9 @@ import Select from "../../common/Select";
 import DatePicker from "../../common/DatePicker";
 import { updateGreenBeanLotPrice } from "../../../services/lots/greenBeanLotService";
 import { formatGreenBeanId } from "../../../utils/formatDisplayId";
-import { formatDate } from "../../../utils/formatters";
+import { formatDateDisplay } from "../../../utils/formatters";
+import { toDateOnly } from "../../../utils/dateOnly";
+import { formatMoney } from "../workbench/withdrawDetails";
 
 const CURRENCY_OPTIONS = [
   { value: "THB", label: "THB" },
@@ -132,10 +134,10 @@ const SetPriceModal: React.FC<SetPriceModalProps> = ({
           <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs">
             <span className="text-gray-500">Current price</span>
             <span className="font-semibold text-gray-900 text-right">
-              {(lot.pricePerKg as number).toFixed(2)} {lot.currency || "THB"}/kg
+              {formatMoney(lot.pricePerKg as number)} {lot.currency || "THB"}/kg
               {lot.priceSetDate && (
                 <span className="font-normal text-gray-400">
-                  {" "}· since {formatDate(lot.priceSetDate)}
+                  {" "}· since {formatDateDisplay(toDateOnly(lot.priceSetDate), undefined, "-")}
                 </span>
               )}
             </span>
@@ -196,14 +198,11 @@ const SetPriceModal: React.FC<SetPriceModalProps> = ({
               Lot value
             </p>
             <p className="text-[11px] text-gray-400">
-              {validPrice ? priceNum.toFixed(2) : "0.00"} × {weightKg.toFixed(2)} kg
+              {validPrice ? formatMoney(priceNum) : "0.00"} × {weightKg.toFixed(2)} kg
             </p>
           </div>
           <p className="text-lg font-bold text-gray-900">
-            {total.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
+            {formatMoney(total)}
             <span className="text-xs font-semibold text-gray-500 ml-1">
               {currency}
             </span>

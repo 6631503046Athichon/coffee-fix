@@ -157,8 +157,8 @@ describe('deleteHarvestLot', () => {
 
   it('passes on a cascade refused over green bean lots in use word for word', async () => {
     const message =
-      'Green bean lots made from this lot are still in use, so nothing was deleted: GBL-2026-404 (AA) has 1 withdrawal. ' +
-      'Void their withdrawals, or settle their stock, roasts, sales and cupping first, then delete again.'
+      'Nothing was deleted, because a green bean lot made from this lot cannot go with it. GBL-2026-404: has 1 withdrawal. ' +
+      'To delete it, first void the withdrawals of GBL-2026-404, or settle its roaster stock, roasts, sales and invoices, then delete again.'
     const body = { error: message, greenBeanLotsInUse: [{ id: 'gbl-1', displayId: 'GBL-2026-404', grade: 'AA' }] }
     vi.spyOn(api, 'delete').mockRejectedValue(new ApiError(message, 409, body))
 

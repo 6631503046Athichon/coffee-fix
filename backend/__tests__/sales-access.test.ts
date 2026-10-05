@@ -365,7 +365,7 @@ describe('sales access and scoping', () => {
     })
 
     test("403 when reading an invoice on another roaster's sale", async () => {
-      mockPrisma.invoice.findUnique.mockResolvedValue({ id: 'invoice-1', saleOrder: { createdBy: 'roaster-1' } })
+      mockPrisma.invoice.findUnique.mockResolvedValue({ id: 'invoice-1', saleOrder: { createdBy: 'roaster-1' }, items: [] })
       const { GET } = await import('@/app/api/invoices/[id]/route')
       mockAuthUser = otherRoaster
       expect((await GET(request('/api/invoices/invoice-1'), params('invoice-1'))).status).toBe(403)

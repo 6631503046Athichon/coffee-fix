@@ -15,8 +15,8 @@ import {
   formatParchmentId,
   formatProcessingBatchId,
 } from "../../../utils/formatDisplayId";
-import { formatDate } from "../../../utils/formatters";
-import { todayDateOnly } from "../../../utils/dateOnly";
+import { formatDateDisplay } from "../../../utils/formatters";
+import { toDateOnly, todayDateOnly } from "../../../utils/dateOnly";
 import { correctionErrorMessage } from "../workbench/lotCorrections";
 
 const PERMISSION_MESSAGE =
@@ -301,7 +301,7 @@ const DryingLogModal: React.FC<DryingLogModalProps> = ({
               <tbody className="divide-y divide-gray-100">
                 {logs.map((log, index) => {
                   const rowKey = log.id ?? `${log.date}-${index}`;
-                  const label = formatDate(log.date, "short");
+                  const label = formatDateDisplay(toDateOnly(log.date), undefined, "-");
                   if (canEdit && log.id && confirmDeleteId === log.id) {
                     return (
                       <tr key={rowKey}>

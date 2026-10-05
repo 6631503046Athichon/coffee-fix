@@ -97,8 +97,8 @@ describe('EditProcessingBatchModal', () => {
     expect(screen.getByLabelText('Parchment output (kg)')).toHaveValue(100)
     expect(screen.getByLabelText('Moisture (%)')).toHaveValue(11)
     expect(screen.getByLabelText('Process notes')).toHaveValue('Ferment 24h')
-    expect(screen.getByRole('button', { name: '1 September 2026' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '20 September 2026' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Drying start date 1 September 2026' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Drying end date 20 September 2026' })).toBeInTheDocument()
     expect(screen.getByTestId('edit-batch-stock')).toHaveTextContent(
       '40.00 kg already withdrawn or hulled, so the output cannot go below that. 60.00 kg left in stock after saving.',
     )
@@ -149,7 +149,7 @@ describe('EditProcessingBatchModal', () => {
     vi.mocked(api.put).mockResolvedValue({ processingBatch: savedBatch() })
     const { onSaved } = renderModal()
 
-    fireEvent.click(screen.getByRole('button', { name: '20 September 2026' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Drying end date 20 September 2026' }))
     fireEvent.click(screen.getByRole('button', { name: '22' }))
     save()
 
@@ -162,7 +162,7 @@ describe('EditProcessingBatchModal', () => {
   it('refuses a drying end date before the start date', () => {
     renderModal({ batch: { ...batch, dryingStartDate: '2026-09-21' } })
 
-    fireEvent.click(screen.getByRole('button', { name: '20 September 2026' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Drying end date 20 September 2026' }))
     fireEvent.click(screen.getByRole('button', { name: '10' }))
     save()
 

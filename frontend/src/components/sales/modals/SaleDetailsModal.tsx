@@ -201,7 +201,10 @@ const SaleDetailsDialog: React.FC<Omit<SaleDetailsModalProps, 'order'> & { order
               </div>
               <p className="mt-0.5 text-xs text-gray-500">
                 {formatSaleDate(order.orderDate)}
-                {isAdmin && order.creatorName ? ` · Recorded by ${order.creatorName}` : ''}
+                {/* The sale's owner (createdBy) is its seller, also when an
+                    Admin recorded it for them (sellerId), so it is named as
+                    the seller, not as who recorded it. */}
+                {isAdmin && order.creatorName ? ` · Seller: ${order.creatorName}` : ''}
               </p>
             </div>
             <button

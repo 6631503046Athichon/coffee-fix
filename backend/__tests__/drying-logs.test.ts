@@ -5,23 +5,37 @@
  * The workbench's Drying log popup adds, corrects and deletes a batch's
  * readings. Only the batch's processor, or an Admin on anyone's batch, may
  * change them; a picked day is stored at 12:00 UTC; moisture and humidity are
- * percentages and a reading cannot be dated in the future. GET
- * /api/processing-batches sends every reading, oldest first, as bulk-load
- * does (bulk-load-row-caps checks that one).
+ * percentages and a reading cannot be dated in the future. Each change
+ * moves the batch's updatedAt in the same transaction, so data-version tells
+ * other sessions to reload the readings. GET /api/processing-batches sends
+ * every reading, oldest first, as bulk-load does (bulk-load-row-caps checks
+ * that one).
  */
 
 import { describe, test, expect, jest, beforeEach } from '@jest/globals'
 import { NextRequest } from 'next/server'
 
 const mockPrisma: any = {
-  processingBatch: { findUnique: jest.fn(), findMany: jest.fn() },
+  processingBatch: { findUnique: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
   dryingLogEntry: {
     create: jest.fn(),
     updateMany: jest.fn(),
     deleteMany: jest.fn(),
     findUnique: jest.fn(),
   },
+  $transaction: jest.fn(),
 }
+
+// The writes the routes make, in order, each marked when it ran outside the
+// transaction, so a reading changed outside it (or a batch left untouched)
+// shows up.
+let inTransaction = false
+let writes: string[] = []
+const recorded = (name: string, result: (args: any) => unknown) =>
+  async (args: any) => {
+    writes.push(inTransaction ? name : `${name} (outside the transaction)`)
+    return result(args)
+  }
 
 jest.mock('@/lib/prisma', () => ({
   __esModule: true,
@@ -104,15 +118,29 @@ const deleteLog = async () => {
 beforeEach(() => {
   jest.clearAllMocks()
   mockAuthUser = null
+  inTransaction = false
+  writes = []
   mockPrisma.processingBatch.findUnique.mockResolvedValue({ id: 'batch-1', createdById: 'processor-1' })
   mockPrisma.processingBatch.findMany.mockResolvedValue([])
-  mockPrisma.dryingLogEntry.create.mockImplementation(async ({ data }: any) => ({ id: 'log-1', ...data }))
-  mockPrisma.dryingLogEntry.updateMany.mockResolvedValue({ count: 1 })
-  mockPrisma.dryingLogEntry.deleteMany.mockResolvedValue({ count: 1 })
+  mockPrisma.processingBatch.updateMany.mockImplementation(recorded('touch batch', () => ({ count: 1 })))
+  mockPrisma.dryingLogEntry.create.mockImplementation(recorded('create', ({ data }) => ({ id: 'log-1', ...data })))
+  mockPrisma.dryingLogEntry.updateMany.mockImplementation(recorded('update', () => ({ count: 1 })))
+  mockPrisma.dryingLogEntry.deleteMany.mockImplementation(recorded('delete', () => ({ count: 1 })))
   mockPrisma.dryingLogEntry.findUnique.mockResolvedValue({
     id: 'log-1', processingBatchId: 'batch-1', ...reading, date: noon(pastDay),
   })
+  // The callback gets the same client as its tx; `inTransaction` marks its writes.
+  mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+    inTransaction = true
+    try {
+      return await fn(mockPrisma)
+    } finally {
+      inTransaction = false
+    }
+  })
 })
+
+const batchTouch = () => mockPrisma.processingBatch.updateMany.mock.calls[0]?.[0]
 
 describe('POST /api/processing-batches/[id]/drying-logs', () => {
   test('the batch\'s processor adds a reading, stored at 12:00 UTC of its day', async () => {
@@ -174,6 +202,22 @@ describe('POST /api/processing-batches/[id]/drying-logs', () => {
     mockAuthUser = processor
     expect((await postLog({ ...reading, moistureContent: 0, relativeHumidity: 100 })).status).toBe(201)
     expect((await postLog({ ...reading, moistureContent: '100' })).status).toBe(201)
+  })
+
+  test("moves the batch's updatedAt in the same transaction, so other sessions reload", async () => {
+    mockAuthUser = processor
+
+    expect((await postLog(reading)).status).toBe(201)
+    expect(writes).toEqual(['touch batch', 'create'])
+    expect(batchTouch()).toEqual({ where: { id: 'batch-1' }, data: { updatedAt: expect.any(Date) } })
+  })
+
+  test('a batch deleted after it was loaded is a 404 and no reading is added', async () => {
+    mockAuthUser = processor
+    mockPrisma.processingBatch.updateMany.mockImplementation(recorded('touch batch', () => ({ count: 0 })))
+
+    expect((await postLog(reading)).status).toBe(404)
+    expect(mockPrisma.dryingLogEntry.create).not.toHaveBeenCalled()
   })
 })
 
@@ -240,6 +284,32 @@ describe('PUT /api/processing-batches/[id]/drying-logs/[logId]', () => {
     expect((await putLog(body)).status).toBe(400)
     expect(mockPrisma.dryingLogEntry.updateMany).not.toHaveBeenCalled()
   })
+
+  test("the edit, the batch's updatedAt and the read-back happen in one transaction", async () => {
+    mockAuthUser = processor
+    mockPrisma.dryingLogEntry.findUnique.mockImplementation(recorded('read back', () => ({ id: 'log-1' })))
+
+    expect((await putLog({ ambientTemp: 30 })).status).toBe(200)
+    expect(writes).toEqual(['update', 'touch batch', 'read back'])
+    expect(batchTouch()).toEqual({ where: { id: 'batch-1' }, data: { updatedAt: expect.any(Date) } })
+  })
+
+  test('a reading that is not there leaves the batch untouched', async () => {
+    mockAuthUser = processor
+    mockPrisma.dryingLogEntry.updateMany.mockImplementation(recorded('update', () => ({ count: 0 })))
+
+    expect((await putLog({ ambientTemp: 30 })).status).toBe(404)
+    expect(mockPrisma.processingBatch.updateMany).not.toHaveBeenCalled()
+  })
+
+  test('never answers 200 with no reading: one gone by the read-back is a 404', async () => {
+    mockAuthUser = processor
+    mockPrisma.dryingLogEntry.findUnique.mockResolvedValue(null)
+
+    const response = await putLog({ ambientTemp: 30 })
+    expect(response.status).toBe(404)
+    expect((await response.json()).error).toBe('Drying log entry not found')
+  })
 })
 
 describe('DELETE /api/processing-batches/[id]/drying-logs/[logId]', () => {
@@ -270,8 +340,17 @@ describe('DELETE /api/processing-batches/[id]/drying-logs/[logId]', () => {
 
   test('a reading that is not on the batch is a 404', async () => {
     mockAuthUser = processor
-    mockPrisma.dryingLogEntry.deleteMany.mockResolvedValue({ count: 0 })
+    mockPrisma.dryingLogEntry.deleteMany.mockImplementation(recorded('delete', () => ({ count: 0 })))
     expect((await deleteLog()).status).toBe(404)
+    expect(mockPrisma.processingBatch.updateMany).not.toHaveBeenCalled()
+  })
+
+  test("moves the batch's updatedAt in the same transaction", async () => {
+    mockAuthUser = processor
+
+    expect((await deleteLog()).status).toBe(200)
+    expect(writes).toEqual(['delete', 'touch batch'])
+    expect(batchTouch()).toEqual({ where: { id: 'batch-1' }, data: { updatedAt: expect.any(Date) } })
   })
 })
 

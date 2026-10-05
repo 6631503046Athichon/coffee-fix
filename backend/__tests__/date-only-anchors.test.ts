@@ -27,7 +27,7 @@ const mockPrisma: any = {
   invoice: { findFirst: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn() },
   invoiceItem: { create: jest.fn() },
   harvestLot: { findMany: jest.fn(), update: jest.fn() },
-  processingBatch: { findMany: jest.fn(), update: jest.fn(), findUnique: jest.fn() },
+  processingBatch: { findMany: jest.fn(), update: jest.fn(), findUnique: jest.fn(), updateMany: jest.fn() },
   parchmentLot: { findMany: jest.fn(), update: jest.fn() },
   greenBeanLot: { findMany: jest.fn(), update: jest.fn() },
   roastBatch: { findUnique: jest.fn(), updateMany: jest.fn() },
@@ -397,6 +397,8 @@ describe('POST /api/processing-batches/[id]/drying-logs stores the day at 12:00 
 
   beforeEach(() => {
     mockPrisma.processingBatch.findUnique.mockResolvedValue({ createdById: 'processor-1' })
+    // A new reading also moves the batch's updatedAt (drying-logs.test.ts).
+    mockPrisma.processingBatch.updateMany.mockResolvedValue({ count: 1 })
     mockPrisma.dryingLogEntry.create.mockImplementation(async ({ data }: any) => ({ id: 'log-1', ...data }))
   })
 

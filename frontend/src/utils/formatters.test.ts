@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, vi } from 'vitest'
 import {
   toRoaId,
   toFixed2,
@@ -105,5 +106,55 @@ describe('formatDateDisplay', () => {
     const out = formatDateDisplay('2025-06-15T10:00:00Z')
     expect(out).not.toBe('')
     expect(out).not.toBe('2025-06-15T10:00:00Z')
+  })
+
+  test('shows day, short month and year in English: "5 Oct 2026"', () => {
+    expect(formatDateDisplay('2026-10-05')).toBe('5 Oct 2026')
+    expect(formatDateDisplay(new Date(2026, 0, 31))).toBe('31 Jan 2026')
+    // Three letters like every other page, not en-GB's newer "Sept".
+    expect(formatDateDisplay('2026-09-15')).toBe('15 Sep 2026')
+  })
+
+  describe('in a browser whose own locale is Thai', () => {
+    // A Thai browser formats a date with no locale given as Thai, in the
+    // Buddhist era: 15 ก.ย. 2569. Stand in for one by making "no locale"
+    // mean th-TH on both ways of formatting a date.
+    beforeEach(() => {
+      const RealDateTimeFormat = Intl.DateTimeFormat
+      const toLocaleDateString = Date.prototype.toLocaleDateString
+      vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(function (
+        locales?: Intl.LocalesArgument,
+        options?: Intl.DateTimeFormatOptions,
+      ) {
+        return new RealDateTimeFormat(locales ?? 'th-TH', options)
+      } as unknown as typeof Intl.DateTimeFormat)
+      vi.spyOn(Date.prototype, 'toLocaleDateString').mockImplementation(function (
+        this: Date,
+        locales?: Intl.LocalesArgument,
+        options?: Intl.DateTimeFormatOptions,
+      ) {
+        return toLocaleDateString.call(this, locales ?? 'th-TH', options)
+      })
+      // The stand-in works: with no locale a date comes out in the 25xx era.
+      expect(new Date(2026, 8, 15).toLocaleDateString()).toMatch(/25\d\d/)
+      expect(new Intl.DateTimeFormat(undefined, { year: 'numeric' }).format(new Date(2026, 8, 15))).toMatch(/25\d\d/)
+    })
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    test('still shows English Gregorian dates, never a 25xx year', () => {
+      for (const date of ['2026-09-15', '2026-10-05T03:00:00.000Z', new Date(2026, 11, 31)]) {
+        const out = formatDateDisplay(date)
+        expect(out).not.toMatch(/25\d\d/)
+        expect(out).not.toMatch(/[฀-๿]/)
+        expect(out).toMatch(/^\d{1,2} [A-Z][a-z]{2} 2026$/)
+      }
+      expect(formatDateDisplay('2026-09-15')).toBe('15 Sep 2026')
+    })
+
+    test('keeps Gregorian years even where a page asks for Thai', () => {
+      expect(formatDateDisplay('2026-09-15', undefined, '', 'th-TH')).toMatch(/2026/)
+    })
   })
 })

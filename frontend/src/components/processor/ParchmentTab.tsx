@@ -43,6 +43,7 @@ import DatePicker from '../common/DatePicker'
 import {
   CropYearChips,
   findCurrentCropYearId,
+  selectableCropYears,
   getHarvestLotCherryWeight,
   getReadyHarvestLots,
   GradeDropdown,
@@ -64,6 +65,8 @@ import {
   withdrawDetailsError,
   buildWithdrawDetailsPayload,
   withdrawSaleTotal,
+  withdrawDetailsForLots,
+  formatMoney,
   formatWithdrawTotal,
 } from './workbench'
 import type { WithdrawalType } from './workbench'
@@ -118,6 +121,17 @@ const gradeSplitRowProblem = (
 
 // A new Process & Grade starts on Honey when the admin list offers it.
 const PREFERRED_PROCESS_TYPE = 'Honey'
+
+// The group of lots with no process type on record. Shown as written, not in
+// the capitals of the process-type pills, and listed after the real types.
+const UNKNOWN_PROCESS = 'Unknown process'
+const UNKNOWN_PROCESS_PILL_SHAPE =
+  'inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border'
+const processPillShape = (type: string) =>
+  type === UNKNOWN_PROCESS ? UNKNOWN_PROCESS_PILL_SHAPE : PARCHMENT_PILL_SHAPE
+const byProcessName = (a: string, b: string) =>
+  Number(a === UNKNOWN_PROCESS) - Number(b === UNKNOWN_PROCESS) ||
+  a.localeCompare(b)
 
 // Withdrawal-type config mirrors the Workbench Withdraw Stock modal:
 // each option is an icon-card with its own active colour. Order is
@@ -202,7 +216,23 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
   const [gradeRows, setGradeRows] = useState<
     { rowKey: string; grade: string; weight: string; price: string }[]
   >(() => [{ rowKey: newRowId(), grade: 'Grade A', weight: '', price: '' }])
-  const [processError, setProcessError] = useState<string | null>(null)
+  // The error banner describes the values at the last Save, so it shows only
+  // while those values are unchanged: any edit hides it.
+  const [processErrorAt, setProcessErrorAt] = useState<{
+    message: string
+    form: typeof processForm
+    rows: typeof gradeRows
+  } | null>(null)
+  const setProcessError = (message: string | null) =>
+    setProcessErrorAt(
+      message ? { message, form: processForm, rows: gradeRows } : null,
+    )
+  const processError =
+    processErrorAt &&
+    processErrorAt.form === processForm &&
+    processErrorAt.rows === gradeRows
+      ? processErrorAt.message
+      : null
   const [processSubmitting, setProcessSubmitting] = useState(false)
 
   // ── Withdraw modal state ────────────────────────────────────────
@@ -301,7 +331,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     for (const lot of data.parchmentLots) {
       if (lot.status !== 'AwaitingHulling') continue
       if ((lot.currentWeightKg ?? 0) <= 0) continue
-      const key = lot.processType || 'Unknown'
+      const key = lot.processType || UNKNOWN_PROCESS
       if (!map.has(key)) map.set(key, [])
       map.get(key)!.push(lot)
     }
@@ -312,7 +342,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         return bc - ac
       })
     }
-    return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
+    return Array.from(map.entries()).sort(([a], [b]) => byProcessName(a, b))
   }, [data.parchmentLots])
 
   // Section 3: green-bean buckets — one row per (processType, grade) with
@@ -331,14 +361,14 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
         ? data.parchmentLots.find((p) => p.id === gbl.parchmentLotId)
         : undefined
       // The parchment lot nested in the lot covers one that is not in the
-      // loaded parchment list, so the lot does not fall into "Unknown".
+      // loaded parchment list, so the lot does not fall into "Unknown process".
       const processType =
         parchment?.processType ??
         gbl.parchmentProcessType ??
         (typeof gbl.externalSource === 'object' && gbl.externalSource
           ? (gbl.externalSource as { processType?: string }).processType
           : undefined) ??
-        'Unknown'
+        UNKNOWN_PROCESS
       const grade = gbl.grade || 'Ungraded'
       const key = `${processType}::${grade}`
       const bucket =
@@ -372,7 +402,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     for (const arr of byType.values()) {
       arr.sort((a, b) => a.grade.localeCompare(b.grade))
     }
-    return Array.from(byType.entries()).sort(([a], [b]) => a.localeCompare(b))
+    return Array.from(byType.entries()).sort(([a], [b]) => byProcessName(a, b))
   }, [greenBeanBuckets])
 
   // ── KPI totals ──────────────────────────────────────────────────
@@ -577,8 +607,11 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     setWithdrawBucket(b)
     setWithdrawForm({ amount: '', type: 'Sale', purpose: '' })
     setWithdrawError(null)
-    // A cancelled Sale must not carry its customer or price to the next bucket.
-    withdrawDetails.reset()
+    // A cancelled Sale must not carry its customer or price to the next
+    // bucket. Like the Workbench's one-lot Withdraw, the Sale price starts
+    // from the lots' set price, but only when every lot in the bucket has
+    // the same price and currency.
+    withdrawDetails.reset(withdrawDetailsForLots(b.sources))
   }
 
   const submitWithdraw = async () => {
@@ -834,7 +867,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                     <ProcessTypePill
                       type={type}
                       processTypes={data.processTypes}
-                      className={PARCHMENT_PILL_SHAPE}
+                      className={processPillShape(type)}
                     />
                     <span className="text-xs text-gray-400">
                       · {buckets.length} grade
@@ -860,7 +893,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                           <ProcessTypePill
                             type={b.processType}
                             processTypes={data.processTypes}
-                            className={PARCHMENT_PILL_SHAPE}
+                            className={processPillShape(b.processType)}
                           />
                         </div>
 
@@ -999,7 +1032,11 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
             {data.cropYears.length > 0 && (
               <Field label="Crop Year">
                 <CropYearChips
-                  years={data.cropYears}
+                  years={selectableCropYears(data.cropYears, [
+                    // The lot's own year stays a choice after another is picked.
+                    processLot?.cropYearId,
+                    processForm.cropYearId,
+                  ])}
                   value={processForm.cropYearId}
                   onChange={(v) =>
                     setProcessForm((f) => ({ ...f, cropYearId: v }))
@@ -1512,7 +1549,7 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
                       </p>
                       <p className="text-[10px] font-semibold text-gray-500 leading-tight">
                         {gbl.pricePerKg
-                          ? `${gbl.pricePerKg.toFixed(2)} ${gbl.currency || 'THB'}/kg`
+                          ? `${formatMoney(gbl.pricePerKg)} ${gbl.currency || 'THB'}/kg`
                           : 'No price'}
                       </p>
                     </div>
@@ -2187,6 +2224,6 @@ const inputClass =
   'w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all'
 
 const fmt = (n: number) =>
-  n.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  n.toLocaleString('en-US', { maximumFractionDigits: 2 })
 
 export default ParchmentTab

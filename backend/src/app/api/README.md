@@ -38,7 +38,7 @@ Every list and by-id read of the chain goes through `chainScope` (`lib/farmAcces
 | `parchment-lots/[id]/route.ts` | read / update / delete a parchment lot. Read lists only the green lots the reader may read; a reader who may not read the batch (a roaster) gets it as a label (`batchLabel`) |
 | `parchment-lots/[id]/withdrawals/route.ts` | record parchment withdrawals (sale / sample / loss / roasting stock). The body is checked with `createParchmentWithdrawalSchema`: a Sale's `salePrice` > 0 with max 2 decimals, `currency` THB/USD/EUR/JPY/CNY, a wrong type = 400; takes `invoiceNumber`. Hull & Grade creates one green bean lot per graded row, owned by the parchment's owner (`processingBatch.createdById`, also when an Admin hulls), takes an optional `gradedLots[i].price` (THB/kg, max 2 decimals, empty or 0 = no price; stamps priceSetDate/priceSetBy and writes a PricingHistory row) and returns the new lots as `greenBeanLots` |
 | `parchment-lots/import-excel/route.ts` | bulk import parchment lots from Excel |
-| `green-bean-lots/route.ts` | list & create green bean lots. A lot made from parchment belongs to the parchment's owner, also when an Admin records it |
+| `green-bean-lots/route.ts` | list & create green bean lots. A lot made from parchment belongs to the parchment's owner, also when an Admin records it; an Admin buying a purchased (External) lot for a roaster names them in `ownerId` (an active Roaster, else 400; non-Admin 403) and the lot is theirs |
 | `green-bean-lots/[id]/route.ts` | read / update / delete a green bean lot. A reader who may not read the batch (a roaster) gets it as a label (`batchLabel`) |
 | `green-bean-lots/[id]/withdrawals/route.ts` | record green bean withdrawals. The body is checked with `createWithdrawalSchema`: a Sale's `salePrice` > 0 with max 2 decimals, `currency` THB/USD/EUR/JPY/CNY, a wrong type = 400 |
 | `green-bean-lots/[id]/qr/route.ts` | QR code asset for the lot |
@@ -66,7 +66,7 @@ Every list and by-id read of the chain goes through `chainScope` (`lib/farmAcces
 | `sale-orders/route.ts` | list & create sale orders |
 | `sale-orders/[id]/route.ts` | read / update / delete a sale order |
 | `invoices/route.ts` | list & create invoices |
-| `invoices/[id]/route.ts` | read / update / delete an invoice. Read and update go by the sale's owner (`saleOrder.createdBy`) or Admin, not by who issued the invoice |
+| `invoices/[id]/route.ts` | read / update / delete an invoice. Read and update go by the sale's owner (`saleOrder.createdBy`) or Admin, not by who issued the invoice. The read drops the line parchment's `externalSource.importedBy` for anyone but Admin and the importer (`lib/importerPrivacy`) |
 | `customers/route.ts` | list & create customers |
 | `customers/[id]/route.ts` | read / update / delete a customer |
 | `pricing-history/route.ts` | append-only price snapshots. Lists only the prices of lots in the reader's `chainScope` (a Roaster: lots they bought in or hold, not the shelf) |

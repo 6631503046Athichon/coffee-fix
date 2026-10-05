@@ -49,3 +49,16 @@ describe('Header logout (F44)', () => {
     expect(Object.keys(localStorage)).toEqual(['weatherApiSimulateFailure'])
   })
 })
+
+describe('Header role chips', () => {
+  it('names the roles for people, not by their enum values', () => {
+    render(
+      <MemoryRouter>
+        <Header currentUserRoles={[UserRole.HeadJudge, UserRole.Roaster]} onToggleMobileNav={() => {}} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Head Judge')).toBeInTheDocument()
+    expect(screen.getByText('Roaster')).toBeInTheDocument()
+    expect(screen.queryByText('HeadJudge')).not.toBeInTheDocument()
+  })
+})

@@ -68,6 +68,18 @@ export const purchasedLotUsedKg = (
   lot: Pick<GreenBeanLot, 'initialWeightKg' | 'currentWeightKg'>,
 ) => Math.max(0, Math.round((lot.initialWeightKg - lot.currentWeightKg) * 1e6) / 1e6)
 
+/**
+ * Whether the server may still delete a purchased lot that left the shelf:
+ * only while nothing was claimed or sold from it (DELETE refuses a lot with
+ * stock, roasts, withdrawals or sales). A used-up lot that was drawn from
+ * shows no Delete.
+ */
+export const usedUpLotDeletable = (
+  lot: Pick<GreenBeanLot, 'initialWeightKg' | 'currentWeightKg' | 'withdrawalHistory'>,
+) =>
+  purchasedLotUsedKg(lot) <= 1e-6 &&
+  !(lot.withdrawalHistory ?? []).some((withdrawal) => !withdrawal.voidedAt)
+
 /** What PUT /green-bean-lots/:id takes for a purchased lot. */
 export interface PurchasedLotUpdate {
   grade: string
@@ -170,6 +182,23 @@ export const withSavedEdit = (lot: GreenBeanLot, saved: GreenBeanLot): GreenBean
   priceSetDate: saved.priceSetDate,
   priceSetBy: saved.priceSetBy,
 })
+
+const addedAt = (lot: Pick<GreenBeanLot, 'createdAt'>): number => {
+  const time = lot.createdAt ? Date.parse(lot.createdAt) : NaN
+  return Number.isFinite(time) ? time : 0
+}
+
+/**
+ * Newest purchased lot first: by when it was added, then by its lot number
+ * (GBL-2026-12 before GBL-2026-9). Not by id: a UUID says nothing about age.
+ */
+export const newestPurchasedLotFirst = (
+  a: Pick<GreenBeanLot, 'id' | 'displayId' | 'createdAt'>,
+  b: Pick<GreenBeanLot, 'id' | 'displayId' | 'createdAt'>,
+): number =>
+  addedAt(b) - addedAt(a) ||
+  (b.displayId ?? '').localeCompare(a.displayId ?? '', undefined, { numeric: true }) ||
+  b.id.localeCompare(a.id)
 
 /** The options with the saved value first when the list does not have it. */
 export const withSavedOption = (options: string[], saved: string): string[] =>

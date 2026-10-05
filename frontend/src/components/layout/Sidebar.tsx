@@ -58,7 +58,9 @@ const SECTIONS: NavSection[] = [
   { id: 'admin', label: 'Administration', icon: Shield, roles: [UserRole.Admin] },
 ]
 
-const ROASTER_ONLY_HREFS = ['/roaster', '/roast-logbook', '/sales', '/customers']
+// The pages the Roaster role grants a non-admin roaster (the /insights route
+// allows Roaster too).
+const ROASTER_ONLY_HREFS = ['/roaster', '/roast-logbook', '/sales', '/customers', '/insights']
 
 const Sidebar: React.FC<SidebarProps> = ({
   navItems,
@@ -88,12 +90,22 @@ const Sidebar: React.FC<SidebarProps> = ({
     }),
   )
 
-  // Group items by section
-  const groupedItems = SECTIONS.map((section) => {
-    const items = filteredNavItems.filter((item) => item.section === section.id)
-    const hasAccess = section.roles.some(hasRole)
-    return { section, items, hasAccess }
-  }).filter((group) => group.items.length > 0 && group.hasAccess)
+  // Group items by section. A page listed in several sections (Quality
+  // Insights sits under Processor, Quality & Cupping and Roaster) shows once,
+  // in the first section the user sees it in, so a Processor+Roaster or an
+  // Admin who also roasts does not get it twice.
+  const shownHrefs = new Set<string>()
+  const groupedItems = SECTIONS.filter((section) => section.roles.some(hasRole))
+    .map((section) => {
+      const items: NavItem[] = []
+      for (const item of filteredNavItems) {
+        if (item.section !== section.id || shownHrefs.has(item.href)) continue
+        shownHrefs.add(item.href)
+        items.push(item)
+      }
+      return { section, items }
+    })
+    .filter((group) => group.items.length > 0)
 
   // Close mobile menu when screen size changes
   useEffect(() => {

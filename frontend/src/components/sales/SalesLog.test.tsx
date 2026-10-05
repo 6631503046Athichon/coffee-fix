@@ -4,7 +4,9 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppData, SaleOrder, User } from '../../types'
 import type { SaleOrdersStatus } from '../../hooks/useDataContext'
-import { csvFilename, downloadCsv } from '../../utils/exportCSV'
+import { NOTHING_TO_EXPORT_MESSAGE, csvFilename, downloadCsv } from '../../utils/exportCSV'
+import { onAppToast } from '../../utils/appToast'
+import type { AppToast } from '../../utils/appToast'
 import {
   createSaleOrder,
   getSellableGreenLots,
@@ -303,11 +305,25 @@ describe('SalesLog', { timeout: 20000 }, () => {
     expect(screen.getByTestId('totals-kg')).toHaveTextContent('6 roasted · 5 green')
   })
 
-  it('disables Export when nothing matches', () => {
+  it('says there is nothing to export when nothing matches, and saves no file', async () => {
+    const actual = await vi.importActual<typeof import('../../utils/exportCSV')>('../../utils/exportCSV')
+    vi.mocked(downloadCsv).mockImplementationOnce(actual.downloadCsv)
+    const toasts: AppToast[] = []
+    const stop = onAppToast((toast) => toasts.push(toast))
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click')
+
     renderLog()
     fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'nothing like this' } })
     expect(screen.getByText('No sales match these filters')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Export CSV' })).toBeDisabled()
+    const exportButton = screen.getByRole('button', { name: 'Export CSV' })
+    expect(exportButton).toBeEnabled()
+    fireEvent.click(exportButton)
+
+    expect(vi.mocked(downloadCsv).mock.calls[0][2]).toEqual([])
+    expect(click).not.toHaveBeenCalled()
+    expect(toasts).toEqual([{ type: 'info', message: NOTHING_TO_EXPORT_MESSAGE }])
+    stop()
+    click.mockRestore()
   })
 
   it('opens details on a row click and on Enter', () => {

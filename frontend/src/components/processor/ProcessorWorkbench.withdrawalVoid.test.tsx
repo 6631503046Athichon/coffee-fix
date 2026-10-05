@@ -84,7 +84,7 @@ const historyModal = () =>
 const historyRows = () => within(historyModal()).getAllByTestId('withdrawal-history-row')
 const openGreenHistory = () => {
   fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
-  fireEvent.click(screen.getByRole('button', { name: 'View Withdrawal History' }))
+  fireEvent.click(screen.getByRole('button', { name: /^Withdrawal history of green bean lot / }))
 }
 
 describe('Workbench withdrawal Void and Edit (D7)', { timeout: 20000 }, () => {
@@ -210,7 +210,7 @@ describe('Workbench withdrawal Void and Edit (D7)', { timeout: 20000 }, () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit sale' })).not.toBeInTheDocument(), slow)
     expect(updateGreenBeanWithdrawal).toHaveBeenCalledWith('gbl-mine', 'w-sale', { salePrice: 410 })
     expect(within(historyRows()[0]).getByText(/410\.00 THB\/kg/)).toBeInTheDocument()
-    expect(within(historyRows()[0]).getByText(/2050\.00 THB/)).toBeInTheDocument()
+    expect(within(historyRows()[0]).getByText(/2,050\.00 THB/)).toBeInTheDocument()
   })
 })
 

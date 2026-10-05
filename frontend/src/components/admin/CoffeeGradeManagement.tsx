@@ -4,6 +4,7 @@ import { CoffeeGrade } from '../../types';
 import { addCoffeeGrade, updateCoffeeGrade, deleteCoffeeGrade } from '../../services/reference/coffeeGradeService';
 import { Plus, Edit, Trash2, CheckCircle, XCircle, AlertCircle, X, Save, Bean, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
 import { ModalPortal } from '../common/ModalPortal';
+import AdminConfirmModal from './modals/AdminConfirmModal';
 
 const PAGE_SIZE = 10;
 
@@ -28,6 +29,9 @@ const CoffeeGradeManagement: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [deleting, setDeleting] = useState<CoffeeGrade | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   const grades = sortGrades(data.coffeeGrades || []);
 
@@ -113,24 +117,29 @@ const CoffeeGradeManagement: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    const gradeToDelete = grades.find(g => g.id === id);
-    if (!gradeToDelete) return;
+  const askDelete = (grade: CoffeeGrade) => {
+    setDeleteError('');
+    setDeleting(grade);
+  };
 
-    if (!confirm(`Are you sure you want to delete "${gradeToDelete.name}"?`)) {
-      return;
-    }
-
+  const confirmDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    setDeleteError('');
     try {
-      await deleteCoffeeGrade(id);
+      await deleteCoffeeGrade(deleting.id);
+      const removedId = deleting.id;
       setData(prev => ({
         ...prev,
-        coffeeGrades: (prev.coffeeGrades || []).filter(g => g.id !== id),
+        coffeeGrades: (prev.coffeeGrades || []).filter(g => g.id !== removedId),
       }));
+      setDeleting(null);
     } catch (err) {
       // The backend refuses to delete a grade that lots still use and says
-      // so in the message — surface it rather than a generic failure.
-      alert(err instanceof Error ? err.message : 'Failed to delete grade');
+      // so in the message: show it in the popup rather than a generic failure.
+      setDeleteError(err instanceof Error && err.message ? err.message : 'Failed to delete grade');
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -332,7 +341,7 @@ const CoffeeGradeManagement: React.FC = () => {
                             <span className="text-xs font-semibold">Edit</span>
                           </button>
                           <button
-                            onClick={() => handleDelete(grade.id)}
+                            onClick={() => askDelete(grade)}
                             className="inline-flex items-center gap-1 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                             title="Delete"
                           >
@@ -498,6 +507,18 @@ const CoffeeGradeManagement: React.FC = () => {
           </div>
         </ModalPortal>
       )}
+
+      <AdminConfirmModal
+        isOpen={!!deleting}
+        title="Delete grade?"
+        message={`Delete "${deleting?.name}"? This cannot be undone.`}
+        confirmLabel="Delete grade"
+        cancelLabel="Keep it"
+        busy={deleteBusy}
+        error={deleteError}
+        onCancel={() => setDeleting(null)}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 };

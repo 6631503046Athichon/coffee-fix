@@ -3,6 +3,7 @@ import { User, UserRole } from '../../../types'
 import { updateUser } from '../../../services/auth/userService'
 import { X, AlertCircle, Edit, Shield } from 'lucide-react'
 import { ModalPortal } from '../../common/ModalPortal'
+import { roleLabel } from '../roleLabels'
 
 interface EditUserModalProps {
   isOpen: boolean
@@ -179,7 +180,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, onClose, on
                   placeholder="Optional username"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Clear the field to keep the current username unchanged
+                  Change it to give the user a new username
                 </p>
               </div>
 
@@ -219,7 +220,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, user, onClose, on
                         onChange={() => handleRoleToggle(role)}
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                       />
-                      <span className="text-sm font-medium text-gray-700">{role}</span>
+                      <span className="text-sm font-medium text-gray-700">{roleLabel(role)}</span>
                     </label>
                   ))}
                 </div>

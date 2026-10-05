@@ -38,14 +38,22 @@ const cropYears: CropYear[] = [
   { id: '11111111-1111-4111-8111-111111111111', year: currentYearName, startDate: '2000-01-01', endDate: '2999-12-31' },
 ]
 
-const Harness: React.FC<{ user: User; farm?: Farm; open?: boolean }> = ({ user, farm, open = true }) => {
+const Harness: React.FC<{ user: User; farm?: Farm; open?: boolean; defaultFarmId?: string }> = ({ user, farm, open = true, defaultFarmId }) => {
   signIn(user)
   const [data, setData] = useState<AppData>({ ...INITIAL_APP_DATA, farms, cropYears })
   return (
     <DataContext.Provider value={{ data, setData, refreshData: async () => {}, isEditing: false, setIsEditing: () => {} }}>
-      <HarvestLotModal isOpen={open} onClose={() => {}} farm={farm} />
+      <HarvestLotModal isOpen={open} onClose={() => {}} farm={farm} defaultFarmId={defaultFarmId} />
     </DataContext.Provider>
   )
+}
+
+// Picks a farm in the popup's farm field (open the list, then the option).
+const pickFarm = (dialog: HTMLElement, name: RegExp) => {
+  const field = within(dialog).getByText('Select Farm *').parentElement as HTMLElement
+  fireEvent.click(within(field).getAllByRole('button')[0])
+  const options = within(field).getAllByRole('button', { name })
+  fireEvent.click(options[options.length - 1])
 }
 
 // What the browser does on reload: true when the page asked "leave page?".
@@ -103,14 +111,14 @@ describe('Harvest lot popup draft (F44)', () => {
     const { unmount } = render(<Harness user={somchai} />)
     let dialog = screen.getByRole('dialog', { name: 'Register New Harvest Lot' })
     expect(within(dialog).getByLabelText('Weight (kg) *')).toHaveValue(null)
-    expect(within(dialog).queryByText('ข้อมูลที่กรอกก่อนหน้านี้ถูกกู้คืนแล้ว')).not.toBeInTheDocument()
+    expect(within(dialog).queryByText('Your earlier entries were restored')).not.toBeInTheDocument()
     unmount()
 
     // Malee gets her own draft back.
     render(<Harness user={malee} />)
     dialog = screen.getByRole('dialog', { name: 'Register New Harvest Lot' })
     expect(within(dialog).getByLabelText('Weight (kg) *')).toHaveValue(999)
-    expect(within(dialog).getByText('ข้อมูลที่กรอกก่อนหน้านี้ถูกกู้คืนแล้ว')).toBeInTheDocument()
+    expect(within(dialog).getByText('Your earlier entries were restored')).toBeInTheDocument()
   })
 })
 
@@ -131,13 +139,15 @@ describe('Harvest lot popup: switching farm and the default date', () => {
     render(<Harness user={admin} />)
     const dialog = screen.getByRole('dialog', { name: 'Register New Harvest Lot' })
     expect(within(dialog).getByLabelText('Weight (kg) *')).toHaveValue(42)
-    expect(within(dialog).getByText('ข้อมูลที่กรอกก่อนหน้านี้ถูกกู้คืนแล้ว')).toBeInTheDocument()
+    expect(within(dialog).getByText('Your earlier entries were restored')).toBeInTheDocument()
 
-    fireEvent.click(within(dialog).getByRole('button', { name: /Doi Farm/ }))
-    fireEvent.click(within(dialog).getByRole('button', { name: /Mae Farm/ }))
+    // The first pick keeps the draft; switching to another farm drops it.
+    pickFarm(dialog, /Doi Farm/)
+    expect(within(dialog).getByLabelText('Weight (kg) *')).toHaveValue(42)
+    pickFarm(dialog, /Mae Farm/)
 
     expect(within(dialog).getByLabelText('Weight (kg) *')).toHaveValue(null)
-    expect(within(dialog).queryByText('ข้อมูลที่กรอกก่อนหน้านี้ถูกกู้คืนแล้ว')).not.toBeInTheDocument()
+    expect(within(dialog).queryByText('Your earlier entries were restored')).not.toBeInTheDocument()
     await act(async () => { vi.advanceTimersByTime(1000) })
     // A reload must not bring the discarded weight back.
     expect(localStorage.getItem(draftKey)).toBeNull()
@@ -164,12 +174,57 @@ describe('Harvest lot popup: switching farm and the default date', () => {
       vi.setSystemTime(new Date('2026-10-04T18:30:00.000Z'))
       render(<Harness user={admin} />)
       const dialog = screen.getByRole('dialog', { name: 'Register New Harvest Lot' })
-      expect(within(dialog).getByRole('button', { name: '5 October 2026' })).toBeInTheDocument()
+      expect(within(dialog).getByRole('button', { name: 'Harvest Date 5 October 2026' })).toBeInTheDocument()
 
-      fireEvent.click(within(dialog).getByRole('button', { name: /Doi Farm/ }))
-      fireEvent.click(within(dialog).getByRole('button', { name: /Mae Farm/ }))
-      expect(within(dialog).getByRole('button', { name: '5 October 2026' })).toBeInTheDocument()
-      expect(within(dialog).queryByRole('button', { name: '4 October 2026' })).not.toBeInTheDocument()
+      pickFarm(dialog, /Doi Farm/)
+      pickFarm(dialog, /Mae Farm/)
+      expect(within(dialog).getByRole('button', { name: 'Harvest Date 5 October 2026' })).toBeInTheDocument()
+      expect(within(dialog).queryByRole('button', { name: 'Harvest Date 4 October 2026' })).not.toBeInTheDocument()
     })
+  })
+})
+
+describe('Harvest lot popup: which farm it starts on', () => {
+  const admin: User = { id: 'u-admin', name: 'Admin', roles: [UserRole.Admin] }
+  const farmField = (dialog: HTMLElement) =>
+    within(within(dialog).getByText('Select Farm *').parentElement as HTMLElement).getAllByRole('button')[0]
+
+  beforeEach(() => localStorage.clear())
+
+  it('picks no farm when the page shows all farms and the user has several', () => {
+    render(<Harness user={admin} />)
+    const dialog = screen.getByRole('dialog', { name: 'Register New Harvest Lot' })
+
+    expect(farmField(dialog)).toHaveTextContent('Select a farm...')
+    expect(within(dialog).getByText('Please select a farm first.')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Register Lot' })).toBeDisabled()
+  })
+
+  it('picks the farm the page is filtered to', () => {
+    render(<Harness user={admin} defaultFarmId="farm-m" />)
+    const dialog = screen.getByRole('dialog', { name: 'Register New Harvest Lot' })
+
+    expect(farmField(dialog)).toHaveTextContent('Mae Farm • Nan')
+    expect(within(dialog).getByText('Planted Varieties: Typica')).toBeInTheDocument()
+  })
+
+  it('picks the user\'s only farm', () => {
+    render(<Harness user={somchai} />)
+    const dialog = screen.getByRole('dialog', { name: 'Register New Harvest Lot' })
+
+    expect(farmField(dialog)).toHaveTextContent('Doi Farm • Chiang Rai')
+  })
+
+  it('starts each opening from the page\'s farm, not the one picked last time', () => {
+    const { rerender } = render(<Harness user={admin} defaultFarmId="farm-m" />)
+    let dialog = screen.getByRole('dialog', { name: 'Register New Harvest Lot' })
+    pickFarm(dialog, /Doi Farm/)
+    expect(farmField(dialog)).toHaveTextContent('Doi Farm • Chiang Rai')
+
+    // Closed, then opened again with the page back on All Farms.
+    rerender(<Harness user={admin} open={false} />)
+    rerender(<Harness user={admin} open />)
+    dialog = screen.getByRole('dialog', { name: 'Register New Harvest Lot' })
+    expect(farmField(dialog)).toHaveTextContent('Select a farm...')
   })
 })

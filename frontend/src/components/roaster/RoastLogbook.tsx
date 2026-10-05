@@ -185,6 +185,7 @@ const RoastLogbook: React.FC<RoastLogbookProps> = ({ currentUser }) => {
   }, [page, totalPages])
 
   // Exports every roast that matches the filters above, across all pages.
+  // With none, downloadCsv says there is nothing to export.
   const exportCsv = () => {
     const roasterNames = new Map(data.users.map((user) => [user.id, user.name]))
     const roasterName = (roasterId: string) =>
@@ -260,8 +261,7 @@ const RoastLogbook: React.FC<RoastLogbookProps> = ({ currentUser }) => {
             <button
               type="button"
               onClick={exportCsv}
-              disabled={records.length === 0}
-              className="inline-flex items-center gap-2 rounded-xl border border-[#dfe9df] bg-white px-3 py-2.5 text-sm font-bold text-[#2e6848] transition hover:bg-[#edf5ee] disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex items-center gap-2 rounded-xl border border-[#dfe9df] bg-white px-3 py-2.5 text-sm font-bold text-[#2e6848] transition hover:bg-[#edf5ee]"
             >
               <Download className="h-4 w-4" />
               Export CSV

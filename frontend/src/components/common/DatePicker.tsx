@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useId } from 'react';
 import { Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { toDateOnly } from '../../utils/dateOnly';
+import { placeCalendar, type CalendarSide } from './calendarPlacement';
 
 // View modes for the popover. 'day' shows the standard date grid,
 // 'month' lets the user pick a month from a 3×4 grid, and 'year' lets
@@ -11,11 +12,38 @@ type CalendarView = 'day' | 'month' | 'year';
 interface DatePickerProps {
     value: string; // YYYY-MM-DD format
     onChange: (date: string) => void;
+    /**
+     * Shown above the field and read out as its name with the date, e.g.
+     * "Purchase Date, 5 October 2026".
+     */
     label?: string;
     placeholder?: string;
     required?: boolean;
     className?: string;
+    /**
+     * The field's id, so an outside <label htmlFor> names it when there is no
+     * `label`. Made up when left out.
+     */
+    id?: string;
 }
+
+/**
+ * Whether any of `field` is still on screen: inside the window and inside
+ * every ancestor that clips it (a popup's scrolling body). Edges that touch
+ * count as inside.
+ */
+const isFieldInView = (field: HTMLElement): boolean => {
+    const box = field.getBoundingClientRect();
+    const overlaps = (area: { top: number; bottom: number; left: number; right: number }) =>
+        box.bottom >= area.top && box.top <= area.bottom && box.right >= area.left && box.left <= area.right;
+    if (!overlaps({ top: 0, left: 0, bottom: window.innerHeight, right: window.innerWidth })) return false;
+    for (let el = field.parentElement; el && el !== document.body; el = el.parentElement) {
+        const style = window.getComputedStyle(el);
+        const clips = /(auto|scroll|hidden|clip)/.test(`${style.overflow} ${style.overflowX} ${style.overflowY}`);
+        if (clips && !overlaps(el.getBoundingClientRect())) return false;
+    }
+    return true;
+};
 
 const DatePicker: React.FC<DatePickerProps> = ({
     value,
@@ -23,13 +51,22 @@ const DatePicker: React.FC<DatePickerProps> = ({
     label,
     placeholder = "Select date",
     required = false,
-    className = ""
+    className = "",
+    id
 }) => {
+    const madeUpId = useId();
+    const fieldId = id || `date-picker-${madeUpId}`;
+    const labelId = `${fieldId}-label`;
+    const valueId = `${fieldId}-value`;
     const [isOpen, setIsOpen] = useState(false);
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [view, setView] = useState<CalendarView>('day');
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const fieldRef = useRef<HTMLButtonElement>(null);
     const calendarRef = useRef<HTMLDivElement>(null);
+    // Where the calendar sits (fixed, in its containing block's pixels); null
+    // until it is first measured, and drawn hidden until then.
+    const [spot, setSpot] = useState<{ top: number; left: number; side: CalendarSide } | null>(null);
 
     // Parse value to Date object (local midnight). A value that is not a
     // readable date counts as no date: the button shows the placeholder and
@@ -68,6 +105,64 @@ const DatePicker: React.FC<DatePickerProps> = ({
     useEffect(() => {
         if (isOpen) setView('day');
     }, [isOpen]);
+
+    // The calendar is drawn with position: fixed at its field, so a popup's
+    // scrolling body no longer cuts it off (you had to scroll inside the popup
+    // to reach it). It stays in place in the DOM, so clicks on it still count
+    // as inside the field and inside the popup. It opens below the field, or
+    // above it when there is no room below (calendarPlacement).
+    const placeAtField = useCallback(() => {
+        const field = fieldRef.current;
+        const calendar = calendarRef.current;
+        if (!field || !calendar) return;
+        const calendarBox = calendar.getBoundingClientRect();
+        // Where top/left 0 lands: the viewport, or an ancestor with a
+        // transform or filter, which fixed elements are placed in instead.
+        const originTop = calendarBox.top - (parseFloat(calendar.style.top) || 0);
+        const originLeft = calendarBox.left - (parseFloat(calendar.style.left) || 0);
+        const next = placeCalendar(
+            field.getBoundingClientRect(),
+            { width: calendarBox.width, height: calendarBox.height },
+            { width: window.innerWidth, height: window.innerHeight },
+        );
+        const top = next.top - originTop;
+        const left = next.left - originLeft;
+        setSpot(prev =>
+            prev && prev.top === top && prev.left === left && prev.side === next.side
+                ? prev
+                : { top, left, side: next.side });
+    }, []);
+
+    // Placed before the browser paints (a reopened calendar starts from its
+    // last spot and is moved before it shows), again when the calendar changes
+    // height (month and year views, 5- or 6-week months), and while the page
+    // or the popup scrolls or the window resizes.
+    useLayoutEffect(() => {
+        if (isOpen) placeAtField();
+    }, [isOpen, view, currentMonth, placeAtField]);
+
+    // On any scroll (the page, a popup's body, any scrolling box: the capture
+    // listener hears them all) or resize, the calendar follows its field. Once
+    // the field is scrolled out of sight the calendar closes instead: being
+    // fixed, it would otherwise stay on screen with nothing under it.
+    const followField = useCallback(() => {
+        const field = fieldRef.current;
+        if (field && !isFieldInView(field)) {
+            setIsOpen(false);
+            return;
+        }
+        placeAtField();
+    }, [placeAtField]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        window.addEventListener('scroll', followField, true);
+        window.addEventListener('resize', followField);
+        return () => {
+            window.removeEventListener('scroll', followField, true);
+            window.removeEventListener('resize', followField);
+        };
+    }, [isOpen, followField]);
 
     // Initialize current month from selected date
     useEffect(() => {
@@ -194,19 +289,23 @@ const DatePicker: React.FC<DatePickerProps> = ({
     return (
         <div ref={dropdownRef} className={`relative ${className}`}>
             {label && (
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label id={labelId} htmlFor={fieldId} className="block text-sm font-semibold text-gray-700 mb-2">
                     {label}
-                    {required && <span className="text-red-500 ml-1">*</span>}
+                    {required && <span className="text-red-500 ml-1" aria-hidden="true">*</span>}
                 </label>
             )}
 
-            {/* Input Button */}
+            {/* Input Button: named by its label and the date it shows. */}
             <button
+                ref={fieldRef}
+                id={fieldId}
                 type="button"
+                aria-labelledby={label ? `${labelId} ${valueId}` : undefined}
+                aria-expanded={isOpen}
                 onClick={() => setIsOpen(!isOpen)}
                 className="w-full flex items-center justify-between px-4 py-2.5 border-2 border-gray-300 rounded-xl bg-white hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 shadow-sm min-w-0"
             >
-                <span className={`text-sm font-medium truncate flex-1 text-left mr-2 ${selectedDate ? 'text-gray-900' : 'text-gray-500'}`}>
+                <span id={valueId} className={`text-sm font-medium truncate flex-1 text-left mr-2 ${selectedDate ? 'text-gray-900' : 'text-gray-500'}`}>
                     {selectedDate ? formatDisplayDate(selectedDate) : placeholder}
                 </span>
                 <Calendar className="h-5 w-5 text-gray-400 flex-shrink-0" />
@@ -216,12 +315,14 @@ const DatePicker: React.FC<DatePickerProps> = ({
             {isOpen && (
                 <div
                     ref={calendarRef}
-                    className="absolute z-[10000] mt-2 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden w-[300px]">
-                    {/* Auto scroll into view when opened */}
-                    {(() => {
-                        setTimeout(() => calendarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
-                        return null;
-                    })()}
+                    data-calendar-side={spot?.side}
+                    style={{
+                        position: 'fixed',
+                        top: spot?.top ?? 0,
+                        left: spot?.left ?? 0,
+                        visibility: spot ? undefined : 'hidden',
+                    }}
+                    className="z-[10000] bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden w-[300px] max-w-[calc(100vw-16px)]">
 
                     {/* Header bar — clickable month/year buttons let the
                         user jump straight to the month or year picker.

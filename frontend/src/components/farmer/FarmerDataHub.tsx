@@ -2,12 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDataContext } from '../../hooks/useDataContext';
 import { HarvestLot, User } from '../../types';
-import { Download, Filter, ChevronRight, ChevronLeft, Database, Edit, Trash2, Package, Lock, AlertTriangle } from 'lucide-react';
-import DatePicker from '../common/DatePicker';
+import { Download, Filter, ChevronRight, ChevronLeft, Database, Edit, Trash2, AlertTriangle } from 'lucide-react';
 import Select from '../common/Select';
 import { Modal } from '../common/Modal';
 import { Button } from '../common/Button';
-import { Input } from '../common/Input';
 import { PageHeader } from '../common/PageHeader';
 import { Badge } from '../common/Badge';
 import { Alert } from '../common/Alert';
@@ -16,21 +14,16 @@ import {
     deleteHarvestLot,
     HarvestLotDependents,
     HarvestLotProcessedError,
-    updateHarvestLot,
 } from '../../services/lots/harvestLotService';
 
 import { formatDateDisplay } from '../../utils/formatters';
 import { canManageHarvestLot, isAdminUser, ownHarvestLots } from '../../utils/farmAccess';
+import HarvestLotEditModal, { harvestLotLabel, useHarvestLotProcessing } from './modals/HarvestLotEditModal';
 
 // Removed inline CustomFilterDropdown in favor of shared Select
 
 const ITEMS_PER_PAGE = 10;
 
-const PROCESSED_LOCK_MESSAGE = 'This lot has already been processed, so its weight and status are locked.';
-const COMPLETE_LOCK_MESSAGE =
-    'This lot is marked Complete, so its weight is locked. Set its status back to Ready for Processing to change the weight or delete the lot.';
-const ADMIN_PROCESSED_MESSAGE =
-    'This lot has already been processed, so its status stays Complete. As an Admin you can still correct its weight, which the traceability record uses.';
 const DEPENDENTS_CHANGED_MESSAGE =
     'What is linked to this lot changed since you looked, so nothing was deleted. Check the new counts below.';
 
@@ -56,20 +49,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
     const [currentPage, setCurrentPage] = useState(1);
 
     // Edit Modal State
-    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingLot, setEditingLot] = useState<HarvestLot | null>(null);
-    const [editFormData, setEditFormData] = useState({
-        farmerName: '',
-        cherryVariety: '',
-        weightKg: '',
-        harvestDate: '',
-        farmPlotLocation: '',
-        status: 'Ready for Processing',
-        farmId: '',
-        cropYearId: ''
-    });
-    const [editError, setEditError] = useState<string | null>(null);
-    const [isSaving, setIsSaving] = useState(false);
 
     // Delete Modal State
     const [deleteState, setDeleteState] = useState<DeleteState | null>(null);
@@ -86,56 +66,26 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
         [isAdmin, currentUser, data.harvestLots, data.farms]
     );
 
-    // A lot is processed once a batch or parchment lot draws on it: its status
-    // then stays Complete, its weight is locked (an Admin may correct it), and
-    // only an Admin may delete it (with everything linked). The loaded batches
-    // and parchment lots are only the latest ones, so a lot that says Complete
-    // is treated as processed too, except that its status may be set back to
-    // Ready (the backend refuses that if something does draw on it).
-    const processedLotIds = useMemo(() => {
-        const ids = new Set<string>();
-        data.processingBatches.forEach(b => { if (b.harvestLotId) ids.add(b.harvestLotId); });
-        data.parchmentLots.forEach(p => { if (p.harvestLotId) ids.add(p.harvestLotId); });
-        return ids;
-    }, [data.processingBatches, data.parchmentLots]);
-    const hasLinkedRecords = (lot: HarvestLot) => processedLotIds.has(lot.id);
-    const isProcessed = (lot: HarvestLot) => lot.status === 'Complete' || hasLinkedRecords(lot);
+    // Processed lots: their status stays Complete, and only an Admin may
+    // delete them (with everything linked).
+    const { isProcessed } = useHarvestLotProcessing();
 
-    // The farms a lot may move to: any for an Admin, else the user's own (the
-    // backend refuses another farmer's farm). The lot's current farm is always
-    // listed so the field shows it.
-    const editFarmOptions = useMemo(() => {
-        const farmLabel = (f: { id: string; farmName?: string; name?: string; location?: string }) =>
-            [f.farmName || f.name, f.location].filter(Boolean).join(' • ') || f.id;
-        const farms = isAdmin ? data.farms : data.farms.filter(f => f.ownerUserId === currentUser.id);
-        const options = farms.map(f => ({ value: f.id, label: farmLabel(f) }));
-        const current = editingLot?.farmId;
-        if (current && !options.some(o => o.value === current)) {
-            const farm = data.farms.find(f => f.id === current) || editingLot?.farm;
-            options.unshift({ value: current, label: farm ? farmLabel(farm) : current });
-        }
-        return options;
-    }, [data.farms, isAdmin, currentUser.id, editingLot]);
-
-    const editCropYearOptions = useMemo(() => [
-        { value: '', label: 'No crop year' },
-        ...[...data.cropYears]
-            .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
-            .map(cy => ({ value: cy.id, label: cy.year })),
-    ], [data.cropYears]);
-
-    const uniqueYears = useMemo(() => {
+    // The filters say what they filter: the harvest year, and the lot's farm
+    // plot location.
+    const yearOptions = useMemo(() => {
         const years = new Set(myLots.map(lot => new Date(lot.harvestDate).getFullYear().toString()));
         // fix: Explicitly type sort callback parameters to resolve TS error
-        return ['All', ...Array.from(years).sort((a: string, b: string) => parseInt(b) - parseInt(a))];
+        const sorted = Array.from(years).sort((a: string, b: string) => parseInt(b) - parseInt(a));
+        return [{ value: 'All', label: 'All years' }, ...sorted.map(year => ({ value: year, label: year }))];
     }, [myLots]);
 
-    const uniquePlots = useMemo(() => {
-        const plots = new Set(myLots.map(lot => lot.farmPlotLocation));
-        return ['All', ...Array.from(plots).sort()];
+    const plotOptions = useMemo(() => {
+        const plots = Array.from(new Set(myLots.map(lot => lot.farmPlotLocation))).sort();
+        return [{ value: 'All', label: 'All locations' }, ...plots.map(plot => ({ value: plot, label: plot }))];
     }, [myLots]);
 
     const filteredLots = useMemo(() => {
+        const time = (lot: HarvestLot) => new Date(lot.harvestDate).getTime() || 0;
         return myLots
             .filter(lot => {
                 const lotYear = new Date(lot.harvestDate).getFullYear().toString();
@@ -143,8 +93,18 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                 const plotMatch = plotFilter === 'All' || lot.farmPlotLocation === plotFilter;
                 return yearMatch && plotMatch;
             })
-            .sort((a, b) => new Date(b.harvestDate).getTime() - new Date(a.harvestDate).getTime());
+            // Newest harvest first; on the same day the higher lot number
+            // first (HL-2026-10 before HL-2026-9). The sort is stable, so
+            // anything still equal keeps its order.
+            .sort((a, b) => time(b) - time(a)
+                || harvestLotLabel(b).localeCompare(harvestLotLabel(a), undefined, { numeric: true }));
     }, [myLots, yearFilter, plotFilter]);
+
+    const filtersActive = yearFilter !== 'All' || plotFilter !== 'All';
+    const clearFilters = () => {
+        setYearFilter('All');
+        setPlotFilter('All');
+    };
 
     // Reset page when filters change
     React.useEffect(() => {
@@ -217,116 +177,11 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
     const openEditModal = (lot: HarvestLot, e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent row click
         setEditingLot(lot);
-        setEditError(null);
-        setEditFormData({
-            farmerName: lot.farmerName,
-            cherryVariety: lot.cherryVariety,
-            weightKg: lot.weightKg.toString(),
-            harvestDate: lot.harvestDate,
-            farmPlotLocation: lot.farmPlotLocation,
-            status: lot.status,
-            farmId: lot.farmId || '',
-            cropYearId: lot.cropYearId || ''
-        });
-        setIsEditModalOpen(true);
     };
 
-    const closeEditModal = () => {
-        if (isSaving) return;
-        setIsEditModalOpen(false);
-        setEditingLot(null);
-        setEditError(null);
-    };
-
-    // What the edit popup locks on the lot being edited (the backend enforces
-    // the same): a processed lot's weight for everyone but an Admin, and its
-    // status while a known batch or parchment lot draws on it. A lot that only
-    // says Complete keeps its status open, so it can be set back to Ready.
-    const weightLocked = editingLot ? isProcessed(editingLot) && !isAdmin : false;
-    const statusLocked = editingLot ? hasLinkedRecords(editingLot) : false;
-    const editingNote = !editingLot
-        ? null
-        : weightLocked
-            ? (statusLocked ? PROCESSED_LOCK_MESSAGE : COMPLETE_LOCK_MESSAGE)
-            : (isAdmin && statusLocked ? ADMIN_PROCESSED_MESSAGE : null);
-
-    const handleEditSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!editingLot || isSaving) return;
-
-        // Send only what was changed: the backend writes every key it is
-        // sent, so an untouched field must not go out at all.
-        const changes: Partial<HarvestLot> = {};
-        const textFields = [
-            ['farmerName', 'Farmer name'],
-            ['cherryVariety', 'Cherry variety'],
-            ['farmPlotLocation', 'Farm plot location'],
-        ] as const;
-        for (const [field, label] of textFields) {
-            const value = editFormData[field].trim();
-            if (value === (editingLot[field] || '').trim()) continue;
-            if (!value) {
-                setEditError(`${label} cannot be blank.`);
-                return;
-            }
-            changes[field] = value;
-        }
-        if (editFormData.harvestDate !== editingLot.harvestDate) {
-            if (!editFormData.harvestDate) {
-                setEditError('Harvest date cannot be blank.');
-                return;
-            }
-            changes.harvestDate = editFormData.harvestDate;
-        }
-        // Locked fields never go out (the backend would refuse them).
-        if (!weightLocked) {
-            const weight = parseFloat(editFormData.weightKg);
-            if (weight !== editingLot.weightKg) {
-                if (!Number.isFinite(weight) || weight <= 0) {
-                    setEditError('Weight must be a number greater than 0.');
-                    return;
-                }
-                changes.weightKg = weight;
-            }
-        }
-        if (!statusLocked && editFormData.status !== editingLot.status) {
-            changes.status = editFormData.status as 'Ready for Processing' | 'Complete';
-        }
-        // The farm can be changed but not cleared; the backend checks the
-        // caller may use the new one. An empty crop year clears it.
-        if (editFormData.farmId && editFormData.farmId !== (editingLot.farmId || '')) {
-            changes.farmId = editFormData.farmId;
-        }
-        if (editFormData.cropYearId !== (editingLot.cropYearId || '')) {
-            changes.cropYearId = editFormData.cropYearId;
-        }
-
-        if (Object.keys(changes).length === 0) {
-            closeEditModal();
-            return;
-        }
-
-        setIsSaving(true);
-        setEditError(null);
-        try {
-            const updatedLot = await updateHarvestLot(editingLot.id, changes);
-            setData(prev => ({
-                ...prev,
-                harvestLots: prev.harvestLots.map(lot => (lot.id === editingLot.id ? updatedLot : lot)),
-            }));
-            setIsEditModalOpen(false);
-            setEditingLot(null);
-        } catch (error) {
-            setEditError(error instanceof Error && error.message ? error.message : 'Failed to update harvest lot.');
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    // Exports every lot that matches the year and plot filters, across all pages.
+    // Exports every lot that matches the year and plot filters, across all
+    // pages. With none, downloadCsv says there is nothing to export.
     const handleExportCSV = () => {
-        if (filteredLots.length === 0) return;
-
         const headers = ['Lot ID', 'Farmer', 'Variety', 'Weight (kg)', 'Harvest Date', 'Location', 'Status'];
         const rows = filteredLots.map(lot => [
             lot.displayId || lot.id,
@@ -351,7 +206,7 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
     // A processed lot is part of the traceability chain: only an Admin may
     // delete it, and only with everything linked to it.
     const canDelete = (lot: HarvestLot) => canEdit(lot) && (isAdmin || !isProcessed(lot));
-    const lotLabel = (lot: HarvestLot) => lot.displayId || lot.id.substring(0, 8).toUpperCase();
+    const lotLabel = harvestLotLabel;
 
     return (
         <div className="space-y-6 min-w-0 w-full overflow-hidden">
@@ -369,24 +224,29 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                             <Filter className="h-4 w-4" />
                             Filters
                         </span>
-                        <Select
-                            className="min-w-[140px]"
-                            value={yearFilter}
-                            onChange={(v) => setYearFilter((v as string) || 'All')}
-                            options={uniqueYears}
-                            placeholder="All Years"
-                        />
-                        <Select
-                            className="min-w-[180px]"
-                            value={plotFilter}
-                            onChange={(v) => setPlotFilter((v as string) || 'All')}
-                            options={uniquePlots}
-                            placeholder="All Locations"
-                        />
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-600">Year</span>
+                            <Select
+                                className="min-w-[140px]"
+                                value={yearFilter}
+                                onChange={(v) => setYearFilter((v as string) || 'All')}
+                                options={yearOptions}
+                                placeholder="All years"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-600">Location</span>
+                            <Select
+                                className="min-w-[180px]"
+                                value={plotFilter}
+                                onChange={(v) => setPlotFilter((v as string) || 'All')}
+                                options={plotOptions}
+                                placeholder="All locations"
+                            />
+                        </div>
                     </div>
                     <Button
                         onClick={handleExportCSV}
-                        disabled={filteredLots.length === 0}
                         variant="success"
                         icon={<Download className="h-4 w-4" />}
                     >
@@ -415,8 +275,20 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                                 <tr>
                                     <td colSpan={8} className="px-4 py-12 text-center">
                                         <Database className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                                        <p className="text-gray-500 text-base font-medium">No harvest data found</p>
-                                        <p className="text-gray-400 text-sm">Try adjusting your filters</p>
+                                        {myLots.length > 0 && filtersActive ? (
+                                            <>
+                                                <p className="text-gray-500 text-base font-medium">No harvest lots match these filters</p>
+                                                <p className="text-gray-400 text-sm mb-4">Try another year or location, or clear the filters to see every lot</p>
+                                                <Button type="button" variant="outline" onClick={clearFilters}>
+                                                    Clear filters
+                                                </Button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <p className="text-gray-500 text-base font-medium">No harvest lots yet</p>
+                                                <p className="text-gray-400 text-sm">Lots registered on the Harvest Lots page appear here</p>
+                                            </>
+                                        )}
                                     </td>
                                 </tr>
                             ) : (
@@ -541,161 +413,12 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                 )}
             </div>
 
-            {/* Edit Modal */}
-            <Modal
-                isOpen={isEditModalOpen}
-                onClose={closeEditModal}
-                title="Edit Harvest Lot"
-                maxWidth="2xl"
-            >
-                <form onSubmit={handleEditSubmit} className="space-y-6">
-                    {/* Lot ID Badge */}
-                    {editingLot && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-blue-100 rounded-lg">
-                                    <Package className="h-5 w-5 text-blue-600" />
-                                </div>
-                                <div>
-                                    <p className="text-xs font-medium text-blue-600 uppercase tracking-wide">Lot ID</p>
-                                    <p className="text-sm font-mono font-semibold text-gray-900">{lotLabel(editingLot)}</p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Basic Information */}
-                    <div className="space-y-4">
-                        <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">Basic Information</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Input
-                                label="Farmer Name"
-                                type="text"
-                                id="edit-farmerName"
-                                value={editFormData.farmerName}
-                                onChange={e => setEditFormData({ ...editFormData, farmerName: e.target.value })}
-                                required
-                                fullWidth
-                            />
-                            <Input
-                                label="Cherry Variety"
-                                type="text"
-                                id="edit-cherryVariety"
-                                value={editFormData.cherryVariety}
-                                onChange={e => setEditFormData({ ...editFormData, cherryVariety: e.target.value })}
-                                required
-                                fullWidth
-                            />
-                        </div>
-                    </div>
-
-                    {/* Harvest Details */}
-                    <div className="space-y-4">
-                        <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">Harvest Details</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Input
-                                label="Weight (kg)"
-                                type="number"
-                                id="edit-weightKg"
-                                value={editFormData.weightKg}
-                                onChange={e => setEditFormData({ ...editFormData, weightKg: e.target.value })}
-                                required={!weightLocked}
-                                disabled={weightLocked}
-                                min="0"
-                                step="0.01"
-                                fullWidth
-                            />
-                            <DatePicker
-                                value={editFormData.harvestDate}
-                                onChange={(date) => setEditFormData({ ...editFormData, harvestDate: date })}
-                                label="Harvest Date"
-                                required
-                            />
-                        </div>
-                    </div>
-
-                    {/* Location & Status */}
-                    <div className="space-y-4">
-                        <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-2">Location & Status</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">Farm</label>
-                                <Select
-                                    value={editFormData.farmId}
-                                    onChange={(v) => setEditFormData({ ...editFormData, farmId: (v as string) || '' })}
-                                    options={editFarmOptions}
-                                    placeholder="Not linked to a farm"
-                                />
-                                {isAdmin && editingLot && editFormData.farmId !== (editingLot.farmId || '') && (
-                                    <p className="mt-1 text-xs text-gray-500">The lot will belong to the owner of this farm.</p>
-                                )}
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">Crop Year</label>
-                                <Select
-                                    value={editFormData.cropYearId}
-                                    onChange={(v) => setEditFormData({ ...editFormData, cropYearId: (v as string) || '' })}
-                                    options={editCropYearOptions}
-                                    placeholder="No crop year"
-                                />
-                            </div>
-                            <Input
-                                label="Farm Plot Location"
-                                type="text"
-                                id="edit-farmPlotLocation"
-                                value={editFormData.farmPlotLocation}
-                                onChange={e => setEditFormData({ ...editFormData, farmPlotLocation: e.target.value })}
-                                required
-                                fullWidth
-                            />
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">Status</label>
-                                <Select
-                                    value={editFormData.status}
-                                    onChange={(v) => setEditFormData({ ...editFormData, status: v as string })}
-                                    options={[
-                                        { value: 'Ready for Processing', label: 'Ready for Processing' },
-                                        { value: 'Complete', label: 'Complete' }
-                                    ]}
-                                    placeholder="Select status"
-                                    disabled={statusLocked}
-                                />
-                            </div>
-                        </div>
-                        {editingNote && (
-                            <p className="flex items-center gap-2 text-sm text-gray-600">
-                                <Lock className="h-4 w-4 flex-shrink-0 text-gray-400" />
-                                {editingNote}
-                            </p>
-                        )}
-                    </div>
-
-                    {editError && (
-                        <div role="alert">
-                            <Alert type="error" message={editError} />
-                        </div>
-                    )}
-
-                    {/* Action Buttons */}
-                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                        <Button
-                            type="button"
-                            onClick={closeEditModal}
-                            variant="outline"
-                            disabled={isSaving}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            type="submit"
-                            variant="primary"
-                            loading={isSaving}
-                        >
-                            Save Changes
-                        </Button>
-                    </div>
-                </form>
-            </Modal>
+            {/* Edit Modal (shared with the harvest lot details page) */}
+            <HarvestLotEditModal
+                lot={editingLot}
+                currentUser={currentUser}
+                onClose={() => setEditingLot(null)}
+            />
 
             {/* Delete Modal */}
             <Modal

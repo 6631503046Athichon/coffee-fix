@@ -18,6 +18,8 @@ import {
 import { ProcessTypeChip } from '../processor/workbench/ProcessTypeChips';
 import ProcessTypePill, { PARCHMENT_PILL_SHAPE } from '../processor/workbench/ProcessTypePill';
 import { ModalPortal } from '../common/ModalPortal';
+import AdminConfirmModal from './modals/AdminConfirmModal';
+import { formatDateDisplay } from '../../utils/formatters';
 
 type UsedByHue = Partial<Record<ProcessTypeHue, string[]>>;
 
@@ -177,6 +179,14 @@ const ColorPreview: React.FC<{ hue: ProcessTypeHue; name: string; usedBy: string
 
 const PAGE_SIZE = 10;
 
+/**
+ * The created day in the app's date format, or "-". Types saved on this page
+ * carry createdDate; the ones the app loads at sign-in carry the backend's
+ * createdAt instead, and some old rows have neither.
+ */
+const createdOn = (type: ProcessType & { createdAt?: string | null }) =>
+  formatDateDisplay(type.createdDate || type.createdAt, undefined, '-');
+
 const ProcessTypeManagement: React.FC = () => {
   const { data, setData } = useDataContext();
   const [showModal, setShowModal] = useState(false);
@@ -192,6 +202,9 @@ const ProcessTypeManagement: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [deleting, setDeleting] = useState<ProcessType | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   // The colours the other process types already use (the one being edited excluded).
   const usedByHue = useMemo(
@@ -298,33 +311,34 @@ const ProcessTypeManagement: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    const typeToDelete = data.processTypes.find(t => t.id === id);
-    if (!typeToDelete) return;
+  // Batches and parchment lots keep the process-type name they were saved
+  // with: deleting a type they use leaves them on a name no type has.
+  const deletingInUse = !!deleting && (
+    data.processingBatches.some(batch => batch.processType === deleting.name) ||
+    data.parchmentLots.some(lot => lot.processType === deleting.name)
+  );
 
-    // Check if process type is used in any processing batches or parchment lots
-    const usedInBatches = data.processingBatches.some(batch => batch.processType === typeToDelete.name);
-    const usedInParchment = data.parchmentLots.some(lot => lot.processType === typeToDelete.name);
-    const isUsed = usedInBatches || usedInParchment;
+  const askDelete = (processType: ProcessType) => {
+    setDeleteError('');
+    setDeleting(processType);
+  };
 
-    if (isUsed) {
-      if (!confirm(`"${typeToDelete.name}" is currently used in processing batches or parchment lots. Are you sure you want to delete it?`)) {
-        return;
-      }
-    } else {
-      if (!confirm(`Are you sure you want to delete "${typeToDelete.name}"?`)) {
-        return;
-      }
-    }
-
+  const confirmDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    setDeleteError('');
     try {
-      await deleteProcessType(id);
+      await deleteProcessType(deleting.id);
+      const removedId = deleting.id;
       setData(prev => ({
         ...prev,
-        processTypes: prev.processTypes.filter(type => type.id !== id),
+        processTypes: prev.processTypes.filter(type => type.id !== removedId),
       }));
-    } catch (err: any) {
-      alert(err instanceof Error ? err.message : 'Failed to delete process type');
+      setDeleting(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error && err.message ? err.message : 'Failed to delete process type');
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -477,7 +491,7 @@ const ProcessTypeManagement: React.FC = () => {
                       })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {type.createdDate}
+                      {createdOn(type)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
@@ -503,7 +517,7 @@ const ProcessTypeManagement: React.FC = () => {
                           <span className="text-xs font-semibold">Edit</span>
                         </button>
                         <button
-                          onClick={() => handleDelete(type.id)}
+                          onClick={() => askDelete(type)}
                           className="inline-flex items-center gap-1 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                           title="Delete"
                         >
@@ -713,6 +727,22 @@ const ProcessTypeManagement: React.FC = () => {
           </div>
         </ModalPortal>
       )}
+
+      <AdminConfirmModal
+        isOpen={!!deleting}
+        title="Delete process type?"
+        message={
+          deletingInUse
+            ? `"${deleting?.name}" is used by processing batches or parchment lots. They keep that name but it no longer matches a process type. This cannot be undone.`
+            : `Delete "${deleting?.name}"? This cannot be undone.`
+        }
+        confirmLabel="Delete process type"
+        cancelLabel="Keep it"
+        busy={deleteBusy}
+        error={deleteError}
+        onCancel={() => setDeleting(null)}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 };

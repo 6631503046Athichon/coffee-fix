@@ -255,7 +255,8 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
     setCustomerId('')
   }
 
-  // Every filtered sale on every page, one row per sale line.
+  // Every filtered sale on every page, one row per sale line. With none,
+  // downloadCsv says there is nothing to export.
   const handleExport = () => {
     const headers = isAdmin ? [...CSV_HEADERS, 'Roaster'] : CSV_HEADERS
     const rows: CsvCell[][] = []
@@ -406,7 +407,6 @@ const SalesLog: React.FC<SalesLogProps> = ({ currentUser }) => {
             <button
               type="button"
               onClick={handleExport}
-              disabled={filtered.length === 0}
               className={outlineButton}
             >
               <Download className="h-4 w-4" />

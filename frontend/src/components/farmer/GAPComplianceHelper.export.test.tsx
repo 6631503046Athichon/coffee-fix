@@ -6,6 +6,8 @@ import { DataContext } from '../../hooks/useDataContext'
 import { UserRole } from '../../types'
 import type { AppData, Farm, GAPLogEntry } from '../../types'
 import { captureCsvDownloads } from '../../test/captureCsvDownloads'
+import { captureAppToasts } from '../../test/captureAppToasts'
+import { NOTHING_TO_EXPORT_MESSAGE } from '../../utils/exportCSV'
 import GAPComplianceHelper from './GAPComplianceHelper'
 
 vi.mock('../../contexts/AuthContext', () => ({
@@ -67,6 +69,20 @@ const pick = (container: HTMLElement, current: string, option: string) => {
 
 describe('GAP log CSV export and report', { timeout: 20000 }, () => {
   const downloads = captureCsvDownloads()
+  const toasts = captureAppToasts()
+
+  it('says there is nothing to export when the filters match no log, and saves no file', () => {
+    renderPage()
+    pick(toolbar(), 'All Farms', 'Hill Farm • Plot 9')
+    pick(toolbar(), 'All', 'Pest control')
+
+    const exportButton = within(toolbar()).getByText('Export CSV').closest('button')!
+    expect(exportButton).toBeEnabled()
+    fireEvent.click(exportButton)
+
+    expect(downloads).toHaveLength(0)
+    expect(toasts).toEqual([{ type: 'info', message: NOTHING_TO_EXPORT_MESSAGE }])
+  })
 
   it('exports every log matching the farm and activity filters, across pages', () => {
     renderPage()

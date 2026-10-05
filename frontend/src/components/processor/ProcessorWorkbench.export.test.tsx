@@ -6,6 +6,8 @@ import { ToastProvider } from '../../contexts/ToastContext'
 import { GreenBeanSourceType, ParchmentSourceType, UserRole } from '../../types'
 import type { AppData, GreenBeanLot, ParchmentLot } from '../../types'
 import { captureCsvDownloads } from '../../test/captureCsvDownloads'
+import { captureAppToasts } from '../../test/captureAppToasts'
+import { NOTHING_TO_EXPORT_MESSAGE } from '../../utils/exportCSV'
 import ProcessorWorkbench from './ProcessorWorkbench'
 
 const greenLot = (
@@ -85,6 +87,7 @@ const countBadge = (el: HTMLElement) => el.querySelector('span.rounded-full')!.t
 
 describe('Processor workbench CSV export', { timeout: 20000 }, () => {
   const downloads = captureCsvDownloads()
+  const toasts = captureAppToasts()
 
   const lastCsv = () => {
     expect(downloads).toHaveLength(1)
@@ -131,22 +134,28 @@ describe('Processor workbench CSV export', { timeout: 20000 }, () => {
     render(<Harness />)
 
     // Workflow view first: search, and switch views before the debounce fires.
-    fireEvent.change(within(greenSection()).getByPlaceholderText('Search lots...'), {
+    fireEvent.change(within(greenSection()).getByPlaceholderText('Search lot, farmer, grade...'), {
       target: { value: 'grade b' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
 
-    expect(within(greenSection()).getByPlaceholderText('Search lots...')).toHaveValue('grade b')
+    expect(within(greenSection()).getByPlaceholderText('Search lot, farmer, grade...')).toHaveValue('grade b')
     await waitFor(() => expect(countBadge(greenSection())).toBe('2'))
 
     // A grid-only filter that matches nothing here...
     pick(greenSection(), 'All Grades', 'Grade A')
     expect(countBadge(greenSection())).toBe('0')
-    expect(within(greenSection()).getByLabelText('Export CSV')).toBeDisabled()
+    // Export stays clickable, says why nothing comes out, and saves no file.
+    const exportButton = within(greenSection()).getByLabelText('Export CSV')
+    expect(exportButton).toBeEnabled()
+    expect(exportButton).toHaveAttribute('title', 'Nothing matches the current search and filters')
+    fireEvent.click(exportButton)
+    expect(downloads).toHaveLength(0)
+    expect(toasts).toEqual([{ type: 'info', message: NOTHING_TO_EXPORT_MESSAGE }])
 
     // ...does not follow the lots into the workflow view, which has no grade control.
     fireEvent.click(screen.getByRole('button', { name: 'Workflow' }))
-    expect(within(greenSection()).getByPlaceholderText('Search lots...')).toHaveValue('grade b')
+    expect(within(greenSection()).getByPlaceholderText('Search lot, farmer, grade...')).toHaveValue('grade b')
     expect(countBadge(greenSection())).toBe('2')
 
     fireEvent.click(within(greenSection()).getByLabelText('Export CSV'))
@@ -159,7 +168,7 @@ describe('Processor workbench CSV export', { timeout: 20000 }, () => {
     render(<Harness />)
     fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
 
-    const box = within(greenSection()).getByPlaceholderText('Search lots...')
+    const box = within(greenSection()).getByPlaceholderText('Search lot, farmer, grade...')
     fireEvent.change(box, { target: { value: 'grade b' } })
     // Clicking Export takes focus off the box first, well inside the debounce.
     fireEvent.blur(box)

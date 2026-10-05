@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma'
 import { requireAuth, requireRole, handleApiError, type AuthenticatedUser } from '@/lib/middleware'
 import { WEIGHT_EPSILON, isAdminUser } from '@/lib/saleOrders'
 import { canClaimGreenBeanLot } from '@/lib/farmAccess'
+import { stockRowWithoutImporterFor } from '@/lib/importerPrivacy'
 
 const NOT_CLAIMABLE_ERROR = 'This green bean lot was bought in by another user, so it cannot be claimed'
 
@@ -84,7 +85,10 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ inventoryItems })
+    // The parchment's importer only for Admin and the importer (lib/importerPrivacy).
+    return NextResponse.json({
+      inventoryItems: inventoryItems.map(item => stockRowWithoutImporterFor(user, item)),
+    })
   } catch (error) {
     return handleApiError(error)
   }
@@ -250,7 +254,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        inventoryItem: claimResult.inventoryItem,
+        inventoryItem: stockRowWithoutImporterFor(user, claimResult.inventoryItem),
         updatedSourceLot: claimResult.updatedSourceLot,
         message: 'Green bean lot claimed successfully',
       },

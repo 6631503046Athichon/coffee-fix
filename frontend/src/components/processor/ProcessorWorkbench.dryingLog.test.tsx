@@ -7,7 +7,7 @@ import { ToastProvider } from '../../contexts/ToastContext'
 import ToastContainer from '../common/ToastContainer'
 import { ParchmentSourceType, ProcessingBatchStatus, UserRole } from '../../types'
 import type { AppData, DryingLogEntry, HarvestLot, ParchmentLot, ProcessingBatch } from '../../types'
-import { formatDate } from '../../utils/formatters'
+import { formatDateDisplay } from '../../utils/formatters'
 import { todayDateOnly } from '../../utils/dateOnly'
 import {
   addDryingLog,
@@ -93,7 +93,8 @@ const openLog = (lot: string) => {
 }
 const rowsOf = (popup: HTMLElement) =>
   within(within(popup).getByTestId('drying-log-table')).getAllByRole('row').slice(1)
-const day = (date: string) => formatDate(date, 'short')
+// The app's one display format: never the Buddhist-era th-TH date.
+const day = (date: string) => formatDateDisplay(date)
 const field = (popup: HTMLElement, label: string) =>
   within(popup).getByLabelText(label) as HTMLInputElement
 const lastData = (onData: ReturnType<typeof vi.fn>): AppData => onData.mock.calls.at(-1)![0]

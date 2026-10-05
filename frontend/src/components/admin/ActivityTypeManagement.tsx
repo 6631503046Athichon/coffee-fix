@@ -4,8 +4,18 @@ import { ActivityType } from '../../types';
 import { addActivityType, updateActivityType, deleteActivityType } from '../../services/reference/activityTypeService';
 import { Plus, Edit, Trash2, CheckCircle, XCircle, AlertCircle, X, Save, Tag, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ModalPortal } from '../common/ModalPortal';
+import AdminConfirmModal from './modals/AdminConfirmModal';
+import { formatDateDisplay } from '../../utils/formatters';
 
 const PAGE_SIZE = 10;
+
+/**
+ * The created day in the app's date format, or "-". Types saved on this page
+ * carry createdDate; the ones the app loads at sign-in carry the backend's
+ * createdAt instead, and some old rows have neither.
+ */
+const createdOn = (type: ActivityType & { createdAt?: string | null }) =>
+  formatDateDisplay(type.createdDate || type.createdAt, undefined, '-');
 
 const ActivityTypeManagement: React.FC = () => {
   const { data, setData } = useDataContext();
@@ -21,6 +31,9 @@ const ActivityTypeManagement: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [deleting, setDeleting] = useState<ActivityType | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   const resetForm = () => {
     setFormData({ name: '', description: '', isActive: true });
@@ -107,22 +120,27 @@ const ActivityTypeManagement: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    const typeToDelete = data.activityTypes.find(t => t.id === id);
-    if (!typeToDelete) return;
+  const askDelete = (activityType: ActivityType) => {
+    setDeleteError('');
+    setDeleting(activityType);
+  };
 
-    if (!confirm(`Are you sure you want to delete "${typeToDelete.name}"?`)) {
-      return;
-    }
-
+  const confirmDelete = async () => {
+    if (!deleting || deleteBusy) return;
+    setDeleteBusy(true);
+    setDeleteError('');
     try {
-      await deleteActivityType(id);
+      await deleteActivityType(deleting.id);
+      const removedId = deleting.id;
       setData(prev => ({
         ...prev,
-        activityTypes: prev.activityTypes.filter(t => t.id !== id),
+        activityTypes: prev.activityTypes.filter(t => t.id !== removedId),
       }));
-    } catch (err: any) {
-      alert(err instanceof Error ? err.message : 'Failed to delete activity type');
+      setDeleting(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error && err.message ? err.message : 'Failed to delete activity type');
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -261,7 +279,7 @@ const ActivityTypeManagement: React.FC = () => {
                       <span className="text-sm text-gray-700">{type.description || '-'}</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {type.createdDate}
+                      {createdOn(type)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
@@ -287,7 +305,7 @@ const ActivityTypeManagement: React.FC = () => {
                           <span className="text-xs font-semibold">Edit</span>
                         </button>
                         <button
-                          onClick={() => handleDelete(type.id)}
+                          onClick={() => askDelete(type)}
                           className="inline-flex items-center gap-1 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                           title="Delete"
                         >
@@ -453,6 +471,18 @@ const ActivityTypeManagement: React.FC = () => {
           </div>
         </ModalPortal>
       )}
+
+      <AdminConfirmModal
+        isOpen={!!deleting}
+        title="Delete activity type?"
+        message={`Delete "${deleting?.name}"? This cannot be undone.`}
+        confirmLabel="Delete activity type"
+        cancelLabel="Keep it"
+        busy={deleteBusy}
+        error={deleteError}
+        onCancel={() => setDeleting(null)}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 };

@@ -45,8 +45,8 @@ const processedBody = {
 }
 
 const farms = [
-  { id: 'farm-1', farmName: 'Doi Farm', location: 'Chiang Rai', farmerName: 'Somchai', ownerUserId: 'u-farmer' },
-  { id: 'farm-2', farmName: 'Mae Farm', location: 'Nan', farmerName: 'Malee', ownerUserId: 'u-other' },
+  { id: 'farm-1', farmName: 'Doi Farm', location: 'Chiang Rai', farmerName: 'Somchai', ownerUserId: 'u-farmer', varieties: ['Catimor', 'Typica'] },
+  { id: 'farm-2', farmName: 'Mae Farm', location: 'Nan', farmerName: 'Malee', ownerUserId: 'u-other', varieties: ['Geisha'] },
 ] as Farm[]
 const cropYears = [
   { id: 'cy-2025', year: '2025/2026', startDate: '2025-10-01', endDate: '2026-09-30' },
@@ -74,6 +74,15 @@ const Harness: React.FC<{ user: User; refreshData?: () => Promise<void>; lots?: 
 
 const editDialog = () => screen.getByRole('dialog', { name: 'Edit Harvest Lot' })
 
+// The Cherry Variety picker: the Select under its label.
+const varietyField = (dialog: HTMLElement) =>
+  within(dialog).getByText('Cherry Variety').parentElement as HTMLElement
+const pickVariety = (dialog: HTMLElement, variety: string) => {
+  const field = varietyField(dialog)
+  fireEvent.click(within(field).getAllByRole('button')[0])
+  fireEvent.click(within(field).getByRole('button', { name: variety }))
+}
+
 describe('FarmerDataHub edit', { timeout: 20000 }, () => {
   beforeEach(() => vi.clearAllMocks())
 
@@ -82,7 +91,7 @@ describe('FarmerDataHub edit', { timeout: 20000 }, () => {
     render(<Harness user={admin} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit harvest lot HL-2026-1' }))
-    fireEvent.change(within(editDialog()).getByLabelText('Cherry Variety'), { target: { value: ' Typica ' } })
+    pickVariety(editDialog(), 'Typica')
     fireEvent.change(within(editDialog()).getByLabelText('Weight (kg)'), { target: { value: '385.5' } })
     fireEvent.click(within(editDialog()).getByRole('button', { name: 'Save Changes' }))
 
@@ -130,7 +139,7 @@ describe('FarmerDataHub edit', { timeout: 20000 }, () => {
 
     // Other fields stay editable, and the weight or status never goes out.
     fireEvent.change(within(dialog).getByLabelText('Weight (kg)'), { target: { value: '1' } })
-    fireEvent.change(within(dialog).getByLabelText('Cherry Variety'), { target: { value: 'Typica' } })
+    pickVariety(dialog, 'Typica')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1))
@@ -183,8 +192,10 @@ describe('FarmerDataHub edit', { timeout: 20000 }, () => {
     expect(within(dialog).queryByText(/locked|As an Admin/)).not.toBeInTheDocument()
   })
 
-  it('moves a lot to another farm and clears its crop year, sending only those', async () => {
-    vi.mocked(api.put).mockResolvedValue({ harvestLot: backendLot({ farmId: 'farm-2', cropYearId: null }) })
+  it('moves a lot to another farm and clears its crop year, sending only those and the new farmer', async () => {
+    vi.mocked(api.put).mockResolvedValue({
+      harvestLot: backendLot({ farmId: 'farm-2', farmerName: 'Malee', cropYearId: null }),
+    })
     render(<Harness user={admin} />)
     fireEvent.click(screen.getByRole('button', { name: 'Edit harvest lot HL-2026-1' }))
     const dialog = editDialog()
@@ -197,9 +208,28 @@ describe('FarmerDataHub edit', { timeout: 20000 }, () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1))
+    // The backend hands the lot to Mae Farm's owner but keeps the name it is
+    // sent, so the new farmer's name goes with the move.
     expect(vi.mocked(api.put).mock.calls[0]).toStrictEqual([
-      '/harvest-lots/hl-1', { farmId: 'farm-2', cropYearId: null },
+      '/harvest-lots/hl-1', { farmId: 'farm-2', farmerName: 'Malee', cropYearId: null },
     ])
+  })
+
+  it("switches the read-only farmer to the chosen farm's farmer, and back", () => {
+    render(<Harness user={admin} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit harvest lot HL-2026-1' }))
+    const dialog = editDialog()
+    const farmerField = () => within(dialog).getByLabelText('Farmer Name')
+    expect(farmerField()).toHaveValue('Somchai')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Doi Farm • Chiang Rai' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Mae Farm • Nan' }))
+    expect(farmerField()).toHaveValue('Malee')
+    expect(farmerField()).toHaveAttribute('readonly')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Mae Farm • Nan' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Doi Farm • Chiang Rai' }))
+    expect(farmerField()).toHaveValue('Somchai')
   })
 
   it('offers a farmer only their own farms', () => {
@@ -247,15 +277,96 @@ describe('FarmerDataHub edit', { timeout: 20000 }, () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit harvest lot HL-2026-1' }))
     const form = within(editDialog()).getByRole('button', { name: 'Save Changes' }).closest('form') as HTMLFormElement
 
-    fireEvent.change(within(editDialog()).getByLabelText('Farmer Name'), { target: { value: '   ' } })
+    fireEvent.change(within(editDialog()).getByLabelText('Farm Plot Location'), { target: { value: '   ' } })
     fireEvent.submit(form)
-    expect(within(editDialog()).getByRole('alert')).toHaveTextContent('Farmer name cannot be blank.')
+    expect(within(editDialog()).getByRole('alert')).toHaveTextContent('Farm plot location cannot be blank.')
 
-    fireEvent.change(within(editDialog()).getByLabelText('Farmer Name'), { target: { value: 'Somchai' } })
+    fireEvent.change(within(editDialog()).getByLabelText('Farm Plot Location'), { target: { value: 'Plot A' } })
     fireEvent.change(within(editDialog()).getByLabelText('Weight (kg)'), { target: { value: '0' } })
     fireEvent.submit(form)
     expect(within(editDialog()).getByRole('alert')).toHaveTextContent('Weight must be a number greater than 0.')
     expect(api.put).not.toHaveBeenCalled()
+  })
+
+  it('shows the farmer read-only: it follows the farm, so it never goes out', async () => {
+    vi.mocked(api.put).mockResolvedValue({ harvestLot: backendLot({ weightKg: 410 }) })
+    render(<Harness user={admin} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit harvest lot HL-2026-1' }))
+
+    const farmer = within(editDialog()).getByLabelText('Farmer Name')
+    expect(farmer).toHaveValue('Somchai')
+    expect(farmer).toHaveAttribute('readonly')
+    fireEvent.change(within(editDialog()).getByLabelText('Weight (kg)'), { target: { value: '410' } })
+    fireEvent.click(within(editDialog()).getByRole('button', { name: 'Save Changes' }))
+
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(api.put).mock.calls[0]).toStrictEqual(['/harvest-lots/hl-1', { weightKg: 410 }])
+  })
+
+  it('offers the farm\'s varieties, as the Register popup does, and keeps a variety the farm no longer lists', async () => {
+    const oldVariety = lot({ cherryVariety: 'Bourbon' })
+    vi.mocked(api.put).mockResolvedValue({ harvestLot: backendLot({ weightKg: 390, cherryVariety: 'Bourbon' }) })
+    render(<Harness user={farmer} lots={[oldVariety]} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit harvest lot HL-2026-1' }))
+
+    const field = varietyField(editDialog())
+    // Not a free-text box any more.
+    expect(within(editDialog()).queryByRole('textbox', { name: 'Cherry Variety' })).not.toBeInTheDocument()
+    fireEvent.click(within(field).getByRole('button', { name: 'Bourbon' }))
+    const options = within(field).getAllByRole('button').slice(1).map(b => b.textContent)
+    expect(options).toEqual(['Bourbon', 'Catimor', 'Typica'])
+    fireEvent.click(within(field).getAllByRole('button', { name: 'Bourbon' })[1])
+
+    // Saving something else leaves the variety alone.
+    fireEvent.change(within(editDialog()).getByLabelText('Weight (kg)'), { target: { value: '390' } })
+    fireEvent.click(within(editDialog()).getByRole('button', { name: 'Save Changes' }))
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(api.put).mock.calls[0]).toStrictEqual(['/harvest-lots/hl-1', { weightKg: 390 }])
+  })
+})
+
+describe('FarmerDataHub list', { timeout: 20000 }, () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const lotIdsInOrder = () =>
+    screen.getAllByRole('row').slice(1).map(row => within(row).getAllByRole('cell')[0].textContent)
+
+  it('puts the higher lot number first on the same harvest date', () => {
+    const sameDay = [
+      lot({ id: 'a', displayId: 'HL-2026-9', harvestDate: '2026-09-15' }),
+      lot({ id: 'b', displayId: 'HL-2026-10', harvestDate: '2026-09-15' }),
+      lot({ id: 'c', displayId: 'HL-2026-11', harvestDate: '2026-09-14' }),
+      lot({ id: 'd', displayId: 'HL-2026-8', harvestDate: '2026-09-16' }),
+    ]
+    render(<Harness user={admin} lots={sameDay} />)
+    expect(lotIdsInOrder()).toEqual(['HL-2026-8', 'HL-2026-10', 'HL-2026-9', 'HL-2026-11'])
+  })
+
+  it('labels its filters, and says when they match nothing instead of that there is no data', () => {
+    const lots = [lot({}), lot({ id: 'hl-2', displayId: 'HL-2025-1', harvestDate: '2025-09-15', farmPlotLocation: 'Plot B' })]
+    render(<Harness user={admin} lots={lots} />)
+
+    const year = screen.getByText('Year').parentElement as HTMLElement
+    const location = screen.getByText('Location').parentElement as HTMLElement
+    expect(within(year).getByRole('button', { name: 'All years' })).toBeInTheDocument()
+    expect(within(location).getByRole('button', { name: 'All locations' })).toBeInTheDocument()
+
+    // 2025 at Plot A: nothing.
+    fireEvent.click(within(year).getByRole('button', { name: 'All years' }))
+    fireEvent.click(within(year).getByRole('button', { name: '2025' }))
+    fireEvent.click(within(location).getByRole('button', { name: 'All locations' }))
+    fireEvent.click(within(location).getByRole('button', { name: 'Plot A' }))
+
+    expect(screen.getByText('No harvest lots match these filters')).toBeInTheDocument()
+    expect(screen.queryByText('No harvest lots yet')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(lotIdsInOrder()).toEqual(['HL-2026-1', 'HL-2025-1'])
+  })
+
+  it('keeps the first-use message when there are no lots at all', () => {
+    render(<Harness user={farmer} lots={[]} />)
+    expect(screen.getByText('No harvest lots yet')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument()
   })
 })
 
@@ -393,13 +504,17 @@ describe('FarmerDataHub delete', { timeout: 20000 }, () => {
     ])
   })
 
-  it('shows which green bean lots to settle first when the cascade is refused over them', async () => {
+  it('shows which green bean lots stay, why and what to do when the cascade is refused over them', async () => {
+    // As the backend words it: each lot with why it stays, then what to do.
     const inUse =
-      'Green bean lots made from this lot are still in use, so nothing was deleted: GBL-2026-404 (AA) has 1 withdrawal. ' +
-      'Void their withdrawals, or settle their stock, roasts, sales and cupping first, then delete again.'
+      'Nothing was deleted, because green bean lots made from this lot cannot go with it. ' +
+      'GBL-2026-6: has QC scores; GBL-2026-7: has a public trace QR. ' +
+      'GBL-2026-6 and GBL-2026-7 must stay to keep their printed trace QR and QC scores valid ' +
+      '(a trace QR, QC score or cupping result is not cleared here). ' +
+      'Keep this harvest lot and its chain, and correct it with Edit instead of deleting it.'
     vi.mocked(api.delete)
       .mockRejectedValueOnce(new ApiError(processedBody.error, 409, processedBody))
-      .mockRejectedValueOnce(new ApiError(inUse, 409, { error: inUse, greenBeanLotsInUse: [{ id: 'gbl-1', displayId: 'GBL-2026-404', grade: 'AA' }] }))
+      .mockRejectedValueOnce(new ApiError(inUse, 409, { error: inUse, greenBeanLotsInUse: [{ id: 'gbl-6', displayId: 'GBL-2026-6', grade: 'AA' }, { id: 'gbl-7', displayId: 'GBL-2026-7', grade: 'A' }] }))
     const refreshData = vi.fn(async () => {})
     render(<Harness user={admin} refreshData={refreshData} />)
 

@@ -5,11 +5,14 @@ import {
   EMPTY_WITHDRAW_DETAILS,
   ROASTER_REQUIRED_MESSAGE,
   buildWithdrawDetailsPayload,
+  formatMoney,
   formatWithdrawTotal,
   pickWithdrawCustomer,
   upsertCustomer,
   withdrawCustomerOptions,
   withdrawDetailsError,
+  withdrawDetailsForLot,
+  withdrawDetailsForLots,
   withdrawRoasterOptions,
   withdrawSaleTotal,
 } from './withdrawDetails'
@@ -141,5 +144,44 @@ describe('withdrawRoasterOptions', () => {
     expect(withdrawRoasterOptions(users)).toEqual([{ value: 'r-1', label: 'Hill Roastery' }])
     // The input list is left in its own order.
     expect(users.map((u) => u.id)).toEqual(['r-2', 'r-1'])
+  })
+})
+
+describe('money and the Sale price a lot starts with', () => {
+  it('writes money with thousands separators and 2 decimals', () => {
+    expect(formatMoney(1000)).toBe('1,000.00')
+    expect(formatMoney(1234.5)).toBe('1,234.50')
+    expect(formatMoney(0)).toBe('0.00')
+  })
+
+  it("starts from the lot's set price and currency", () => {
+    expect(withdrawDetailsForLot({ pricePerKg: 250, currency: 'THB' })).toEqual({
+      ...EMPTY_WITHDRAW_DETAILS, salePrice: '250', currency: 'THB',
+    })
+    expect(withdrawDetailsForLot({ pricePerKg: 12.5, currency: 'USD' })).toMatchObject({ salePrice: '12.5', currency: 'USD' })
+    expect(withdrawDetailsForLot({ pricePerKg: 250 })).toMatchObject({ salePrice: '250', currency: 'THB' })
+  })
+
+  it('starts empty without a price, or in a currency the picker does not offer', () => {
+    expect(withdrawDetailsForLot({})).toEqual(EMPTY_WITHDRAW_DETAILS)
+    expect(withdrawDetailsForLot(null)).toEqual(EMPTY_WITHDRAW_DETAILS)
+    expect(withdrawDetailsForLot({ pricePerKg: 0, currency: 'THB' })).toEqual(EMPTY_WITHDRAW_DETAILS)
+    expect(withdrawDetailsForLot({ pricePerKg: 90, currency: 'JPY' })).toEqual(EMPTY_WITHDRAW_DETAILS)
+  })
+
+  it('starts a several-lot withdrawal from their price only when every lot has the same', () => {
+    expect(withdrawDetailsForLots([
+      { pricePerKg: 250, currency: 'THB' },
+      { pricePerKg: 250 }, // no currency is THB
+    ])).toEqual({ ...EMPTY_WITHDRAW_DETAILS, salePrice: '250', currency: 'THB' })
+    expect(withdrawDetailsForLots([{ pricePerKg: 12.5, currency: 'USD' }])).toMatchObject({ salePrice: '12.5', currency: 'USD' })
+
+    // Mixed prices, mixed currencies, or a lot without a price: empty.
+    expect(withdrawDetailsForLots([{ pricePerKg: 250, currency: 'THB' }, { pricePerKg: 240, currency: 'THB' }]))
+      .toEqual(EMPTY_WITHDRAW_DETAILS)
+    expect(withdrawDetailsForLots([{ pricePerKg: 250, currency: 'THB' }, { pricePerKg: 250, currency: 'USD' }]))
+      .toEqual(EMPTY_WITHDRAW_DETAILS)
+    expect(withdrawDetailsForLots([{ pricePerKg: 250, currency: 'THB' }, {}])).toEqual(EMPTY_WITHDRAW_DETAILS)
+    expect(withdrawDetailsForLots([])).toEqual(EMPTY_WITHDRAW_DETAILS)
   })
 })

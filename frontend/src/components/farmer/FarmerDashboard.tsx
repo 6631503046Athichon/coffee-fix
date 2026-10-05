@@ -14,7 +14,7 @@ import { PageHeader } from '../common/PageHeader';
 import { Alert } from '../common/Alert';
 import { StatCard } from '../common/StatCard';
 import { generateHarvestLotId } from '../../utils/idGenerator';
-import { toFixed2 } from '../../utils/formatters';
+import { formatDateDisplay, toFixed2 } from '../../utils/formatters';
 
 
 
@@ -212,7 +212,7 @@ const FarmerDashboard: React.FC = () => {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatCard icon={BarChart} title="Total Harvest Lots" value={stats.totalLots} borderColor="border-l-blue-500" iconBg="bg-blue-100" iconColor="text-blue-600"/>
-            <StatCard icon={Weight} title="Total Weight (kg)" value={stats.totalWeight.toLocaleString()} borderColor="border-l-green-500" iconBg="bg-green-100" iconColor="text-green-600"/>
+            <StatCard icon={Weight} title="Total Weight (kg)" value={stats.totalWeight.toLocaleString('en-US')} borderColor="border-l-green-500" iconBg="bg-green-100" iconColor="text-green-600"/>
             <StatCard
               icon={Award}
               title={`Best Avg Feedback ${feedbackYearExtremes.max ? `(${feedbackYearExtremes.max.year})` : ''}`}
@@ -314,7 +314,7 @@ const FarmerDashboard: React.FC = () => {
                         <span>•</span>
                         <span>{lot.weightKg} kg</span>
                         <span>•</span>
-                        <span>{lot.harvestDate}</span>
+                        <span>{formatDateDisplay(lot.harvestDate)}</span>
                       </div>
                     </div>
                     <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />

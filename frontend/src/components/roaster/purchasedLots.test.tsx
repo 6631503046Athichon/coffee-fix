@@ -4,16 +4,18 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { GreenBeanSourceType, UserRole } from '../../types'
 import type { AppData, GreenBeanLot, RoasterInventoryItem, User } from '../../types'
-import { deleteGreenBeanLot } from '../../services/lots/greenBeanLotService'
+import { createGreenBeanLot, deleteGreenBeanLot } from '../../services/lots/greenBeanLotService'
 import { TestDataProvider, adminUser, appData, roasterUser } from '../../test/salesFixtures'
 import type { TestDataHandle } from '../../test/salesFixtures'
 import { toRoaId } from '../../utils/formatters'
 import RoasterWorkbench from './RoasterWorkbench'
 import {
+  newestPurchasedLotFirst,
   purchasedLotForm,
   purchasedLotUpdate,
   stockSourceLabel,
   updatePurchasedLot,
+  usedUpLotDeletable,
 } from './purchasedLots'
 
 const { auth, addToast } = vi.hoisted(() => ({
@@ -23,13 +25,9 @@ const { auth, addToast } = vi.hoisted(() => ({
 
 vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => auth }))
 vi.mock('../../contexts/ToastContext', () => ({ useToast: () => ({ addToast }) }))
-vi.mock('../common/DatePicker', () => ({
-  default: ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
-    <input aria-label="Purchase Date" value={value} onChange={(e) => onChange(e.target.value)} />
-  ),
-}))
 vi.mock('../../services/lots/greenBeanLotService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../services/lots/greenBeanLotService')>()),
+  createGreenBeanLot: vi.fn(),
   deleteGreenBeanLot: vi.fn(),
 }))
 vi.mock('./purchasedLots', async (importOriginal) => ({
@@ -156,6 +154,38 @@ describe('purchased lot helpers', () => {
     ).toBe(true)
   })
 
+  it('lets a used-up lot be deleted only while nothing was taken from it', () => {
+    expect(usedUpLotDeletable(purchasedLot({ currentWeightKg: 0 }))).toBe(false)
+    expect(usedUpLotDeletable(purchasedLot({ currentWeightKg: 25 }))).toBe(true)
+    expect(
+      usedUpLotDeletable(
+        purchasedLot({
+          currentWeightKg: 25,
+          withdrawalHistory: [{ id: 'w-1', voidedAt: null } as never],
+        }),
+      ),
+    ).toBe(false)
+    expect(
+      usedUpLotDeletable(
+        purchasedLot({
+          currentWeightKg: 25,
+          withdrawalHistory: [{ id: 'w-1', voidedAt: '2026-09-02T00:00:00Z' } as never],
+        }),
+      ),
+    ).toBe(true)
+  })
+
+  it('puts the newest purchased lot first by date added, then by lot number, never by id', () => {
+    const lot = (id: string, displayId: string, createdAt?: string) => ({ id, displayId, createdAt })
+    const sorted = [
+      lot('ffff', 'GBL-2026-9', '2026-09-01T00:00:00.000Z'),
+      lot('0000', 'GBL-2026-30', '2026-09-20T00:00:00.000Z'),
+      lot('aaaa', 'GBL-2026-12', '2026-09-01T00:00:00.000Z'),
+      lot('bbbb', 'GBL-2025-99'),
+    ].sort(newestPurchasedLotFirst)
+    expect(sorted.map((l) => l.displayId)).toEqual(['GBL-2026-30', 'GBL-2026-12', 'GBL-2026-9', 'GBL-2025-99'])
+  })
+
   it('names how a stock row came in words, never the enum', () => {
     expect(stockSourceLabel('RoastingStock')).toBe('Sent for roasting')
     expect(stockSourceLabel('Roasting Stock')).toBe('Sent for roasting')
@@ -222,7 +252,7 @@ describe('Roaster Workbench purchased lots', { timeout: 20000 }, () => {
     fireEvent.change(within(form).getByDisplayValue('Doi Chang'), {
       target: { value: 'Doi Chang Co-op' },
     })
-    fireEvent.change(screen.getByLabelText('Lot Weight (kg)'), { target: { value: '30' } })
+    fireEvent.change(screen.getByLabelText(/Lot Weight \(kg\)/), { target: { value: '30' } })
     fireEvent.click(within(form).getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => expect(updatePurchasedLot).toHaveBeenCalledTimes(1))
@@ -243,7 +273,7 @@ describe('Roaster Workbench purchased lots', { timeout: 20000 }, () => {
     renderWorkbench(appData({ greenBeanLots: [purchasedLot()] }))
     openPurchasedTab()
     fireEvent.click(screen.getByRole('button', { name: `Edit ${toRoaId(LOT_X)}` }))
-    fireEvent.change(screen.getByLabelText('Lot Weight (kg)'), { target: { value: '4' } })
+    fireEvent.change(screen.getByLabelText(/Lot Weight \(kg\)/), { target: { value: '4' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(updatePurchasedLot).not.toHaveBeenCalled()
@@ -287,6 +317,234 @@ describe('Roaster Workbench purchased lots', { timeout: 20000 }, () => {
     expect(screen.getByText('Bean Roasters')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: `Edit ${toRoaId(LOT_X)}` })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: `Delete ${toRoaId(LOT_X)}` })).toBeInTheDocument()
+  })
+})
+
+describe('Roaster Workbench used-up purchased lots', { timeout: 20000 }, () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const usedUp = (over: Partial<GreenBeanLot> = {}) =>
+    purchasedLot({ currentWeightKg: 0, availabilityStatus: 'Withdrawn', ...over })
+
+  it('keeps a used-up lot under a collapsed Used up list, with View details and Edit', () => {
+    renderWorkbench(appData({ greenBeanLots: [usedUp()] }))
+    openPurchasedTab()
+
+    // Off the shelf: no card and no Start roast.
+    expect(screen.getByText('No purchased lots on the shelf')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Start roast/ })).toBeNull()
+    const toggle = screen.getByRole('button', { name: /Used up/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('button', { name: `Edit ${toRoaId(LOT_X)}` })).toBeNull()
+
+    expect(toggle).toHaveTextContent('Out of kg or withdrawn')
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText(/Bourbon · Natural · 25 kg bought/)).toBeInTheDocument()
+    expect(screen.queryByText(/kg left/)).toBeNull()
+    // Drawn from, so the server would refuse a delete: none is offered.
+    expect(screen.queryByRole('button', { name: `Delete ${toRoaId(LOT_X)}` })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: `View details of ${toRoaId(LOT_X)}` }))
+    const details = screen.getByRole('dialog', { name: 'Lot details' })
+    expect(within(details).getByText('0 of 25 kg')).toBeInTheDocument()
+    expect(within(details).queryByRole('button', { name: 'Delete' })).toBeNull()
+    fireEvent.click(within(details).getByRole('button', { name: 'Edit lot' }))
+
+    const form = screen.getByRole('dialog')
+    expect(within(form).getByText('Edit Purchased Lot')).toBeInTheDocument()
+    expect(within(form).getByDisplayValue('Doi Chang')).toBeInTheDocument()
+  })
+
+  it('offers Delete on a lot set Withdrawn that nothing was taken from', () => {
+    renderWorkbench(appData({ greenBeanLots: [usedUp({ currentWeightKg: 25 })] }))
+    openPurchasedTab()
+    fireEvent.click(screen.getByRole('button', { name: /Used up/ }))
+    // Still holds coffee, and the row says so.
+    expect(screen.getByText(/25 kg bought · Withdrawn, 25 kg left/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: `Delete ${toRoaId(LOT_X)}` }))
+    expect(
+      screen.getByRole('dialog', { name: `Delete purchased lot ${toRoaId(LOT_X)}?` }),
+    ).toBeInTheDocument()
+  })
+
+  it('lists the newest used-up lots first, 20 of them until Show all', () => {
+    // 23 lots added a day apart; their UUIDs sort the other way round.
+    const lots = Array.from({ length: 23 }, (_, i) =>
+      usedUp({
+        id: `${String(90 - i).padStart(8, '0')}-0000-4000-8000-000000000000`,
+        displayId: `GBL-2026-${i + 1}`,
+        createdAt: `2026-08-${String(i + 1).padStart(2, '0')}T03:00:00.000Z`,
+      }),
+    )
+    renderWorkbench(appData({ greenBeanLots: lots }))
+    openPurchasedTab()
+    fireEvent.click(screen.getByRole('button', { name: /Used up/ }))
+
+    const rows = () => within(document.getElementById('used-up-purchased-lots')!).getAllByRole('listitem')
+    expect(rows()).toHaveLength(20)
+    expect(rows()[0]).toHaveTextContent(toRoaId(lots[22].id))
+    expect(rows()[19]).toHaveTextContent(toRoaId(lots[3].id))
+    expect(screen.getByText('Newest 20 of 23')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 23' }))
+    expect(rows()).toHaveLength(23)
+    expect(rows()[22]).toHaveTextContent(toRoaId(lots[0].id))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show fewer' }))
+    expect(rows()).toHaveLength(20)
+  })
+
+  it('has no Show all while every used-up lot fits', () => {
+    renderWorkbench(appData({ greenBeanLots: [usedUp()] }))
+    openPurchasedTab()
+    fireEvent.click(screen.getByRole('button', { name: /Used up/ }))
+    expect(screen.queryByRole('button', { name: /Show all/ })).toBeNull()
+  })
+
+  it("lists only the viewer's own used-up lots", () => {
+    const theirs = usedUp({ id: LOT_A, createdById: otherRoaster.id })
+    renderWorkbench(appData({ greenBeanLots: [usedUp(), theirs] }))
+    openPurchasedTab()
+    fireEvent.click(screen.getByRole('button', { name: /Used up/ }))
+    expect(screen.getByRole('button', { name: `Edit ${toRoaId(LOT_X)}` })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: `Edit ${toRoaId(LOT_A)}` })).toBeNull()
+  })
+
+  it('shows the Admin every used-up lot with its buyer', () => {
+    const theirs = usedUp({ id: LOT_A, createdById: otherRoaster.id })
+    renderWorkbench(
+      appData({ users: [roasterUser, otherRoaster], greenBeanLots: [usedUp(), theirs] }),
+      adminUser,
+    )
+    openPurchasedTab()
+    fireEvent.click(screen.getByRole('button', { name: /Used up/ }))
+    expect(screen.getByRole('button', { name: `Edit ${toRoaId(LOT_A)}` })).toBeInTheDocument()
+    expect(screen.getByText(/by Hill Roasters/)).toBeInTheDocument()
+  })
+})
+
+describe('Roaster Workbench Add External Lot', { timeout: 20000 }, () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(createGreenBeanLot).mockImplementation(async (input) =>
+      purchasedLot({
+        id: LOT_A,
+        displayId: 'GBL-2026-30',
+        initialWeightKg: input.initialWeightKg,
+        currentWeightKg: input.initialWeightKg,
+        createdById: (input as { ownerId?: string }).ownerId ?? auth.currentUser?.id,
+      }),
+    )
+  })
+
+  const pick = (placeholder: string, option: string) => {
+    fireEvent.click(screen.getByRole('button', { name: placeholder }))
+    fireEvent.click(screen.getByRole('button', { name: option }))
+  }
+
+  const fillLot = () => {
+    fireEvent.change(screen.getByLabelText(/Origin \/ Supplier/), { target: { value: 'Doi Chang' } })
+    pick('Select variety...', 'Bourbon')
+    pick('Select process type...', 'Natural')
+    fireEvent.change(screen.getByLabelText(/Initial Weight \(kg\)/), { target: { value: '12' } })
+  }
+
+  it('labels every field and marks the required ones', () => {
+    renderWorkbench(appData())
+    openPurchasedTab()
+    fireEvent.click(screen.getByRole('button', { name: 'Add lot' }))
+
+    for (const label of [
+      /Origin \/ Supplier/,
+      'Producer',
+      /Initial Weight \(kg\)/,
+      'Price/kg (THB)',
+      'Total Price (THB)',
+      'Taste Note (optional)',
+      'Supplier Notes',
+    ]) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument()
+    }
+    for (const group of ['Variety *', 'Process Type *', 'Grade']) {
+      expect(screen.getByRole('group', { name: group })).toBeInTheDocument()
+    }
+    // The date field is read out as "Purchase Date" with the date it shows.
+    const purchaseDate = screen.getByRole('button', { name: /^Purchase Date \d{1,2} [A-Z][a-z]+ \d{4}$/ })
+    expect(purchaseDate).toHaveAttribute('id', 'external-lot-purchase-date')
+    expect(screen.getByText('Purchase Date').closest('label')).toHaveAttribute('for', 'external-lot-purchase-date')
+    expect(screen.getByLabelText(/Origin \/ Supplier/)).toBeRequired()
+    // A roaster buys for themselves: no picker.
+    expect(screen.queryByRole('group', { name: 'Buying for' })).toBeNull()
+  })
+
+  it("adds a roaster's lot as theirs, with an English toast", async () => {
+    const { handle } = renderWorkbench(appData())
+    openPurchasedTab()
+    fireEvent.click(screen.getByRole('button', { name: 'Add lot' }))
+    fillLot()
+    fireEvent.click(screen.getByRole('button', { name: 'Add Lot' }))
+
+    await waitFor(() => expect(createGreenBeanLot).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(createGreenBeanLot).mock.calls[0][0]).not.toHaveProperty('ownerId')
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith({
+        type: 'success',
+        message: 'Purchased lot GBL-2026-30 added',
+      }),
+    )
+    expect(handle.current.greenBeanLots.map((lot) => lot.id)).toEqual([LOT_A])
+  })
+
+  it('lets an Admin buy the lot for a roaster, who then owns it', async () => {
+    const inactive: User = {
+      ...otherRoaster,
+      id: 'user-roaster-3',
+      name: 'Gone Roasters',
+      isActive: false,
+    }
+    renderWorkbench(
+      appData({ users: [adminUser, roasterUser, otherRoaster, inactive] }),
+      adminUser,
+    )
+    openPurchasedTab()
+    fireEvent.click(screen.getByRole('button', { name: 'Add lot' }))
+
+    const buyer = screen.getByRole('group', { name: 'Buying for' })
+    // Admin's own stock by default; the active roasters to choose from.
+    fireEvent.click(within(buyer).getByRole('button', { name: 'Me (Admin)' }))
+    expect(within(buyer).getByRole('button', { name: 'Bean Roasters' })).toBeInTheDocument()
+    expect(within(buyer).queryByRole('button', { name: 'Gone Roasters' })).toBeNull()
+    fireEvent.click(within(buyer).getByRole('button', { name: 'Hill Roasters' }))
+    fillLot()
+    fireEvent.click(screen.getByRole('button', { name: 'Add Lot' }))
+
+    await waitFor(() => expect(createGreenBeanLot).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(createGreenBeanLot).mock.calls[0][0]).toMatchObject({
+      ownerId: otherRoaster.id,
+      sourceType: 'External',
+      initialWeightKg: 12,
+      externalSource: { originName: 'Doi Chang', variety: 'Bourbon', processType: 'Natural' },
+    })
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith({
+        type: 'success',
+        message: 'Purchased lot GBL-2026-30 added for Hill Roasters',
+      }),
+    )
+  })
+
+  it('sends no ownerId when an Admin buys for themselves', async () => {
+    renderWorkbench(appData({ users: [adminUser, roasterUser] }), adminUser)
+    openPurchasedTab()
+    fireEvent.click(screen.getByRole('button', { name: 'Add lot' }))
+    fillLot()
+    fireEvent.click(screen.getByRole('button', { name: 'Add Lot' }))
+
+    await waitFor(() => expect(createGreenBeanLot).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(createGreenBeanLot).mock.calls[0][0]).not.toHaveProperty('ownerId')
   })
 })
 

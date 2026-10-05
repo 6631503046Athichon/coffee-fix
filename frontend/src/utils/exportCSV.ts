@@ -2,7 +2,13 @@
 //
 // Callers pass the rows the page is showing after its filters and search are
 // applied (every page of them, not only the visible one); these helpers only
-// turn those rows into a file Excel and Google Sheets open correctly.
+// turn those rows into a file Excel and Google Sheets open correctly. With no
+// rows, downloadCsv says so instead of downloading a file with only headers.
+
+import { showAppToast } from './appToast';
+
+/** What an export says when the filters leave no rows. */
+export const NOTHING_TO_EXPORT_MESSAGE = 'Nothing to export - no rows match the current filters';
 
 export type CsvCell = string | number | null | undefined;
 
@@ -39,8 +45,16 @@ export function toCsv(headers: string[], rows: CsvCell[][]): string {
 /**
  * Downloads the rows as a CSV file. The UTF-8 byte order mark makes Excel
  * read Thai (and any other non-ASCII) text correctly.
+ *
+ * With no rows nothing is downloaded: the app shows NOTHING_TO_EXPORT_MESSAGE
+ * as a toast instead of the button silently doing nothing, and this returns
+ * false (true when the file was handed to the browser).
  */
-export function downloadCsv(filename: string, headers: string[], rows: CsvCell[][]): void {
+export function downloadCsv(filename: string, headers: string[], rows: CsvCell[][]): boolean {
+  if (rows.length === 0) {
+    showAppToast({ type: 'info', message: NOTHING_TO_EXPORT_MESSAGE });
+    return false;
+  }
   const blob = new Blob([`\uFEFF${toCsv(headers, rows)}`], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -56,6 +70,7 @@ export function downloadCsv(filename: string, headers: string[], rows: CsvCell[]
     // after the click handler returns.
     setTimeout(() => URL.revokeObjectURL(url), 0);
   }
+  return true;
 }
 
 /** Today's (or the given) date as YYYY-MM-DD in the viewer's own time zone. */

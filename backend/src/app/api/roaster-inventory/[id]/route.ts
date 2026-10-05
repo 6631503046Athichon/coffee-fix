@@ -5,6 +5,7 @@ import { requireAuth, requireRole, requireOwnership, handleApiError } from '@/li
 import { safeParseFloat } from '@/lib/utils'
 import { SALE_TX_OPTIONS, WEIGHT_EPSILON, formatKgText, round3 } from '@/lib/saleOrders'
 import { batchLabel, canClaimGreenBeanLot, chainScope } from '@/lib/farmAccess'
+import { stockRowWithoutImporterFor } from '@/lib/importerPrivacy'
 
 const round6 = (value: number) => Math.round(value * 1e6) / 1e6
 
@@ -172,25 +173,26 @@ export async function GET(
 
     // The lot's processing batch comes as a label (process, variety, farm),
     // not the processor's record, unless the reader may read the batch
-    // (lib/farmAccess chainScope).
+    // (lib/farmAccess chainScope). The parchment's importer only for Admin
+    // and the importer (lib/importerPrivacy).
     const parchmentLot = inventoryItem.greenBeanLot?.parchmentLot
     const batch = parchmentLot?.processingBatch
     if (parchmentLot && batch) {
       const scope = await chainScope(user)
       if (scope && !scope.canReadBatch(batch)) {
         return NextResponse.json({
-          inventoryItem: {
+          inventoryItem: stockRowWithoutImporterFor(user, {
             ...inventoryItem,
             greenBeanLot: {
               ...inventoryItem.greenBeanLot,
               parchmentLot: { ...parchmentLot, processingBatch: batchLabel(batch) },
             },
-          },
+          }),
         })
       }
     }
 
-    return NextResponse.json({ inventoryItem })
+    return NextResponse.json({ inventoryItem: stockRowWithoutImporterFor(user, inventoryItem) })
   } catch (error) {
     return handleApiError(error)
   }
@@ -420,7 +422,7 @@ export async function PUT(
     }
 
     return NextResponse.json({
-      inventoryItem: result.inventoryItem,
+      inventoryItem: stockRowWithoutImporterFor(user, result.inventoryItem),
       ...(result.updatedSourceLot && { updatedSourceLot: result.updatedSourceLot }),
     })
   } catch (error) {

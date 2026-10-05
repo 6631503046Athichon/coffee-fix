@@ -64,6 +64,8 @@ interface HarvestLotModalProps {
   isOpen: boolean;
   onClose: () => void;
   farm?: Farm; // Optional - can be selected in modal
+  /** The farm the page is filtered to, picked when the popup opens. */
+  defaultFarmId?: string;
   onSuccess?: (message: string) => void; // Callback to notify parent component of success
 }
 
@@ -71,6 +73,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
   isOpen,
   onClose,
   farm: initialFarm,
+  defaultFarmId,
   onSuccess,
 }) => {
   const { data, setData } = useDataContext();
@@ -101,6 +104,15 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
     .map(f => f.farmName || f.name || f.location)
     .filter(Boolean)
     .join(', ');
+
+  // The farm picked for the user when the popup opens: the one the page is
+  // filtered to, or their only farm. With several farms and no page filter
+  // ("All Farms") nothing is picked, so the lot never lands on whichever farm
+  // happens to be listed first.
+  const preselectFarmId = React.useMemo(() => {
+    if (defaultFarmId && farmsWithVarieties.some(f => f.id === defaultFarmId)) return defaultFarmId;
+    return farmsWithVarieties.length === 1 ? farmsWithVarieties[0].id : '';
+  }, [defaultFarmId, farmsWithVarieties]);
 
   // Farm selection state
   const [selectedFarmId, setSelectedFarmId] = useState<string>(initialFarm?.id || '');
@@ -153,7 +165,12 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
   const [wasOpen, setWasOpen] = useState(isOpen);
   if (wasOpen !== isOpen) {
     setWasOpen(isOpen);
-    if (isOpen) setFarmerPick(null);
+    if (isOpen) {
+      setFarmerPick(null);
+      // Each opening starts from the page's farm (or none), not the farm
+      // picked the last time, which the page filter may no longer show.
+      if (!initialFarm) setSelectedFarmId(preselectFarmId);
+    }
   }
   const selectedFarmerName = farmerPick && farmerPick.farmId === (selectedFarm?.id ?? '')
     ? farmerPick.name
@@ -191,8 +208,9 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
     if (isOpen) {
       if (initialFarm) {
         setSelectedFarmId(initialFarm.id);
-      } else if (farmsWithVarieties.length > 0 && !selectedFarmId) {
-        setSelectedFarmId(farmsWithVarieties[0].id);
+      } else if (preselectFarmId && !selectedFarmId) {
+        // The farms may load after the popup opened.
+        setSelectedFarmId(preselectFarmId);
       }
       // Clear errors and success message when modal opens
       setFormErrors({});
@@ -209,7 +227,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         }
       }
     }
-  }, [isOpen, initialFarm, farmsWithVarieties, selectedFarmId, data.cropYears]);
+  }, [isOpen, initialFarm, preselectFarmId, selectedFarmId, data.cropYears]);
 
   // Update form when selected farm changes (but keep restored data)
   const prevFarmIdRef = useRef<string | null>(null);
@@ -227,8 +245,9 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
           harvestDate: todayDateOnly(),
           cropYearId: '',
         });
-      } else if (!cherryVariety && selectedFarm.varieties?.[0]) {
-        // Set default variety if not set
+      } else if (selectedFarm.varieties?.[0] && !selectedFarm.varieties.includes(cherryVariety)) {
+        // Set the default variety when none is set, or when the one kept
+        // (a restored draft) is not planted on the farm picked
         setDefaults({ cherryVariety: selectedFarm.varieties[0] });
       }
       prevFarmIdRef.current = selectedFarm.id;
@@ -427,7 +446,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
         <RestoredDataBanner
           show={wasRestored && !successMessage}
           onClear={resetForm}
-          message="ข้อมูลที่กรอกก่อนหน้านี้ถูกกู้คืนแล้ว"
+          message="Your earlier entries were restored"
         />
 
         {/* Success Message */}
@@ -589,7 +608,7 @@ export const HarvestLotModal: React.FC<HarvestLotModalProps> = ({
                 setHarvestDate(date);
                 setFormErrors(prev => ({ ...prev, harvestDate: undefined }));
               }}
-              label="Harvest Date *"
+              label="Harvest Date"
               required
             />
             {formErrors.harvestDate && (

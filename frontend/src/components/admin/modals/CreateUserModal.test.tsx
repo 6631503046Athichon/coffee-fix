@@ -43,12 +43,15 @@ afterEach(() => {
 
 describe('Create User popup refreshes the list after a create', () => {
   it('when closed with the X (after confirming)', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     const { onClose, onUserCreated } = setup()
     await createFarmer()
     expect(screen.getByText('User Created Successfully')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    // The site's confirm popup asks, not the browser's confirm box.
+    expect(screen.getByRole('dialog', { name: 'Close without saving the credentials?' })).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Close anyway' }))
 
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(onUserCreated).toHaveBeenCalledTimes(1)
@@ -65,12 +68,13 @@ describe('Create User popup refreshes the list after a create', () => {
   })
 
   it('stays open, without refreshing, when the X is not confirmed', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
     const { onClose, onUserCreated } = setup()
     await createFarmer()
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Go back' }))
 
+    expect(screen.queryByRole('dialog', { name: 'Close without saving the credentials?' })).not.toBeInTheDocument()
     expect(onClose).not.toHaveBeenCalled()
     expect(onUserCreated).not.toHaveBeenCalled()
     expect(screen.getByText('User Created Successfully')).toBeInTheDocument()

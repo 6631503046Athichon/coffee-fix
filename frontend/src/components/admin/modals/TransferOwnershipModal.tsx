@@ -3,6 +3,7 @@ import { User, UserRole } from '../../../types'
 import { getAllUsers, transferOwnership } from '../../../services/auth/userService'
 import { X, AlertCircle, Shield, ArrowRight } from 'lucide-react'
 import { ModalPortal } from '../../common/ModalPortal'
+import { roleLabel } from '../roleLabels'
 
 interface TransferOwnershipModalProps {
   isOpen: boolean
@@ -213,7 +214,7 @@ const TransferOwnershipModal: React.FC<TransferOwnershipModalProps> = ({
                                 key={role}
                                 className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700 border border-purple-200"
                               >
-                                {role}
+                                {roleLabel(role)}
                               </span>
                             ))}
                           </div>

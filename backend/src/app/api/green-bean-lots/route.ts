@@ -5,7 +5,9 @@ import { validateBody, createGreenBeanLotSchema } from '@/lib/validations'
 import { nextDisplayId, withDisplayIdRetry } from '@/lib/utils'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { greenBeanLotForViewer } from '@/lib/withdrawalPrivacy'
+import { withParchmentImporterFor } from '@/lib/importerPrivacy'
 import { chainScope } from '@/lib/farmAccess'
+import { isAdminUser } from '@/lib/saleOrders'
 
 // GET /api/green-bean-lots - List all green bean lots
 export async function GET(request: NextRequest) {
@@ -99,8 +101,9 @@ export async function GET(request: NextRequest) {
     ])
 
     return NextResponse.json({
-      // Withdrawal sale details and purpose only for the lot's owner and Admin.
-      greenBeanLots: greenBeanLots.map(lot => greenBeanLotForViewer(user, lot)),
+      // Withdrawal sale details and purpose only for the lot's owner and Admin;
+      // the parchment's importer only for Admin and the importer.
+      greenBeanLots: greenBeanLots.map(lot => withParchmentImporterFor(user, greenBeanLotForViewer(user, lot))),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     })
   } catch (error) {
@@ -140,6 +143,7 @@ export async function POST(request: NextRequest) {
       availabilityStatus,
       pricePerKg,
       currency,
+      ownerId: buyingFor,
     } = validation.data
     const processorScore = (validation.data as { processorScore?: unknown }).processorScore
 
@@ -171,6 +175,35 @@ export async function POST(request: NextRequest) {
       }
       requireOwnership(user, parchmentLot.processingBatch?.createdById, ['Admin'])
       ownerId = parchmentLot.processingBatch?.createdById ?? user.id
+    }
+
+    // An Admin buying a purchased lot for a roaster (the Workbench's "Buying
+    // for") names them in ownerId, and the lot is that roaster's: they roast,
+    // sell, edit and delete it, as with the other Admin-on-behalf records.
+    // Naming yourself is the same as naming no one.
+    const buyerId = buyingFor && buyingFor !== user.id ? buyingFor : null
+    if (buyerId) {
+      if (!isAdminUser(user)) {
+        return NextResponse.json(
+          { error: 'Only an admin can add a lot for another roaster' },
+          { status: 403 },
+        )
+      }
+      // A lot from parchment is its processor's (above), never a buyer's.
+      if (sourceType !== 'External' || parchmentLotId) {
+        return NextResponse.json(
+          { error: 'Only a purchased (External) lot can be added for a roaster' },
+          { status: 400 },
+        )
+      }
+      const buyer = await prisma.user.findUnique({
+        where: { id: buyerId },
+        select: { roles: true, isActive: true },
+      })
+      if (!buyer || !buyer.isActive || !buyer.roles.includes('Roaster')) {
+        return NextResponse.json({ error: 'Choose an active roaster to buy for' }, { status: 400 })
+      }
+      ownerId = buyerId
     }
 
     // Prisma JSON fields cannot serialize nested undefined values from optional form fields.

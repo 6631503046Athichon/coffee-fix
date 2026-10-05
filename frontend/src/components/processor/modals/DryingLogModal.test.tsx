@@ -5,7 +5,7 @@ import { ProcessingBatchStatus } from '../../../types'
 import type { ProcessingBatch } from '../../../types'
 import { api } from '../../../services/api'
 import { transformProcessingBatchFromBackend } from '../../../services/processing/processingBatchService'
-import { formatDate } from '../../../utils/formatters'
+import { formatDateDisplay } from '../../../utils/formatters'
 import DryingLogModal, { dryingLogFormErrors } from './DryingLogModal'
 
 vi.mock('../../../services/api', () => ({
@@ -66,7 +66,7 @@ describe('DryingLogModal', () => {
     vi.mocked(api.put).mockResolvedValue({ dryingLog: stored({ ambientTemp: 33 }) })
     vi.mocked(api.delete).mockResolvedValue({ id: 'log-1' })
     const { popup, onLogsChange } = renderModal()
-    const label = formatDate('2026-09-03', 'short')
+    const label = formatDateDisplay('2026-09-03')
 
     fireEvent.click(within(popup).getByRole('button', { name: `Edit the reading of ${label}` }))
     type(popup, 'Temp (°C)', '33')

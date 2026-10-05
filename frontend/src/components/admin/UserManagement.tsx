@@ -10,6 +10,8 @@ import EditUserModal from '@/components/admin/modals/EditUserModal';
 import TransferOwnershipModal from '@/components/admin/modals/TransferOwnershipModal';
 import { ModalPortal } from '@/components/common/ModalPortal';
 import DebouncedSearchInput from '@/components/processor/workbench/DebouncedSearchInput';
+import AdminConfirmModal from '@/components/admin/modals/AdminConfirmModal';
+import { roleLabel } from '@/components/admin/roleLabels';
 
 // Custom Dropdown Component
 interface DropdownOption {
@@ -125,6 +127,9 @@ const UserManagement: React.FC = () => {
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null);
     const [newPassword, setNewPassword] = useState<string>('');
+    const [deleting, setDeleting] = useState<User | null>(null);
+    const [deleteBusy, setDeleteBusy] = useState(false);
+    const [deleteError, setDeleteError] = useState('');
 
     // Load users from backend on component mount and when filters change
     useEffect(() => {
@@ -211,23 +216,25 @@ const UserManagement: React.FC = () => {
         setShowEditModal(true);
     };
 
-    const handleDeleteUser = async (user: User) => {
-        if (user.isSuperAdmin) {
-            alert('Cannot delete super admin. Transfer ownership first.');
-            return;
-        }
+    const askDeleteUser = (user: User) => {
+        // The button is disabled for the super admin: ownership moves first.
+        if (user.isSuperAdmin) return;
+        setDeleteError('');
+        setDeleting(user);
+    };
 
-        const confirmed = window.confirm(
-            `Are you sure you want to delete ${user.name}? This action cannot be undone.`
-        );
-
-        if (!confirmed) return;
-
+    const confirmDeleteUser = async () => {
+        if (!deleting || deleteBusy) return;
+        setDeleteBusy(true);
+        setDeleteError('');
         try {
-            await deleteUser(user.id);
+            await deleteUser(deleting.id);
+            setDeleting(null);
             fetchUsers();
         } catch (err: any) {
-            alert(err instanceof Error ? err.message : 'Failed to delete user');
+            setDeleteError(err instanceof Error && err.message ? err.message : 'Failed to delete user');
+        } finally {
+            setDeleteBusy(false);
         }
     };
 
@@ -248,6 +255,7 @@ const UserManagement: React.FC = () => {
     };
 
     const superAdmin = users.find((u) => u.isSuperAdmin);
+    const hasFilters = !!(searchTerm || roleFilter || statusFilter);
     const currentSuperAdmin = currentUser?.isSuperAdmin ? currentUser : superAdmin || null;
 
     return (
@@ -308,7 +316,7 @@ const UserManagement: React.FC = () => {
                                 { value: '', label: 'All Roles' },
                                 ...Object.values(UserRole).map(role => ({
                                     value: role,
-                                    label: role,
+                                    label: roleLabel(role),
                                     icon: <div className={`h-2 w-2 rounded-full ${
                                         role === UserRole.Admin ? 'bg-purple-500' :
                                         role === UserRole.Farmer ? 'bg-green-500' :
@@ -338,7 +346,7 @@ const UserManagement: React.FC = () => {
                         />
 
                         {/* Clear Button */}
-                        {(searchTerm || roleFilter || statusFilter) && (
+                        {hasFilters && (
                             <button
                                 onClick={clearFilters}
                                 className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100 hover:border-red-300 transition-all duration-200"
@@ -351,12 +359,12 @@ const UserManagement: React.FC = () => {
                 </div>
 
                 {/* Results Count */}
-                {(searchTerm || roleFilter || statusFilter) && (
+                {hasFilters && (
                     <div className="mt-4 pt-4 border-t border-gray-100">
                         <div className="flex flex-wrap items-center gap-2 text-sm">
                             {loading ? (
                                 <span className="text-gray-500">Searching...</span>
-                            ) : (
+                            ) : error ? null : (
                                 <>
                                     <span className="font-semibold text-blue-600">{users.length}</span>
                                     <span className="text-gray-500">user{users.length !== 1 ? 's' : ''} found</span>
@@ -369,7 +377,7 @@ const UserManagement: React.FC = () => {
                             )}
                             {roleFilter && (
                                 <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md text-xs font-medium">
-                                    {roleFilter}
+                                    {roleLabel(roleFilter)}
                                 </span>
                             )}
                             {statusFilter && (
@@ -378,7 +386,7 @@ const UserManagement: React.FC = () => {
                                         ? 'bg-green-50 text-green-700'
                                         : 'bg-gray-100 text-gray-600'
                                 }`}>
-                                    {statusFilter}
+                                    {statusFilter === 'active' ? 'Active' : 'Inactive'}
                                 </span>
                             )}
                         </div>
@@ -452,14 +460,38 @@ const UserManagement: React.FC = () => {
                                         </div>
                                     </td>
                                 </tr>
+                            ) : error ? (
+                                /* A failed load is not an empty list: the banner above
+                                    says why, and no "no users" text invites a first user. */
+                                <tr>
+                                    <td colSpan={6} className="px-4 py-12 text-center">
+                                        <p className="text-sm font-medium text-red-700">Users could not be loaded</p>
+                                    </td>
+                                </tr>
                             ) : users.length === 0 ? (
                                 <tr>
                                     <td colSpan={6} className="px-4 py-12 text-center">
                                         <UsersIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                                        <p className="text-gray-500 font-medium">No users found</p>
-                                        <p className="text-sm text-gray-400 mt-1">
-                                            Click "Create User" to add your first user
-                                        </p>
+                                        {hasFilters ? (
+                                            <>
+                                                <p className="text-gray-500 font-medium">No users match these filters</p>
+                                                <button
+                                                    type="button"
+                                                    onClick={clearFilters}
+                                                    className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                    Clear filters
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <p className="text-gray-500 font-medium">No users found</p>
+                                                <p className="text-sm text-gray-400 mt-1">
+                                                    Click "Create User" to add your first user
+                                                </p>
+                                            </>
+                                        )}
                                     </td>
                                 </tr>
                             ) : (
@@ -488,7 +520,7 @@ const UserManagement: React.FC = () => {
                                                         key={role}
                                                         className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border ${getRoleBadgeColor(role)}`}
                                                     >
-                                                        {role}
+                                                        {roleLabel(role)}
                                                     </span>
                                                 ))}
                                             </div>
@@ -524,7 +556,7 @@ const UserManagement: React.FC = () => {
                                                     <Key className="h-4 w-4" />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDeleteUser(user)}
+                                                    onClick={() => askDeleteUser(user)}
                                                     className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                     title={user.isSuperAdmin ? "Cannot delete super admin" : "Delete user"}
                                                     disabled={user.isSuperAdmin}
@@ -590,6 +622,18 @@ const UserManagement: React.FC = () => {
                     setSelectedUser(null);
                 }}
                 onUserUpdated={fetchUsers}
+            />
+
+            <AdminConfirmModal
+                isOpen={!!deleting}
+                title="Delete user?"
+                message={`Delete ${deleting?.name}? This cannot be undone.`}
+                confirmLabel="Delete user"
+                cancelLabel="Keep user"
+                busy={deleteBusy}
+                error={deleteError}
+                onCancel={() => setDeleting(null)}
+                onConfirm={confirmDeleteUser}
             />
 
                 <TransferOwnershipModal

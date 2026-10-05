@@ -117,6 +117,10 @@ const button = (name: string) => screen.queryByRole('button', { name })
 // busy parallel run.
 const slow = { timeout: 5000 }
 const toDataGrid = () => fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
+// Deletes ask in the site's confirm popup, never window.confirm.
+const confirmPopup = () => screen.getByRole('dialog', { name: /^Delete / })
+const confirmIn = (label: string) =>
+  fireEvent.click(within(confirmPopup()).getByRole('button', { name: label }))
 
 describe('Workbench edit and delete (F24)', { timeout: 20000 }, () => {
   let confirmSpy: ReturnType<typeof vi.spyOn>
@@ -179,9 +183,13 @@ describe('Workbench edit and delete (F24)', { timeout: 20000 }, () => {
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Edit processing batch' })).not.toBeInTheDocument(), slow)
     expect(updateProcessingBatch).toHaveBeenCalledWith('pb-mine', { parchmentWeightKg: 90 })
-    expect(latest!.processingBatches.find((b) => b.id === 'pb-mine')).toMatchObject({ processType: 'Natural', parchmentWeightKg: 90 })
-    expect(latest!.parchmentLots.find((p) => p.id === 'pl-mine')).toMatchObject({ initialWeightKg: 90, currentWeightKg: 50, processType: 'Natural' })
-    expect(latest!.greenBeanLots.find((g) => g.id === 'gbl-mine')?.parchmentProcessType).toBe('Natural')
+    // Under a loaded parallel run the data update can land just after the
+    // dialog closes, so wait for it instead of reading it straight away
+    await waitFor(() => {
+      expect(latest!.processingBatches.find((b) => b.id === 'pb-mine')).toMatchObject({ processType: 'Natural', parchmentWeightKg: 90 })
+      expect(latest!.parchmentLots.find((p) => p.id === 'pl-mine')).toMatchObject({ initialWeightKg: 90, currentWeightKg: 50, processType: 'Natural' })
+      expect(latest!.greenBeanLots.find((g) => g.id === 'gbl-mine')?.parchmentProcessType).toBe('Natural')
+    }, slow)
     expect(await screen.findByText('Processing batch PB-MINE updated.', {}, slow)).toBeInTheDocument()
   })
 
@@ -208,9 +216,11 @@ describe('Workbench edit and delete (F24)', { timeout: 20000 }, () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete parchment lot PCH-FRESH' }))
 
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringMatching(
-      /^Delete processing batch PB-FRESH and its parchment lot PCH-FRESH\? Cherry lot HL-2026-2 goes back to Cherry Lots/,
-    ))
+    expect(confirmPopup()).toHaveAccessibleName('Delete processing batch PB-FRESH and its parchment lot PCH-FRESH?')
+    expect(confirmPopup()).toHaveTextContent(/Cherry lot HL-2026-2 goes back to Cherry Lots/)
+    expect(deleteProcessingBatch).not.toHaveBeenCalled()
+    confirmIn('Delete batch')
+    expect(confirmSpy).not.toHaveBeenCalled()
     await waitFor(() => expect(deleteProcessingBatch).toHaveBeenCalledWith('pb-fresh'), slow)
     // Only the batch: the old handler deleted its parchment and green beans first.
     expect(deleteParchmentLot).not.toHaveBeenCalled()
@@ -228,6 +238,7 @@ describe('Workbench edit and delete (F24)', { timeout: 20000 }, () => {
     render(<Harness onData={(d) => { latest = d }} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete parchment lot PCH-MINE' }))
+    confirmIn('Delete batch')
 
     expect(await screen.findByText(refused, {}, slow)).toBeInTheDocument()
     expect(latest!.parchmentLots.map((p) => p.id)).toContain('pl-mine')
@@ -236,12 +247,32 @@ describe('Workbench edit and delete (F24)', { timeout: 20000 }, () => {
   })
 
   it('sends nothing when the delete is not confirmed', () => {
-    confirmSpy.mockReturnValue(false)
     render(<Harness />)
     fireEvent.click(screen.getByRole('button', { name: 'Delete parchment lot PCH-FRESH' }))
+    confirmIn('Keep')
+    expect(screen.queryByRole('dialog', { name: /^Delete / })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Delete green bean lot GBL-EXT' }))
+    confirmIn('Keep')
     expect(deleteProcessingBatch).not.toHaveBeenCalled()
     expect(deleteGreenBeanLot).not.toHaveBeenCalled()
+  })
+
+  it('sends one delete however often Delete is pressed while it runs', async () => {
+    let finish: () => void = () => {}
+    vi.mocked(deleteParchmentLot).mockImplementation(() => new Promise<void>((resolve) => { finish = resolve }))
+    render(<Harness roles={[UserRole.Admin]} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete parchment lot PCH-EXT' }))
+    const confirm = within(confirmPopup()).getByRole('button', { name: 'Delete lot' })
+    fireEvent.click(confirm)
+    fireEvent.click(confirm)
+    expect(confirm).toBeDisabled()
+    expect(within(confirmPopup()).getByRole('button', { name: 'Keep' })).toBeDisabled()
+    expect(deleteParchmentLot).toHaveBeenCalledTimes(1)
+
+    finish()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /^Delete / })).not.toBeInTheDocument(), slow)
+    expect(deleteParchmentLot).toHaveBeenCalledTimes(1)
   })
 
   it('deletes external parchment as a lot', async () => {
@@ -250,6 +281,8 @@ describe('Workbench edit and delete (F24)', { timeout: 20000 }, () => {
     render(<Harness roles={[UserRole.Admin]} onData={(d) => { latest = d }} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete parchment lot PCH-EXT' }))
+    expect(confirmPopup()).toHaveAccessibleName('Delete parchment lot PCH-EXT?')
+    confirmIn('Delete lot')
 
     await waitFor(() => expect(deleteParchmentLot).toHaveBeenCalledWith('pl-ext'), slow)
     expect(deleteProcessingBatch).not.toHaveBeenCalled()
@@ -292,8 +325,9 @@ describe('Workbench edit and delete (F24)', { timeout: 20000 }, () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete green bean lot GBL-EXT' }))
 
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('GBL-EXT (Grade A)'))
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('a withdrawal that is not void, roaster stock holding kg'))
+    expect(confirmPopup()).toHaveAccessibleName('Delete green bean lot GBL-EXT (Grade A)?')
+    expect(confirmPopup()).toHaveTextContent('a withdrawal that is not void, roaster stock holding kg')
+    confirmIn('Delete lot')
     await waitFor(() => expect(deleteGreenBeanLot).toHaveBeenCalledWith('gbl-ext'), slow)
     await waitFor(() => expect(latest!.greenBeanLots.map((g) => g.id)).not.toContain('gbl-ext'), slow)
     expect(latest!.roasterInventory.map((inv) => inv.id)).toEqual(['inv-theirs'])
@@ -304,7 +338,7 @@ describe('Workbench edit and delete (F24)', { timeout: 20000 }, () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete green bean lot GBL-MINE' }))
 
-    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: /^Delete / })).not.toBeInTheDocument()
     expect(deleteGreenBeanLot).not.toHaveBeenCalled()
     expect(await screen.findByText(/^Green bean lot GBL-MINE was made by a Hull & Grade of parchment lot PCH-MINE\. To remove it, void that Hull & Grade/, {}, slow)).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Green Bean Split History' })).toBeInTheDocument()

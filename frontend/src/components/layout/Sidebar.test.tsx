@@ -23,7 +23,7 @@ const renderSidebar = (roles: UserRole[]) =>
   )
 
 describe('Sidebar', () => {
-  it('shows a roaster-only account its workbench, logbook, sales and customers', () => {
+  it('shows a roaster-only account its workbench, logbook, sales, customers and Quality Insights', () => {
     renderSidebar([UserRole.Roaster])
 
     expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual([
@@ -31,8 +31,10 @@ describe('Sidebar', () => {
       'Roast Logbook',
       'Sales',
       'Customer Management',
+      'Quality Insights',
     ])
-    expect(screen.queryByRole('link', { name: 'Quality Insights' })).not.toBeInTheDocument()
+    // The /insights route lets a Roaster in, so the sidebar offers it.
+    expect(screen.getByRole('link', { name: 'Quality Insights' })).toHaveAttribute('href', '/insights')
     expect(screen.getByRole('link', { name: 'Sales' })).toHaveAttribute('href', '/sales')
   })
 
@@ -65,7 +67,7 @@ describe('Sidebar for multi-role accounts', () => {
 
   it('a Farmer+Roaster keeps the farmer pages next to the roaster workspace', () => {
     renderFull([UserRole.Farmer, UserRole.Roaster])
-    expect(links()).toEqual(['/farmer-dashboard', '/harvest-lots', '/roaster', '/roast-logbook', '/sales', '/customers'])
+    expect(links()).toEqual(['/farmer-dashboard', '/harvest-lots', '/roaster', '/roast-logbook', '/sales', '/customers', '/insights'])
   })
 
   it('a Processor+Roaster keeps the processor pages, Quality Insights once, under Processor', () => {
@@ -73,14 +75,56 @@ describe('Sidebar for multi-role accounts', () => {
     expect(links()).toEqual(['/processor', '/insights', '/roaster', '/roast-logbook', '/sales', '/customers'])
   })
 
-  it('a roaster-only account still gets only the roaster workspace', () => {
+  it('a roaster-only account still gets only the roaster workspace, Quality Insights under Roaster', () => {
     renderFull([UserRole.Roaster])
-    expect(links()).toEqual(['/roaster', '/roast-logbook', '/sales', '/customers'])
+    expect(links()).toEqual(['/roaster', '/roast-logbook', '/sales', '/customers', '/insights'])
+    expect(screen.getAllByRole('link', { name: 'Quality Insights' })).toHaveLength(1)
   })
 
   it('a Farmer+Processor sees both sections', () => {
     renderFull([UserRole.Farmer, UserRole.Processor])
     expect(links()).toEqual(['/farmer-dashboard', '/harvest-lots', '/processor', '/insights'])
+  })
+})
+
+// Quality Insights is listed under Processor, Quality & Cupping (Admin) and
+// Roaster, as in App's nav list: whatever the mix of roles, it shows once.
+describe('Sidebar Quality Insights entry', () => {
+  const insightsNav = [
+    { name: 'Processor Workbench', href: '/processor', icon: Droplets, roles: [UserRole.Processor, UserRole.Admin], section: 'processor' },
+    { name: 'Quality Insights', href: '/insights', icon: Lightbulb, roles: [UserRole.Processor], section: 'processor' },
+    { name: 'Quality Insights', href: '/insights', icon: Lightbulb, roles: [UserRole.Admin], section: 'cupping' },
+    ...navItems,
+  ]
+
+  const renderInsightsNav = (roles: UserRole[]) =>
+    render(
+      <MemoryRouter>
+        <Sidebar navItems={insightsNav} currentUserRoles={roles} isMobileOpen={false} onMobileClose={() => {}} />
+      </MemoryRouter>,
+    )
+
+  it.each([
+    [[UserRole.Roaster]],
+    [[UserRole.Processor]],
+    [[UserRole.Processor, UserRole.Roaster]],
+    [[UserRole.Admin]],
+    [[UserRole.Admin, UserRole.Processor]],
+    [[UserRole.Admin, UserRole.Roaster]],
+  ])('shows it once for %j', (roles) => {
+    renderInsightsNav(roles)
+    expect(screen.getAllByRole('link', { name: 'Quality Insights' })).toHaveLength(1)
+  })
+
+  it('keeps it under Quality & Cupping for an admin', () => {
+    renderInsightsNav([UserRole.Admin, UserRole.Roaster])
+    const section = screen.getByText('Quality & Cupping').closest('div')!.parentElement!
+    expect(section).toContainElement(screen.getByRole('link', { name: 'Quality Insights' }))
+  })
+
+  it('is not offered to a farmer', () => {
+    renderInsightsNav([UserRole.Farmer])
+    expect(screen.queryByRole('link', { name: 'Quality Insights' })).not.toBeInTheDocument()
   })
 })
 

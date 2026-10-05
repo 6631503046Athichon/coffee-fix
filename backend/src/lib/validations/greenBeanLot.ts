@@ -50,6 +50,9 @@ export const createGreenBeanLotSchema = z.object({
   pricePerKg: positiveNumberSchema.optional().nullable(),
   currency: currencySchema.optional().nullable(),
   externalSource: externalSourceSchema,
+  // Admin only: the roaster a purchased (External) lot is bought for, who
+  // then owns it (POST /api/green-bean-lots checks it).
+  ownerId: uuidSchema.optional().nullable(),
 }).refine((data) => {
   if (data.sourceType === 'Internal' && !data.parchmentLotId) {
     return false;

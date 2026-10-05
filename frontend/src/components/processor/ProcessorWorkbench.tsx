@@ -6,7 +6,8 @@ import React, {
   useRef,
 } from "react";
 import { useDataContext } from "../../hooks/useDataContext";
-import { formatDate, formatDateDisplay } from "../../utils/formatters";
+import { formatDateDisplay } from "../../utils/formatters";
+import { toDateOnly } from "../../utils/dateOnly";
 import { useGradeNames } from "../../hooks/useGradeOptions";
 import { useToggleScrollAnchor } from "../../hooks/useToggleScrollAnchor";
 import {
@@ -108,6 +109,7 @@ import EditParchmentLotModal from "./modals/EditParchmentLotModal";
 import EditGreenBeanLotModal from "./modals/EditGreenBeanLotModal";
 import DryingLogModal from "./modals/DryingLogModal";
 import HideLotModal from "./modals/HideLotModal";
+import ConfirmActionModal from "./modals/ConfirmActionModal";
 import { logger } from "../../utils/logger";
 import {
   csvDate,
@@ -123,6 +125,7 @@ import {
   isRecentItem,
   formatParchmentStatus,
   findCurrentCropYearId,
+  selectableCropYears,
   getHarvestLotCherryWeight,
   getReadyHarvestLots,
   validateScore,
@@ -151,7 +154,15 @@ import {
   withdrawDetailsError,
   buildWithdrawDetailsPayload,
   withdrawSaleTotal,
+  withdrawDetailsForLot,
+  formatMoney,
   formatWithdrawTotal,
+  greenBeanLotFacts,
+  greenBeanSearchFields,
+  harvestLotSearchFields,
+  matchesLotSearch,
+  parchmentLotFacts,
+  parchmentSearchFields,
 } from "./workbench";
 import type {
   ViewMode,
@@ -802,9 +813,34 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   const deleteErrorMessage = (error: unknown, fallback: string) =>
     error instanceof Error && error.message ? error.message : fallback;
 
+  // A delete asks first in the site's confirm popup (not window.confirm).
+  // `run` does the delete once confirmed; the popup waits while it runs, so
+  // a second click cannot send a second request.
+  const [pendingDelete, setPendingDelete] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    run: () => Promise<void>;
+  } | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const confirmBusyRef = useRef(false);
+
+  const confirmPendingDelete = async () => {
+    if (!pendingDelete || confirmBusyRef.current) return;
+    confirmBusyRef.current = true;
+    setConfirmBusy(true);
+    try {
+      await pendingDelete.run();
+    } finally {
+      confirmBusyRef.current = false;
+      setConfirmBusy(false);
+      setPendingDelete(null);
+    }
+  };
+
   // Deleting a batch undoes its Record Process: its untouched parchment lot
   // goes with it and the cherry lot is ready to process again.
-  const handleDeleteBatch = async (batchId: string) => {
+  const handleDeleteBatch = (batchId: string) => {
     if (deletingRecordId) return;
     const batch = batchById.get(batchId) ?? { id: batchId };
     const lots = parchmentLotsByBatch.get(batchId) ?? [];
@@ -818,15 +854,22 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         : lots.length > 1
           ? ` and its ${lots.length} parchment lots`
           : "";
-    if (
-      !window.confirm(
-        `Delete processing batch ${formatProcessingBatchId(batch)}${lotPart}? ` +
-          `${cherryLot ? `Cherry lot ${formatHarvestLotId(cherryLot)}` : "Its cherry lot"} goes back to Cherry Lots to be processed again. ` +
-          "A batch whose parchment was already withdrawn or hulled is not deleted. This cannot be undone.",
-      )
-    ) {
-      return;
-    }
+    setPendingDelete({
+      title: `Delete processing batch ${formatProcessingBatchId(batch)}${lotPart}?`,
+      message:
+        `${cherryLot ? `Cherry lot ${formatHarvestLotId(cherryLot)}` : "Its cherry lot"} goes back to Cherry Lots to be processed again. ` +
+        "A batch whose parchment was already withdrawn or hulled is not deleted. This cannot be undone.",
+      confirmLabel: "Delete batch",
+      run: () => deleteBatchNow(batchId),
+    });
+  };
+
+  const deleteBatchNow = async (batchId: string) => {
+    const batch = batchById.get(batchId) ?? { id: batchId };
+    const harvestLotId = "harvestLotId" in batch ? batch.harvestLotId : undefined;
+    const cherryLot = harvestLotId
+      ? data.harvestLots.find((h) => h.id === harvestLotId)
+      : undefined;
     setDeletingRecordId(batchId);
     try {
       const { harvestLotReleased } = await deleteProcessingBatch(batchId);
@@ -868,18 +911,20 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     }
   };
 
-  const handleDeleteParchmentLot = async (lotId: string) => {
+  const handleDeleteParchmentLot = (lotId: string) => {
     if (deletingRecordId) return;
     const lot = data.parchmentLots.find((p) => p.id === lotId);
     const label = lot ? formatParchmentId(lot) : "";
-    if (
-      !window.confirm(
-        `Delete parchment lot ${label}? ` +
-          "A lot that was already withdrawn from or hulled is not deleted. This cannot be undone.",
-      )
-    ) {
-      return;
-    }
+    setPendingDelete({
+      title: `Delete parchment lot ${label}?`,
+      message:
+        "A lot that was already withdrawn from or hulled is not deleted. This cannot be undone.",
+      confirmLabel: "Delete lot",
+      run: () => deleteParchmentLotNow(lotId, label),
+    });
+  };
+
+  const deleteParchmentLotNow = async (lotId: string, label: string) => {
     setDeletingRecordId(lotId);
     try {
       await deleteParchmentLot(lotId);
@@ -906,13 +951,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   // is not stranded as processed with nothing to show for it.
   const handleDeleteParchmentRecord = (lot: ParchmentLot) => {
     if (lot.processingBatchId && isOnlyLotOfBatch(lot)) {
-      void handleDeleteBatch(lot.processingBatchId);
+      handleDeleteBatch(lot.processingBatchId);
     } else {
-      void handleDeleteParchmentLot(lot.id);
+      handleDeleteParchmentLot(lot.id);
     }
   };
 
-  const handleDeleteGreenBeanLot = async (lotId: string) => {
+  const handleDeleteGreenBeanLot = (lotId: string) => {
     if (deletingRecordId) return;
     const lot = data.greenBeanLots.find((g) => g.id === lotId);
     const label = lot ? formatGreenBeanId(lot) : "";
@@ -930,15 +975,17 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       if (source) setSelectedParchmentForHistory(source);
       return;
     }
-    if (
-      !window.confirm(
-        `Delete green bean lot ${label}${lot ? ` (${lot.grade})` : ""}? ` +
-          "A lot with a withdrawal that is not void, roaster stock holding kg, a roast, a sale or invoice line, or a cupping sample is not deleted. " +
-          "Voided withdrawals and empty roaster stock go with it. This cannot be undone.",
-      )
-    ) {
-      return;
-    }
+    setPendingDelete({
+      title: `Delete green bean lot ${label}${lot ? ` (${lot.grade})` : ""}?`,
+      message:
+        "A lot with a withdrawal that is not void, roaster stock holding kg, a roast, a sale or invoice line, or a cupping sample is not deleted. " +
+        "Voided withdrawals and empty roaster stock go with it. This cannot be undone.",
+      confirmLabel: "Delete lot",
+      run: () => deleteGreenBeanLotNow(lotId, label),
+    });
+  };
+
+  const deleteGreenBeanLotNow = async (lotId: string, label: string) => {
     setDeletingRecordId(lotId);
     try {
       await deleteGreenBeanLot(lotId);
@@ -1157,16 +1204,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     }
   };
 
-  const handleDeleteHarvestLot = async (lot: HarvestLot) => {
+  const handleDeleteHarvestLot = (lot: HarvestLot) => {
     if (deletingHarvestLotId) return;
     const lotLabel = formatHarvestLotId(lot);
-    if (
-      !window.confirm(
-        `Delete cherry lot ${lotLabel}${lot.farmerName ? ` from ${lot.farmerName}` : ""}? This cannot be undone.`,
-      )
-    ) {
-      return;
-    }
+    setPendingDelete({
+      title: `Delete cherry lot ${lotLabel}${lot.farmerName ? ` from ${lot.farmerName}` : ""}?`,
+      message: "This cannot be undone.",
+      confirmLabel: "Delete lot",
+      run: () => deleteHarvestLotNow(lot, lotLabel),
+    });
+  };
+
+  const deleteHarvestLotNow = async (lot: HarvestLot, lotLabel: string) => {
     setDeletingHarvestLotId(lot.id);
     try {
       // The workbench lists only Ready lots, so ask the backend to refuse
@@ -1301,7 +1350,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           // Show success toast
           addToast({
             type: "success",
-            message: "สร้าง Processing Batch สำเร็จ!",
+            message: `Processing batch ${formatProcessingBatchId(batch)} recorded.`,
           });
 
           // Close modal and reset form on success
@@ -1485,11 +1534,12 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             ),
           );
           const roasterName = data.users.find(u => u.id === withdrawDetails.details.targetRoasterId)?.name;
+          const lotLabel = formatGreenBeanId(selectedGreenBean);
           addToast({
             type: "success",
             message: roasterInventoryItem
-              ? `ส่ง ${amountKg} kg ไปยัง Roaster${roasterName ? ` (${roasterName})` : ''} สำเร็จ!`
-              : `Withdraw ${amountKg} kg สำเร็จ!`,
+              ? `Sent ${amountKg} kg of ${lotLabel} to ${roasterName || "the roaster"}.`
+              : `Withdrew ${amountKg} kg from ${lotLabel}.`,
           });
           // Reset withdrawal form state
           setWithdrawalType("Sample");
@@ -1500,7 +1550,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           setModal(null);
         } catch (err: any) {
           const msg =
-            err?.message || "เกิดข้อผิดพลาดในการ Withdraw Stock";
+            err?.message || "Could not withdraw the stock. Please try again.";
           setFormError(msg);
           addToast({ type: "error", message: msg });
           return;
@@ -1551,8 +1601,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       setSelectedGreenBean(item);
       setWithdrawalType("Sample");
       setWithdrawalAmount("");
-      // A cancelled Sale must not carry its customer or price to the next lot.
-      withdrawDetails.reset();
+      setFormError(null);
+      // A cancelled Sale must not carry its customer or price to the next
+      // lot. The Sale price starts at this lot's set price (still editable).
+      withdrawDetails.reset(withdrawDetailsForLot(item));
     }
     setModal(type);
   };
@@ -1590,7 +1642,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       });
       return true;
     } catch (err: any) {
-      addToast({ type: "error", message: err?.message || "ไม่สามารถเปลี่ยนสถานะ lot ได้" });
+      addToast({ type: "error", message: err?.message || "Could not change the lot's availability. Please try again." });
       return false;
     } finally {
       setSavingAvailability(false);
@@ -1640,7 +1692,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     setPricingLot(null);
     addToast({
       type: "success",
-      message: `Price for ${formatGreenBeanId(updatedLot)} set to ${(updatedLot.pricePerKg ?? 0).toFixed(2)} ${updatedLot.currency || "THB"}/kg`,
+      message: `Price for ${formatGreenBeanId(updatedLot)} set to ${formatMoney(updatedLot.pricePerKg ?? 0)} ${updatedLot.currency || "THB"}/kg`,
     });
   };
 
@@ -1655,14 +1707,24 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     ? getHarvestLotCherryWeight(selectedHarvestLot)
     : 0;
 
-  const filteredHarvestLots = useMemo(() => {
-    const search = harvestLotSearch.toLowerCase();
-    return readyForProcessingLots.filter(
-      (lot) =>
-        formatHarvestLotId(lot).toLowerCase().includes(search) ||
-        lot.cherryVariety.toLowerCase().includes(search),
-    );
-  }, [readyForProcessingLots, harvestLotSearch]);
+  const filteredHarvestLots = useMemo(
+    () =>
+      readyForProcessingLots.filter((lot) =>
+        matchesLotSearch(harvestLotSearch, harvestLotSearchFields(lot)),
+      ),
+    [readyForProcessingLots, harvestLotSearch],
+  );
+
+  // The source records the parchment and green bean searches (and their
+  // CSV exports) read a lot's farmer, variety and source lot from.
+  const harvestLotById = useMemo(
+    () => new Map(data.harvestLots.map((h) => [h.id, h])),
+    [data.harvestLots],
+  );
+  const parchmentLotById = useMemo(
+    () => new Map(data.parchmentLots.map((p) => [p.id, p])),
+    [data.parchmentLots],
+  );
 
   // Reset to page 1 when search changes
   useEffect(() => {
@@ -1732,11 +1794,15 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   // Search and sort apply in both views; the status and process filters only
   // exist in the data grid (see processedParchmentLots / kanbanParchmentLots).
   const searchedParchmentLots = useMemo(() => {
-    const search = parchmentSearch.toLowerCase();
-    const filtered = data.parchmentLots.filter(
-      (p) =>
-        formatParchmentId(p).toLowerCase().includes(search) ||
-        p.status.toLowerCase().includes(search),
+    const filtered = data.parchmentLots.filter((p) =>
+      matchesLotSearch(
+        parchmentSearch,
+        parchmentSearchFields(
+          p,
+          p.harvestLotId ? harvestLotById.get(p.harvestLotId) : undefined,
+          p.processingBatchId ? batchById.get(p.processingBatchId) : undefined,
+        ),
+      ),
     );
 
     return filtered.sort((a, b) => {
@@ -1759,7 +1825,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         return parchmentSortConfig.direction === "asc" ? 1 : -1;
       return 0;
     });
-  }, [data.parchmentLots, parchmentSearch, parchmentSortConfig]);
+  }, [data.parchmentLots, parchmentSearch, parchmentSortConfig, harvestLotById, batchById]);
 
   // Data grid: search plus the status and process filters in its header.
   const processedParchmentLots = useMemo(() => {
@@ -1843,12 +1909,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   // Search and sort apply in both views; the status and grade filters only
   // exist in the data grid (see processedGreenBeanLots / kanbanGreenBeanLots).
   const searchedGreenBeanLots = useMemo(() => {
-    const search = greenBeanSearch.toLowerCase();
-    const filtered = enrichedGreenBeanLots.filter(
-      (g) =>
-        formatGreenBeanId(g).toLowerCase().includes(search) ||
-        g.grade.toLowerCase().includes(search),
-    );
+    const filtered = enrichedGreenBeanLots.filter((g) => {
+      const parchment = g.parchmentLotId
+        ? parchmentLotById.get(g.parchmentLotId)
+        : undefined;
+      const harvest = parchment?.harvestLotId
+        ? harvestLotById.get(parchment.harvestLotId)
+        : undefined;
+      return matchesLotSearch(
+        greenBeanSearch,
+        greenBeanSearchFields(g, parchment, harvest),
+      );
+    });
 
     return filtered.sort((a, b) => {
       const key = greenBeanSortConfig.key as keyof typeof a;
@@ -1870,7 +1942,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         return greenBeanSortConfig.direction === "asc" ? 1 : -1;
       return 0;
     });
-  }, [enrichedGreenBeanLots, greenBeanSearch, greenBeanSortConfig]);
+  }, [enrichedGreenBeanLots, greenBeanSearch, greenBeanSortConfig, parchmentLotById, harvestLotById]);
 
   // Data grid: search plus the status and grade filters in its header.
   const processedGreenBeanLots = useMemo(() => {
@@ -2007,7 +2079,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   );
 
   // CSV exports hold every lot the section lists under its current search
-  // and filters, across all pages, in the order shown.
+  // and filters, across all pages, in the order shown. With none, downloadCsv
+  // says there is nothing to export instead of saving a header-only file.
   const searchFilterPart = (search: string) =>
     search.trim() ? `search ${search.trim()}` : null;
 
@@ -2015,7 +2088,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     lots: ParchmentLot[],
     filterParts: (string | null | false)[],
   ) => {
-    if (lots.length === 0) return;
     const harvestById = new Map(data.harvestLots.map((h) => [h.id, h]));
     const batchById = new Map(data.processingBatches.map((b) => [b.id, b]));
     const headers = [
@@ -2036,19 +2108,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       const batch = p.processingBatchId
         ? batchById.get(p.processingBatchId) ?? { id: p.processingBatchId }
         : undefined;
+      const facts = parchmentLotFacts(p, harvest);
       return [
         formatParchmentId(p),
         batch ? formatProcessingBatchId(batch) : "",
-        harvest
-          ? formatHarvestLotId(harvest)
-          : p.externalSource
-            ? `External ${p.externalSource.code}`.trim()
-            : "",
-        harvest?.farmerName ??
-          p.externalSource?.supplierName ??
-          p.externalSource?.origin ??
-          "",
-        harvest?.cherryVariety ?? p.externalSource?.variety ?? "",
+        facts.sourceLot,
+        facts.farmer,
+        facts.variety,
         p.processType,
         formatParchmentStatus(p.status),
         csvFixed(p.initialWeightKg),
@@ -2064,7 +2130,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     lots: GreenBeanLot[],
     filterParts: (string | null | false)[],
   ) => {
-    if (lots.length === 0) return;
     const parchmentById = new Map(data.parchmentLots.map((p) => [p.id, p]));
     const harvestById = new Map(data.harvestLots.map((h) => [h.id, h]));
     const headers = [
@@ -2091,23 +2156,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
         ? harvestById.get(parchment.harvestLotId)
         : undefined;
       const price = g.pricePerKg || undefined;
+      const facts = greenBeanLotFacts(g, parchment, harvest);
       return [
         formatGreenBeanId(g),
-        parchment
-          ? formatParchmentId(parchment)
-          : g.sourceType === "External"
-            ? "External"
-            : "",
-        harvest?.farmerName ??
-          g.externalSource?.producerName ??
-          g.externalSource?.originName ??
-          parchment?.externalSource?.supplierName ??
-          "",
-        g.externalSource?.variety ??
-          harvest?.cherryVariety ??
-          parchment?.externalSource?.variety ??
-          "",
-        parchment?.processType ?? g.externalSource?.processType ?? "",
+        facts.sourceLot,
+        facts.farmer,
+        facts.variety,
+        facts.process,
         g.grade,
         availabilityLabel(g),
         csvFixed(g.initialWeightKg),
@@ -2176,7 +2231,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           <div className="relative w-full sm:w-56 sm:min-h-[46px] flex items-center">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <DebouncedSearchInput
-              placeholder="Search lots..."
+              placeholder="Search lot, farmer, variety..."
               value={harvestLotSearch}
               onSearch={onHarvestLotSearch}
               className="pl-9 w-full border border-green-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-green-300 focus:border-green-300 outline-none"
@@ -2308,7 +2363,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               <div className="relative w-full sm:w-56">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <DebouncedSearchInput
-                  placeholder="Search lots..."
+                  placeholder="Search lot, farmer, process..."
                   value={parchmentSearch}
                   onSearch={onParchmentSearch}
                   className="pl-9 w-full border border-amber-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-amber-300 focus:border-amber-300 outline-none"
@@ -2459,9 +2514,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       <div className="flex items-center gap-2">
                         {parchmentIdsWithGreenBeans.has(p.id) ? (
                           <button
+                            type="button"
                             onClick={() => setSelectedParchmentForHistory(p)}
                             className="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
                             title="View Green Bean Lots"
+                            aria-label={`History of parchment lot ${formatParchmentId(p)}`}
                           >
                             <History className="h-4 w-4" />
                           </button>
@@ -2684,7 +2741,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               <div className="relative w-full sm:w-56">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <DebouncedSearchInput
-                  placeholder="Search lots..."
+                  placeholder="Search lot, farmer, grade..."
                   value={greenBeanSearch}
                   onSearch={onGreenBeanSearch}
                   className="pl-9 w-full border border-teal-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-teal-300 focus:border-teal-300 outline-none"
@@ -2833,7 +2890,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
                         {g.pricePerKg ? (
                           <span className="text-teal-600">
-                            {g.pricePerKg.toFixed(2)} {g.currency || "THB"}
+                            {formatMoney(g.pricePerKg)} {g.currency || "THB"}
                           </span>
                         ) : (
                           <span className="text-gray-400">-</span>
@@ -2842,7 +2899,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-gray-900">
                         {g.pricePerKg ? (
                           <span className="text-teal-700">
-                            {(g.pricePerKg * (g.currentWeightKg ?? 0)).toFixed(2)}{" "}
+                            {formatMoney(g.pricePerKg * (g.currentWeightKg ?? 0))}{" "}
                             {g.currency || "THB"}
                           </span>
                         ) : (
@@ -2880,14 +2937,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             return (
                               <>
                           <button
+                            type="button"
                             onClick={() => setSelectedGreenBeanForSource(g)}
                             className="inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors"
                             title="View Source Lot"
+                            aria-label={`Source of green bean lot ${formatGreenBeanId(g)}`}
                           >
                             <Eye className="h-4 w-4" />
                           </button>
                           <button
+                            type="button"
                             onClick={() => setSelectedGreenBeanForHistory(g)}
+                            aria-label={`${hasWithdrawalHistory ? "Withdrawal history of" : "No withdrawal history yet for"} green bean lot ${formatGreenBeanId(g)}`}
                             className={`inline-flex items-center justify-center w-8 h-8 rounded-md border border-gray-200 transition-colors ${
                               hasWithdrawalHistory
                                 ? "text-gray-500 hover:bg-gray-50"
@@ -3003,7 +3064,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           <div className="relative mt-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <DebouncedSearchInput
-              placeholder="Search lots..."
+              placeholder="Search lot, farmer, variety..."
               value={harvestLotSearch}
               onSearch={onHarvestLotSearch}
               className="pl-9 w-full border border-green-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-green-300 focus:border-green-300 outline-none"
@@ -3102,7 +3163,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         Harvested
                       </span>
                       <span className="font-medium text-gray-900">
-                        {lot.harvestDate ? formatDate(lot.harvestDate, "short") : "-"}
+                        {formatDateDisplay(toDateOnly(lot.harvestDate), undefined, "-")}
                       </span>
                     </div>
                   </div>
@@ -3145,7 +3206,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <DebouncedSearchInput
-                placeholder="Search lots..."
+                placeholder="Search lot, farmer, process..."
                 value={parchmentSearch}
                 onSearch={onParchmentSearch}
                 className="pl-9 w-full border border-amber-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-amber-300 focus:border-amber-300 outline-none"
@@ -3197,6 +3258,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         onClick={() => setSelectedParchmentForHistory(p)}
                         className="p-1 rounded-md border border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50 transition-colors"
                         title="View history"
+                        aria-label={`History of parchment lot ${formatParchmentId(p)}`}
                       >
                         <History className="h-3.5 w-3.5" />
                       </button>
@@ -3352,7 +3414,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <DebouncedSearchInput
-                placeholder="Search lots..."
+                placeholder="Search lot, farmer, grade..."
                 value={greenBeanSearch}
                 onSearch={onGreenBeanSearch}
                 className="pl-9 w-full border border-teal-200 bg-white rounded-lg py-2 px-3 text-sm focus:ring-1 focus:ring-teal-300 focus:border-teal-300 outline-none"
@@ -3414,6 +3476,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         onClick={() => setSelectedGreenBeanForSource(g)}
                         className="p-1 rounded-md border border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50 transition-colors"
                         title="Source"
+                        aria-label={`Source of green bean lot ${formatGreenBeanId(g)}`}
                       >
                         <Eye className="h-3.5 w-3.5" />
                       </button>
@@ -3426,6 +3489,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             : "border-gray-100 text-gray-300"
                         }`}
                         title={hasWithdrawalHistory ? "History" : "No history yet"}
+                        aria-label={`${hasWithdrawalHistory ? "Withdrawal history of" : "No withdrawal history yet for"} green bean lot ${formatGreenBeanId(g)}`}
                       >
                         <History className="h-3.5 w-3.5" />
                       </button>
@@ -3506,9 +3570,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       {g.pricePerKg ? (
                         <span className="flex items-center gap-1 min-w-0">
                           <span className="font-medium text-teal-600 truncate">
-                            {g.pricePerKg.toFixed(2)} {g.currency || "THB"}/kg
+                            {formatMoney(g.pricePerKg)} {g.currency || "THB"}/kg
                             <span className="font-normal text-gray-400">
-                              {" "}· {(g.pricePerKg * (g.currentWeightKg ?? 0)).toFixed(2)} total
+                              {" "}· {formatMoney(g.pricePerKg * (g.currentWeightKg ?? 0))} total
                             </span>
                           </span>
                           {canManageLot(g) && (
@@ -3644,8 +3708,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
             <div
               className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col"
             >
+              {/* Any edit clears the error banner: it described the values
+                  as they were at the last Save. */}
               <form
                 onSubmit={handleSubmit}
+                onChange={() => setFormError(null)}
                 className="flex flex-col h-full overflow-y-auto p-8"
               >
                 {/* Error Display */}
@@ -3711,7 +3778,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </label>
                         <ProcessTypeChips
                           value={selectedProcessType}
-                          onChange={setSelectedProcessType}
+                          onChange={(v) => {
+                            setSelectedProcessType(v);
+                            setFormError(null);
+                          }}
                           processTypes={data.processTypes}
                         />
                         <input type="hidden" name="processType" value={selectedProcessType} />
@@ -3723,22 +3793,16 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           Crop Year
                         </label>
                         <CropYearChips
-                          years={(() => {
-                            const today = new Date();
-                            const cm = today.getMonth() + 1;
-                            const cy = today.getFullYear();
-                            const active = cm >= 10 ? cy : cy - 1;
-                            const targets = [
-                              `${active - 1}/${active}`,
-                              `${active}/${active + 1}`,
-                              `${active + 1}/${active + 2}`,
-                            ];
-                            return [...data.cropYears]
-                              .filter(c => targets.includes(c.year))
-                              .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
-                          })()}
+                          // The lot's own year stays a choice after another is picked.
+                          years={selectableCropYears(data.cropYears, [
+                            selectedHarvestLot?.cropYearId,
+                            cropYearId,
+                          ])}
                           value={cropYearId}
-                          onChange={setCropYearId}
+                          onChange={(v) => {
+                            setCropYearId(v);
+                            setFormError(null);
+                          }}
                         />
                       </div>
 
@@ -3796,7 +3860,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         <div>
                           <DatePicker
                             value={dryingStartDate}
-                            onChange={setDryingStartDate}
+                            onChange={(v) => {
+                              setDryingStartDate(v);
+                              setFormError(null);
+                            }}
                             label="Drying Start Date"
                           />
                           <input type="hidden" name="dryingStartDate" value={dryingStartDate} />
@@ -3804,7 +3871,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         <div>
                           <DatePicker
                             value={dryingEndDate}
-                            onChange={setDryingEndDate}
+                            onChange={(v) => {
+                              setDryingEndDate(v);
+                              setFormError(null);
+                            }}
                             label="Drying End Date"
                           />
                           <input type="hidden" name="dryingEndDate" value={dryingEndDate} />
@@ -3915,13 +3985,16 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               <div className="col-start-2 col-span-2 row-start-1 sm:col-span-1 min-w-0">
                                 <GradeDropdown
                                   value={lot.grade}
-                                  onChange={(value) =>
+                                  onChange={(value) => {
+                                    // A button list, not a native input: the
+                                    // form's onChange never sees this pick.
+                                    setFormError(null);
                                     setGradedLots(
                                       gradedLots.map((l, i) =>
                                         i === index ? { ...l, grade: value } : l,
                                       ),
-                                    )
-                                  }
+                                    );
+                                  }}
                                   index={index}
                                   usedGrades={selectedHullGrades}
                                 />
@@ -3966,7 +4039,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               <div className="col-start-4 row-start-1 sm:col-start-5 h-[38px] flex items-center justify-center">
                                 <button
                                   type="button"
-                                  onClick={() => setGradedLots(gradedLots.filter((_, i) => i !== index))}
+                                  onClick={() => {
+                                    setFormError(null);
+                                    setGradedLots(gradedLots.filter((_, i) => i !== index));
+                                  }}
                                   disabled={gradedLots.length <= 1}
                                   aria-label={`Remove row ${index + 1}`}
                                   className="p-2 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-20 disabled:cursor-not-allowed transition-all"
@@ -3981,12 +4057,13 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         {/* Add Grade Button */}
                         <button
                           type="button"
-                          onClick={() =>
+                          onClick={() => {
+                            setFormError(null);
                             setGradedLots([
                               ...gradedLots,
                               { rowKey: newRowId(), grade: "", weight: "", price: "", score: "" },
-                            ])
-                          }
+                            ]);
+                          }}
                           disabled={!canAddMoreHullGrades}
                           className="w-full py-2.5 border border-dashed border-green-300 rounded-xl text-xs font-bold text-green-600 hover:bg-green-50 hover:border-green-400 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
@@ -4114,7 +4191,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                             <button
                               key={type.value}
                               type="button"
-                              onClick={() => setWithdrawalType(type.value as typeof withdrawalType)}
+                              onClick={() => {
+                                setWithdrawalType(type.value as typeof withdrawalType);
+                                setFormError(null);
+                              }}
                               className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all text-center ${
                                 isActive
                                   ? `${c.active} ring-2 ${c.ring} shadow-sm`
@@ -4133,6 +4213,10 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                     <WithdrawDetailsFields
                       type={withdrawalType}
                       {...withdrawDetails.fieldsProps}
+                      onChange={(details) => {
+                        withdrawDetails.fieldsProps.onChange(details);
+                        setFormError(null);
+                      }}
                       className="mb-5"
                     />
 
@@ -4349,6 +4433,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           <input
                             type="number"
                             id={attr}
+                            aria-label={`${attr} score`}
                             min="1"
                             max="10"
                             step="0.25"
@@ -4398,6 +4483,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                               <button
                                 type="button"
                                 key={`${attr}-rating-${i + 1}`}
+                                aria-label={`${attr}: ${(i + 1) * 2} of 10`}
                                 onClick={() =>
                                   setCupScores((prev) => ({
                                     ...prev,
@@ -4421,6 +4507,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           <input
                             type="number"
                             min="0"
+                            aria-label="Number of defective cups"
                             value={defects.numCups}
                             onChange={(e) =>
                               setDefects({
@@ -4610,7 +4697,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                 Purchase Date
                               </p>
                               <p className="font-semibold text-gray-900">
-                                {externalSource.purchaseDate}
+                                {formatDateDisplay(toDateOnly(externalSource.purchaseDate), undefined, "-")}
                               </p>
                             </div>
                             <div>
@@ -4618,7 +4705,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                 Price
                               </p>
                               <p className="font-semibold text-gray-900">
-                                {externalSource.pricePerKg.toFixed(2)} {externalSource.currency}
+                                {formatMoney(externalSource.pricePerKg)} {externalSource.currency}
                               </p>
                             </div>
                             {externalSource.producerName && (
@@ -4914,7 +5001,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                       </p>
                                       {g.pricePerKg ? (
                                         <span className="text-sm font-semibold text-gray-900">
-                                          {g.pricePerKg.toFixed(2)} {g.currency || "THB"}
+                                          {formatMoney(g.pricePerKg)} {g.currency || "THB"}/kg
                                         </span>
                                       ) : (
                                         <span className="text-sm text-gray-400">-</span>
@@ -5047,7 +5134,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                   ? [
                                       w.customerName,
                                       w.salePrice
-                                        ? `${w.salePrice.toFixed(2)} ${w.currency || "THB"}/kg`
+                                        ? `${formatMoney(w.salePrice)} ${w.currency || "THB"}/kg`
                                         : undefined,
                                       w.invoiceNumber ? `Invoice ${w.invoiceNumber}` : undefined,
                                     ].filter(Boolean)
@@ -5069,7 +5156,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                       </span>
                                       {voided && <VoidedTag />}
                                       <span className="text-gray-400">
-                                        {formatDateDisplay(w.date)}
+                                        {formatDateDisplay(toDateOnly(w.date), undefined, "-")}
                                       </span>
                                     </div>
                                     {sale.length > 0 && (
@@ -5272,7 +5359,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                     Date
                                   </p>
                                   <p className="text-sm font-bold text-gray-900">
-                                    {entry.date}
+                                    {formatDateDisplay(toDateOnly(entry.date), undefined, "-")}
                                   </p>
                                 </div>
                               </div>
@@ -5329,7 +5416,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                         <span className="font-semibold">
                                           Price:
                                         </span>{" "}
-                                        {entry.salePrice.toFixed(2)}{" "}
+                                        {formatMoney(entry.salePrice)}{" "}
                                         {entry.currency || "THB"}/kg
                                       </p>
                                     )}
@@ -5362,7 +5449,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                         <span className="font-semibold">
                                           Total:
                                         </span>{" "}
-                                        {entry.totalAmount.toFixed(2)}{" "}
+                                        {formatMoney(entry.totalAmount)}{" "}
                                         {entry.currency || "THB"}
                                       </p>
                                     )}
@@ -5497,6 +5584,17 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           onError={handleCorrectionError}
         />
       )}
+      {pendingDelete && (
+        <ConfirmActionModal
+          title={pendingDelete.title}
+          message={pendingDelete.message}
+          confirmLabel={pendingDelete.confirmLabel}
+          cancelLabel="Keep"
+          busy={confirmBusy}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={confirmPendingDelete}
+        />
+      )}
       {hidingLot && (
         <HideLotModal
           lot={hidingLot}
@@ -5536,6 +5634,9 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           onClose={() => setInvoiceView(null)}
           lot={invoiceView.lot}
           entry={invoiceView.lot.withdrawalHistory![invoiceView.entryIndex]}
+          sellerName={
+            data.users.find((u) => u.id === invoiceView.lot.createdById)?.name
+          }
           canGeneratePublicLink={canManageLot(invoiceView.lot)}
           onPublicTraceIdGenerated={(publicTraceId) =>
             handleInvoicePublicTraceId(invoiceView.lot.id, publicTraceId)

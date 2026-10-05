@@ -4,6 +4,7 @@ import { User, LogOut, Menu } from 'lucide-react';
 import { UserRole } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { clearFormDrafts } from '../../hooks/useFormPersist';
+import { roleLabel } from '../admin/roleLabels';
 
 interface HeaderProps {
   currentUserRoles: UserRole[];
@@ -82,7 +83,7 @@ const Header: React.FC<HeaderProps> = ({ currentUserRoles, onToggleMobileNav }) 
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {currentUserRoles.map(role => (
               <span key={role} className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${getRoleBadgeColor(role)}`}>
-                {role}
+                {roleLabel(role)}
               </span>
             ))}
           </div>

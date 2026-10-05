@@ -7,6 +7,8 @@ import { ToastProvider } from '../../contexts/ToastContext'
 import { RoastLevel, UserRole } from '../../types'
 import type { AppData, RoastBatch, RoasterInventoryItem, User } from '../../types'
 import { captureCsvDownloads } from '../../test/captureCsvDownloads'
+import { captureAppToasts } from '../../test/captureAppToasts'
+import { NOTHING_TO_EXPORT_MESSAGE } from '../../utils/exportCSV'
 import RoastLogbook from './RoastLogbook'
 
 const roaster: User = { id: 'roaster-1', name: 'Somchai Roaster', roles: [UserRole.Roaster] }
@@ -68,6 +70,7 @@ const renderLogbook = (currentUser: User) =>
   )
 
 describe('Roast logbook CSV export', { timeout: 15000 }, () => {
+  const toasts = captureAppToasts()
   const downloads = captureCsvDownloads()
 
   const csvLines = () => {
@@ -137,8 +140,11 @@ describe('Roast logbook CSV export', { timeout: 15000 }, () => {
     expect(first).toContain('"Somchai Roaster"')
   })
 
-  it('disables the export when no roast matches', () => {
+  it('says there is nothing to export when no roast matches, and saves no file', () => {
     renderLogbook({ ...roaster, id: 'someone-else' })
-    expect(exportButton()).toBeDisabled()
+    expect(exportButton()).toBeEnabled()
+    fireEvent.click(exportButton())
+    expect(downloads).toHaveLength(0)
+    expect(toasts).toEqual([{ type: 'info', message: NOTHING_TO_EXPORT_MESSAGE }])
   })
 })

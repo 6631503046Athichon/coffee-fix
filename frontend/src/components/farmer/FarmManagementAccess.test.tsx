@@ -77,7 +77,7 @@ describe('Farm Management actions follow the backend\'s farm rules', { timeout: 
     render(<Harness user={farmhand}><FarmManagement /></Harness>)
 
     const shared = farmCard('Doi Farm')
-    expect(within(shared).getByText('ผู้ดูแล')).toBeInTheDocument()
+    expect(within(shared).getByText('Farmhand')).toBeInTheDocument()
     expect(within(shared).queryByRole('button', { name: 'Options menu' })).not.toBeInTheDocument()
     expect(within(shared).getByRole('button', { name: 'Soil' })).toBeInTheDocument()
     expect(within(shared).getByRole('button', { name: 'Weather' })).toBeInTheDocument()
@@ -268,7 +268,8 @@ describe('A collaborator cannot reach the farm edit form', { timeout: 20000 }, (
   const withGps = (farm: Farm, latitude: number, longitude: number): Farm => ({ ...farm, latitude, longitude })
   const mappedFarms = [withGps(sharedFarm, 19.9, 99.7), withGps(handsOwnFarm, 18.8, 100.8)]
   const popupOf = (farm: Farm) => popups.get(`${farm.latitude},${farm.longitude}`)!
-  const detailsButton = (farm: Farm) => within(popupOf(farm)).queryByRole('button', { name: 'ดูรายละเอียด Farm' })
+  // The popup's only button opens the farm's edit form (whatever it is labelled).
+  const detailsButton = (farm: Farm) => within(popupOf(farm)).queryByRole('button')
 
   beforeEach(() => {
     vi.clearAllMocks()

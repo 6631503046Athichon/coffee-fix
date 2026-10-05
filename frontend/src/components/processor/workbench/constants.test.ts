@@ -1,5 +1,5 @@
 import type { CropYear, HarvestLot } from '../../../types'
-import { findCurrentCropYearId, getHarvestLotCherryWeight, getReadyHarvestLots } from './constants'
+import { findCurrentCropYearId, getHarvestLotCherryWeight, getReadyHarvestLots, selectableCropYears } from './constants'
 
 describe('getHarvestLotCherryWeight', () => {
   it('always shows the original cherry weight, never the old partial balance', () => {
@@ -76,5 +76,49 @@ describe('findCurrentCropYearId', () => {
   it('gives an empty string when no year covers today', () => {
     expect(findCurrentCropYearId([year(2025)], new Date('2027-06-15T05:00:00.000Z'))).toBe('')
     expect(findCurrentCropYearId([], new Date('2027-06-15T05:00:00.000Z'))).toBe('')
+  })
+})
+
+describe('selectableCropYears', () => {
+  const year = (start: number): CropYear => ({
+    id: `cy-${start}`,
+    year: `${start}/${start + 1}`,
+    startDate: `${start}-10-01T00:00:00.000Z`,
+    endDate: `${start + 1}-09-30T00:00:00.000Z`,
+  })
+  const years = [year(2024), year(2026), year(2025), year(2027), year(2028)]
+  const ids = (list: CropYear[]) => list.map((y) => y.id)
+  // 5 October 2026 in Bangkok: the 2026/2027 season.
+  const now = new Date('2026-10-05T03:00:00.000Z')
+
+  it('offers the current season and the one either side, newest first', () => {
+    expect(ids(selectableCropYears(years, '', now))).toEqual(['cy-2027', 'cy-2026', 'cy-2025'])
+  })
+
+  it('turns the season over on 1 October in Bangkok', () => {
+    // 23:30 on 30 September in Bangkok is still 2025/2026.
+    expect(ids(selectableCropYears(years, '', new Date('2026-09-30T16:30:00.000Z'))))
+      .toEqual(['cy-2026', 'cy-2025', 'cy-2024'])
+    // 00:30 on 1 October in Bangkok is 2026/2027.
+    expect(ids(selectableCropYears(years, '', new Date('2026-09-30T17:30:00.000Z'))))
+      .toEqual(['cy-2027', 'cy-2026', 'cy-2025'])
+  })
+
+  it("keeps a lot's own older year picked", () => {
+    expect(ids(selectableCropYears(years, 'cy-2024', now))).toEqual(['cy-2027', 'cy-2026', 'cy-2025', 'cy-2024'])
+  })
+
+  it("keeps the lot's own year as a choice after another year is picked", () => {
+    // The lot is filed under 2024/2025 and 2026/2027 is now picked: both stay.
+    expect(ids(selectableCropYears(years, ['cy-2024', 'cy-2026'], now)))
+      .toEqual(['cy-2027', 'cy-2026', 'cy-2025', 'cy-2024'])
+    // A lot with no year of its own, or a cleared pick, adds nothing.
+    expect(ids(selectableCropYears(years, [undefined, ''], now))).toEqual(['cy-2027', 'cy-2026', 'cy-2025'])
+    expect(ids(selectableCropYears(years, null, now))).toEqual(['cy-2027', 'cy-2026', 'cy-2025'])
+  })
+
+  it('offers every year rather than none when no label is in the window', () => {
+    const odd = [{ ...year(2026), year: 'Season 26' }, { ...year(2025), year: 'Season 25' }]
+    expect(ids(selectableCropYears(odd, '', now))).toEqual(['cy-2026', 'cy-2025'])
   })
 })

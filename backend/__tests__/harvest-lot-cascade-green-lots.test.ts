@@ -7,8 +7,14 @@
  *   voided withdrawals, empty roaster stock rows and price history
  *   (lib/greenLotRemoval)
  * - if any is used (a withdrawal that still counts, roaster stock holding
- *   kg, a roast, a sale or invoice line, a cupping sample) nothing is deleted
- *   and the 409 lists those lots, for the Admin to void or settle first
+ *   kg, a roast, a sale or invoice line) nothing is deleted and the 409 lists
+ *   those lots, for the Admin to void or settle first
+ * - the same for a lot whose record is out in the world or scored: a public
+ *   trace QR (printed labels would go 404), a QC score, a cupping sample or
+ *   cupping score (counted only; cupping itself is not touched)
+ * - the 409 message names each such lot with why ("GBL-2: has QC scores")
+ *   and what to do: void or settle them, then delete again, or, when one is
+ *   kept for its QR or scores, keep the lot and its chain
  *
  * These run against an in-memory database (helpers/memoryPrisma). It does not
  * cascade a harvest lot's delete to its batches and parchment lots (the
@@ -82,6 +88,9 @@ const greenLot = (id: string, parchmentLotId: string, fields: Record<string, unk
     createdById: 'processor-1',
     ...fields,
   })
+
+// The lot the refusal tests mark as used.
+const gbl2 = () => mockDb.get('greenBeanLot', 'gbl-2') as Record<string, unknown>
 
 const greenIds = () => mockDb.rows('greenBeanLot').map(lot => lot.id).sort()
 
@@ -177,52 +186,87 @@ describe('an Admin cascade-deletes a processed lot', () => {
 })
 
 describe('a green bean lot made from it that is used refuses the whole cascade', () => {
-  const uses: [string, () => void, string][] = [
+  const REFUSED_ONE = 'Nothing was deleted, because a green bean lot made from this lot cannot go with it.'
+  const REFUSED_MANY = 'Nothing was deleted, because green bean lots made from this lot cannot go with it.'
+  const SETTLE =
+    'To delete it, first void the withdrawals of GBL-2, or settle its roaster stock, roasts, sales and invoices, then delete again.'
+  const KEEP_CHAIN = 'Keep this harvest lot and its chain, and correct it with Edit instead of deleting it.'
+  const kept = (lots: string, records: string) =>
+    `${lots} must stay to keep ${lots.includes(' and ') ? 'their' : 'its'} ${records} valid ` +
+    `(a trace QR, QC score or cupping result is not cleared here). ${KEEP_CHAIN}`
+
+  const uses: [string, () => void, string, string][] = [
     ['a withdrawal that still counts', () => {
       mockDb.seed('greenBeanWithdrawal', { id: 'gbw-1', greenBeanLotId: 'gbl-2', amountKg: 5, withdrawalType: 'Sale', voidedAt: null })
-    }, '1 withdrawal'],
+    }, 'has 1 withdrawal', SETTLE],
     ['roaster stock holding kg', () => {
       mockDb.seed('roasterInventoryItem', { id: 'inv-1', roasterId: 'roaster-1', greenBeanLotId: 'gbl-2', claimedWeightKg: 5, remainingWeightKg: 5 })
-    }, '1 roaster stock record'],
+    }, 'has 1 roaster stock record', SETTLE],
     ['a roast', () => {
       mockDb.seed('roastBatch', { id: 'rb-1', roasterId: 'roaster-1', roasterInventoryId: 'inv-x', greenBeanLotId: 'gbl-2' })
-    }, '1 roast batch'],
+    }, 'has 1 roast batch', SETTLE],
     ['a sale order line', () => {
       mockDb.seed('saleOrderItem', { id: 'soi-1', greenBeanLotId: 'gbl-2' })
-    }, '1 sale order line'],
+    }, 'has 1 sale order line', SETTLE],
     ['an invoice line', () => {
       mockDb.seed('invoiceItem', { id: 'ii-1', greenBeanLotId: 'gbl-2' })
-    }, '1 invoice line'],
+    }, 'has 1 invoice line', SETTLE],
+    ['a public trace QR', () => {
+      Object.assign(gbl2(), { publicTraceId: 'trace-abc', qrGeneratedAt: new Date() })
+    }, 'has a public trace QR', kept('GBL-2', 'printed trace QR')],
+    ['a QC score', () => {
+      Object.assign(gbl2(), { processorScore: 84.5 })
+    }, 'has QC scores', kept('GBL-2', 'QC scores')],
+    ['a QC score of 0', () => {
+      Object.assign(gbl2(), { processorScore: 0 })
+    }, 'has QC scores', kept('GBL-2', 'QC scores')],
     ['a cupping sample', () => {
       mockDb.seed('cuppingSample', { id: 'cs-1', greenBeanLotId: 'gbl-2' })
-    }, '1 cupping sample'],
+    }, 'was cupped', kept('GBL-2', 'cupping results')],
+    ['a cupping score', () => {
+      mockDb.seed('cuppingScore', { id: 'csc-1', greenBeanLotId: 'gbl-2', sessionId: 'session-1', score: 86 })
+    }, 'was cupped', kept('GBL-2', 'cupping results')],
   ]
 
-  test.each(uses)('409 for %s, listing the lot, and nothing is deleted', async (_label, use, words) => {
+  test.each(uses)('409 for %s, naming the lot, why and what to do, and nothing is deleted', async (_label, use, reason, advice) => {
     use()
     const rowsBefore = {
       greenBeanLot: mockDb.rows('greenBeanLot').length,
       roasterInventoryItem: mockDb.rows('roasterInventoryItem').length,
+      cuppingScore: mockDb.rows('cuppingScore').length,
     }
 
     const { status, body } = await del()
 
     expect(status).toBe(409)
-    expect(body.error).toBe(
-      `Green bean lots made from this lot are still in use, so nothing was deleted: GBL-2 (A) has ${words}. ` +
-        'Void their withdrawals, or settle their stock, roasts, sales and cupping first, then delete again.',
-    )
+    expect(body.error).toBe(`${REFUSED_ONE} GBL-2: ${reason}. ${advice}`)
     expect(body.greenBeanLotsInUse).toEqual([
-      { id: 'gbl-2', displayId: 'GBL-2', grade: 'A', dependents: expect.any(Object) },
+      { id: 'gbl-2', displayId: 'GBL-2', grade: 'A', dependents: expect.any(Object), reasons: [reason] },
     ])
     // No dependents key: the Data Hub shows the message rather than the counts popup.
     expect(body.dependents).toBeUndefined()
     expect(mockDb.get('harvestLot', HARVEST)).toBeDefined()
     expect(mockDb.rows('greenBeanLot')).toHaveLength(rowsBefore.greenBeanLot)
     expect(mockDb.rows('roasterInventoryItem')).toHaveLength(rowsBefore.roasterInventoryItem)
+    expect(mockDb.rows('cuppingScore')).toHaveLength(rowsBefore.cuppingScore)
   })
 
-  test('every used lot is listed', async () => {
+  test('one lot lists every reason, and the advice is to keep the chain', async () => {
+    mockDb.seed('greenBeanWithdrawal', { id: 'gbw-1', greenBeanLotId: 'gbl-2', amountKg: 5, withdrawalType: 'Sale', voidedAt: null })
+    Object.assign(gbl2(), { publicTraceId: 'trace-abc', processorScore: 82 })
+    mockDb.seed('cuppingSample', { id: 'cs-1', greenBeanLotId: 'gbl-2' })
+
+    const { status, body } = await del()
+
+    expect(status).toBe(409)
+    expect(body.error).toBe(
+      `${REFUSED_ONE} GBL-2: has 1 withdrawal, has a public trace QR, has QC scores and was cupped. ` +
+        kept('GBL-2', 'printed trace QR, QC scores and cupping results'),
+    )
+    expect(greenIds()).toHaveLength(4)
+  })
+
+  test('every used lot is listed, and each to void or settle is named', async () => {
     mockDb.seed('greenBeanWithdrawal', { id: 'gbw-1', greenBeanLotId: 'gbl-1', amountKg: 5, withdrawalType: 'Sale', voidedAt: null })
     mockDb.seed('greenBeanWithdrawal', { id: 'gbw-2', greenBeanLotId: 'gbl-1', amountKg: 5, withdrawalType: 'Sale', voidedAt: null })
     mockDb.seed('roastBatch', { id: 'rb-1', roasterId: 'roaster-1', roasterInventoryId: 'inv-x', greenBeanLotId: 'gbl-3' })
@@ -230,9 +274,43 @@ describe('a green bean lot made from it that is used refuses the whole cascade',
     const { status, body } = await del()
 
     expect(status).toBe(409)
-    expect(body.error).toContain('GBL-1 (AA) has 2 withdrawals; GBL-3 (AA) has 1 roast batch.')
+    expect(body.error).toBe(
+      `${REFUSED_MANY} GBL-1: has 2 withdrawals; GBL-3: has 1 roast batch. ` +
+        'To delete it, first void the withdrawals of GBL-1 and GBL-3, or settle their roaster stock, roasts, sales and invoices, then delete again.',
+    )
     expect(body.greenBeanLotsInUse.map((lot: any) => lot.id)).toEqual(['gbl-1', 'gbl-3'])
     expect(greenIds()).toHaveLength(4)
+  })
+
+  test('kept lots beside used ones: every lot is listed and the kept ones are named', async () => {
+    mockDb.seed('greenBeanWithdrawal', { id: 'gbw-1', greenBeanLotId: 'gbl-1', amountKg: 5, withdrawalType: 'Sale', voidedAt: null })
+    Object.assign(gbl2(), { publicTraceId: 'trace-abc' })
+    Object.assign(mockDb.get('greenBeanLot', 'gbl-3') as Record<string, unknown>, { processorScore: 80 })
+
+    const { status, body } = await del()
+
+    expect(status).toBe(409)
+    expect(body.error).toBe(
+      `${REFUSED_MANY} GBL-1: has 1 withdrawal; GBL-2: has a public trace QR; GBL-3: has QC scores. ` +
+        kept('GBL-2 and GBL-3', 'printed trace QR and QC scores'),
+    )
+    // Settling GBL-1 alone would not let the delete through.
+    expect(body.error).not.toContain('then delete again')
+    expect(body.greenBeanLotsInUse.map((lot: any) => [lot.id, lot.reasons])).toEqual([
+      ['gbl-1', ['has 1 withdrawal']],
+      ['gbl-2', ['has a public trace QR']],
+      ['gbl-3', ['has QC scores']],
+    ])
+    expect(greenIds()).toHaveLength(4)
+  })
+
+  test('a lot with no display id is named by its id', async () => {
+    Object.assign(gbl2(), { displayId: null, publicTraceId: 'trace-abc' })
+
+    const { status, body } = await del()
+
+    expect(status).toBe(409)
+    expect(body.error).toBe(`${REFUSED_ONE} gbl-2: has a public trace QR. ${kept('gbl-2', 'printed trace QR')}`)
   })
 
   test('the empty roaster stock row of an unused lot stays when the cascade is refused', async () => {

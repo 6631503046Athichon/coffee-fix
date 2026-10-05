@@ -11,6 +11,23 @@ import { canManageFarm } from '../../utils/farmAccess';
 import { todayDateOnly } from '../../utils/dateOnly';
 import { addSoilAnalysis, deleteSoilAnalysis, updateSoilAnalysis } from '../../services/farm/soilAnalysisService';
 import { generateSoilRecommendations, extractSoilDataFromImage } from '../../services/external/geminiService';
+import { isApiError } from '../../services/apiError';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
+
+// The backend answers 501 when no AI key is set up; the AI helper passes on
+// its English reason ("AI features are not set up on this server yet")
+// without the status, so the reason is matched too.
+const AI_NOT_SET_UP = /AI features are not set up/i;
+const AI_NOT_SET_UP_MESSAGE = 'ระบบ AI ยังไม่ได้ตั้งค่าบนเซิร์ฟเวอร์';
+
+/** What to tell the user when an AI call fails: Thai when AI is not set up, else the server's reason. */
+const soilAiErrorMessage = (error: unknown, fallback: string): string => {
+  const message = error instanceof Error ? error.message : '';
+  if ((isApiError(error) && error.status === 501) || AI_NOT_SET_UP.test(message)) {
+    return AI_NOT_SET_UP_MESSAGE;
+  }
+  return message || fallback;
+};
 
 export type SoilFormState = {
   farmPlotLocation: string;
@@ -73,6 +90,12 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
   const [soilToast, setSoilToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeneratingRecommendations, setIsGeneratingRecommendations] = useState(false);
+
+  // The delete confirm popup
+  const [soilToDelete, setSoilToDelete] = useState<SoilAnalysis | null>(null);
+  const [isDeletingSoil, setIsDeletingSoil] = useState(false);
+  const [soilDeleteError, setSoilDeleteError] = useState<string | null>(null);
+  const deletingSoilRef = useRef(false);
 
   // Image upload states
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -196,7 +219,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
       setTimeout(() => setSoilToast(null), 5000);
     } catch (error: any) {
       console.error('Failed to extract soil data from image:', error);
-      setSoilFormError(error?.message || 'ไม่สามารถอ่านค่าจากรูปได้ กรุณาลองอีกครั้ง');
+      setSoilFormError(soilAiErrorMessage(error, 'ไม่สามารถอ่านค่าจากรูปได้ กรุณาลองอีกครั้ง'));
     } finally {
       setIsExtractingFromImage(false);
     }
@@ -290,9 +313,11 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
       }, 100);
     } catch (error: any) {
       console.error('Failed to generate recommendations:', error);
-      const errorMessage = error?.message || 'ไม่สามารถสร้างคำแนะนำได้ กรุณาลองอีกครั้ง หรือตรวจสอบการเชื่อมต่ออินเทอร์เน็ต';
-      setSoilFormError(errorMessage);
-      setSoilToast({ type: 'error', message: errorMessage });
+      // Shown once, in the error box (not again as a toast).
+      setSoilFormError(soilAiErrorMessage(
+        error,
+        'ไม่สามารถสร้างคำแนะนำได้ กรุณาลองอีกครั้ง หรือตรวจสอบการเชื่อมต่ออินเทอร์เน็ต',
+      ));
     } finally {
       setIsGeneratingRecommendations(false);
     }
@@ -439,9 +464,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
       }, 4000);
     } catch (error: any) {
       console.error('Failed to save soil analysis:', error);
-      const errorMessage = error?.message || 'ไม่สามารถบันทึกผลวิเคราะห์ดินได้ กรุณาลองอีกครั้ง';
-      setSoilFormError(errorMessage);
-      setSoilToast({ type: 'error', message: errorMessage });
+      setSoilFormError(error?.message || 'ไม่สามารถบันทึกผลวิเคราะห์ดินได้ กรุณาลองอีกครั้ง');
       setIsSubmitting(false);
     }
   };
@@ -472,10 +495,24 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
     }));
   };
 
-  const handleSoilDelete = async (analysisId: string) => {
-    if (!confirm('ยืนยันการลบผลวิเคราะห์ดินนี้?')) {
-      return;
-    }
+  const askSoilDelete = (analysis: SoilAnalysis) => {
+    setSoilDeleteError(null);
+    setSoilToDelete(analysis);
+  };
+
+  const closeSoilDelete = () => {
+    if (deletingSoilRef.current) return;
+    setSoilToDelete(null);
+    setSoilDeleteError(null);
+  };
+
+  // One delete at a time: a fast double click must not send two DELETEs.
+  const confirmSoilDelete = async () => {
+    if (!soilToDelete || deletingSoilRef.current) return;
+    deletingSoilRef.current = true;
+    setIsDeletingSoil(true);
+    setSoilDeleteError(null);
+    const analysisId = soilToDelete.id;
     try {
       await deleteSoilAnalysis(analysisId);
       setData(prev => ({
@@ -485,13 +522,14 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
       if (editingSoilId === analysisId) {
         handleSoilCancelEdit();
       }
+      setSoilToDelete(null);
       setSoilToast({ type: 'success', message: 'ลบผลวิเคราะห์แล้ว' });
     } catch (error) {
       console.error('Failed to delete soil analysis:', error);
-      setSoilToast({
-        type: 'error',
-        message: 'ลบผลวิเคราะห์ไม่สำเร็จ กรุณาลองใหม่',
-      });
+      setSoilDeleteError('ลบผลวิเคราะห์ไม่สำเร็จ กรุณาลองใหม่');
+    } finally {
+      deletingSoilRef.current = false;
+      setIsDeletingSoil(false);
     }
   };
 
@@ -518,7 +556,6 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                 <Microscope className="h-6 w-6 text-emerald-600" />
               </div>
               <div>
-                <p className="text-xs font-semibold text-emerald-700">{farm.id}</p>
                 <h3 className="text-xl font-bold text-gray-900">{farm.name ?? farm.location}</h3>
                 <p className="text-sm text-gray-600">{farm.location}</p>
                 <p className="text-sm text-gray-600">
@@ -987,7 +1024,7 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
                               type="button"
                               onClick={event => {
                                 event.stopPropagation();
-                                handleSoilDelete(analysis.id);
+                                askSoilDelete(analysis);
                               }}
                               className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100"
                               aria-label="ลบผลดิน"
@@ -1008,6 +1045,23 @@ const FarmSoilPanel: React.FC<FarmSoilPanelProps> = ({ farm, isOpen = true, onCl
         </div>
       )}
       </div>
+
+      <ConfirmDeleteModal
+        isOpen={soilToDelete !== null}
+        titleId="delete-soil-analysis-title"
+        title="ลบผลวิเคราะห์ดินนี้?"
+        message={soilToDelete && (
+          <>
+            ผลวิเคราะห์ดินวันที่ {formatDateDisplay(soilToDelete.testDate)} ({soilToDelete.farmPlotLocation}) จะถูกลบถาวร
+          </>
+        )}
+        confirmLabel={isDeletingSoil ? 'กำลังลบ...' : 'ยืนยันการลบ'}
+        cancelLabel="ยกเลิก"
+        busy={isDeletingSoil}
+        error={soilDeleteError}
+        onCancel={closeSoilDelete}
+        onConfirm={confirmSoilDelete}
+      />
     </Modal>
   );
 };

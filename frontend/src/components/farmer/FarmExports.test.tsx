@@ -8,6 +8,8 @@ import { UserRole } from '../../types'
 import type { AppData, Farm, HarvestLot, WeatherRecord } from '../../types'
 import { getAllWeatherRecords } from '../../services/farm/weatherService'
 import { captureCsvDownloads } from '../../test/captureCsvDownloads'
+import { captureAppToasts } from '../../test/captureAppToasts'
+import { NOTHING_TO_EXPORT_MESSAGE } from '../../utils/exportCSV'
 import FarmerDataHub from './FarmerDataHub'
 import FarmWeatherPanel from './FarmWeatherPanel'
 
@@ -32,6 +34,32 @@ const withData = (data: AppData, ui: React.ReactElement) => (
 
 describe('Farm CSV exports', { timeout: 20000 }, () => {
   const downloads = captureCsvDownloads()
+  const toasts = captureAppToasts()
+  const nothingToExport = [{ type: 'info', message: NOTHING_TO_EXPORT_MESSAGE }]
+
+  it('says there is nothing to export when no harvest lot matches, and saves no file', () => {
+    render(withData(INITIAL_APP_DATA, <FarmerDataHub currentUser={{ id: 'admin', name: 'Admin', roles: [UserRole.Admin] }} />))
+
+    const exportButton = screen.getByText('Export CSV').closest('button')!
+    expect(exportButton).toBeEnabled()
+    fireEvent.click(exportButton)
+
+    expect(downloads).toHaveLength(0)
+    expect(toasts).toEqual(nothingToExport)
+  })
+
+  it('says there is nothing to export when the range holds no weather record', async () => {
+    const farm: Farm = { id: 'farm-1', name: 'ไร่ดอยช้าง', location: 'แปลง 2', farmerName: 'Somsak' }
+    vi.mocked(getAllWeatherRecords).mockResolvedValue([])
+    render(withData({ ...INITIAL_APP_DATA, farms: [farm] }, <FarmWeatherPanel farm={farm} isOpen onClose={vi.fn()} />))
+
+    const exportButton = screen.getByText('ส่งออก CSV').closest('button')!
+    await waitFor(() => expect(exportButton).toBeEnabled())
+    fireEvent.click(exportButton)
+
+    expect(downloads).toHaveLength(0)
+    expect(toasts).toEqual(nothingToExport)
+  })
 
   it('exports the harvest lots of the chosen year from every page, by display ID', () => {
     const lot = (n: number, year: number): HarvestLot => ({
@@ -53,8 +81,8 @@ describe('Farm CSV exports', { timeout: 20000 }, () => {
     }
     render(withData(data, <FarmerDataHub currentUser={{ id: 'admin', name: 'Admin', roles: [UserRole.Admin] }} />))
 
-    const select = screen.getAllByText('All')[0].closest('div.relative') as HTMLElement
-    fireEvent.click(within(select).getByText('All'))
+    const select = screen.getByText('All years').closest('div.relative') as HTMLElement
+    fireEvent.click(within(select).getByText('All years'))
     fireEvent.click(within(select).getByText('2025', { selector: 'button' }))
     fireEvent.click(screen.getByText('Export CSV'))
 

@@ -224,7 +224,7 @@ const TraceabilityStory: React.FC<TraceabilityStoryProps> = ({ data, shareUrl })
   };
 
   const formatDate = (date?: string | Date | null) =>
-    formatDateDisplay(date, undefined, 'N/A', 'en-US');
+    formatDateDisplay(date, undefined, 'N/A');
 
   // Stage colours follow the bean itself getting darker: cherry -> parchment -> dried -> roasted
   const timelineItems = [

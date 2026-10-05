@@ -8,6 +8,7 @@ import {
   generateQRDataUrl,
   getPublicTraceUrl,
 } from '../../services/lots/greenBeanLotService'
+import { formatDateDisplay } from '../../utils/formatters'
 import InvoiceReceipt from './InvoiceReceipt'
 
 vi.mock('../../services/lots/greenBeanLotService', async (importOriginal) => {
@@ -130,9 +131,9 @@ describe('InvoiceReceipt issue date and header', () => {
     else process.env.TZ = originalTZ
   })
 
-  it('shows the Thai day of the sale', () => {
+  it('shows the Thai day of the sale in the app date format', () => {
     renderInvoice({ entry: { ...sale, date: '2026-10-04T19:30:00.000Z' } })
-    expect(screen.getByText('Issue Date').nextElementSibling).toHaveTextContent('2026-10-05')
+    expect(screen.getByText('Issue Date').nextElementSibling).toHaveTextContent(formatDateDisplay('2026-10-05'))
   })
 
   it("falls back to the viewer's today, not the UTC day", () => {
@@ -140,7 +141,7 @@ describe('InvoiceReceipt issue date and header', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-04T19:30:00.000Z'))
     renderInvoice({ entry: { ...sale, date: '' } })
-    expect(screen.getByText('Issue Date').nextElementSibling).toHaveTextContent('2026-10-05')
+    expect(screen.getByText('Issue Date').nextElementSibling).toHaveTextContent(formatDateDisplay('2026-10-05'))
   })
 
   // At phone width a long invoice number shrinks and truncates; the Print
@@ -164,5 +165,36 @@ describe('InvoiceReceipt issue date and header', () => {
     expect(print).toHaveAttribute('aria-label', 'Print')
     expect(screen.getByText('Print', { selector: 'span' })).toHaveClass('hidden', 'sm:inline')
     expect(print.parentElement!.parentElement).toHaveClass('px-4', 'sm:px-6')
+  })
+})
+
+describe('InvoiceReceipt seller, number and total', () => {
+  it('names the seller, totals the lines and formats the money', () => {
+    renderInvoice({
+      sellerName: 'Doi Processing',
+      entry: { ...sale, amountKg: 8, salePrice: 1250, totalAmount: 10000 },
+    })
+    expect(screen.getByTestId('invoice-seller')).toHaveTextContent('FromDoi Processing')
+    expect(screen.getByTestId('invoice-total')).toHaveTextContent('Total10,000.00 THB')
+    expect(screen.getByText('1,250.00 THB')).toBeInTheDocument()
+  })
+
+  it('names who recorded the sale when the owner is not known', () => {
+    renderInvoice({ entry: { ...sale, withdrawnByName: 'Proc One' } })
+    expect(screen.getByTestId('invoice-seller')).toHaveTextContent('Proc One')
+  })
+
+  it('says there is no invoice number instead of making one up', () => {
+    renderInvoice({ entry: { ...sale, invoiceNumber: undefined } })
+    expect(screen.getByText('No invoice number')).toBeInTheDocument()
+    expect(screen.queryByText('Invoice Number')).not.toBeInTheDocument()
+    expect(screen.queryByText(/INV-DRAFT/)).not.toBeInTheDocument()
+  })
+
+  it('labels the close button', () => {
+    const onClose = vi.fn()
+    render(<InvoiceReceipt visible onClose={onClose} lot={makeLot()} entry={sale} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Close invoice' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })

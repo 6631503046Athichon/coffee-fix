@@ -49,41 +49,23 @@ export function parseNumber(value: string): number {
 
 // Date formatting utilities
 
-export function formatDate(date: Date | string, format: 'short' | 'long' = 'short'): string {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
+/**
+ * The locale every page shows its dates in. The UI is English, and the
+ * browser's own locale must not leak in: a Thai browser would otherwise show
+ * "15 ก.ย. 2569" (Buddhist era) on an English page.
+ */
+export const DATE_DISPLAY_LOCALE = 'en-GB';
 
-  if (format === 'long') {
-    return new Intl.DateTimeFormat('th-TH', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    }).format(dateObj);
-  }
-
-  return new Intl.DateTimeFormat('th-TH', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(dateObj);
-}
-
-export function formatDateTime(date: Date | string): string {
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
-
-  return new Intl.DateTimeFormat('th-TH', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(dateObj);
-}
-
+/**
+ * A date as the pages show it: "5 Oct 2026" by default, Gregorian years
+ * whatever the browser's locale. A plain YYYY-MM-DD is that calendar day.
+ * Pass `locale` only where a page deliberately needs another format.
+ */
 export function formatDateDisplay(
   date?: string | Date | null,
-  options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' },
+  options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' },
   fallback: string = '',
-  locale?: string,
+  locale: string = DATE_DISPLAY_LOCALE,
 ): string {
   if (date == null || date === '') {
     return fallback;
@@ -104,5 +86,14 @@ export function formatDateDisplay(
     return fallback;
   }
 
-  return parsed.toLocaleDateString(locale, options);
+  const format = new Intl.DateTimeFormat(locale, { calendar: 'gregory', ...options });
+  if (locale !== DATE_DISPLAY_LOCALE || options.month !== 'short') {
+    return format.format(parsed);
+  }
+  // Newer browsers spell September "Sept" in en-GB; every other page (sales,
+  // purchased lots, the date picker) writes the three letters "Sep".
+  return format
+    .formatToParts(parsed)
+    .map((part) => (part.type === 'month' && part.value === 'Sept' ? 'Sep' : part.value))
+    .join('');
 }
