@@ -338,6 +338,80 @@ describe('RoasterWorkbench Start roast popup', { timeout: 20000 }, () => {
     expect(claimGreenBeanLot).not.toHaveBeenCalled()
   })
 
+  it("offers an Admin the buyer's stock of a roaster's purchased lot, not an Admin row", async () => {
+    // An old Admin row of the lot (from before claims went to the buyer) and
+    // the roaster's own row: only the roaster's is the lot's stock.
+    const adminRow = stock({
+      id: 'inv-admin',
+      roasterId: adminUser.id,
+      greenBeanLotId: LOT_X,
+      remainingWeightKg: 7,
+    })
+    const roasterRow = stock({ id: 'inv-x', greenBeanLotId: LOT_X, remainingWeightKg: 5 })
+    vi.mocked(getSellableGreenLots).mockResolvedValue([
+      sellableGreen({ id: 'inv-x', label: toRoaId(LOT_X), greenBeanLotId: LOT_X, availableKg: 5 }),
+    ])
+    renderWorkbench(
+      appData({
+        customers: [customer()],
+        roasterInventory: [adminRow, roasterRow],
+        greenBeanLots: [purchasedLot()],
+        users: [adminUser, roasterUser],
+      }),
+      adminUser,
+    )
+    openPurchasedLot()
+    fireEvent.click(chip('Sell'))
+
+    expect(within(startLot()).getByText(/already has/)).toHaveTextContent(
+      'Bean Roasters already has 5 kg of this lot in their stock.',
+    )
+    fireEvent.click(within(startLot()).getByRole('button', { name: 'Sell from their stock' }))
+
+    await waitFor(() => expect(itemPicker()).toHaveTextContent('5 kg left'))
+    expect(within(startLot()).getByText(/Selling for/)).toHaveTextContent('Selling for Bean Roasters')
+    expect(getSellableGreenLots).toHaveBeenCalledWith(roasterUser.id)
+    expect(claimGreenBeanLot).not.toHaveBeenCalled()
+  })
+
+  it("tells an Admin a claim of a roaster's purchased lot went into that roaster's stock", async () => {
+    const claimed = stock({
+      id: 'inv-new',
+      greenBeanLotId: LOT_X,
+      claimedWeightKg: 3,
+      remainingWeightKg: 3,
+    })
+    vi.mocked(claimGreenBeanLot).mockResolvedValue({
+      inventoryItem: claimed,
+      updatedSourceLot: { id: LOT_X, currentWeightKg: 22, availabilityStatus: 'Available' },
+    })
+    vi.mocked(getSellableGreenLots).mockResolvedValue([
+      sellableGreen({ id: 'inv-new', label: toRoaId(LOT_X), greenBeanLotId: LOT_X, availableKg: 3 }),
+    ])
+    renderWorkbench(
+      appData({
+        customers: [customer()],
+        roasterInventory: [],
+        greenBeanLots: [purchasedLot()],
+        users: [adminUser, roasterUser],
+      }),
+      adminUser,
+    )
+    openPurchasedLot()
+    fireEvent.click(chip('Sell'))
+
+    expect(within(claimStep()).getByText(/into Bean Roasters's/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Green beans to sell'), { target: { value: '3' } })
+    fireEvent.click(within(claimStep()).getByRole('button', { name: 'Claim Stock' }))
+
+    await waitFor(() => expect(itemPicker()).toHaveTextContent('3 kg left'))
+    expect(addToast).toHaveBeenCalledWith({
+      type: 'success',
+      message: "Claimed 3 kg into Bean Roasters's stock. They stay there if you cancel the sale.",
+    })
+    expect(within(startLot()).getByText(/Selling for/)).toHaveTextContent('Selling for Bean Roasters')
+  })
+
   it("claims the shelf's exact kg when Use all is picked", async () => {
     const shelf = 0.19999999999999998
     vi.mocked(claimGreenBeanLot).mockResolvedValue({

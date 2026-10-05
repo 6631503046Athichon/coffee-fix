@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { vi } from 'vitest'
 import { INITIAL_APP_DATA } from '../../constants'
 import { DataContext } from '../../hooks/useDataContext'
-import { ToastProvider } from '../../contexts/ToastContext'
+import { ToastProvider, useToast } from '../../contexts/ToastContext'
 import {
   GreenBeanSourceType,
   ParchmentSourceType,
@@ -11,26 +11,22 @@ import {
   UserRole,
 } from '../../types'
 import type { AppData, Customer, GreenBeanLot, HarvestLot, ParchmentLot, ProcessType, User } from '../../types'
-import { addProcessingBatch } from '../../services/processing/processingBatchService'
+import { BATCH_NOT_GRADED_MESSAGE, processAndGradeBatch } from '../../services/processing/processingBatchService'
 import { createWithdrawal } from '../../services/lots/greenBeanLotService'
 import { addCustomer } from '../../services/sales/customerService'
-import {
-  createParchmentWithdrawal,
-  getAllParchmentLots,
-} from '../../services/lots/parchmentLotService'
+import { createParchmentWithdrawal } from '../../services/lots/parchmentLotService'
 import { formatDateDisplay } from '../../utils/formatters'
 import ParchmentTab from './ParchmentTab'
 import { ROASTER_REQUIRED_MESSAGE } from './workbench'
 
 vi.mock('../../services/processing/processingBatchService', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../services/processing/processingBatchService')>(),
-  addProcessingBatch: vi.fn(),
+  processAndGradeBatch: vi.fn(),
 }))
 
 vi.mock('../../services/lots/parchmentLotService', async (importOriginal) => ({
   ...await importOriginal<typeof import('../../services/lots/parchmentLotService')>(),
   createParchmentWithdrawal: vi.fn(),
-  getAllParchmentLots: vi.fn(),
 }))
 
 vi.mock('../../services/lots/greenBeanLotService', async (importOriginal) => ({
@@ -64,11 +60,18 @@ const newLot = (id: string, displayId: string, grade: string, kg: number, price?
   }),
 })
 
-function Harness({ refreshData, onData, initial, roles = [UserRole.Processor] }: {
+// The toasts as plain text, for the tests that read them.
+function ToastText() {
+  const { toasts } = useToast()
+  return <ul aria-label="Toasts">{toasts.map((t) => <li key={t.id}>{t.message}</li>)}</ul>
+}
+
+function Harness({ refreshData, onData, initial, roles = [UserRole.Processor], showToasts = false }: {
   refreshData: () => Promise<void>
   onData?: (data: AppData) => void
   initial?: Partial<AppData>
   roles?: UserRole[]
+  showToasts?: boolean
 }) {
   const [data, setData] = useState<AppData>({ ...INITIAL_APP_DATA, harvestLots: [cherry], ...initial })
   useEffect(() => { onData?.(data) }, [data, onData])
@@ -76,6 +79,7 @@ function Harness({ refreshData, onData, initial, roles = [UserRole.Processor] }:
     <DataContext.Provider value={{ data, setData, refreshData, isEditing: false, setIsEditing: () => {} }}>
       <ToastProvider>
         <ParchmentTab currentUser={{ id: 'processor', name: 'Processor', roles }} />
+        {showToasts && <ToastText />}
       </ToastProvider>
     </DataContext.Provider>
   )
@@ -133,12 +137,11 @@ describe('Process & Grade price', () => {
   }, 15000)
 
   it('sends each price with its own grade, skips an untouched row, closes before the reload, and shows the prices in Source History', async () => {
-    vi.mocked(addProcessingBatch).mockResolvedValue({
-      id: 'pb-1', harvestLotId: 'hl-1', processType: 'Honey',
-      status: ProcessingBatchStatus.Completed, parchmentWeightKg: 100,
-    })
-    vi.mocked(getAllParchmentLots).mockResolvedValue([newParchment])
-    vi.mocked(createParchmentWithdrawal).mockResolvedValue({
+    vi.mocked(processAndGradeBatch).mockResolvedValue({
+      processingBatch: {
+        id: 'pb-1', harvestLotId: 'hl-1', processType: 'Honey',
+        status: ProcessingBatchStatus.Completed, parchmentWeightKg: 100,
+      },
       parchmentLot: { ...newParchment, currentWeightKg: 0, status: 'Hulled' },
       greenBeanLots: [
         newLot('gbl-1', 'GBL-2026-50', 'Grade A', 60, 220.5),
@@ -165,10 +168,14 @@ describe('Process & Grade price', () => {
     expect(summary()).toHaveClass('bg-green-50')
     fireEvent.click(saveButton())
 
-    await waitFor(() => expect(createParchmentWithdrawal).toHaveBeenCalledTimes(1))
-    const [lotId, payload] = vi.mocked(createParchmentWithdrawal).mock.calls[0]
-    expect(lotId).toBe('pl-new')
-    expect(payload).toMatchObject({ withdrawalType: 'HullAndGrade', totalGreenBeanWeight: 90 })
+    // One call: the batch, its parchment and the grading are saved together.
+    await waitFor(() => expect(processAndGradeBatch).toHaveBeenCalledTimes(1))
+    expect(createParchmentWithdrawal).not.toHaveBeenCalled()
+    const [batch, payload] = vi.mocked(processAndGradeBatch).mock.calls[0]
+    expect(batch).toMatchObject({
+      harvestLotId: 'hl-1', processType: 'Honey', parchmentWeightKg: 100, moistureContent: 11,
+    })
+    expect(payload).toMatchObject({ totalGreenBeanWeight: 90 })
     expect(payload.gradedLots).toEqual([
       { grade: 'Grade A', weight: 60, price: 220.5 },
       { grade: 'Grade C', weight: 20 },
@@ -185,6 +192,9 @@ describe('Process & Grade price', () => {
     expect(stored.greenBeanLots[1].pricePerKg).toBeUndefined()
     // The parchment comes along so the new lots group under their process type.
     expect(stored.parchmentLots).toContainEqual(expect.objectContaining({ id: 'pl-new', processType: 'Honey' }))
+    // The cherry lot is used up and the batch is on record.
+    expect(stored.harvestLots[0]).toMatchObject({ id: 'hl-1', status: 'Complete', remainingWeightKg: 0 })
+    expect(stored.processingBatches).toContainEqual(expect.objectContaining({ id: 'pb-1' }))
 
     // Buckets sort by grade: Grade A, Grade C, Peaberry.
     const history = screen.getAllByLabelText('View source history')
@@ -196,6 +206,43 @@ describe('Process & Grade price', () => {
     const gradeC = screen.getByText('GBL-2026-51').closest('.shadow-sm') as HTMLElement
     expect(within(gradeC).getByText('No price')).toBeInTheDocument()
   }, 20000)
+
+  it('a failed save keeps the popup open with the reason, and the cherry lot ready', async () => {
+    vi.mocked(processAndGradeBatch).mockRejectedValue(
+      new Error('Total green bean weight cannot exceed the parchment amount withdrawn'),
+    )
+    const onData = vi.fn()
+    const refreshData = vi.fn(async () => {})
+    render(<Harness refreshData={refreshData} onData={onData} />)
+    openProcess()
+    fireEvent.change(weight(1), { target: { value: '60' } })
+    fireEvent.click(saveButton())
+
+    expect(await screen.findByText('Total green bean weight cannot exceed the parchment amount withdrawn')).toBeInTheDocument()
+    expect(saveButton()).toBeInTheDocument()
+    expect(processAndGradeBatch).toHaveBeenCalledTimes(1)
+    expect(createParchmentWithdrawal).not.toHaveBeenCalled()
+    expect(refreshData).not.toHaveBeenCalled()
+    const stored = onData.mock.lastCall![0] as AppData
+    expect(stored.harvestLots[0].status).toBe('Ready for Processing')
+    expect(stored.processingBatches).toEqual([])
+    expect(screen.queryByText(/Grading failed/)).not.toBeInTheDocument()
+  }, 15000)
+
+  it('a batch saved but not graded closes the popup, says so and reloads', async () => {
+    vi.mocked(processAndGradeBatch).mockRejectedValue(new Error(BATCH_NOT_GRADED_MESSAGE))
+    const refreshData = vi.fn(async () => {})
+    render(<Harness refreshData={refreshData} showToasts />)
+    openProcess()
+    fireEvent.change(weight(1), { target: { value: '60' } })
+    fireEvent.click(saveButton())
+
+    await waitFor(() => expect(refreshData).toHaveBeenCalledTimes(1))
+    expect(processAndGradeBatch).toHaveBeenCalledTimes(1)
+    // No second save: the popup is gone and the message is a toast.
+    expect(screen.queryByText('Save & Grade', { selector: 'button' })).not.toBeInTheDocument()
+    expect(within(screen.getByLabelText('Toasts')).getByText(BATCH_NOT_GRADED_MESSAGE)).toBeInTheDocument()
+  }, 15000)
 
   it('refuses a half-filled row instead of dropping it and its price', () => {
     render(<Harness refreshData={async () => {}} />)
@@ -218,7 +265,7 @@ describe('Process & Grade price', () => {
     expect(screen.getByText('Enter a weight above 0 for row 2 (Grade B).')).toBeInTheDocument()
     expect(saveButton()).toBeDisabled()
     fireEvent.click(saveButton())
-    expect(addProcessingBatch).not.toHaveBeenCalled()
+    expect(processAndGradeBatch).not.toHaveBeenCalled()
     expect(createParchmentWithdrawal).not.toHaveBeenCalled()
 
     fireEvent.change(weight(2), { target: { value: '20' } })
@@ -253,7 +300,7 @@ describe('Process & Grade price', () => {
       expect(valueLine()).not.toBeInTheDocument()
     }
     fireEvent.click(saveButton())
-    expect(addProcessingBatch).not.toHaveBeenCalled()
+    expect(processAndGradeBatch).not.toHaveBeenCalled()
 
     fireEvent.change(price(1), { target: { value: '180.5' } })
     expect(saveButton()).toBeEnabled()
@@ -519,7 +566,7 @@ describe('Process type colours', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('offers the admin process types as coloured chips and sends the picked name', async () => {
-    vi.mocked(addProcessingBatch).mockRejectedValue(new Error('stop here'))
+    vi.mocked(processAndGradeBatch).mockRejectedValue(new Error('stop here'))
     render(<Harness refreshData={async () => {}} initial={{ processTypes }} />)
     openProcess()
 
@@ -536,12 +583,12 @@ describe('Process type colours', () => {
     fireEvent.change(weight(1), { target: { value: '60' } })
     fireEvent.click(saveButton())
 
-    await waitFor(() => expect(addProcessingBatch).toHaveBeenCalledTimes(1))
-    expect(addProcessingBatch).toHaveBeenCalledWith(expect.objectContaining({ processType: 'Anaerobic' }))
+    await waitFor(() => expect(processAndGradeBatch).toHaveBeenCalledTimes(1))
+    expect(processAndGradeBatch).toHaveBeenCalledWith(expect.objectContaining({ processType: 'Anaerobic' }), expect.anything())
   }, 15000)
 
   it('still starts on Honey with the classic types while the list is empty', async () => {
-    vi.mocked(addProcessingBatch).mockRejectedValue(new Error('stop here'))
+    vi.mocked(processAndGradeBatch).mockRejectedValue(new Error('stop here'))
     render(<Harness refreshData={async () => {}} />)
     openProcess()
     const chips = within(chipGroup()).getAllByRole('button')
@@ -549,7 +596,7 @@ describe('Process type colours', () => {
     expect(chips[0]).toHaveAttribute('aria-pressed', 'true')
     fireEvent.change(weight(1), { target: { value: '60' } })
     fireEvent.click(saveButton())
-    await waitFor(() => expect(addProcessingBatch).toHaveBeenCalledWith(expect.objectContaining({ processType: 'Honey' })))
+    await waitFor(() => expect(processAndGradeBatch).toHaveBeenCalledWith(expect.objectContaining({ processType: 'Honey' }), expect.anything()))
   }, 15000)
 
   it('colours the green bean group, card and pill with the admin colour, inactive types included', () => {

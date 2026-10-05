@@ -441,6 +441,85 @@ describe('Withdraw Stock roaster and total', { timeout: 20000 }, () => {
     })
   })
 
+  // The withdrawal answers with the bare stock row (no nested lot), and the
+  // roaster's card reads grade, score, variety and process from the stored
+  // row: storing it as sent showed "GRADE —" until the next refresh.
+  describe('the roaster stock row a Roast fills keeps its lot details', () => {
+    const parchment: ParchmentLot = {
+      id: 'pl-1', displayId: 'PCH-2026-1', sourceType: ParchmentSourceType.Internal, harvestLotId: 'hl-1',
+      initialWeightKg: 100, currentWeightKg: 0, moistureContent: 11, processType: 'Natural', status: 'Hulled',
+    }
+    const cherry: HarvestLot = { ...lot, id: 'hl-1', status: 'Complete', cherryVariety: 'Typica' }
+    const sourceLot: GreenBeanLot = { ...stockLot, parchmentLotId: 'pl-1', processorScore: 86.5 }
+
+    const roastFive = async (roasterInventory: AppData['roasterInventory'], onData: (data: AppData) => void) => {
+      render(
+        <Harness
+          initial={{
+            ...INITIAL_APP_DATA, users, greenBeanLots: [sourceLot], parchmentLots: [parchment],
+            harvestLots: [cherry], roasterInventory,
+          }}
+          refreshData={async () => {}}
+          onData={onData}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Roast' }))
+      setAmount('5')
+      fireEvent.click(screen.getByRole('button', { name: 'Select Roaster...' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Hill Roastery' }))
+      fireEvent.submit(form())
+      await waitFor(() => expect(createWithdrawal).toHaveBeenCalledTimes(1))
+    }
+
+    const lotDetails = {
+      greenBeanLotId: 'gbl-1', greenBeanDisplayId: 'GBL-2026-1', grade: 'Grade A', processorScore: 86.5,
+      variety: 'Typica', process: 'Natural', withdrawalType: 'RoastingStock',
+    }
+
+    it('on a row the roaster already had', async () => {
+      vi.mocked(createWithdrawal).mockResolvedValue({
+        greenBeanLot: { ...sourceLot, currentWeightKg: 35 },
+        roasterInventoryItem: { id: 'inv-1', roasterId: 'r-1', greenBeanLotId: 'gbl-1', claimedWeightKg: 15, remainingWeightKg: 12 },
+      })
+      const onData = vi.fn()
+      await roastFive(
+        [{
+          id: 'inv-1', roasterId: 'r-1', greenBeanLotId: 'gbl-1', claimedWeightKg: 10, remainingWeightKg: 7,
+          createdAt: '2026-09-30T03:00:00.000Z', grade: 'Grade A', variety: 'Typica',
+        }],
+        onData,
+      )
+
+      await waitFor(() => {
+        const data: AppData = onData.mock.calls.at(-1)![0]
+        expect(data.roasterInventory).toHaveLength(1)
+        expect(data.roasterInventory[0]).toMatchObject({
+          ...lotDetails, id: 'inv-1', claimedWeightKg: 15, remainingWeightKg: 12,
+          createdAt: '2026-09-30T03:00:00.000Z',
+        })
+      })
+      const data: AppData = onData.mock.calls.at(-1)![0]
+      expect(data.greenBeanLots[0]).toMatchObject({ currentWeightKg: 35, grade: 'Grade A' })
+    })
+
+    it('on a new row', async () => {
+      vi.mocked(createWithdrawal).mockResolvedValue({
+        greenBeanLot: { ...sourceLot, currentWeightKg: 35 },
+        roasterInventoryItem: { id: 'inv-2', roasterId: 'r-1', greenBeanLotId: 'gbl-1', claimedWeightKg: 5, remainingWeightKg: 5 },
+      })
+      const onData = vi.fn()
+      await roastFive([], onData)
+
+      await waitFor(() => {
+        const data: AppData = onData.mock.calls.at(-1)![0]
+        expect(data.roasterInventory).toEqual([
+          expect.objectContaining({ ...lotDetails, id: 'inv-2', remainingWeightKg: 5 }),
+        ])
+      })
+    })
+  })
+
   it('shows the Sale total in the picked currency', () => {
     render(<Harness initial={{ ...INITIAL_APP_DATA, greenBeanLots: [stockLot] }} refreshData={async () => {}} />)
     fireEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
@@ -1371,11 +1450,11 @@ describe('Withdraw, Set price, QC Score and the availability switch only on lots
     // The roaster's price still shows, read-only.
     expect(screen.getByText(/300\.00 THB\/kg/)).toBeInTheDocument()
 
-    // QC Score and the Available/Withdrawn switch save through the same
+    // QC Score and the On sale / Hidden switch save through the same
     // owner-only routes: the other lots show their status, not a switch.
     expect(screen.getAllByRole('button', { name: 'QC Score' })).toHaveLength(1)
-    expect(screen.getAllByRole('button', { name: 'Available' })).toHaveLength(1)
-    expect(screen.getAllByText('Available', { selector: 'span' })).toHaveLength(others.length)
+    expect(screen.getAllByRole('button', { name: 'On sale' })).toHaveLength(1)
+    expect(screen.getAllByText('On sale', { selector: 'span' })).toHaveLength(others.length)
 
     fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
     expect(screen.getAllByRole('button', { name: 'Withdraw' })).toHaveLength(1)
@@ -1407,10 +1486,68 @@ describe('Withdraw, Set price, QC Score and the availability switch only on lots
     vi.mocked(updateGreenBeanLotAvailability).mockResolvedValue({ ...mine, availabilityStatus: 'Withdrawn' })
     render(<Harness initial={initial} refreshData={async () => {}} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Available' }))
+    fireEvent.click(screen.getByRole('button', { name: 'On sale' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Hide lot' }))
 
     await waitFor(() => expect(updateGreenBeanLotAvailability).toHaveBeenCalledWith('gbl-mine', 'Withdrawn'))
-    expect(await screen.findByRole('button', { name: 'Withdrawn' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Hidden' })).toBeInTheDocument()
+  })
+
+  describe('On sale / Hidden instead of Available / Withdrawn', () => {
+    it('asks in a centred popup before hiding a lot that still has kg, and Keep on sale leaves it', () => {
+      render(<Harness initial={initial} refreshData={async () => {}} />)
+      const chip = screen.getByRole('button', { name: 'On sale' })
+      expect(chip).toHaveAttribute('title', 'Hide this lot from sale')
+
+      fireEvent.click(chip)
+      const popup = screen.getByRole('dialog')
+      expect(popup).toHaveTextContent('Hide GBL-2026-1 from sale?')
+      expect(popup).toHaveTextContent('40.00 kg stay in stock')
+      // The site popup, centred on the screen; not a drawer.
+      expect(popup).toHaveClass('items-center', 'justify-center')
+
+      fireEvent.click(within(popup).getByRole('button', { name: 'Keep on sale' }))
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(updateGreenBeanLotAvailability).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: 'On sale' })).toBeInTheDocument()
+    })
+
+    it('puts a hidden lot back on sale without asking, and keeps the rest of the stored lot', async () => {
+      const hidden: GreenBeanLot = { ...mine, availabilityStatus: 'Withdrawn', withdrawalHistory: [
+        { amountKg: 10, withdrawalType: 'Sample', purpose: 'Sample', date: '2026-09-01' },
+      ] }
+      // The PUT answer is thinner than bulk-load: no withdrawal history.
+      vi.mocked(updateGreenBeanLotAvailability).mockResolvedValue({ ...hidden, availabilityStatus: 'Available', withdrawalHistory: [] })
+      const onData = vi.fn()
+      render(<Harness initial={{ ...INITIAL_APP_DATA, greenBeanLots: [hidden] }} refreshData={async () => {}} onData={onData} />)
+
+      const chip = screen.getByRole('button', { name: 'Hidden' })
+      expect(chip).toHaveAttribute('title', 'Put this lot back on sale')
+      // Withdraw is off while hidden, and says why.
+      expect(screen.getByRole('button', { name: 'Withdraw' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Withdraw' })).toHaveAttribute(
+        'title', 'Hidden from sale: put the lot back on sale to withdraw',
+      )
+
+      fireEvent.click(chip)
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      await waitFor(() => expect(updateGreenBeanLotAvailability).toHaveBeenCalledWith('gbl-mine', 'Available'))
+      expect(await screen.findByRole('button', { name: 'On sale' })).toBeInTheDocument()
+      const stored: GreenBeanLot = onData.mock.calls.at(-1)![0].greenBeanLots[0]
+      expect(stored.availabilityStatus).toBe('Available')
+      expect(stored.withdrawalHistory).toHaveLength(1)
+    })
+
+    it('labels the data grid column the same way', () => {
+      const hidden = { ...mine, availabilityStatus: 'Withdrawn' as const }
+      render(<Harness initial={{ ...INITIAL_APP_DATA, greenBeanLots: [hidden, otherProcessors] }} refreshData={async () => {}} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
+      const table = screen.getByText('Availability', { selector: 'th' }).closest('table') as HTMLElement
+      expect(within(table).getByText('Hidden')).toBeInTheDocument()
+      expect(within(table).getByText('On sale')).toBeInTheDocument()
+      expect(within(table).queryByText('Withdrawn')).not.toBeInTheDocument()
+      expect(within(table).queryByText('Available')).not.toBeInTheDocument()
+    })
   })
 
   it('the one Withdraw opens Withdraw Stock for the Processor\'s own lot', () => {
@@ -1431,7 +1568,7 @@ describe('Withdraw, Set price, QC Score and the availability switch only on lots
     expect(screen.getByRole('button', { name: 'Edit price of GBL-2026-3' })).toBeInTheDocument()
 
     expect(screen.getAllByRole('button', { name: 'QC Score' })).toHaveLength(4)
-    expect(screen.getAllByRole('button', { name: 'Available' })).toHaveLength(4)
+    expect(screen.getAllByRole('button', { name: 'On sale' })).toHaveLength(4)
 
     fireEvent.click(screen.getByRole('button', { name: 'Data Grid' }))
     expect(screen.getAllByRole('button', { name: 'Withdraw' })).toHaveLength(4)

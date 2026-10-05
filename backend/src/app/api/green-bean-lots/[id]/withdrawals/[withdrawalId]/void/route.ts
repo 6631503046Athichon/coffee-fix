@@ -14,6 +14,7 @@ import {
   round6,
   wouldOverfill,
 } from '@/lib/withdrawalVoid'
+import { EMPTY_ROASTER_STOCK_WHERE } from '@/lib/greenLotRemoval'
 
 type VoidedWithdrawal = {
   id: string
@@ -64,7 +65,7 @@ async function roasterToTakeBackFrom(tx: SaleTx, lotId: string, withdrawal: Void
  * and off the shelf (remainingWeightKg), which must still hold all of them.
  * Roasts and green-bean sales take their kg off the shelf, so kg the roaster
  * already used cannot come back, and the void is refused instead.
- * The row stays (at 0 kg if this push made it): roasts or sales may point at it.
+ * A row left holding nothing is removed by removeIfEmpty, below.
  */
 async function takeBackFromRoaster(tx: SaleTx, lotId: string, roasterId: string, kg: number) {
   const item = await tx.roasterInventoryItem.findUnique({
@@ -109,6 +110,20 @@ async function takeBackFromRoaster(tx: SaleTx, lotId: string, roasterId: string,
 }
 
 /**
+ * Removes the roaster's stock row when the void left it holding nothing: 0 kg
+ * claimed and on the shelf, with no roast or sale pointing at it (the push
+ * made it and this takes it back). Left behind, it would keep the lot from
+ * ever being deleted. A row the roaster also claimed into, or roasted or sold
+ * from, stays. Runs under the row lock takeBackFromRoaster took.
+ */
+async function removeIfEmpty(tx: SaleTx, itemId: string): Promise<boolean> {
+  const { count } = await tx.roasterInventoryItem.deleteMany({
+    where: { id: itemId, ...EMPTY_ROASTER_STOCK_WHERE },
+  })
+  return count > 0
+}
+
+/**
  * Puts `kg` back on the lot. The withdrawal route marks a lot it empties
  * Withdrawn, so a lot at 0 kg becomes Available again; a lot its owner took
  * off the market while it still held kg keeps its status.
@@ -137,8 +152,9 @@ async function restoreLot(tx: SaleTx, lotId: string, kg: number) {
 // withdrawal (owner decision D7). Body: optional { reason }.
 // In one transaction: marks the row void (voidedAt, voidedById, voidReason),
 // takes the kg back off the roaster stock row a push filled (409 when the
-// roaster already used them), and puts them back on the lot (Available again
-// if the withdrawal emptied it). The row stays in the history, marked void.
+// roaster already used them; a row left at 0 kg with no roast or sale is
+// removed), and puts them back on the lot (Available again if the withdrawal
+// emptied it). The row stays in the history, marked void.
 // Already void = 409. Same people as recording one: the lot's creator, Admin
 // and super admin.
 export async function POST(
@@ -208,13 +224,16 @@ export async function POST(
       const roasterInventoryItem = roasterId
         ? await takeBackFromRoaster(tx, id, roasterId, withdrawal.amountKg)
         : null
+      const roasterInventoryItemRemoved = roasterInventoryItem
+        ? await removeIfEmpty(tx, roasterInventoryItem.id)
+        : false
       await restoreLot(tx, id, withdrawal.amountKg)
 
       const voided = await tx.greenBeanWithdrawal.findUnique({
         where: { id: withdrawalId },
         include: { withdrawnByUser: { select: { id: true, name: true } } },
       })
-      return { withdrawal: voided, roasterInventoryItem }
+      return { withdrawal: voided, roasterInventoryItem, roasterInventoryItemRemoved }
     }, SALE_TX_OPTIONS)
 
     // The lot as the withdrawal POST returns it, so the client can swap it in.
@@ -232,6 +251,9 @@ export async function POST(
       greenBeanLot,
       withdrawal: result.withdrawal,
       roasterInventoryItem: result.roasterInventoryItem,
+      // True when that row was left at 0 kg with nothing pointing at it and
+      // was removed: roasterInventoryItem is then its last state.
+      roasterInventoryItemRemoved: result.roasterInventoryItemRemoved,
       message: 'Withdrawal voided',
     })
   } catch (error) {

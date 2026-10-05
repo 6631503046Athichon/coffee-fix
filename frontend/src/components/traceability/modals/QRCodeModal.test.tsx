@@ -1,5 +1,5 @@
 import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { generatePublicTraceId } from '../../../services/lots/greenBeanLotService'
 import { QRCodeModal } from './QRCodeModal'
@@ -49,16 +49,46 @@ describe('QRCodeModal public id', () => {
     expect(screen.getByText(/#\/trace\/pub-old/)).toBeInTheDocument()
   })
 
-  it('passes regenerate: true from the Regenerate Public ID action', async () => {
+  // Regenerating kills the current link, so it asks first in a site popup.
+  const confirmDialog = () => screen.queryByRole('dialog', { name: /Regenerate the public link\?/ })
+
+  it('asks before regenerating, and Cancel keeps the current link', async () => {
+    renderModal({ publicTraceId: 'pub-old' })
+
+    fireEvent.click(screen.getByRole('button', { name: /Regenerate Public ID/ }))
+
+    const dialog = confirmDialog() as HTMLElement
+    expect(dialog).toBeInTheDocument()
+    expect(within(dialog).getByText('Printed QR codes and invoices with the current link will stop working.')).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    expect(confirmDialog()).not.toBeInTheDocument()
+    // The current QR is still drawn for the current link.
+    expect(decodeURIComponent((await screen.findByAltText('QR Code') as HTMLImageElement).src)).toContain('#/trace/pub-old')
+    expect(generatePublicTraceId).not.toHaveBeenCalled()
+    expect(screen.getByText(/#\/trace\/pub-old/)).toBeInTheDocument()
+  })
+
+  it('passes regenerate: true once the regenerate popup is confirmed', async () => {
     vi.mocked(generatePublicTraceId).mockResolvedValue(generated('pub-new'))
     const onPublicIdGenerated = vi.fn()
     renderModal({ publicTraceId: 'pub-old', onPublicIdGenerated })
 
     fireEvent.click(screen.getByRole('button', { name: /Regenerate Public ID/ }))
+    expect(generatePublicTraceId).not.toHaveBeenCalled()
+    fireEvent.click(within(confirmDialog() as HTMLElement).getByRole('button', { name: /Regenerate link/ }))
 
+    expect(confirmDialog()).not.toBeInTheDocument()
     await waitFor(() => expect(onPublicIdGenerated).toHaveBeenCalledWith('pub-new'))
     expect(generatePublicTraceId).toHaveBeenCalledTimes(1)
     expect(generatePublicTraceId).toHaveBeenCalledWith('gbl-1', true)
+  })
+
+  it('names the lot by its lot number in the title', () => {
+    renderModal({ publicTraceId: 'pub-old', lotLabel: 'GBL-2026-7' })
+
+    expect(screen.getByRole('dialog', { name: 'QR Code · GBL-2026-7' })).toBeInTheDocument()
   })
 
   it('retries a failed first-time generate without the regenerate flag', async () => {

@@ -16,20 +16,39 @@ import {
   GreenBeanSourceType,
   UserRole,
 } from '../../types'
-import { Package, Flame, Coffee, Loader2, ArrowRight, X, HandCoins } from 'lucide-react'
+import {
+  Package,
+  Flame,
+  Coffee,
+  Loader2,
+  ArrowRight,
+  X,
+  HandCoins,
+  AlertTriangle,
+  Trash2,
+} from 'lucide-react'
 import ExternalLotsTable from './ExternalLotsTable'
 import InternalLotsTable from './InternalLotsTable'
 import RoastLogPanel from './RoastLogPanel'
 import { FLAVOR_GROUPS } from './flavorGroups'
 import { toFixed2, clamp, toRoaId, toRoastBatchId } from '../../utils/formatters'
 import { claimGreenBeanLot, createRoastBatch } from '../../services/roaster/roasterService'
-import { createGreenBeanLot } from '../../services/lots/greenBeanLotService'
+import { createGreenBeanLot, deleteGreenBeanLot } from '../../services/lots/greenBeanLotService'
 import { formatGreenBeanId } from '../../utils/formatDisplayId'
-import { todayDateOnly } from '../../utils/dateOnly'
 import { isAdminUser } from '../../utils/farmAccess'
 import { useToast } from '../../contexts/ToastContext'
 import { SaleOrderForm } from '../sales/modals/SaleOrderModal'
 import { formatKg } from '../sales/saleDisplay'
+import {
+  emptyPurchasedLotForm,
+  purchasedLotForm,
+  purchasedLotUpdate,
+  purchasedLotUsedKg,
+  updatePurchasedLot,
+  withPurchasedLotDetails,
+  withSavedEdit,
+  withSavedOption,
+} from './purchasedLots'
 
 interface RoasterWorkbenchProps {
   currentUser: User
@@ -107,23 +126,32 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
   const [lotsTab, setLotsTab] = useState<'internal' | 'external'>('internal')
   const roastLogRef = useRef<HTMLDivElement>(null)
 
-  // Add External Lot form state
+  // Add External Lot form state; the same form edits a purchased lot
   const [isAddingLot, setIsAddingLot] = useState(false)
-  const [newLotForm, setNewLotForm] = useState({
-    originName: '',
-    producerName: '',
-    variety: '',
-    processType: '',
-    purchaseDate: todayDateOnly(),
-    pricePerKg: '',
-    currency: 'THB',
-    initialWeightKg: '',
-    grade: 'Grade A',
-    supplierNotes: '',
-    tasteNote: '',
-  })
+  const [newLotForm, setNewLotForm] = useState(emptyPurchasedLotForm)
+  // The purchased lot the form is editing; null while it adds a new one.
+  const [editingLot, setEditingLot] = useState<GreenBeanLot | null>(null)
+  // The purchased lot whose Delete is being confirmed.
+  const [deletingLot, setDeletingLot] = useState<GreenBeanLot | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   const isAdmin = currentUser.roles?.includes(UserRole.Admin)
+
+  // Whose a stock row or purchased lot is, for an Admin who sees everyone's.
+  const userNameOf = useCallback(
+    (id?: string) => {
+      if (!id) return undefined
+      if (id === currentUser.id) return `${currentUser.name || 'You'} (you)`
+      return data.users.find((user) => user.id === id)?.name
+    },
+    [data.users, currentUser.id, currentUser.name],
+  )
+  // A purchased lot's buyer (or an Admin) may edit and delete it.
+  const canManagePurchasedLot = useCallback(
+    (lot: GreenBeanLot) => isAdminUser(currentUser) || lot.createdById === currentUser.id,
+    [currentUser],
+  )
 
   const processTypeOptions = useMemo(() => {
     const configuredTypes = data.processTypes
@@ -250,8 +278,10 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
           // Admins see all inventory; roasters see only their own
           return isAdmin || item.roasterId === currentUser.id
         })
+        // A purchased lot's stock row shows its lot's variety and process
+        .map((item) => withPurchasedLotDetails(item, data.greenBeanLots))
         .sort((a, b) => b.id.localeCompare(a.id)),
-    [data.roasterInventory, currentUser.id, isAdmin],
+    [data.roasterInventory, data.greenBeanLots, currentUser.id, isAdmin],
   )
 
   // Like the stock above: Admins see every roast (a roast they log from a
@@ -460,10 +490,18 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
   const sellRowOwnerName = sellingForOther
     ? data.users.find((user) => user.id === sellRow.roasterId)?.name || 'this roaster'
     : ''
+  // Whose stock a claim of the open purchased lot fills: its buyer's, as
+  // POST /api/roaster-inventory decides (an Admin's claim of a roaster's lot
+  // goes into that roaster's stock row).
+  const lotStockOwnerId = selectedExternalLot?.createdById ?? currentUser.id
+  const lotStockForOther = lotStockOwnerId !== currentUser.id
+  const lotStockOwnerName = lotStockForOther
+    ? userNameOf(lotStockOwnerId) || 'this roaster'
+    : ''
   const ownStockOfLot = selectedExternalLot
     ? data.roasterInventory.find(
         (item) =>
-          item.roasterId === currentUser.id &&
+          item.roasterId === lotStockOwnerId &&
           item.greenBeanLotId === selectedExternalLot.id &&
           item.remainingWeightKg > 0.01,
       )
@@ -519,7 +557,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     // less, so a claim that small could never be sold.
     const heldKg =
       data.roasterInventory.find(
-        (item) => item.roasterId === currentUser.id && item.greenBeanLotId === lot.id,
+        (item) => item.roasterId === lotStockOwnerId && item.greenBeanLotId === lot.id,
       )?.remainingWeightKg ?? 0
     if (kg + heldKg <= 0.01) {
       setSellClaimError('Claim more than 0.01 kg to sell it')
@@ -552,7 +590,9 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
       }))
       addToast({
         type: 'success',
-        message: `Claimed ${formatKg(kg)} kg into your stock. They stay there if you cancel the sale.`,
+        message: lotStockForOther
+          ? `Claimed ${formatKg(kg)} kg into ${lotStockOwnerName}'s stock. They stay there if you cancel the sale.`
+          : `Claimed ${formatKg(kg)} kg into your stock. They stay there if you cancel the sale.`,
       })
       if (session !== startLotSessionRef.current) return
       setSelectedInventoryItem({ ...inventoryItem, variety: lot.variety, process: lot.process })
@@ -751,6 +791,85 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
     roastLogRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  // ── Purchased lots: Add, Edit (the same form, filled) and Delete ──
+  const openAddLot = () => {
+    setEditingLot(null)
+    setIsAddLotModalOpen(true)
+  }
+
+  const openEditLot = (lot: GreenBeanLot) => {
+    setEditingLot(lot)
+    setNewLotForm(purchasedLotForm(lot))
+    setIsAddLotModalOpen(true)
+  }
+
+  const closeLotForm = () => {
+    setIsAddLotModalOpen(false)
+    // A cancelled Add keeps what was typed; a closed Edit leaves an empty form.
+    if (editingLot) setNewLotForm(emptyPurchasedLotForm())
+    setEditingLot(null)
+  }
+
+  const saveLotEdit = async (lot: GreenBeanLot) => {
+    const checked = purchasedLotUpdate(lot, newLotForm)
+    if ('error' in checked) {
+      addToast({ type: 'error', message: checked.error })
+      return
+    }
+    try {
+      setIsAddingLot(true)
+      const saved = await updatePurchasedLot(lot.id, checked.update)
+      setData((prev) => ({
+        ...prev,
+        greenBeanLots: prev.greenBeanLots.map((l) =>
+          l.id === saved.id ? withSavedEdit(l, saved) : l,
+        ),
+      }))
+      addToast({ type: 'success', message: `Saved ${toRoaId(lot.id)}` })
+      setIsAddLotModalOpen(false)
+      setEditingLot(null)
+      setNewLotForm(emptyPurchasedLotForm())
+    } catch (err: unknown) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error && err.message ? err.message : 'Could not save the lot',
+      })
+    } finally {
+      setIsAddingLot(false)
+    }
+  }
+
+  const askDeleteLot = (lot: GreenBeanLot) => {
+    setDeleteError('')
+    setDeletingLot(lot)
+  }
+
+  const closeDeleteLot = () => {
+    if (!deleteBusy) setDeletingLot(null)
+  }
+
+  // The server refuses a lot already claimed, roasted or sold; its reason
+  // shows in the popup.
+  const confirmDeleteLot = async () => {
+    if (!deletingLot || deleteBusy) return
+    const removedId = deletingLot.id
+    setDeleteBusy(true)
+    setDeleteError('')
+    try {
+      await deleteGreenBeanLot(removedId)
+      setData((prev) => ({
+        ...prev,
+        greenBeanLots: prev.greenBeanLots.filter((l) => l.id !== removedId),
+      }))
+      addToast({ type: 'success', message: `Deleted ${toRoaId(removedId)}` })
+      setDeletingLot(null)
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error && err.message ? err.message : 'Could not delete the lot')
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
   const quickActionHandlers = useRef({
     claim: handleQuickClaim,
     logRoast: handleQuickLogRoast,
@@ -859,12 +978,20 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                   onPageChange={setInventoryPage}
                   pageSize={inventoryPageSize}
                   hideHeader
+                  viewerIsAdmin={!!isAdmin}
+                  ownerNameOf={(lot) => userNameOf(lot.roasterId)}
                 />
               ) : (
                 <ExternalLotsTable
                   lots={pagedExternalLots as any}
                   onRoast={(lot) => handleExternalRoast(lot as any)}
-                  onAddExternal={() => setIsAddLotModalOpen(true)}
+                  onAddExternal={openAddLot}
+                  canManage={canManagePurchasedLot}
+                  onEdit={openEditLot}
+                  onDelete={askDeleteLot}
+                  ownerNameOf={
+                    isAdminUser(currentUser) ? (lot) => userNameOf(lot.createdById) : undefined
+                  }
                   currentPage={safeExternalPage}
                   totalPages={externalTotalPages}
                   onPageChange={setExternalPage}
@@ -1512,25 +1639,26 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
                           </h3>
                           <p className="mt-1 text-sm text-[#66756b]">
                             These beans are still on the purchased-lots shelf. Claim the kg you are
-                            selling into your stock, then choose the customer and price.
+                            selling into {lotStockForOther ? `${lotStockOwnerName}'s` : 'your'}{' '}
+                            stock, then choose the customer and price.
                           </p>
                         </section>
 
                         {ownStockOfLot && (
                           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#dfe9df] bg-[#f7fbf7] px-4 py-3">
                             <p className="text-sm text-[#46564b]">
-                              You already have{' '}
+                              {lotStockForOther ? `${lotStockOwnerName} already has` : 'You already have'}{' '}
                               <span className="font-bold text-[#294936]">
                                 {formatKg(ownStockOfLot.remainingWeightKg)} kg
                               </span>{' '}
-                              of this lot in your stock.
+                              of this lot in {lotStockForOther ? 'their' : 'your'} stock.
                             </p>
                             <button
                               type="button"
                               onClick={sellFromOwnStock}
                               className="rounded-lg border border-[#b8cabe] bg-white px-3 py-1.5 text-xs font-bold text-[#2e6848] transition-colors hover:bg-[#e9f2ec]"
                             >
-                              Sell from my stock
+                              {lotStockForOther ? 'Sell from their stock' : 'Sell from my stock'}
                             </button>
                           </div>
                         )}
@@ -1620,10 +1748,14 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
           })()}
       </Modal>
 
-      <Modal isOpen={isAddLotModalOpen} onClose={() => setIsAddLotModalOpen(false)} maxWidth="5xl">
+      <Modal isOpen={isAddLotModalOpen} onClose={closeLotForm} maxWidth="5xl">
         <form
           onSubmit={async (e) => {
             e.preventDefault()
+            if (editingLot) {
+              if (!isAddingLot) await saveLotEdit(editingLot)
+              return
+            }
             const initial = parseFloat(newLotForm.initialWeightKg)
             const price = parseFloat(newLotForm.pricePerKg)
             if (!newLotForm.originName || !newLotForm.variety || !newLotForm.processType) {
@@ -1663,19 +1795,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
               setData((prev) => ({ ...prev, greenBeanLots: [lot, ...prev.greenBeanLots] }))
               addToast({ type: 'success', message: `เพิ่ม External Lot สำเร็จ!` })
               setIsAddLotModalOpen(false)
-              setNewLotForm({
-                originName: '',
-                producerName: '',
-                variety: '',
-                processType: '',
-                purchaseDate: todayDateOnly(),
-                pricePerKg: '',
-                currency: 'THB',
-                initialWeightKg: '',
-                grade: 'Grade A',
-                supplierNotes: '',
-                tasteNote: '',
-              })
+              setNewLotForm(emptyPurchasedLotForm())
             } catch (err: unknown) {
               addToast({
                 type: 'error',
@@ -1692,9 +1812,20 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
             </div>
             <div>
               <h2 className="text-2xl font-bold tracking-tight text-[#20352b]">
-                Add External Green Bean Lot
+                {editingLot ? 'Edit Purchased Lot' : 'Add External Green Bean Lot'}
               </h2>
-              <p className="mt-0.5 text-sm text-[#7b8a80]">Record externally purchased stock</p>
+              <p className="mt-0.5 text-sm text-[#7b8a80]">
+                {editingLot ? (
+                  <>
+                    <span className="font-mono font-bold text-[#294936]">
+                      {toRoaId(editingLot.id)}
+                    </span>{' '}
+                    · Correct what was typed when it was added
+                  </>
+                ) : (
+                  'Record externally purchased stock'
+                )}
+              </p>
             </div>
           </div>
 
@@ -1775,7 +1906,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
               <Select
                 value={newLotForm.variety}
                 onChange={(v) => setNewLotForm({ ...newLotForm, variety: (v as string) || '' })}
-                options={COFFEE_VARIETIES}
+                options={withSavedOption(COFFEE_VARIETIES, newLotForm.variety)}
                 placeholder="Select variety..."
               />
             </div>
@@ -1786,7 +1917,7 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
               <Select
                 value={newLotForm.processType}
                 onChange={(v) => setNewLotForm({ ...newLotForm, processType: (v as string) || '' })}
-                options={processTypeOptions}
+                options={withSavedOption(processTypeOptions, newLotForm.processType)}
                 placeholder="Select process type..."
                 colorTheme="emerald"
               />
@@ -1801,25 +1932,35 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
               />
             </div>
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                Initial Weight (kg)
+              <label
+                htmlFor="purchased-lot-weight"
+                className="block text-sm font-bold text-gray-700 mb-2"
+              >
+                {editingLot ? 'Lot Weight (kg)' : 'Initial Weight (kg)'}
               </label>
               <input
                 type="number"
                 step="0.01"
                 min="0.01"
+                id="purchased-lot-weight"
                 className="block w-full border-2 border-gray-300 rounded-xl py-2.5 px-3"
                 value={newLotForm.initialWeightKg}
                 onChange={(e) => setNewLotForm({ ...newLotForm, initialWeightKg: e.target.value })}
                 required
               />
+              {editingLot && purchasedLotUsedKg(editingLot) > 0 && (
+                <p className="mt-1.5 text-xs text-gray-500">
+                  {toFixed2(purchasedLotUsedKg(editingLot))} kg already claimed or sold, so the
+                  weight cannot go below that.
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">Grade</label>
               <Select
                 value={newLotForm.grade}
                 onChange={(v) => setNewLotForm({ ...newLotForm, grade: (v as string) || '' })}
-                options={gradeNames}
+                options={withSavedOption(gradeNames, newLotForm.grade)}
                 placeholder="Select grade..."
               />
             </div>
@@ -1882,19 +2023,84 @@ const RoasterWorkbench: React.FC<RoasterWorkbenchProps> = ({ currentUser }) => {
           </div>
 
           <div className="mt-6 flex justify-end gap-3">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsAddLotModalOpen(false)}
-              disabled={isAddingLot}
-            >
+            <Button type="button" variant="secondary" onClick={closeLotForm} disabled={isAddingLot}>
               Cancel
             </Button>
             <Button type="submit" variant="success" disabled={isAddingLot}>
-              {isAddingLot ? 'Adding...' : 'Add Lot'}
+              {editingLot
+                ? isAddingLot
+                  ? 'Saving...'
+                  : 'Save changes'
+                : isAddingLot
+                  ? 'Adding...'
+                  : 'Add Lot'}
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete a purchased lot: a centred confirm popup */}
+      <Modal
+        isOpen={!!deletingLot}
+        onClose={closeDeleteLot}
+        maxWidth="sm"
+        showCloseButton={false}
+        ariaLabelledBy="delete-purchased-lot-title"
+        className="!p-5 !rounded-xl"
+      >
+        {deletingLot && (
+          <div>
+            <p
+              id="delete-purchased-lot-title"
+              className="flex items-center gap-2 text-base font-semibold text-gray-900"
+            >
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+              Delete purchased lot {toRoaId(deletingLot.id)}?
+            </p>
+            <p className="mt-1 text-sm text-gray-600">
+              {[
+                [deletingLot.externalSource?.variety, deletingLot.externalSource?.originName]
+                  .filter(Boolean)
+                  .join(' from '),
+                `${toFixed2(deletingLot.initialWeightKg)} kg`,
+              ]
+                .filter(Boolean)
+                .join(', ')}
+              . This cannot be undone.
+            </p>
+            {deleteError && (
+              <p
+                role="alert"
+                className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700"
+              >
+                {deleteError}
+              </p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeDeleteLot}
+                disabled={deleteBusy}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Keep lot
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteLot}
+                disabled={deleteBusy}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+              >
+                {deleteBusy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                {deleteBusy ? 'Deleting…' : 'Delete lot'}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )

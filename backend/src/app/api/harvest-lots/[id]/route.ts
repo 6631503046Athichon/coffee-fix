@@ -6,6 +6,9 @@ import type { AuthenticatedUser } from '@/lib/middleware'
 import { parseStrictDateOnly, parseStrictNumber } from '@/lib/utils'
 import { serializeHarvestLot } from '@/lib/harvestLot'
 import { chainScope, requireInScope } from '@/lib/farmAccess'
+import { describeDependents, hasDependents as anyDependents } from '@/lib/lotCorrections'
+import { SALE_TX_OPTIONS } from '@/lib/saleOrders'
+import { GREEN_LOT_USES_COUNT, deleteUnusedGreenLots, greenLotDependents } from '@/lib/greenLotRemoval'
 import {
   PROCESSOR_EDITABLE_HARVEST_LOT_FIELDS,
   processorUpdateHarvestLotSchema,
@@ -32,15 +35,19 @@ const PROCESSED_LOCK_ERROR = 'This lot has already been processed, so its weight
 const PROCESSED_STATUS_ERROR =
   'This lot has a processing batch or parchment lot, so its status stays Complete'
 // Deleting a processed lot cascades away its batches, drying logs, parchment
-// lots, physical tests and parchment withdrawals (sales included), and leaves
-// its green-bean lots without a source. Only an Admin may do that, and only by
-// asking for it with ?cascade=1 after seeing what will be lost.
+// lots, physical tests and parchment withdrawals (sales included), and the
+// green bean lots made from that parchment while nothing uses them (see
+// deleteChain). Only an Admin may do that, and only by asking for it with
+// ?cascade=1 after seeing what will be lost.
 const PROCESSED_DELETE_ERROR = 'This lot has already been processed'
 const CASCADE_ADMIN_ONLY_ERROR =
   'Only an Admin can delete a processed lot together with everything linked to it'
 // The counts the Admin confirmed (?expect=) no longer match what is linked.
 const DEPENDENTS_CHANGED_ERROR =
   'What is linked to this lot has changed since you looked, so it was not deleted'
+// A green bean lot made from the lot was used while the cascade ran.
+const GREEN_LOTS_CHANGED_ERROR =
+  'A green bean lot made from this lot was used while it was being deleted, so nothing was deleted. Reload and try again.'
 const FARM_REQUIRED_ERROR = 'A harvest lot must stay on a farm'
 const PROCESSOR_EDITABLE_FIELD_SET: ReadonlySet<string> = new Set(PROCESSOR_EDITABLE_HARVEST_LOT_FIELDS)
 
@@ -173,13 +180,17 @@ async function lotResponse(id: string) {
   return NextResponse.json({ harvestLot: serializeHarvestLot(harvestLot) })
 }
 
+// The lot's parchment: it hangs off the lot directly or through one of its
+// batches.
+function chainParchmentWhere(id: string): Prisma.ParchmentLotWhereInput {
+  return { OR: [{ harvestLotId: id }, { processingBatch: { harvestLotId: id } }] }
+}
+
 // What deleting a processed lot would take with it, so an Admin can decide.
-// Parchment lots hang off the lot directly or through one of its batches.
-// Green-bean lots are not deleted, but lose their parchment source.
+// The green bean lots made from its parchment go too (refused while any is
+// used, see deleteChain).
 async function countDependents(id: string) {
-  const parchmentWhere: Prisma.ParchmentLotWhereInput = {
-    OR: [{ harvestLotId: id }, { processingBatch: { harvestLotId: id } }],
-  }
+  const parchmentWhere = chainParchmentWhere(id)
   const [processingBatches, parchmentLots, greenBeanLots, withdrawals] = await Promise.all([
     prisma.processingBatch.count({ where: { harvestLotId: id } }),
     prisma.parchmentLot.count({ where: parchmentWhere }),
@@ -187,6 +198,73 @@ async function countDependents(id: string) {
     prisma.parchmentWithdrawal.count({ where: { parchmentLot: parchmentWhere } }),
   ])
   return { processingBatches, parchmentLots, greenBeanLots, withdrawals }
+}
+
+/** A cascade delete refused inside its transaction, which rolls it back (409). */
+class ChainDeleteRefused extends Error {
+  constructor(
+    message: string,
+    readonly greenBeanLotsInUse: GreenLotInUse[] = []
+  ) {
+    super(message)
+    this.name = 'ChainDeleteRefused'
+  }
+}
+
+type GreenLotInUse = {
+  id: string
+  displayId: string | null
+  grade: string
+  dependents: ReturnType<typeof greenLotDependents>
+}
+
+function greenLotsInUseMessage(lots: GreenLotInUse[]): string {
+  const list = lots
+    .map(lot => `${lot.displayId ?? lot.id} (${lot.grade}) has ${describeDependents(lot.dependents)}`)
+    .join('; ')
+  return (
+    `Green bean lots made from this lot are still in use, so nothing was deleted: ${list}. ` +
+    'Void their withdrawals, or settle their stock, roasts, sales and cupping first, then delete again.'
+  )
+}
+
+// Deletes a processed lot with its whole chain, for an Admin's ?cascade=1, in
+// one transaction. The schema cascades the batches, drying logs, parchment
+// lots, physical tests and parchment withdrawals; the green bean lots made
+// from that parchment would only lose their source, so they are deleted
+// first, while nothing uses them (lib/greenLotRemoval: no withdrawal that
+// still counts, no roaster stock holding kg, no roast, sale or invoice line,
+// no cupping sample; their voided withdrawals, empty roaster stock rows and
+// price history go with them). If any is used, nothing is deleted and the
+// refusal lists them for the Admin to void or settle first.
+async function deleteChain(id: string): Promise<number> {
+  return prisma.$transaction(async (tx) => {
+    // The parchment first, as a Hull & Grade takes it, so no green bean lot is
+    // made from it meanwhile; then those lots, as a withdrawal or claim takes them.
+    await tx.$queryRaw`SELECT "id" FROM "ParchmentLot" WHERE "harvestLotId" = ${id} OR "processingBatchId" IN (SELECT "id" FROM "ProcessingBatch" WHERE "harvestLotId" = ${id}) ORDER BY "id" FOR UPDATE`
+    await tx.$queryRaw`SELECT "id" FROM "GreenBeanLot" WHERE "parchmentLotId" IN (SELECT "id" FROM "ParchmentLot" WHERE "harvestLotId" = ${id} OR "processingBatchId" IN (SELECT "id" FROM "ProcessingBatch" WHERE "harvestLotId" = ${id})) ORDER BY "id" FOR UPDATE`
+    const greenLots = await tx.greenBeanLot.findMany({
+      where: { parchmentLot: chainParchmentWhere(id) },
+      select: { id: true, displayId: true, grade: true, _count: { select: GREEN_LOT_USES_COUNT } },
+      orderBy: { createdAt: 'asc' },
+    })
+    const inUse = greenLots
+      .map(lot => ({
+        id: lot.id,
+        displayId: lot.displayId,
+        grade: lot.grade,
+        dependents: greenLotDependents(lot._count),
+      }))
+      .filter(lot => anyDependents(lot.dependents))
+    if (inUse.length > 0) throw new ChainDeleteRefused(greenLotsInUseMessage(inUse), inUse)
+
+    const ids = greenLots.map(lot => lot.id)
+    if ((await deleteUnusedGreenLots(tx, ids)) !== ids.length) {
+      throw new ChainDeleteRefused(GREEN_LOTS_CHANGED_ERROR)
+    }
+    await tx.harvestLot.delete({ where: { id } })
+    return ids.length
+  }, SALE_TX_OPTIONS)
 }
 
 // The body as a plain JSON object, or null when it is not one.
@@ -576,8 +654,19 @@ export async function DELETE(
           return NextResponse.json({ error: DEPENDENTS_CHANGED_ERROR, dependents }, { status: 409 })
         }
       }
-      await prisma.harvestLot.delete({ where: { id } })
-      return NextResponse.json({ message: 'Harvest lot deleted successfully' })
+      try {
+        const greenBeanLotsDeleted = await deleteChain(id)
+        return NextResponse.json({ message: 'Harvest lot deleted successfully', greenBeanLotsDeleted })
+      } catch (error) {
+        if (!(error instanceof ChainDeleteRefused)) throw error
+        return NextResponse.json(
+          {
+            error: error.message,
+            ...(error.greenBeanLotsInUse.length > 0 && { greenBeanLotsInUse: error.greenBeanLotsInUse }),
+          },
+          { status: 409 }
+        )
+      }
     }
 
     return NextResponse.json(

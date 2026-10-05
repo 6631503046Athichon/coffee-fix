@@ -478,14 +478,16 @@ describe('roasters read their own lots and the shelf', () => {
     })
   })
 
-  test("the batch's processor and its farm's farmer still list the parchment with the batch's owner and status", async () => {
+  test("the batch's processor, its farm's farmer and Admin still list the parchment with the batch's owner and status", async () => {
     tables.processingBatch[0].status = 'Completed'
-    for (const viewer of [procA, owner]) {
+    for (const viewer of [procA, owner, admin]) {
       mockAuthUser = viewer
       const { GET } = await import('@/app/api/parchment-lots/route')
       const { parchmentLots } = await (await GET(request('/api/parchment-lots'))).json()
       const lot = parchmentLots.find((row: Row) => row.id === 'pl-a')
       expect(lot.processingBatch).toMatchObject({ id: 'pb-a', createdById: 'proc-a', status: 'Completed' })
+      // The farm was loaded only for canReadBatch: no reader gets it.
+      expect(lot.processingBatch.harvestLot).toBeUndefined()
     }
   })
 

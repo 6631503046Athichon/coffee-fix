@@ -6,7 +6,8 @@ import Select from '@/components/common/Select';
 import { useAuth } from '@/contexts/AuthContext';
 import { Search, ExternalLink, CheckCircle, Archive, AlertCircle, ChevronLeft, ChevronRight, QrCode, Star } from 'lucide-react';
 import { UserRole, GreenBeanLot } from '@/types';
-import { toRoaId } from '@/utils/formatters';
+import { formatGreenBeanId } from '@/utils/formatDisplayId'
+import { toRoaId } from '@/utils/formatters'
 import { isAdminUser } from '@/utils/farmAccess';
 import { canManageGreenBeanLot } from '@/components/processor/workbench/stockAccess';
 import { QRCodeModal } from '@/components/traceability/modals/QRCodeModal';
@@ -22,16 +23,20 @@ const isRecentLot = (dateString?: string | null): boolean => {
   return diffHours >= 0 && diffHours <= NEW_TAG_HOURS
 }
 
+// What a row without a process or variety shows, and the filter option for it.
+const UNKNOWN = 'Unknown'
+
 /**
  * Filter dropdown values: 'All', then the distinct values present, in
- * `order` when given (unknown values after, alphabetically). 'N/A' goes last
- * so a placeholder never sits between real values.
+ * `order` when given (values not in it after, alphabetically). UNKNOWN goes
+ * last so a placeholder never sits between real values; it is only offered
+ * when some row has no value.
  */
 const filterOptions = (values: (string | undefined)[], order: string[] = []): string[] => {
   const rank = new Map(order.map((name, i) => [name, i]))
   const distinct = Array.from(new Set(values.filter((v): v is string => Boolean(v))))
   distinct.sort((a, b) => {
-    if (a === 'N/A' || b === 'N/A') return a === 'N/A' ? 1 : -1
+    if (a === UNKNOWN || b === UNKNOWN) return a === UNKNOWN ? 1 : -1
     const ra = rank.get(a) ?? Number.MAX_SAFE_INTEGER
     const rb = rank.get(b) ?? Number.MAX_SAFE_INTEGER
     return ra !== rb ? ra - rb : a.localeCompare(b)
@@ -40,6 +45,8 @@ const filterOptions = (values: (string | undefined)[], order: string[] = []): st
 }
 
 interface EnrichedLot extends GreenBeanLot {
+  /** The lot number the Processor Workbench uses too (GBL-2026-7). */
+  lotLabel: string
   processType: string
   variety: string
   finalScore: string | number
@@ -109,10 +116,17 @@ const TraceabilityHub: React.FC = () => {
 
           return {
             ...gbl,
+            lotLabel: formatGreenBeanId(gbl),
             // A roaster's shelf lot comes without its batch (out of their
-            // scope); its parchment lot carries the process too.
-            processType: processingBatch?.processType || parchmentLot?.processType || 'N/A',
-            variety: harvestLot?.cherryVariety || 'N/A',
+            // scope); its parchment lot carries the process too. A bought-in
+            // lot has them on its external source, as its public page shows.
+            processType:
+              processingBatch?.processType ||
+              parchmentLot?.processType ||
+              gbl.parchmentProcessType ||
+              gbl.externalSource?.processType ||
+              UNKNOWN,
+            variety: harvestLot?.cherryVariety || gbl.externalSource?.variety || UNKNOWN,
             finalScore,
           } as EnrichedLot
         })
@@ -142,10 +156,12 @@ const TraceabilityHub: React.FC = () => {
           const matchesVariety = varietyFilter === 'All' || lot.variety === varietyFilter
           const matchesProcess = processFilter === 'All' || lot.processType === processFilter
           const matchesGrade = gradeFilter === 'All' || lot.grade === gradeFilter
-          const formattedLotId = toRoaId(lot.id).toLowerCase()
+          // The ROA id is never shown here, but invoices and the roaster's
+          // stock rows still name the lot that way, so it stays searchable.
           return (
             ((lot.id?.toLowerCase() || '').includes(searchLower) ||
-              formattedLotId.includes(searchLower) ||
+              lot.lotLabel.toLowerCase().includes(searchLower) ||
+              (lot.id ? toRoaId(lot.id).toLowerCase().includes(searchLower) : false) ||
               (lot.publicTraceId?.toLowerCase() || '').includes(searchLower) ||
               (lot.grade?.toLowerCase() || '').includes(searchLower) ||
               (lot.processType?.toLowerCase() || '').includes(searchLower) ||
@@ -353,7 +369,7 @@ const TraceabilityHub: React.FC = () => {
                             className="text-sm font-mono font-semibold text-gray-900"
                             title={lot.id}
                           >
-                            {toRoaId(lot.id)}
+                            {lot.lotLabel}
                           </span>
                           {isNew && (
                             <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700 border border-rose-200">
@@ -363,15 +379,15 @@ const TraceabilityHub: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
-                        <span className="text-sm text-gray-700">{lot.variety || 'N/A'}</span>
+                        <span className="text-sm text-gray-700">{lot.variety || UNKNOWN}</span>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
                         <span className="text-sm font-medium text-gray-900">
-                          {lot.processType || 'N/A'}
+                          {lot.processType || UNKNOWN}
                         </span>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
-                        <span className="text-sm text-gray-700">{lot.grade || 'N/A'}</span>
+                        <span className="text-sm text-gray-700">{lot.grade || UNKNOWN}</span>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
@@ -513,6 +529,7 @@ const TraceabilityHub: React.FC = () => {
             setSelectedLotForQR(null)
           }}
           lotId={selectedLotForQR.id}
+          lotLabel={selectedLotForQR.lotLabel}
           publicTraceId={selectedLotForQR.publicTraceId}
           onPublicIdGenerated={handlePublicIdGenerated}
           canGenerate={canPublishLot(selectedLotForQR)}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Modal } from '../../common/Modal';
 import { Button } from '../../common/Button';
-import { Download, Printer, Copy, Check, QrCode, RefreshCw, Image } from 'lucide-react';
+import { Download, Printer, Copy, Check, QrCode, RefreshCw, Image, AlertTriangle } from 'lucide-react';
 import { generatePublicTraceId, getPublicTraceUrl, generateQRDataUrl, generateQRSvg } from '../../../services/lots/greenBeanLotService';
 
 const escapeHtml = (str: string) =>
@@ -11,6 +11,8 @@ interface QRCodeModalProps {
   isOpen: boolean;
   onClose: () => void;
   lotId: string;
+  /** The lot's display id (GBL-2026-7), for the popup and print window titles. */
+  lotLabel?: string;
   publicTraceId?: string | null;
   onPublicIdGenerated?: (publicTraceId: string) => void;
   /**
@@ -26,6 +28,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   isOpen,
   onClose,
   lotId,
+  lotLabel,
   publicTraceId,
   onPublicIdGenerated,
   canGenerate = false
@@ -37,6 +40,9 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentPublicId, setCurrentPublicId] = useState(publicTraceId);
   const [error, setError] = useState<string | null>(null);
+  // Regenerating kills the current link, and with it every printed QR code
+  // and invoice that carries it, so it is asked for first.
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false);
 
   const publicUrl = currentPublicId ? getPublicTraceUrl(currentPublicId) : '';
 
@@ -84,6 +90,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
     if (!isOpen) {
       setError(null);
       setIsLinkCopied(false);
+      setConfirmRegenerate(false);
     }
   }, [isOpen]);
 
@@ -137,6 +144,11 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
     }
   };
 
+  const handleConfirmRegenerate = () => {
+    setConfirmRegenerate(false);
+    handleGeneratePublicId({ regenerate: true, autoClose: true });
+  };
+
   const handleDownloadPNG = () => {
     if (!qrDataUrl) return;
     const link = document.createElement('a');
@@ -175,7 +187,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
     if (printWindow) {
       printWindow.document.write(`
         <html>
-          <head><title>QR Code - ${escapeHtml(lotId)}</title></head>
+          <head><title>QR Code - ${escapeHtml(lotLabel || lotId)}</title></head>
           <body style="text-align: center; margin-top: 50px; font-family: system-ui, sans-serif;">
             <img src="${escapeHtml(qrDataUrl)}" alt="QR Code" style="width: ${size}px; height: ${size}px;" />
             <p style="margin-top: 20px; font-size: 12px; color: #666; word-break: break-all; max-width: 400px; margin-left: auto; margin-right: auto;">${escapeHtml(publicUrl)}</p>
@@ -190,7 +202,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="QR Code" maxWidth="md">
+    <Modal isOpen={isOpen} onClose={onClose} title={lotLabel ? `QR Code · ${lotLabel}` : 'QR Code'} maxWidth="md">
       <div className="space-y-6">
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
@@ -318,7 +330,7 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
               <div className="border-t border-gray-200 pt-4">
                 <Button
                   variant="outline"
-                  onClick={() => handleGeneratePublicId({ regenerate: true, autoClose: true })}
+                  onClick={() => setConfirmRegenerate(true)}
                   disabled={isGenerating}
                   loading={isGenerating}
                   fullWidth
@@ -334,6 +346,43 @@ export const QRCodeModal: React.FC<QRCodeModalProps> = ({
           </>
         )}
       </div>
+
+      {/* Regenerate confirmation */}
+      <Modal
+        isOpen={isOpen && confirmRegenerate}
+        onClose={() => setConfirmRegenerate(false)}
+        maxWidth="sm"
+        showCloseButton={false}
+        ariaLabelledBy="regenerate-public-id-title"
+        className="!p-5 !rounded-xl"
+      >
+        <div>
+          <p id="regenerate-public-id-title" className="flex items-center gap-2 text-base font-semibold text-gray-900">
+            <AlertTriangle className="h-4 w-4 text-red-600" />
+            Regenerate the public link?
+          </p>
+          <p className="mt-1 text-sm text-gray-600">
+            Printed QR codes and invoices with the current link will stop working.
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmRegenerate(false)}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmRegenerate}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Regenerate link
+            </button>
+          </div>
+        </div>
+      </Modal>
     </Modal>
   );
 };

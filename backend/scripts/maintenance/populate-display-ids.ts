@@ -22,6 +22,7 @@ import { businessYear } from '../../src/lib/utils'
 type DisplayIdModel = {
   findMany: (args: any) => Promise<any[]>
   updateMany: (args: any) => Promise<{ count: number }>
+  count: (args: { where: { displayId: null } }) => Promise<number>
 }
 
 const MAX_ATTEMPTS = 5
@@ -106,10 +107,30 @@ async function populateForModel(model: DisplayIdModel, prefix: string, modelName
 async function populateDisplayIds() {
   console.log('Numbering rows that have no displayId...\n')
 
-  await populateForModel(prisma.harvestLot, 'HL', 'HarvestLot')
-  await populateForModel(prisma.processingBatch, 'PB', 'ProcessingBatch')
-  await populateForModel(prisma.parchmentLot, 'PCH', 'ParchmentLot')
-  await populateForModel(prisma.greenBeanLot, 'GBL', 'GreenBeanLot')
+  const models: [DisplayIdModel, string, string][] = [
+    [prisma.harvestLot, 'HL', 'HarvestLot'],
+    [prisma.processingBatch, 'PB', 'ProcessingBatch'],
+    [prisma.parchmentLot, 'PCH', 'ParchmentLot'],
+    [prisma.greenBeanLot, 'GBL', 'GreenBeanLot'],
+  ]
+  for (const [model, prefix, modelName] of models) {
+    await populateForModel(model, prefix, modelName)
+  }
+
+  // A row no free number was found for stays without one: the run failed, so
+  // it exits 1 for whoever (or whatever) ran it. Counted afresh, so a row the
+  // app numbered meanwhile is not a failure.
+  let unnumbered = 0
+  for (const [model, , modelName] of models) {
+    const left = await model.count({ where: { displayId: null } })
+    if (left > 0) console.error(`${modelName}: ${left} records still have no displayId`)
+    unnumbered += left
+  }
+  if (unnumbered > 0) {
+    console.error(`\nNot done: ${unnumbered} records still have no displayId. Run it again or check the errors above.`)
+    process.exitCode = 1
+    return
+  }
 
   console.log('\nDone!')
 }

@@ -259,3 +259,105 @@ describe('a voided withdrawal does not keep a record from being deleted', () => 
     expect(mockDb.get('harvestLot', 'hl-1')!.status).toBe('ReadyForProcessing')
   })
 })
+
+describe('a green bean lot with a roaster stock row that holds nothing', () => {
+  // A Roasting Stock push voided before the void removed the row it made
+  // leaves the roaster's stock row at 0 claimed / 0 left (production data).
+  const seedLot = () =>
+    mockDb.seed('greenBeanLot', {
+      id: 'gbl-pushed',
+      displayId: 'GBL-2026-7',
+      sourceType: 'External',
+      parchmentLotId: null,
+      grade: 'Grade A',
+      initialWeightKg: 40,
+      currentWeightKg: 40,
+      availabilityStatus: 'Available',
+      createdById: 'processor-1',
+    })
+  const seedStockRow = (claimedWeightKg: number, remainingWeightKg: number) =>
+    mockDb.seed('roasterInventoryItem', {
+      id: 'inv-1',
+      roasterId: 'roaster-1',
+      greenBeanLotId: 'gbl-pushed',
+      claimedWeightKg,
+      remainingWeightKg,
+    })
+
+  test.each([
+    ['its owner', processor],
+    ['an Admin', admin],
+  ])('is deleted by %s, and the empty row goes with it', async (_who, actor) => {
+    seedLot()
+    seedStockRow(0, 0)
+    mockDb.seed('greenBeanWithdrawal', {
+      id: 'gbw-void',
+      greenBeanLotId: 'gbl-pushed',
+      amountKg: 40,
+      withdrawalType: 'RoastingStock',
+      targetRoasterId: 'roaster-1',
+      voidedAt: new Date(),
+    })
+    mockAuthUser = actor
+
+    const response = await deleteGreen('gbl-pushed')
+    expect(response.status).toBe(200)
+    expect(mockDb.get('greenBeanLot', 'gbl-pushed')).toBeUndefined()
+    expect(mockDb.rows('roasterInventoryItem')).toEqual([])
+    expect(mockDb.rows('greenBeanWithdrawal')).toEqual([])
+    // The lot is locked before anything is deleted.
+    expect(mockDb.locks[0]).toContain('FROM "GreenBeanLot" WHERE "id" = ? FOR UPDATE [gbl-pushed]')
+  })
+
+  test.each([
+    ['kg claimed', () => seedStockRow(5, 0)],
+    ['kg left on the shelf', () => seedStockRow(0, 5)],
+    ['a sale line from it', () => {
+      seedStockRow(0, 0)
+      mockDb.seed('saleOrderItem', { id: 'soi-1', roasterInventoryId: 'inv-1', greenBeanLotId: 'other-lot' })
+    }],
+  ])('is still refused, Admin included, when the row has %s', async (_what, setUp) => {
+    seedLot()
+    setUp()
+    mockAuthUser = admin
+
+    const response = await deleteGreen('gbl-pushed')
+    expect(response.status).toBe(409)
+    const body = await response.json()
+    expect(body.error).toBe('This green bean lot already has 1 roaster stock record, so it was not deleted')
+    expect(body.dependents).toMatchObject({ roasterInventory: 1 })
+    expect(mockDb.get('greenBeanLot', 'gbl-pushed')).toBeDefined()
+    expect(mockDb.rows('roasterInventoryItem')).toHaveLength(1)
+  })
+
+  test('a claim that lands after the check rolls the delete back, empty row included', async () => {
+    seedLot()
+    seedStockRow(0, 0)
+    mockDb.seed('roasterInventoryItem', {
+      id: 'inv-2',
+      roasterId: 'roaster-2',
+      greenBeanLotId: 'gbl-pushed',
+      claimedWeightKg: 0,
+      remainingWeightKg: 0,
+    })
+    mockAuthUser = admin
+    // The check read both rows empty; by the delete roaster 2 claimed 5 kg.
+    const read = mockDb.tx.greenBeanLot.findUnique
+    mockDb.tx.greenBeanLot.findUnique = async (args: any) => {
+      const lot = await read(args)
+      Object.assign(mockDb.get('roasterInventoryItem', 'inv-2')!, { claimedWeightKg: 5, remainingWeightKg: 5 })
+      return lot
+    }
+    try {
+      const response = await deleteGreen('gbl-pushed')
+      expect(response.status).toBe(409)
+      expect((await response.json()).error).toContain('was drawn from since you looked')
+    } finally {
+      mockDb.tx.greenBeanLot.findUnique = read
+    }
+    expect(mockDb.get('greenBeanLot', 'gbl-pushed')).toBeDefined()
+    // The empty row the transaction removed is back.
+    expect(mockDb.get('roasterInventoryItem', 'inv-1')).toMatchObject({ claimedWeightKg: 0, remainingWeightKg: 0 })
+    expect(mockDb.get('roasterInventoryItem', 'inv-2')).toMatchObject({ claimedWeightKg: 5 })
+  })
+})

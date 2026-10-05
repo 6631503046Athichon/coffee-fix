@@ -6,8 +6,9 @@
  * It covers what the withdrawal routes use: findUnique / findFirst / findMany
  * / count, create / update / updateMany / delete / deleteMany, simple where
  * filters (equality, null, gte / gt / lte / lt, in, not, startsWith, the
- * roasterId_greenBeanLotId compound key, and none / some / every on the
- * list relations below), select / include with those relations, `_count`
+ * roasterId_greenBeanLotId compound key, none / some / every on the
+ * list relations below and a nested where on the to-one ones), select /
+ * include with those relations, `_count`
  * (filtered with `where` too), orderBy and take. Deleting a lot takes its
  * withdrawals with it, as the schema cascades them. An unknown relation or
  * filter throws, so a route that needs more fails loudly instead of passing
@@ -41,6 +42,9 @@ const RELATIONS: Record<string, Record<string, Relation>> = {
     parchmentLots: many('parchmentLot', 'harvestLotId'),
   },
   processingBatch: {
+    harvestLot: one('harvestLot', 'harvestLotId'),
+    cropYear: one('cropYear', 'cropYearId'),
+    dryingLogs: many('dryingLogEntry', 'processingBatchId'),
     parchmentLots: many('parchmentLot', 'processingBatchId'),
   },
   parchmentLot: {
@@ -72,6 +76,8 @@ const RELATIONS: Record<string, Record<string, Relation>> = {
   roasterInventoryItem: {
     roaster: one('user', 'roasterId'),
     greenBeanLot: one('greenBeanLot', 'greenBeanLotId'),
+    roastBatches: many('roastBatch', 'roasterInventoryId'),
+    saleOrderItems: many('saleOrderItem', 'roasterInventoryId'),
   },
 }
 
@@ -190,9 +196,18 @@ export function createMemoryPrisma() {
     return true
   }
 
-  // none / some / every on a list relation, e.g. withdrawalHistory: { none: {} }.
+  // none / some / every on a list relation, e.g. withdrawalHistory: { none: {} };
+  // on a to-one relation, a where for the related row (null: there is none).
   function matchesRelation(model: string, key: string, row: Row, cond: unknown): boolean {
     const rel = relationOf(model, key)!
+    if (rel.kind === 'one') {
+      const target = related(model, key, row) as Row | null
+      if (cond === null) return target === null
+      if (!isPlainObject(cond) || 'is' in cond || 'isNot' in cond) {
+        throw new Error(`memoryPrisma: relation filter "${model}.${key}" not supported`)
+      }
+      return target !== null && matches(rel.model, target, cond)
+    }
     const ops = isPlainObject(cond) ? Object.keys(cond) : []
     if (rel.kind !== 'many' || ops.length === 0 || ops.some(op => !['none', 'some', 'every'].includes(op))) {
       throw new Error(`memoryPrisma: relation filter "${model}.${key}" not supported`)

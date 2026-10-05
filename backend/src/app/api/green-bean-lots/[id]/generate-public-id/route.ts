@@ -66,24 +66,28 @@ export async function POST(
     // Generate new public ID
     const data = { publicTraceId: randomUUID(), qrGeneratedAt: new Date() }
 
-    if (regenerate) {
-      await prisma.greenBeanLot.update({ where: { id }, data, select: traceSelect })
-      return traceResponse({ id, ...data })
-    }
-
-    // First publish: only fill an empty id, so two first-time requests racing
-    // each other end with one id instead of the later replacing the earlier.
+    // Compare-and-swap on the id as read (null on a first publish), so two
+    // requests racing each other end with one id instead of the later
+    // replacing the earlier: the one that loses gets the id that won. A
+    // regenerate racing another regenerate thus still ends with a new id,
+    // printed once.
     const { count } = await prisma.greenBeanLot.updateMany({
-      where: { id, publicTraceId: null },
+      where: { id, publicTraceId: lot.publicTraceId },
       data
     })
     if (count === 1) return traceResponse({ id, ...data })
 
     const current = await prisma.greenBeanLot.findUnique({ where: { id }, select: traceSelect })
-    if (!current?.publicTraceId) {
+    if (!current) {
       return NextResponse.json(
         { error: 'Green bean lot not found' },
         { status: 404 }
+      )
+    }
+    if (!current.publicTraceId) {
+      return NextResponse.json(
+        { error: 'This lot changed while its public id was being made. Reload and try again.' },
+        { status: 409 }
       )
     }
     return traceResponse({ id: current.id, publicTraceId: current.publicTraceId, qrGeneratedAt: current.qrGeneratedAt })

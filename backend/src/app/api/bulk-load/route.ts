@@ -263,7 +263,9 @@ export async function GET(request: NextRequest) {
         prisma.processingBatch.findMany({
           where: processingScopeWhere,
           include: {
-            dryingLogs: { orderBy: { date: 'desc' }, take: 10 },
+            // Every reading, oldest first: the processor's Drying log popup
+            // edits them all and Quality Insights plots the whole curve.
+            dryingLogs: { orderBy: [{ date: 'asc' }, { createdAt: 'asc' }] },
           },
           orderBy: { createdAt: 'desc' },
         }),

@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from '../api'
 import { ProcessingBatchStatus } from '../../types'
 import {
+  BATCH_NOT_GRADED_MESSAGE,
   deleteProcessingBatch,
+  processAndGradeBatch,
   transformProcessingBatchFromBackend,
   updateProcessingBatch,
 } from './processingBatchService'
@@ -91,5 +93,59 @@ describe('deleteProcessingBatch', () => {
       message: 'Processing batch deleted successfully', harvestLotReleased: true, parchmentLotsDeleted: 1,
     })
     await expect(deleteProcessingBatch('pb-1')).resolves.toEqual({ harvestLotReleased: true, parchmentLotsDeleted: 1 })
+  })
+})
+
+describe('processAndGradeBatch', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('sends the Completed batch with its grades in one call and maps all three results back', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue({
+      processingBatch: { ...batchJson, parchmentLots: [] },
+      parchmentLot: { ...batchJson.parchmentLots[0], currentWeightKg: 0, status: 'Hulled', withdrawalHistory: [] },
+      greenBeanLots: [{
+        id: 'gbl-1', displayId: 'GBL-2026-4', sourceType: 'Internal', parchmentLotId: 'pl-1', grade: 'Grade A',
+        initialWeightKg: 60, currentWeightKg: 60, availabilityStatus: 'Available', pricePerKg: 220, currency: 'THB',
+      }],
+      message: 'Processing batch created and graded successfully',
+    })
+
+    const result = await processAndGradeBatch(
+      { harvestLotId: 'hl-1', processType: 'Natural', parchmentWeightKg: 90, moistureContent: 11 },
+      { totalGreenBeanWeight: 60, gradedLots: [{ grade: 'Grade A', weight: 60, price: 220 }] },
+    )
+
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(post).toHaveBeenCalledWith('/processing-batches', expect.objectContaining({
+      harvestLotId: 'hl-1',
+      status: 'Completed',
+      processType: 'Natural',
+      parchmentWeightKg: 90,
+      moistureContent: 11,
+      hullAndGrade: { totalGreenBeanWeight: 60, gradedLots: [{ grade: 'Grade A', weight: 60, price: 220 }] },
+    }))
+    expect(result.processingBatch).toMatchObject({ id: 'pb-1', status: ProcessingBatchStatus.Completed })
+    expect(result.parchmentLot).toMatchObject({ id: 'pl-1', currentWeightKg: 0, status: 'Hulled' })
+    expect(result.greenBeanLots).toEqual([
+      expect.objectContaining({ id: 'gbl-1', grade: 'Grade A', pricePerKg: 220, currentWeightKg: 60 }),
+    ])
+  })
+
+  it.each([
+    ['no parchment lot', { greenBeanLots: [] }],
+    ['no green bean lots', { parchmentLot: { ...batchJson.parchmentLots[0] } }],
+    ['green bean lots that are not a list', { parchmentLot: { ...batchJson.parchmentLots[0] }, greenBeanLots: null }],
+  ])('says the batch was saved but not graded when the answer has %s', async (_case, extra) => {
+    vi.spyOn(api, 'post').mockResolvedValue({
+      processingBatch: { ...batchJson, parchmentLots: [] },
+      message: 'Processing batch created successfully',
+      ...extra,
+    })
+
+    await expect(processAndGradeBatch(
+      { harvestLotId: 'hl-1', processType: 'Natural', parchmentWeightKg: 90, moistureContent: 11 },
+      { totalGreenBeanWeight: 60, gradedLots: [{ grade: 'Grade A', weight: 60 }] },
+    )).rejects.toThrow(BATCH_NOT_GRADED_MESSAGE)
+    expect(BATCH_NOT_GRADED_MESSAGE).toBe('The batch was saved but not graded. Grade it from Parchment Stock.')
   })
 })

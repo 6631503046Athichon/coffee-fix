@@ -303,9 +303,11 @@ describe('POST /api/green-bean-lots/[id]/withdrawals/[withdrawalId]/void', () =>
       const body = await response.json()
 
       expect(greenLot().currentWeightKg).toBe(100)
-      // The row stays at 0 kg: roasts or sales may point at a stock row.
-      expect(stockRow('roaster-1')).toMatchObject({ claimedWeightKg: 0, remainingWeightKg: 0 })
+      // The push made the row and the void took it all back: nothing points
+      // at it, so it goes (left at 0 kg it kept the lot from being deleted).
+      expect(stockRow('roaster-1')).toBeUndefined()
       expect(body.roasterInventoryItem).toMatchObject({ roasterId: 'roaster-1', claimedWeightKg: 0, remainingWeightKg: 0 })
+      expect(body.roasterInventoryItemRemoved).toBe(true)
       expect(mockDb.get('greenBeanWithdrawal', push.id)!.voidedAt).toBeInstanceOf(Date)
       // Lot, then the stock row.
       expect(mockDb.locks.map(lock => lock.split(' WHERE')[0])).toEqual([
@@ -321,9 +323,55 @@ describe('POST /api/green-bean-lots/[id]/withdrawals/[withdrawalId]/void', () =>
       greenLot().currentWeightKg = 85
       mockAuthUser = processor
 
-      expect((await voidGreen('gbw-1')).status).toBe(200)
+      const response = await voidGreen('gbw-1')
+      expect(response.status).toBe(200)
       expect(stockRow('roaster-1')).toMatchObject({ claimedWeightKg: 10, remainingWeightKg: 6 })
+      expect((await response.json()).roasterInventoryItemRemoved).toBe(false)
       expect(greenLot().currentWeightKg).toBe(90)
+    })
+
+    test.each([
+      ['a roast', () => mockDb.seed('roastBatch', { id: 'rb-1', roasterId: 'roaster-1', roasterInventoryId: 'inv-roaster-1', greenBeanLotId: GREEN })],
+      ['a green-bean sale line', () => mockDb.seed('saleOrderItem', { id: 'soi-1', roasterInventoryId: 'inv-roaster-1', greenBeanLotId: GREEN })],
+    ])('a stock row left at 0 kg stays when %s points at it', async (_label, pointAtRow) => {
+      seedStock('roaster-1', 20, 20)
+      pointAtRow()
+      seedGreenWithdrawal({ amountKg: 20, withdrawalType: 'RoastingStock', targetRoasterId: 'roaster-1' })
+      greenLot().currentWeightKg = 80
+      mockAuthUser = processor
+
+      const response = await voidGreen('gbw-1')
+      expect(response.status).toBe(200)
+      expect(stockRow('roaster-1')).toMatchObject({ claimedWeightKg: 0, remainingWeightKg: 0 })
+      expect((await response.json()).roasterInventoryItemRemoved).toBe(false)
+      expect(greenLot().currentWeightKg).toBe(100)
+    })
+
+    test('a void the lot refuses keeps the stock row as it was', async () => {
+      // The lot was corrected by hand to its full weight: the kg cannot go back.
+      seedStock('roaster-1', 20, 20)
+      seedGreenWithdrawal({ amountKg: 20, withdrawalType: 'RoastingStock', targetRoasterId: 'roaster-1' })
+      mockAuthUser = processor
+
+      expect((await voidGreen('gbw-1')).status).toBe(409)
+      expect(stockRow('roaster-1')).toMatchObject({ claimedWeightKg: 20, remainingWeightKg: 20 })
+    })
+
+    test('after the void an Admin can delete a lot that was only ever pushed to a roaster', async () => {
+      mockAuthUser = processor
+      const push = await recordGreen({ amountKg: 40, withdrawalType: 'RoastingStock', targetRoasterId: 'roaster-1' })
+      expect((await voidGreen(push.id)).status).toBe(200)
+
+      mockAuthUser = admin
+      const { DELETE } = await import('@/app/api/green-bean-lots/[id]/route')
+      const response = await DELETE(
+        new NextRequest(`http://localhost:3001/api/green-bean-lots/${GREEN}`, { method: 'DELETE' }),
+        { params: Promise.resolve({ id: GREEN }) },
+      )
+      expect(response.status).toBe(200)
+      expect(mockDb.get('greenBeanLot', GREEN)).toBeUndefined()
+      expect(mockDb.rows('greenBeanWithdrawal')).toEqual([])
+      expect(mockDb.rows('roasterInventoryItem')).toEqual([])
     })
 
     test('409 when the roaster already used the kg, and nothing changes', async () => {
@@ -364,7 +412,8 @@ describe('POST /api/green-bean-lots/[id]/withdrawals/[withdrawalId]/void', () =>
       mockAuthUser = processor
 
       expect((await voidGreen('gbw-1')).status).toBe(200)
-      expect(stockRow('roaster-2')).toMatchObject({ claimedWeightKg: 0, remainingWeightKg: 0 })
+      // Taken back to 0 kg with nothing pointing at it: the row goes.
+      expect(stockRow('roaster-2')).toBeUndefined()
       expect(greenLot().currentWeightKg).toBe(100)
     })
 
@@ -602,8 +651,12 @@ describe('POST /api/parchment-lots/[id]/withdrawals/[withdrawalId]/void', () => 
   })
 
   const uses: [string, (lotId: string) => void, string][] = [
-    ['has a withdrawal', lotId => { mockDb.seed('greenBeanWithdrawal', { id: 'gbw-x', greenBeanLotId: lotId, amountKg: 0.5, voidedAt: new Date() }) }, 'has withdrawals'],
-    ['was claimed by a roaster', lotId => { mockDb.seed('roasterInventoryItem', { id: 'inv-x', roasterId: 'roaster-1', greenBeanLotId: lotId, claimedWeightKg: 0, remainingWeightKg: 0 }) }, 'was claimed by a roaster'],
+    ['has a withdrawal', lotId => { mockDb.seed('greenBeanWithdrawal', { id: 'gbw-x', greenBeanLotId: lotId, amountKg: 0.5, voidedAt: null }) }, 'has withdrawals'],
+    ['was claimed by a roaster', lotId => { mockDb.seed('roasterInventoryItem', { id: 'inv-x', roasterId: 'roaster-1', greenBeanLotId: lotId, claimedWeightKg: 5, remainingWeightKg: 5 }) }, 'was claimed by a roaster'],
+    ['has an empty roaster stock row that was roasted from', lotId => {
+      mockDb.seed('roasterInventoryItem', { id: 'inv-x', roasterId: 'roaster-1', greenBeanLotId: lotId, claimedWeightKg: 0, remainingWeightKg: 0 })
+      mockDb.seed('roastBatch', { id: 'rb-x', roasterInventoryId: 'inv-x' })
+    }, 'was claimed by a roaster'],
     ['was roasted', lotId => { mockDb.seed('roastBatch', { id: 'rb-x', greenBeanLotId: lotId }) }, 'was roasted'],
     ['is on a sale', lotId => { mockDb.seed('saleOrderItem', { id: 'soi-x', greenBeanLotId: lotId }) }, 'is on a sale or invoice'],
     ['is on an invoice', lotId => { mockDb.seed('invoiceItem', { id: 'ii-x', greenBeanLotId: lotId }) }, 'is on a sale or invoice'],
@@ -632,6 +685,53 @@ describe('POST /api/parchment-lots/[id]/withdrawals/[withdrawalId]/void', () => 
     // The POST route leaves voidedAt to the column's NULL.
     expect(mockDb.get('parchmentWithdrawal', hull.id)!.voidedAt ?? null).toBeNull()
     expect(parchmentLot()).toMatchObject({ currentWeightKg: 0, status: 'Hulled' })
+  })
+
+  test('an empty roaster stock row (claim released to 0, no roast or sale) goes with the lot', async () => {
+    mockAuthUser = processor
+    const hull = await recordParchment(hullAndGrade)
+    const aa = gradedLots(hull.id).find(lot => lot.grade === 'AA')!
+    mockDb.seed('roasterInventoryItem', { id: 'inv-empty', roasterId: 'roaster-1', greenBeanLotId: aa.id, claimedWeightKg: 0, remainingWeightKg: 0 })
+
+    const response = await voidParchment(hull.id)
+    expect(response.status).toBe(200)
+    expect(mockDb.rows('greenBeanLot')).toEqual([])
+    expect(mockDb.rows('roasterInventoryItem')).toEqual([])
+    expect(parchmentLot()).toMatchObject({ currentWeightKg: 50, status: 'AwaitingHulling' })
+  })
+
+  test('a voided withdrawal on a lot the hull made is history: the lot goes, with it', async () => {
+    mockAuthUser = processor
+    const hull = await recordParchment(hullAndGrade)
+    const aa = gradedLots(hull.id).find(lot => lot.grade === 'AA')!
+    const sale = await recordGreen({ amountKg: 5, withdrawalType: 'Sale' }, aa.id)
+    expect((await voidGreen(sale.id, undefined, aa.id)).status).toBe(200)
+
+    const response = await voidParchment(hull.id)
+    expect(response.status).toBe(200)
+    expect(mockDb.rows('greenBeanLot')).toEqual([])
+    expect(mockDb.rows('greenBeanWithdrawal')).toEqual([])
+    expect(parchmentLot()).toMatchObject({ currentWeightKg: 50, status: 'AwaitingHulling' })
+  })
+
+  test('a lot the hull made and pushed to a roaster: void the push, then the hull', async () => {
+    mockAuthUser = processor
+    const hull = await recordParchment(hullAndGrade)
+    const aa = gradedLots(hull.id).find(lot => lot.grade === 'AA')!
+    const push = await recordGreen({ amountKg: 20, withdrawalType: 'RoastingStock', targetRoasterId: 'roaster-1' }, aa.id)
+
+    // The roaster still holds the kg: the hull cannot be voided.
+    const refused = await voidParchment(hull.id)
+    expect(refused.status).toBe(409)
+    expect((await refused.json()).error).toContain('has withdrawals, was claimed by a roaster')
+
+    expect((await voidGreen(push.id, undefined, aa.id)).status).toBe(200)
+    expect(mockDb.rows('roasterInventoryItem')).toEqual([])
+
+    mockAuthUser = admin
+    expect((await voidParchment(hull.id)).status).toBe(200)
+    expect(mockDb.rows('greenBeanLot')).toEqual([])
+    expect(parchmentLot()).toMatchObject({ currentWeightKg: 50, status: 'AwaitingHulling' })
   })
 
   describe('a Hull & Grade recorded before its lots were linked', () => {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
+import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireOwnership, requireRole, handleApiError } from "@/lib/middleware";
 import {
@@ -24,6 +25,11 @@ import {
 } from "@/lib/lotCorrections";
 import { batchLabel, chainScope, requireInScope } from "@/lib/farmAccess";
 import {
+  GREEN_LOT_USES_COUNT,
+  deleteUnusedGreenLots,
+  greenLotDependents,
+} from "@/lib/greenLotRemoval";
+import {
   OverHullError,
   hullLimitOf,
   exceedsHull,
@@ -34,6 +40,52 @@ import {
 // The processor's QC "Tasting Notes & Comments" (GreenBeanLot.qcNotes). Not
 // exported: a route file may only export its handlers.
 const QC_NOTES_MAX = 2000;
+
+// The DELETE's guarded delete matched nothing: rolls its transaction back.
+const GREEN_LOT_IN_USE = "GREEN_LOT_IN_USE";
+
+// A purchased (External) lot's supplier details, as the Roaster Workbench's
+// Add / Edit purchased lot form sends them. Each field is optional: what is
+// left out keeps its saved value, and an empty optional text (or null)
+// clears it. Origin, variety and process cannot be emptied.
+const optionalText = (max: number, label: string) =>
+  z
+    .string({ message: `${label} must be text` })
+    .trim()
+    .max(max, `${label} must be at most ${max} characters`)
+    .nullable()
+    .optional();
+const requiredText = (max: number, label: string) =>
+  z
+    .string({ message: `${label} must be text` })
+    .trim()
+    .min(1, `${label} is required`)
+    .max(max, `${label} must be at most ${max} characters`)
+    .optional();
+const externalSourceEditSchema = z
+  .object({
+    originName: requiredText(200, "Origin / supplier"),
+    producerName: optionalText(200, "Producer"),
+    variety: requiredText(100, "Variety"),
+    processType: requiredText(100, "Process type"),
+    purchaseDate: z
+      .string({ message: "Purchase date must be a date" })
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Purchase date must be a date (YYYY-MM-DD)")
+      .refine(
+        (value) => !Number.isNaN(parseStrictDateOnly(value)?.getTime() ?? NaN),
+        "Purchase date is not a real date",
+      )
+      .optional(),
+    // 0 is "no price", as the Add External Lot form saves a blank price.
+    pricePerKg: z
+      .number({ message: "Price per kg must be a number" })
+      .min(0, "Price per kg cannot be below 0")
+      .optional(),
+    currency: currencySchema.optional(),
+    tasteNote: optionalText(500, "Taste note"),
+    supplierNotes: optionalText(2000, "Supplier notes"),
+  })
+  .strict();
 
 // GET /api/green-bean-lots/:id
 export async function GET(
@@ -311,8 +363,9 @@ export async function PUT(
 ) {
   try {
     const user = await requireAuth(request);
-    // SECURITY: Only Processor and Admin can update green bean lots
-    requireRole(user, ['Processor', 'Admin']);
+    // SECURITY: Processors and Admins update green bean lots; a Roaster may
+    // correct the purchased (External) lots they added (checked below).
+    requireRole(user, ['Processor', 'Roaster', 'Admin']);
     const { id } = await params;
 
     const existingLot = await prisma.greenBeanLot.findUnique({
@@ -329,6 +382,8 @@ export async function PUT(
         parchmentLotId: true,
         parchmentWithdrawalId: true,
         createdAt: true,
+        // A purchased lot's supplier details, merged with an edit of them.
+        externalSource: true,
       },
     });
 
@@ -339,9 +394,15 @@ export async function PUT(
       );
     }
 
-    // SECURITY: Ownership check — only the Processor who created this lot
-    // (or Admin) can mutate it.
+    // SECURITY: Ownership check — only the user who created this lot (or
+    // Admin) can mutate it.
     requireOwnership(user, existingLot.createdById, ['Admin']);
+    // A lot out of processing stays the Processor's (or Admin's) to correct;
+    // a Roaster only ever owns the External lots they bought in.
+    const isExternal = existingLot.sourceType === "External";
+    if (!isExternal) {
+      requireRole(user, ['Processor', 'Admin']);
+    }
 
     const body = await request.json();
     const {
@@ -352,7 +413,46 @@ export async function PUT(
       pricePerKg,
       currency,
       priceSetDate,
+      externalSource,
     } = body;
+
+    // Supplier details (origin, producer, variety, process, purchase date,
+    // price, notes) belong to a purchased lot only. Sent fields replace the
+    // saved ones; the rest stay.
+    let nextExternalSource: Prisma.InputJsonObject | undefined;
+    if (externalSource !== undefined) {
+      if (!isExternal) {
+        return NextResponse.json(
+          { error: "Only a purchased (External) lot has supplier details" },
+          { status: 400 },
+        );
+      }
+      const parsedSource = externalSourceEditSchema.safeParse(externalSource);
+      if (!parsedSource.success) {
+        return NextResponse.json(
+          {
+            error:
+              parsedSource.error.issues[0]?.message ||
+              "Invalid supplier details",
+          },
+          { status: 400 },
+        );
+      }
+      const saved =
+        existingLot.externalSource &&
+        typeof existingLot.externalSource === "object" &&
+        !Array.isArray(existingLot.externalSource)
+          ? (existingLot.externalSource as Record<string, unknown>)
+          : {};
+      const merged: Record<string, unknown> = { ...saved };
+      for (const [key, value] of Object.entries(parsedSource.data)) {
+        if (value === undefined) continue;
+        // An emptied optional text is dropped, as the Add form leaves it out.
+        if (value === null || value === "") delete merged[key];
+        else merged[key] = value;
+      }
+      nextExternalSource = merged as Prisma.InputJsonObject;
+    }
 
     // The kg left follows from the lot weight and what was already withdrawn,
     // sent to a roaster or sold, so it is never set directly: that would
@@ -370,6 +470,9 @@ export async function PUT(
     // Use UncheckedUpdateInput so we can assign scalar FKs (priceSetBy) directly
     // without needing a nested `connect`.
     const updateData: Prisma.GreenBeanLotUncheckedUpdateInput = {};
+    if (nextExternalSource) {
+      updateData.externalSource = nextExternalSource;
+    }
     if (grade !== undefined) {
       const gradeName = typeof grade === "string" ? grade.trim() : "";
       if (!gradeName || gradeName.length > 50) {
@@ -462,7 +565,14 @@ export async function PUT(
       currency: string;
       effectiveDate: Date;
     } | null = null;
-    if (pricePerKg !== undefined) {
+    if (pricePerKg === null && isExternal) {
+      // A purchased lot may be bought with no price on record (the Add form
+      // leaves it blank), so its edit can take a typed price away again.
+      // Nothing is priced, so there is no pricing-history row.
+      updateData.pricePerKg = null;
+      updateData.priceSetDate = null;
+      updateData.priceSetBy = null;
+    } else if (pricePerKg !== undefined) {
       const parsedPrice = parseStrictNumber(pricePerKg);
       if (parsedPrice === null || parsedPrice <= 0) {
         return NextResponse.json(
@@ -624,8 +734,9 @@ export async function DELETE(
 ) {
   try {
     const user = await requireAuth(request);
-    // SECURITY: Only Processor and Admin can delete green bean lots
-    requireRole(user, ['Processor', 'Admin']);
+    // SECURITY: Processors and Admins delete green bean lots; a Roaster may
+    // delete a purchased (External) lot they added (checked below).
+    requireRole(user, ['Processor', 'Roaster', 'Admin']);
     const { id } = await params;
 
     // Check if lot exists, with what depends on it
@@ -637,17 +748,9 @@ export async function DELETE(
         parchmentLotId: true,
         parchmentWithdrawalId: true,
         parchmentLot: { select: { displayId: true } },
-        _count: {
-          select: {
-            // A voided withdrawal (D7) never happened: it goes with the lot.
-            withdrawalHistory: { where: { voidedAt: null } },
-            roasterInventory: true,
-            roastBatches: true,
-            saleOrderItems: true,
-            invoiceItems: true,
-            cuppingSamples: true,
-          },
-        },
+        // A voided withdrawal, and a roaster stock row at 0 kg with no roast
+        // or sale (a voided push leaves one), go with the lot.
+        _count: { select: GREEN_LOT_USES_COUNT },
       },
     });
 
@@ -658,9 +761,13 @@ export async function DELETE(
       );
     }
 
-    // SECURITY: Ownership check — only the Processor who created this lot
-    // (or Admin) can delete it.
+    // SECURITY: Ownership check — only the user who created this lot (or
+    // Admin) can delete it, and a lot out of processing only a Processor
+    // (or Admin): a Roaster only ever owns the External lots they bought in.
     requireOwnership(user, lot.createdById, ['Admin']);
+    if (lot.sourceType !== 'External') {
+      requireRole(user, ['Processor', 'Admin']);
+    }
 
     // A lot a Hull & Grade made holds that hull's parchment kg: deleting it
     // would lose them, and the hull could no longer be voided (its lots are
@@ -685,17 +792,10 @@ export async function DELETE(
     }
 
     // Withdrawals (sales included) would cascade away with the lot, and
-    // roaster stock, roasts, sale and invoice lines and cupping samples
-    // would lose it, so a lot anything depends on is not deleted, for Admin
-    // too: the counts come back instead.
-    const dependents = {
-      withdrawals: lot._count?.withdrawalHistory ?? 0,
-      roasterInventory: lot._count?.roasterInventory ?? 0,
-      roastBatches: lot._count?.roastBatches ?? 0,
-      saleOrderItems: lot._count?.saleOrderItems ?? 0,
-      invoiceItems: lot._count?.invoiceItems ?? 0,
-      cuppingSamples: lot._count?.cuppingSamples ?? 0,
-    };
+    // roaster stock holding kg, roasts, sale and invoice lines and cupping
+    // samples would lose it, so a lot anything depends on is not deleted,
+    // for Admin too: the counts come back instead (lib/greenLotRemoval).
+    const dependents = greenLotDependents(lot._count);
     if (hasDependents(dependents)) {
       return NextResponse.json(
         {
@@ -706,21 +806,23 @@ export async function DELETE(
       );
     }
 
-    // CuppingScore and PricingHistory cascade on delete in the schema. The
-    // delete repeats the "nothing depends on it" rule, so a withdrawal or
-    // claim that lands after the check above makes it match nothing.
-    const deleted = await prisma.greenBeanLot.deleteMany({
-      where: {
-        id,
-        withdrawalHistory: { none: { voidedAt: null } },
-        roasterInventory: { none: {} },
-        roastBatches: { none: {} },
-        saleOrderItems: { none: {} },
-        invoiceItems: { none: {} },
-        cuppingSamples: { none: {} },
-      },
-    });
-    if (deleted.count === 0) {
+    // CuppingScore and PricingHistory cascade on delete in the schema; empty
+    // roaster stock rows are removed first, in the same transaction. The lot
+    // is locked first, as a withdrawal and a claim take it, and the delete
+    // repeats the "nothing depends on it" rule, so a withdrawal or claim that
+    // landed after the check above makes it match nothing and rolls back.
+    let deletedCount = 0;
+    try {
+      deletedCount = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "GreenBeanLot" WHERE "id" = ${id} FOR UPDATE`;
+        const count = await deleteUnusedGreenLots(tx, [id]);
+        if (count === 0) throw new Error(GREEN_LOT_IN_USE);
+        return count;
+      });
+    } catch (error) {
+      if ((error as Error)?.message !== GREEN_LOT_IN_USE) throw error;
+    }
+    if (deletedCount === 0) {
       const stillThere = await prisma.greenBeanLot.findUnique({
         where: { id },
         select: { id: true },

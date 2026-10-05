@@ -430,7 +430,7 @@ const TraceabilityStory: React.FC<TraceabilityStoryProps> = ({ data, shareUrl })
               <div>
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-coffee-500">Variety</p>
                 <p className="text-base font-bold text-coffee-900">
-                  {harvestLot?.cherryVariety || lot.externalSource?.variety || 'N/A'}
+                  {harvestLot?.cherryVariety || lot.externalSource?.variety || 'Unknown'}
                 </p>
               </div>
               <div>
@@ -460,7 +460,7 @@ const TraceabilityStory: React.FC<TraceabilityStoryProps> = ({ data, shareUrl })
               <div>
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-coffee-500">Method</p>
                 <p className="text-base font-bold text-coffee-900">
-                  {parchmentLot?.processType || lot.externalSource?.processType || 'N/A'}
+                  {parchmentLot?.processType || lot.externalSource?.processType || 'Unknown'}
                 </p>
               </div>
               <div>
@@ -613,13 +613,13 @@ const TraceabilityStory: React.FC<TraceabilityStoryProps> = ({ data, shareUrl })
               <div className="flex justify-between items-center border-b border-coffee-100 pb-2">
                 <span className="text-sm text-coffee-500">Processing method</span>
                 <span className="text-sm font-bold text-coffee-900">
-                  {parchmentLot?.processType || lot.externalSource?.processType || 'N/A'}
+                  {parchmentLot?.processType || lot.externalSource?.processType || 'Unknown'}
                 </span>
               </div>
               <div className="flex justify-between items-center border-b border-coffee-100 pb-2">
                 <span className="text-sm text-coffee-500">Variety</span>
                 <span className="text-sm font-bold text-coffee-900">
-                  {harvestLot?.cherryVariety || lot.externalSource?.variety || 'N/A'}
+                  {harvestLot?.cherryVariety || lot.externalSource?.variety || 'Unknown'}
                 </span>
               </div>
               <div className="flex justify-between items-center border-b border-coffee-100 pb-2">

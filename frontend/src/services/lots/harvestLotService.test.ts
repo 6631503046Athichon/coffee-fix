@@ -154,4 +154,17 @@ describe('deleteHarvestLot', () => {
     del.mockRejectedValueOnce(new ApiError('Forbidden', 403, { error: 'Forbidden' }))
     await expect(deleteHarvestLot('hl-1')).rejects.toThrow("You don't have permission to delete harvest lot.")
   })
+
+  it('passes on a cascade refused over green bean lots in use word for word', async () => {
+    const message =
+      'Green bean lots made from this lot are still in use, so nothing was deleted: GBL-2026-404 (AA) has 1 withdrawal. ' +
+      'Void their withdrawals, or settle their stock, roasts, sales and cupping first, then delete again.'
+    const body = { error: message, greenBeanLotsInUse: [{ id: 'gbl-1', displayId: 'GBL-2026-404', grade: 'AA' }] }
+    vi.spyOn(api, 'delete').mockRejectedValue(new ApiError(message, 409, body))
+
+    const error = await deleteHarvestLot('hl-1', { cascade: true }).catch((e: unknown) => e)
+
+    expect(error).not.toBeInstanceOf(HarvestLotProcessedError)
+    expect((error as Error).message).toBe(message)
+  })
 })

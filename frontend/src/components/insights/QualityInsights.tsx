@@ -11,6 +11,15 @@ import { formatGreenBeanId } from '@/utils/formatDisplayId';
 
 // Removed local CustomDropdown in favor of shared Select component
 
+// Shown in a chart card instead of empty axes when there is nothing to plot.
+const ChartEmptyState: React.FC<{ title: string; detail: string }> = ({ title, detail }) => (
+    <div role="status" className="flex h-full flex-col items-center justify-center rounded-md bg-gray-50 px-4 text-center">
+        <BarChart2 className="mb-2 h-8 w-8 text-gray-300" />
+        <p className="text-sm font-semibold text-gray-700">{title}</p>
+        <p className="mt-1 max-w-xs text-xs text-gray-500">{detail}</p>
+    </div>
+);
+
 const QualityInsights: React.FC = () => {
     const { data } = useDataContext();
     
@@ -27,8 +36,11 @@ const QualityInsights: React.FC = () => {
     const [reportError, setReportError] = useState<string | null>(null);
 
     // State for Comparative Charts
-    const farmerNames = useMemo(() => [...new Set(data.farms.map(f => f.farmerName))], [data.farms]);
+    const farmerNames = useMemo(() => [...new Set(data.farms.map(f => f.farmerName).filter(Boolean))], [data.farms]);
     const [selectedFarmName, setSelectedFarmName] = useState<string>(farmerNames[0] || '');
+    // The farms usually load after this page mounts, so the first farmer is
+    // picked once they arrive (and again if the picked one goes away).
+    const activeFarmName = farmerNames.includes(selectedFarmName) ? selectedFarmName : (farmerNames[0] ?? '');
     const [selectedParchmentLotId, setSelectedParchmentLotId] = useState<string>('');
 
     // Handlers for AI
@@ -98,7 +110,8 @@ const QualityInsights: React.FC = () => {
     }, [data]);
 
     const farmPerformanceData = useMemo(() => {
-        const farmLots = data.harvestLots.filter(hl => hl.farmerName === selectedFarmName);
+        if (!activeFarmName) return [];
+        const farmLots = data.harvestLots.filter(hl => hl.farmerName === activeFarmName);
         return farmLots.map(hl => {
             const relatedGbl = data.greenBeanLots.find(gbl => {
                 const pLot = data.parchmentLots.find(p => p.id === gbl.parchmentLotId);
@@ -115,7 +128,7 @@ const QualityInsights: React.FC = () => {
             }
             return { name: hl.harvestDate, Score: finalScore };
         }).filter(d => d.Score !== null).sort((a,b) => new Date(a.name).getTime() - new Date(b.name).getTime());
-    }, [data, selectedFarmName]);
+    }, [data, activeFarmName]);
 
     const lotsForDryingAnalysis = useMemo(() => {
         return data.parchmentLots.filter(pl => {
@@ -260,19 +273,21 @@ const QualityInsights: React.FC = () => {
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                     <div>
                         <h3 className="font-semibold text-center text-gray-700 mb-2">Processing Method Comparison</h3>
-                        <div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={processComparisonData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={[80, 'dataMax + 1']} /><Tooltip /><Legend /><Bar dataKey="Average Score" fill="#4f46e5" /></BarChart></ResponsiveContainer></div>
+                        <div className="h-80">{processComparisonData.length === 0 ? <ChartEmptyState title="No scored lots yet" detail="Average scores per processing method show here once green bean lots have final cupping results." /> : <ResponsiveContainer width="100%" height="100%"><BarChart data={processComparisonData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={[80, 'dataMax + 1']} /><Tooltip /><Legend /><Bar dataKey="Average Score" fill="#4f46e5" /></BarChart></ResponsiveContainer>}</div>
                     </div>
                     <div>
                         <div className="flex flex-wrap justify-between items-center mb-2 gap-4">
                              <h3 className="font-semibold text-gray-700">Farm Performance Over Time</h3>
                                       <Select
-                                          value={selectedFarmName}
+                                          value={activeFarmName}
                                           onChange={(v) => setSelectedFarmName((v as string) || '')}
                                           options={farmerNames.map(name => ({ value: name, label: name }))}
+                                          placeholder={farmerNames.length === 0 ? 'No farmers yet' : 'Select a farmer...'}
+                                          disabled={farmerNames.length === 0}
                                           className="w-full sm:w-48"
                                       />
                         </div>
-                        <div className="h-80"><ResponsiveContainer width="100%" height="100%"><LineChart data={farmPerformanceData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={[80, 'dataMax + 1']} /><Tooltip /><Legend /><Line type="monotone" dataKey="Score" stroke="#10b981" strokeWidth={2} activeDot={{ r: 8 }} /></LineChart></ResponsiveContainer></div>
+                        <div className="h-80">{farmerNames.length === 0 ? <ChartEmptyState title="No farmers yet" detail="Scores over time show here once farms are registered and their lots are scored." /> : farmPerformanceData.length === 0 ? <ChartEmptyState title={`No scored lots for ${activeFarmName} yet`} detail="Scores over time show here once this farmer's lots have final cupping results." /> : <ResponsiveContainer width="100%" height="100%"><LineChart data={farmPerformanceData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="name" /><YAxis domain={[80, 'dataMax + 1']} /><Tooltip /><Legend /><Line type="monotone" dataKey="Score" stroke="#10b981" strokeWidth={2} activeDot={{ r: 8 }} /></LineChart></ResponsiveContainer>}</div>
                     </div>
                 </div>
             </div>

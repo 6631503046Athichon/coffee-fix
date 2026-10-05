@@ -20,6 +20,9 @@ import { createMemorySequence } from './helpers/memorySequence'
 // lib/documentSequence's counter: nextDisplayId takes its numbers here.
 const mockSequence = createMemorySequence()
 
+// Row locks taken inside a transaction; they return no rows.
+const mockTxQueryRaw = jest.fn(async () => [])
+
 const mockPrisma: any = {
   $queryRaw: jest.fn(mockSequence.queryRaw),
   harvestLot: {
@@ -36,8 +39,11 @@ const mockPrisma: any = {
   cropYear: { findUnique: jest.fn() },
   processingBatch: { count: jest.fn() },
   parchmentLot: { count: jest.fn() },
-  greenBeanLot: { count: jest.fn() },
+  greenBeanLot: { count: jest.fn(), findMany: jest.fn(), deleteMany: jest.fn() },
+  roasterInventoryItem: { deleteMany: jest.fn() },
   parchmentWithdrawal: { count: jest.fn() },
+  // An Admin's ?cascade=1 runs in a transaction (row locks on $queryRaw).
+  $transaction: jest.fn(async (callback: any) => callback({ ...mockPrisma, $queryRaw: mockTxQueryRaw })),
 }
 
 jest.mock('@/lib/prisma', () => ({
@@ -245,6 +251,11 @@ beforeEach(() => {
   mockPrisma.parchmentLot.count.mockResolvedValue(3)
   mockPrisma.greenBeanLot.count.mockResolvedValue(4)
   mockPrisma.parchmentWithdrawal.count.mockResolvedValue(5)
+  // No green bean lot made from the lot: the cascade deletes the lot alone
+  // (harvest-lot-cascade-green-lots.test.ts covers the lots made from it).
+  mockPrisma.greenBeanLot.findMany.mockResolvedValue([])
+  mockPrisma.greenBeanLot.deleteMany.mockResolvedValue({ count: 0 })
+  mockPrisma.roasterInventoryItem.deleteMany.mockResolvedValue({ count: 0 })
 })
 
 describe('who owns a harvest lot', () => {
@@ -862,9 +873,14 @@ describe('DELETE /api/harvest-lots/[id]', () => {
     const { status, data } = await del('?cascade=1')
 
     expect(status).toBe(200)
-    expect(data.message).toBe('Harvest lot deleted successfully')
+    expect(data).toEqual({ message: 'Harvest lot deleted successfully', greenBeanLotsDeleted: 0 })
     expect(mockPrisma.harvestLot.delete).toHaveBeenCalledWith({ where: { id: LOT_ID } })
     expect(mockPrisma.harvestLot.deleteMany).not.toHaveBeenCalled()
+    // In one transaction, after looking for green bean lots made from it.
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1)
+    expect(mockPrisma.greenBeanLot.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { parchmentLot: parchmentWhere } }),
+    )
   })
 
   test('?cascade=1 with the counts the Admin saw deletes while they still match', async () => {

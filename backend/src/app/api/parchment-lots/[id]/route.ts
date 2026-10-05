@@ -13,6 +13,7 @@ import {
   type ReweighResult,
 } from '@/lib/lotCorrections'
 import { batchLabel, chainScope, requireInScope } from '@/lib/farmAccess'
+import { withoutImporterFor } from '@/lib/importerPrivacy'
 
 // PATCH /api/parchment-lots/:id - Correct a parchment lot's weight or moisture
 //
@@ -242,14 +243,17 @@ export async function GET(
       }))
     }
 
+    // The importer's user id only for Admin and the importer (lib/importerPrivacy).
+    const readable = withoutImporterFor(user, parchmentLot)
+
     // A roaster reads the lot only as the source of their green beans: its
     // batch comes as a label, not the processor's record.
     const batch = parchmentLot.processingBatch
     if (scope && batch && !scope.canReadBatch(batch)) {
-      return NextResponse.json({ parchmentLot: { ...parchmentLot, processingBatch: batchLabel(batch) } })
+      return NextResponse.json({ parchmentLot: { ...readable, processingBatch: batchLabel(batch) } })
     }
 
-    return NextResponse.json({ parchmentLot })
+    return NextResponse.json({ parchmentLot: readable })
   } catch (error) {
     return handleApiError(error)
   }

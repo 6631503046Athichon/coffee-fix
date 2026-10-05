@@ -241,7 +241,8 @@ export const replaceWithdrawal = <W extends { id?: string }>(
 
 /**
  * The app data after a green-bean void: the lot's kg, status and history as
- * the backend returned them, and the roaster stock row it took the kg off.
+ * the backend returned them, and the roaster stock row it took the kg off
+ * (gone when the backend removed it, left holding nothing).
  */
 export const applyGreenBeanVoid = (
   prev: AppData,
@@ -250,6 +251,10 @@ export const applyGreenBeanVoid = (
 ): AppData => {
   const saved = result.greenBeanLot
   const item = result.roasterInventoryItem
+  const roasterInventory =
+    item && result.roasterInventoryItemRemoved
+      ? prev.roasterInventory.filter((inv) => inv.id !== item.id)
+      : prev.roasterInventory
   return {
     ...prev,
     greenBeanLots: prev.greenBeanLots.map((g) =>
@@ -265,7 +270,7 @@ export const applyGreenBeanVoid = (
         : g,
     ),
     roasterInventory: item
-      ? prev.roasterInventory.map((inv) =>
+      ? roasterInventory.map((inv) =>
           inv.id === item.id
             ? {
                 ...inv,
@@ -274,14 +279,15 @@ export const applyGreenBeanVoid = (
               }
             : inv,
         )
-      : prev.roasterInventory,
+      : roasterInventory,
   }
 }
 
 /**
  * The app data after a parchment void: the lot's kg, status and history as
  * the backend returned them, without the green bean lots a voided Hull &
- * Grade made (the backend deleted them).
+ * Grade made (the backend deleted them, with any empty roaster stock row of
+ * theirs: a row that held kg refuses the void).
  */
 export const applyParchmentVoid = (
   prev: AppData,
@@ -306,6 +312,9 @@ export const applyParchmentVoid = (
     greenBeanLots: removed.size
       ? prev.greenBeanLots.filter((g) => !removed.has(g.id))
       : prev.greenBeanLots,
+    roasterInventory: removed.size
+      ? prev.roasterInventory.filter((inv) => !removed.has(inv.greenBeanLotId))
+      : prev.roasterInventory,
   }
 }
 

@@ -179,9 +179,11 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
     };
 
     // cascade (Admin only, after seeing the counts) deletes the lot with its
-    // whole chain: batches, drying logs, parchment lots, withdrawals and sales.
-    // The counts shown go along, so anything linked since is never deleted
-    // unseen: the backend sends the new counts back instead.
+    // whole chain: batches, drying logs, parchment lots, withdrawals and sales,
+    // and the green bean lots made from it. The counts shown go along, so
+    // anything linked since is never deleted unseen: the backend sends the new
+    // counts back instead. A green bean lot still in use refuses it all, with
+    // the lots to void or settle first in the message.
     const runDelete = async (cascade: boolean) => {
         if (!deleteState || isDeleting) return;
         const { lot, dependents } = deleteState;
@@ -716,12 +718,13 @@ const FarmerDataHub: React.FC<FarmerDataHubProps> = ({ currentUser }) => {
                                         <li>{plural(deleteState.dependents.processingBatches, 'processing batch', 'processing batches')} (with their drying logs)</li>
                                         <li>{plural(deleteState.dependents.parchmentLots, 'parchment lot', 'parchment lots')} (with their test results)</li>
                                         <li>{plural(deleteState.dependents.withdrawals, 'parchment withdrawal', 'parchment withdrawals')}, including any sale records</li>
+                                        <li>{plural(deleteState.dependents.greenBeanLots, 'green bean lot', 'green bean lots')} made from it (with their price history)</li>
                                     </ul>
-                                    <p>
-                                        {deleteState.dependents.greenBeanLots === 1
-                                            ? '1 green bean lot loses its link back to this harvest.'
-                                            : `${deleteState.dependents.greenBeanLots} green bean lots lose their link back to this harvest.`}
-                                    </p>
+                                    {deleteState.dependents.greenBeanLots > 0 && (
+                                        <p>
+                                            If any of those green bean lots is still in use (a withdrawal that is not void, roaster stock, a roast, a sale, an invoice or a cupping sample), nothing is deleted and you will see which lots to void or settle first.
+                                        </p>
+                                    )}
                                     <p className="font-semibold">This cannot be undone.</p>
                                 </div>
                             </div>

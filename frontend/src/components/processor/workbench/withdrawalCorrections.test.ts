@@ -203,6 +203,18 @@ describe('merging a void or an edit into the app data', () => {
     expect(next.greenBeanLots.find((g) => g.id === 'gbl-2')!.currentWeightKg).toBe(0)
   })
 
+  it('a green-bean void drops the roaster row the backend removed, left holding nothing', () => {
+    const voidedRow = { ...sale, withdrawalType: 'Roasting Stock' as const, amountKg: 4, voidedAt: '2026-10-04T00:00:00.000Z' }
+    const next = applyGreenBeanVoid(data(), 'gbl-1', {
+      greenBeanLot: gbl('gbl-1', { currentWeightKg: 4, availabilityStatus: 'Available', withdrawalHistory: [voidedRow] }),
+      withdrawal: voidedRow,
+      roasterInventoryItem: { id: 'inv-2', roasterId: 'r-2', greenBeanLotId: 'gbl-1', claimedWeightKg: 0, remainingWeightKg: 0 },
+      roasterInventoryItemRemoved: true,
+    })
+    expect(next.roasterInventory).toEqual([data().roasterInventory[0]])
+    expect(next.greenBeanLots.find((g) => g.id === 'gbl-1')!.currentWeightKg).toBe(4)
+  })
+
   it('a parchment void puts the kg and status back and drops the green bean lots it removed', () => {
     const voidedRow = { id: 'pw-1', amountKg: 100, withdrawalType: 'HullAndGrade' as const, date: '2026-09-20', voidedAt: '2026-10-04T00:00:00.000Z' }
     const next = applyParchmentVoid(data(), 'pl-1', {
@@ -215,6 +227,19 @@ describe('merging a void or an edit into the app data', () => {
     })
     expect(next.parchmentLots[0]).toMatchObject({ currentWeightKg: 100, status: 'AwaitingHulling', withdrawalHistory: [voidedRow] })
     expect(next.greenBeanLots.map((g) => g.id)).toEqual(['gbl-1'])
+    expect(next.roasterInventory).toEqual(data().roasterInventory)
+  })
+
+  it('a parchment void drops the empty roaster rows of the green bean lots it removed', () => {
+    const voidedRow = { id: 'pw-1', amountKg: 100, withdrawalType: 'HullAndGrade' as const, date: '2026-09-20', voidedAt: '2026-10-04T00:00:00.000Z' }
+    const start = data()
+    start.roasterInventory.push({ id: 'inv-3', roasterId: 'r-1', greenBeanLotId: 'gbl-2', claimedWeightKg: 0, remainingWeightKg: 0 })
+    const next = applyParchmentVoid(start, 'pl-1', {
+      parchmentLot: { ...parchment, currentWeightKg: 100, status: 'AwaitingHulling', withdrawalHistory: [voidedRow] },
+      withdrawal: voidedRow,
+      removedGreenBeanLots: [{ id: 'gbl-2', displayId: 'GBL-2', grade: 'Grade A', initialWeightKg: 20 }],
+    })
+    expect(next.roasterInventory.map((inv) => inv.id)).toEqual(['inv-1', 'inv-2'])
   })
 
   it('an edit swaps the row with that id in, keeping the fields the reply lacks', () => {

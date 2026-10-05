@@ -5,6 +5,7 @@ import { RoasterInventoryItem } from '../../types'
 import { toFixed2, toRoaId } from '../../utils/formatters'
 import { useStablePageHeight } from '../../hooks/useStablePageHeight'
 import LotsPagination from './LotsPagination'
+import { stockSourceLabel } from './purchasedLots'
 
 // WithdrawalLotItem is just RoasterInventoryItem — all enriched fields (grade, processorScore,
 // variety, process, greenBeanDisplayId) are now populated directly by transformInventoryItem.
@@ -22,6 +23,12 @@ interface InternalLotsTableProps {
   /** Items on a full page, so a short last page still reserves a full page of height. */
   pageSize?: number
   hideHeader?: boolean
+  /**
+   * An Admin sees every roaster's stock rows: the panel is titled for
+   * roasters, not "your", and each card names its roaster (ownerNameOf).
+   */
+  viewerIsAdmin?: boolean
+  ownerNameOf?: (lot: WithdrawalLotItem) => string | undefined
 }
 
 interface PopoverPos {
@@ -39,6 +46,8 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
   onPageChange,
   pageSize,
   hideHeader = false,
+  viewerIsAdmin = false,
+  ownerNameOf,
 }) => {
   // A short last page would shrink the panel and make the screen jump up.
   const pageRef = useStablePageHeight<HTMLDivElement>(
@@ -106,7 +115,9 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
               <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#7f9184]">
                 Ready to roast
               </p>
-              <p className="mt-1 text-sm font-bold text-[#294936]">Your internal inventory</p>
+              <p className="mt-1 text-sm font-bold text-[#294936]">
+                {viewerIsAdmin ? "Roasters' internal inventory" : 'Your internal inventory'}
+              </p>
             </div>
             <div className="flex items-center gap-4 text-right">
               <div>
@@ -142,12 +153,21 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
                   className="rounded-2xl border border-[#dfe9df] bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#9cb8a6] hover:shadow-md"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    <div className="min-w-0">
                       <p className="font-mono text-sm font-bold text-[#294936]">
                         {toRoaId(lot.greenBeanLotId)}
                       </p>
-                      <p className="mt-1 text-xs font-medium text-[#8b9a90]">
-                        Internal roasting stock
+                      <p className="mt-1 truncate text-xs font-medium text-[#8b9a90]">
+                        {viewerIsAdmin ? (
+                          <>
+                            Roaster{' '}
+                            <span className="font-semibold text-[#55635a]">
+                              {ownerNameOf?.(lot) || 'not on record'}
+                            </span>
+                          </>
+                        ) : (
+                          'Internal roasting stock'
+                        )}
                       </p>
                     </div>
                     <button
@@ -253,9 +273,9 @@ const InternalLotsTable: React.FC<InternalLotsTableProps> = ({
                 </span>
               </div>
               <div className="flex justify-between items-center gap-4">
-                <span className="text-xs text-gray-500">Withdrawal Type</span>
+                <span className="text-xs text-gray-500">How it came in</span>
                 <span className="text-xs font-normal text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
-                  {activeLot.withdrawalType || '—'}
+                  {stockSourceLabel(activeLot.withdrawalType)}
                 </span>
               </div>
             </div>

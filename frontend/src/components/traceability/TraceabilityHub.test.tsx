@@ -7,6 +7,7 @@ import { DataContext } from '../../hooks/useDataContext'
 import { GreenBeanSourceType, UserRole } from '../../types'
 import type { AppData, GreenBeanLot, User } from '../../types'
 import { generatePublicTraceId } from '../../services/lots/greenBeanLotService'
+import { toRoaId } from '../../utils/formatters'
 import TraceabilityHub from './TraceabilityHub'
 
 vi.mock('../../services/lots/greenBeanLotService', async (importOriginal) => ({
@@ -60,18 +61,18 @@ describe('Traceability Hub access', () => {
 // public are for the lot's creator or an Admin: the backend refuses anyone
 // else with a 403. Others see a lot's QR and story once it is published.
 describe('Traceability Hub publish controls', () => {
-  const lot = (id: string, createdById: string, publicTraceId?: string): GreenBeanLot => ({
-    id, createdById, publicTraceId, sourceType: GreenBeanSourceType.Internal, grade: 'Grade A',
+  const lot = (id: string, displayId: string, createdById: string, publicTraceId?: string): GreenBeanLot => ({
+    id, displayId, createdById, publicTraceId, sourceType: GreenBeanSourceType.Internal, grade: 'Grade A',
     initialWeightKg: 10, currentWeightKg: 10, availabilityStatus: 'Available',
     cuppingScores: [], withdrawalHistory: [],
   })
   const data: AppData = {
     ...INITIAL_APP_DATA,
     greenBeanLots: [
-      lot('11111111-0000-4000-8000-000000000001', 'u-proc'),
-      lot('22222222-0000-4000-8000-000000000002', 'u-proc', 'pub-mine'),
-      lot('33333333-0000-4000-8000-000000000003', 'u-other'),
-      lot('44444444-0000-4000-8000-000000000004', 'u-other', 'pub-theirs'),
+      lot('11111111-0000-4000-8000-000000000001', 'GBL-2026-1', 'u-proc'),
+      lot('22222222-0000-4000-8000-000000000002', 'GBL-2026-2', 'u-proc', 'pub-mine'),
+      lot('33333333-0000-4000-8000-000000000003', 'GBL-2026-3', 'u-other'),
+      lot('44444444-0000-4000-8000-000000000004', 'GBL-2026-4', 'u-other', 'pub-theirs'),
     ],
   }
   const [mineDraft, minePublished, theirsDraft, theirsPublished] = data.greenBeanLots.map((g) => g.id)
@@ -104,7 +105,7 @@ describe('Traceability Hub publish controls', () => {
     expect(viewLink(theirsPublished)).toHaveAttribute('href', '/trace/pub-theirs')
     fireEvent.click(row(theirsPublished).getByRole('button', { name: /QR/ }))
 
-    const dialog = await screen.findByRole('dialog', { name: 'QR Code' })
+    const dialog = await screen.findByRole('dialog', { name: 'QR Code · GBL-2026-4' })
     expect(within(dialog).getByText(/#\/trace\/pub-theirs/)).toBeInTheDocument()
     expect(within(dialog).queryByRole('button', { name: /Regenerate Public ID/ })).not.toBeInTheDocument()
     expect(generatePublicTraceId).not.toHaveBeenCalled()
@@ -115,7 +116,7 @@ describe('Traceability Hub publish controls', () => {
 
     fireEvent.click(row(minePublished).getByRole('button', { name: /QR/ }))
 
-    const dialog = await screen.findByRole('dialog', { name: 'QR Code' })
+    const dialog = await screen.findByRole('dialog', { name: 'QR Code · GBL-2026-2' })
     expect(within(dialog).getByRole('button', { name: /Regenerate Public ID/ })).toBeInTheDocument()
   })
 
@@ -164,5 +165,121 @@ describe('Traceability Hub process column', () => {
     })
 
     expect(row().getByText('Washed')).toBeInTheDocument()
+  })
+})
+
+// The hub names a green bean lot by the lot number the Processor Workbench
+// uses (GBL-2026-7), not the hash-style ROA id the roaster pages give their
+// own stock rows.
+describe('Traceability Hub lot ids', () => {
+  const lotA = '77777777-0000-4000-8000-000000000007'
+  const lotB = '12121212-0000-4000-8000-000000000012'
+  const greenLot = (id: string, displayId: string): GreenBeanLot => ({
+    id, displayId, createdById: 'u-admin', sourceType: GreenBeanSourceType.Internal, grade: 'Grade A',
+    initialWeightKg: 10, currentWeightKg: 10, availabilityStatus: 'Available',
+    cuppingScores: [], withdrawalHistory: [],
+  })
+  const data: AppData = {
+    ...INITIAL_APP_DATA,
+    greenBeanLots: [greenLot(lotA, 'GBL-2026-7'), greenLot(lotB, 'GBL-2026-12')],
+  }
+  const admin: User = { id: 'u-admin', name: 'Admin', roles: [UserRole.Admin] }
+  const search = (term: string) =>
+    fireEvent.change(screen.getByPlaceholderText(/Search by Lot ID/), { target: { value: term } })
+
+  it('lists each lot by its lot number', () => {
+    renderHub(admin, data)
+
+    expect(screen.getByTitle(lotA)).toHaveTextContent('GBL-2026-7')
+    expect(screen.getByTitle(lotB)).toHaveTextContent('GBL-2026-12')
+    expect(screen.queryByText(toRoaId(lotA))).not.toBeInTheDocument()
+    expect(screen.queryByText(/^ROA-/)).not.toBeInTheDocument()
+  })
+
+  it('finds a lot by its lot number', () => {
+    renderHub(admin, data)
+
+    search('gbl-2026-7')
+
+    expect(screen.getByTitle(lotA)).toBeInTheDocument()
+    expect(screen.queryByTitle(lotB)).not.toBeInTheDocument()
+  })
+
+  // Invoices and the roaster's stock rows still name the lot ROA-xxxx, so
+  // that id finds the row, but the hub itself never shows it.
+  it('still finds a lot by its ROA id without showing it', () => {
+    renderHub(admin, data)
+
+    search(toRoaId(lotA))
+
+    expect(screen.getByTitle(lotA)).toHaveTextContent('GBL-2026-7')
+    expect(screen.queryByTitle(lotB)).not.toBeInTheDocument()
+    expect(screen.queryByText(/ROA-/)).not.toBeInTheDocument()
+  })
+
+  it('titles the QR popup with the lot number', async () => {
+    vi.mocked(generatePublicTraceId).mockResolvedValue({
+      publicTraceId: 'pub-7', publicUrl: '/trace/pub-7', greenBeanLot: { id: lotA, publicTraceId: 'pub-7', qrGeneratedAt: '2026-10-05T00:00:00Z' },
+    })
+    renderHub(admin, data)
+
+    fireEvent.click(within(screen.getByTitle(lotA).closest('tr') as HTMLElement).getByRole('button', { name: /Generate/ }))
+
+    expect(await screen.findByRole('dialog', { name: 'QR Code · GBL-2026-7' })).toBeInTheDocument()
+  })
+})
+
+// A lot whose process is not known shows "Unknown", and the process filter
+// offers "Unknown" (last) only when some row needs it.
+describe('Traceability Hub unknown process', () => {
+  const known = '88888888-0000-4000-8000-000000000008'
+  const unknown = '99999999-0000-4000-8000-000000000009'
+  const external = 'aaaaaaaa-0000-4000-8000-00000000000a'
+  const greenLot = (id: string, displayId: string, extra: Partial<GreenBeanLot> = {}): GreenBeanLot => ({
+    id, displayId, createdById: 'u-admin', sourceType: GreenBeanSourceType.Internal, grade: 'Grade A',
+    initialWeightKg: 10, currentWeightKg: 10, availabilityStatus: 'Available',
+    cuppingScores: [], withdrawalHistory: [], ...extra,
+  })
+  const withProcess = greenLot(known, 'GBL-2026-8', { parchmentProcessType: 'Washed' })
+  const admin: User = { id: 'u-admin', name: 'Admin', roles: [UserRole.Admin] }
+  const row = (id: string) => within(screen.getByTitle(id).closest('tr') as HTMLElement)
+  const processOptions = () => {
+    const filter = screen.getByText('Process', { selector: 'label' }).parentElement as HTMLElement
+    fireEvent.click(within(filter).getByRole('button'))
+    return within(filter).getAllByRole('button').slice(1).map((b) => b.textContent)
+  }
+
+  it('shows Unknown for a lot without a process and offers it last in the filter', () => {
+    renderHub(admin, {
+      ...INITIAL_APP_DATA,
+      greenBeanLots: [withProcess, greenLot(unknown, 'GBL-2026-9')],
+    })
+
+    expect(row(unknown).getAllByText('Unknown')).not.toHaveLength(0)
+    expect(processOptions()).toEqual(['All', 'Washed', 'Unknown'])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unknown' }))
+    expect(screen.getByTitle(unknown)).toBeInTheDocument()
+    expect(screen.queryByTitle(known)).not.toBeInTheDocument()
+  })
+
+  it('leaves Unknown out of the filter when every lot has a process', () => {
+    renderHub(admin, {
+      ...INITIAL_APP_DATA,
+      greenBeanLots: [
+        withProcess,
+        greenLot(external, 'GBL-2026-10', {
+          sourceType: GreenBeanSourceType.External,
+          externalSource: {
+            originName: 'Doi Chang', variety: 'Geisha', processType: 'Natural',
+            purchaseDate: '2026-09-01', pricePerKg: 300, currency: 'THB',
+          },
+        }),
+      ],
+    })
+
+    expect(row(external).getByText('Natural')).toBeInTheDocument()
+    expect(row(external).getByText('Geisha')).toBeInTheDocument()
+    expect(processOptions()).toEqual(['All', 'Natural', 'Washed'])
   })
 })

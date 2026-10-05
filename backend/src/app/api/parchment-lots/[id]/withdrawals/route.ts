@@ -5,11 +5,10 @@ import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/li
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import {
   safeParseFloat,
-  parseStrictNumber,
-  todayDateOnly,
   nextDisplayIds,
   withDisplayIdRetry,
 } from '@/lib/utils'
+import { checkGradedLots, createGradedLots, type GradedLot } from '@/lib/hullAndGrade'
 import { isActiveRoaster, INVALID_TARGET_ROASTER_MESSAGE } from '@/lib/targetRoaster'
 import { createParchmentWithdrawalSchema } from '@/lib/validations/parchmentLot'
 import { BODY_NOT_OBJECT_MESSAGE, readJsonObjectBody } from '@/lib/withdrawalVoid'
@@ -133,84 +132,15 @@ export async function POST(
       )
     }
 
-    // Validate HullAndGrade specific fields
+    // Validate HullAndGrade specific fields (lib/hullAndGrade, shared with
+    // the one-step Process & Grade on POST /api/processing-batches).
+    let gradedLotsToCreate: GradedLot[] = []
     if (withdrawalType === 'HullAndGrade') {
-      if (!gradedLots || !Array.isArray(gradedLots) || gradedLots.length === 0) {
-        return NextResponse.json(
-          { error: 'Graded lots are required for Hull & Grade withdrawal' },
-          { status: 400 }
-        )
+      const graded = checkGradedLots(gradedLots, totalGreenBeanWeight, amount)
+      if (!graded.ok) {
+        return NextResponse.json({ error: graded.error }, { status: 400 })
       }
-
-      const declaredGreenWeight = safeParseFloat(totalGreenBeanWeight)
-      let gradedWeightSum = 0
-      const seenGrades = new Set<string>()
-
-      for (let i = 0; i < gradedLots.length; i++) {
-        const gl = gradedLots[i]
-        const grade = typeof gl?.grade === 'string' ? gl.grade.trim() : ''
-        const weight = safeParseFloat(gl?.weight)
-
-        if (!grade || weight === null || weight <= 0) {
-          return NextResponse.json(
-            { error: 'Each graded lot must include a unique grade and a weight greater than 0' },
-            { status: 400 }
-          )
-        }
-
-        if (seenGrades.has(grade)) {
-          return NextResponse.json(
-            { error: `Duplicate grade is not allowed: ${grade}` },
-            { status: 400 }
-          )
-        }
-
-        // Price is optional (empty or 0 = no price), but a value that is
-        // present must be a plain, non-negative number ("150abc" is refused).
-        const rawPrice = gl?.price
-        if (rawPrice !== undefined && rawPrice !== null && rawPrice !== '') {
-          const glPrice = parseStrictNumber(rawPrice)
-          if (glPrice === null || glPrice < 0) {
-            return NextResponse.json(
-              { error: `Price per kg for ${grade} must be a number of 0 or more` },
-              { status: 400 }
-            )
-          }
-          // THB to the satang, as the form allows: 220.555 is refused rather
-          // than stored and audited with a third decimal.
-          if (Math.abs(glPrice * 100 - Math.round(glPrice * 100)) > 1e-6) {
-            return NextResponse.json(
-              { error: `Price per kg for ${grade} must have at most 2 decimals` },
-              { status: 400 }
-            )
-          }
-        }
-
-        seenGrades.add(grade)
-        gradedWeightSum += weight
-      }
-
-      const effectiveGreenWeight = declaredGreenWeight ?? gradedWeightSum
-      if (effectiveGreenWeight <= 0) {
-        return NextResponse.json(
-          { error: 'Total green bean weight must be greater than 0' },
-          { status: 400 }
-        )
-      }
-
-      if (effectiveGreenWeight - amount > 0.01) {
-        return NextResponse.json(
-          { error: 'Total green bean weight cannot exceed the parchment amount withdrawn' },
-          { status: 400 }
-        )
-      }
-
-      if (declaredGreenWeight !== null && Math.abs(gradedWeightSum - declaredGreenWeight) > 0.01) {
-        return NextResponse.json(
-          { error: 'The sum of graded lots must exactly match the declared total green bean weight' },
-          { status: 400 }
-        )
-      }
+      gradedLotsToCreate = graded.lots
     }
 
     // Calculate total amount for sales
@@ -231,8 +161,8 @@ export async function POST(
     // other type), so the response can hand them back with their prices.
     const createdGreenBeanLots = await withDisplayIdRetry(async () => {
       const greenBeanDisplayIds: string[] =
-        withdrawalType === 'HullAndGrade' && gradedLots
-          ? await nextDisplayIds(prisma.greenBeanLot, 'GBL', gradedLots.length)
+        gradedLotsToCreate.length > 0
+          ? await nextDisplayIds(prisma.greenBeanLot, 'GBL', gradedLotsToCreate.length)
           : []
 
       return prisma.$transaction(async (tx) => {
@@ -296,58 +226,16 @@ export async function POST(
       await tx.parchmentLot.update({ where: { id }, data: statusUpdate })
 
       // If HullAndGrade, create green bean lots
-      if (withdrawalType === 'HullAndGrade' && gradedLots) {
-        // Today on Thai time, anchored at 12:00 UTC like a picked date, so a
-        // lot hulled before 07:00 is not dated the previous (UTC) day.
-        const pricedAt = todayDateOnly()
-        for (let i = 0; i < gradedLots.length; i++) {
-          const gl = gradedLots[i]
-          const weight = safeParseFloat(gl.weight)
-          const glPrice = parseStrictNumber(gl.price)
-          const glScore = safeParseFloat(gl.score)
-          // 0 or empty means the operator left the price for later.
-          const setPrice = glPrice !== null && glPrice > 0 ? glPrice : null
-
-          if (weight === null || weight <= 0) continue
-
-          const createdLot = await tx.greenBeanLot.create({
-            data: {
-              displayId: greenBeanDisplayIds[i],
-              sourceType: 'Internal',
-              parchmentLotId: id,
-              // The hull that made it, so voiding the hull can find it.
-              parchmentWithdrawalId: withdrawal.id,
-              grade: gl.grade,
-              initialWeightKg: weight,
-              currentWeightKg: weight,
-              availabilityStatus: 'Available',
-              createdById: greenBeanOwnerId,
-              ...(setPrice !== null && {
-                pricePerKg: setPrice,
-                currency: 'THB',
-                priceSetDate: pricedAt,
-                priceSetBy: user.id,
-              }),
-              ...(glScore !== null && {
-                processorScore: glScore,
-              }),
-            },
-          })
-          createdLots.push(createdLot)
-
-          // A price set at hulling gets the same audit row as one set later.
-          if (setPrice !== null) {
-            await tx.pricingHistory.create({
-              data: {
-                greenBeanLotId: createdLot.id,
-                pricePerKg: setPrice,
-                currency: 'THB',
-                effectiveDate: pricedAt,
-                setBy: user.id,
-              },
-            })
-          }
-        }
+      if (gradedLotsToCreate.length > 0) {
+        createdLots.push(...await createGradedLots(tx, {
+          parchmentLotId: id,
+          // The hull that made it, so voiding the hull can find it.
+          parchmentWithdrawalId: withdrawal.id,
+          ownerId: greenBeanOwnerId,
+          pricedById: user.id,
+          lots: gradedLotsToCreate,
+          displayIds: greenBeanDisplayIds,
+        }))
       }
 
       // For RoastingStock with target roaster, create/update inventory

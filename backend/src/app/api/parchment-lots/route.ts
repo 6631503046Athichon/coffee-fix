@@ -5,6 +5,7 @@ import { requireAuth, requireRole, requireOwnership, handleApiError } from '@/li
 import { nextDisplayId, safeParseFloat, withDisplayIdRetry } from '@/lib/utils'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { parchmentLotForViewer } from '@/lib/withdrawalPrivacy'
+import { withoutImporterFor } from '@/lib/importerPrivacy'
 import { chainScope } from '@/lib/farmAccess'
 
 // The body's externalSource as an object to add to, or an empty one.
@@ -84,17 +85,22 @@ export async function GET(request: NextRequest) {
     })
 
     // Withdrawal sale details and purpose only for the lot's owner and
-    // Admin; see lib/withdrawalPrivacy. Then, as on the by-id read, a reader
-    // who may not read the batch (a roaster labelling the source of their
-    // green beans) gets only its id and process, not its owner and status.
+    // Admin; see lib/withdrawalPrivacy. The importer's user id only for
+    // Admin and the importer; see lib/importerPrivacy. Then, as on the by-id
+    // read, a reader who may not read the batch (a roaster labelling the
+    // source of their green beans) gets only its id and process, not its
+    // owner and status. The batch's harvestLot.farmId was loaded only for
+    // that check and goes to no one.
     return NextResponse.json({
       parchmentLots: parchmentLots.map(lot => {
-        const shaped = parchmentLotForViewer(user, lot)
+        const shaped = withoutImporterFor(user, parchmentLotForViewer(user, lot))
         const batch = lot.processingBatch
-        if (scope && batch && !scope.canReadBatch(batch)) {
+        if (!batch) return shaped
+        if (scope && !scope.canReadBatch(batch)) {
           return { ...shaped, processingBatch: { id: batch.id, processType: batch.processType } }
         }
-        return shaped
+        const { harvestLot: _farmCheck, ...readableBatch } = batch
+        return { ...shaped, processingBatch: readableBatch }
       }),
     })
   } catch (error) {

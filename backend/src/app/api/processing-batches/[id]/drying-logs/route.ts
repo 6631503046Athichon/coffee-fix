@@ -1,24 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
-import { parseStrictDateOnly, safeParseFloat } from '@/lib/utils'
+import { requireAuth, handleApiError } from '@/lib/middleware'
+import { loadBatchForDryingLogs, parseDryingLogInput, type DryingLogFields } from '@/lib/dryingLogs'
 
 // POST /api/processing-batches/:id/drying-logs - Add drying log entry
+// The batch's processor, or an Admin on anyone's batch.
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAuth(request)
-    requireRole(user, ['Processor', 'Admin'])
     const { id } = await params
 
-    // Load the parent batch for ownership check
-    const batch = await prisma.processingBatch.findUnique({
-      where: { id },
-      select: { createdById: true },
-    })
-
+    const batch = await loadBatchForDryingLogs(user, id)
     if (!batch) {
       return NextResponse.json(
         { error: 'Processing batch not found' },
@@ -26,46 +21,20 @@ export async function POST(
       )
     }
 
-    requireOwnership(user, batch.createdById, ['Admin'])
-
-    const body = await request.json()
-    const { date, moistureContent, ambientTemp, relativeHumidity } = body
-
-    if (!date || moistureContent === undefined || ambientTemp === undefined || relativeHumidity === undefined) {
-      return NextResponse.json(
-        { error: 'Date, moisture content, ambient temperature, and relative humidity are required' },
-        { status: 400 }
-      )
+    const body = await request.json().catch(() => null)
+    const parsed = parseDryingLogInput(body, { partial: false })
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 })
     }
-
-    // A picked YYYY-MM-DD is stored at 12:00 UTC (parseDateOnly's anchor),
-    // not 00:00 UTC, so it reads as the same day in every timezone.
-    const logDate = parseStrictDateOnly(date)
-    if (!logDate || Number.isNaN(logDate.getTime())) {
-      return NextResponse.json(
-        { error: 'Date must be a valid date' },
-        { status: 400 }
-      )
-    }
-
-    const moisture = safeParseFloat(moistureContent)
-    const ambient = safeParseFloat(ambientTemp)
-    const humidity = safeParseFloat(relativeHumidity)
-
-    if (moisture === null || ambient === null || humidity === null) {
-      return NextResponse.json(
-        { error: 'Moisture content, ambient temperature, and relative humidity must be valid numbers' },
-        { status: 400 }
-      )
-    }
+    const reading = parsed.data as DryingLogFields
 
     const dryingLog = await prisma.dryingLogEntry.create({
       data: {
         processingBatchId: id,
-        date: logDate,
-        moistureContent: moisture,
-        ambientTemp: ambient,
-        relativeHumidity: humidity,
+        date: reading.date,
+        moistureContent: reading.moistureContent,
+        ambientTemp: reading.ambientTemp,
+        relativeHumidity: reading.relativeHumidity,
       },
     })
 

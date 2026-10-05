@@ -10,6 +10,7 @@ import SaleOrderModal from '@/components/sales/modals/SaleOrderModal';
 import { formatSaleDate } from '@/components/sales/saleDisplay';
 import { Modal } from '@/components/common/Modal';
 import { isAdminUser } from '@/utils/farmAccess';
+import { isApiError } from '@/services/apiError';
 
 const TYPE_BADGE: Record<string, string> = {
   Roaster: 'bg-amber-50 text-amber-700',
@@ -48,6 +49,9 @@ const CustomerManagement: React.FC = () => {
   const [deleting, setDeleting] = useState<Customer | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
+  // The server refused the delete (409): sales the viewer cannot see, such as
+  // another roaster's, keep the customer. Delete stays off for this popup.
+  const [deleteRefused, setDeleteRefused] = useState(false);
 
   // Check if user has Admin or Roaster role. A super admin counts as an
   // Admin whatever roles the account lists (isAdminUser).
@@ -84,13 +88,17 @@ const CustomerManagement: React.FC = () => {
   const fetchCustomers = () => setReloadKey((k) => k + 1);
 
   // Non-cancelled sales per customer from the viewer's own sales log.
+  // `recorded` also counts cancelled ones: the server keeps a customer with
+  // any sale on record, cancelled or not.
   const salesByCustomer = useMemo(() => {
-    const stats = new Map<string, { count: number; last: string }>();
+    const stats = new Map<string, { count: number; last: string; recorded: number }>();
     for (const order of data.saleOrders) {
-      if (order.status === 'Cancelled') continue;
-      const s = stats.get(order.customerId) ?? { count: 0, last: '' };
-      s.count += 1;
-      if (order.orderDate > s.last) s.last = order.orderDate;
+      const s = stats.get(order.customerId) ?? { count: 0, last: '', recorded: 0 };
+      s.recorded += 1;
+      if (order.status !== 'Cancelled') {
+        s.count += 1;
+        if (order.orderDate > s.last) s.last = order.orderDate;
+      }
       stats.set(order.customerId, s);
     }
     return stats;
@@ -98,9 +106,19 @@ const CustomerManagement: React.FC = () => {
 
   const salesText = (customerId: string) => {
     const s = salesByCustomer.get(customerId);
-    if (!s) return '—';
+    if (!s || s.count === 0) return '—';
     return `${s.count} ${s.count === 1 ? 'sale' : 'sales'} · last ${formatSaleDate(s.last)}`;
   };
+
+  // The sales that keep the customer in the popup being shown, said up front
+  // so Delete is never offered for a customer the server will refuse.
+  const deletingSales = deleting ? salesByCustomer.get(deleting.id) : undefined;
+  const deletingSalesText = !deletingSales || deletingSales.recorded === 0
+    ? ''
+    : deletingSales.count > 0
+      ? `${deletingSales.count} ${deletingSales.count === 1 ? 'sale' : 'sales'}`
+      : `${deletingSales.recorded} cancelled ${deletingSales.recorded === 1 ? 'sale' : 'sales'}`;
+  const cannotDelete = deletingSalesText !== '' || deleteRefused;
 
   const handleCustomerSaved = (customer: Customer) => {
     setCustomers((prev) => upsertCustomer(prev, customer));
@@ -116,11 +134,12 @@ const CustomerManagement: React.FC = () => {
 
   const askDelete = (customer: Customer) => {
     setDeleteError('');
+    setDeleteRefused(false);
     setDeleting(customer);
   };
 
   const confirmDelete = async () => {
-    if (!deleting || deleteBusy) return;
+    if (!deleting || deleteBusy || cannotDelete) return;
     setDeleteBusy(true);
     setDeleteError('');
     try {
@@ -132,6 +151,8 @@ const CustomerManagement: React.FC = () => {
       fetchCustomers();
     } catch (err: unknown) {
       setDeleteError(err instanceof Error && err.message ? err.message : 'Failed to delete customer');
+      // Refused for its sales: pressing Delete again would only be refused again.
+      if (isApiError(err) && err.status === 409) setDeleteRefused(true);
     } finally {
       setDeleteBusy(false);
     }
@@ -379,10 +400,14 @@ const CustomerManagement: React.FC = () => {
         <div>
           <p id="delete-customer-title" className="flex items-center gap-2 text-base font-semibold text-gray-900">
             <AlertTriangle className="h-4 w-4 text-red-600" />
-            Delete customer?
+            {cannotDelete ? 'Customer cannot be deleted' : 'Delete customer?'}
           </p>
           <p className="mt-1 text-sm text-gray-600">
-            Delete {deleting?.name}? This cannot be undone.
+            {deletingSalesText
+              ? `${deleting?.name} has ${deletingSalesText}, so it cannot be deleted. A customer with sales stays in the address book.`
+              : deleteRefused
+                ? `${deleting?.name} cannot be deleted.`
+                : `Delete ${deleting?.name}? This cannot be undone.`}
           </p>
           {deleteError && (
             <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
@@ -396,13 +421,13 @@ const CustomerManagement: React.FC = () => {
               disabled={deleteBusy}
               className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
-              Keep customer
+              {cannotDelete ? 'Close' : 'Keep customer'}
             </button>
             <button
               type="button"
               onClick={confirmDelete}
-              disabled={deleteBusy}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+              disabled={deleteBusy || cannotDelete}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {deleteBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
               Delete customer

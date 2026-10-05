@@ -191,7 +191,7 @@ describe('POST /api/green-bean-lots/[id]/generate-public-id', () => {
       expectNoWrite()
     })
 
-    test('replaces it only with regenerate: true', async () => {
+    test('replaces it only with regenerate: true, swapping only the id it read', async () => {
       mockAuthUser = processor
       mockLot({ publicTraceId: 'pub-old' })
       const { response, body } = await callRoute({ regenerate: true })
@@ -200,9 +200,9 @@ describe('POST /api/green-bean-lots/[id]/generate-public-id', () => {
       expect(body.publicTraceId).toMatch(UUID)
       expect(body.publicTraceId).not.toBe('pub-old')
       expect(body.publicUrl).toBe(`/trace/${body.publicTraceId}`)
-      expect(mockPrisma.greenBeanLot.updateMany).not.toHaveBeenCalled()
-      const write: any = mockPrisma.greenBeanLot.update.mock.calls[0][0]
-      expect(write.where).toEqual({ id: 'lot-1' })
+      expect(mockPrisma.greenBeanLot.update).not.toHaveBeenCalled()
+      const write: any = mockPrisma.greenBeanLot.updateMany.mock.calls[0][0]
+      expect(write.where).toEqual({ id: 'lot-1', publicTraceId: 'pub-old' })
       expect(write.data.publicTraceId).toBe(body.publicTraceId)
     })
 
@@ -212,7 +212,48 @@ describe('POST /api/green-bean-lots/[id]/generate-public-id', () => {
       const { response, body } = await callRoute({ regenerate: true })
       expect(response.status).toBe(200)
       expect(body.publicTraceId).not.toBe('pub-old')
-      expect(mockPrisma.greenBeanLot.update).toHaveBeenCalledTimes(1)
+      expect(mockPrisma.greenBeanLot.updateMany).toHaveBeenCalledTimes(1)
+    })
+
+    test('two regenerates at once end with one new id: the later gets the one that won', async () => {
+      mockAuthUser = processor
+      mockPrisma.greenBeanLot.findUnique
+        .mockResolvedValueOnce({ id: 'lot-1', createdById: 'proc-1', publicTraceId: 'pub-old', qrGeneratedAt: printedAt })
+        .mockResolvedValueOnce({ id: 'lot-1', publicTraceId: 'pub-won', qrGeneratedAt: printedAt })
+      // The other request swapped pub-old first, so this swap matches nothing.
+      mockPrisma.greenBeanLot.updateMany.mockResolvedValue({ count: 0 })
+
+      const { response, body } = await callRoute({ regenerate: true })
+
+      expect(response.status).toBe(200)
+      expect(body.publicTraceId).toBe('pub-won')
+      expect(body.publicUrl).toBe('/trace/pub-won')
+      expect(body.greenBeanLot).toEqual({ id: 'lot-1', publicTraceId: 'pub-won', qrGeneratedAt: printedAt.toISOString() })
+      expect(mockPrisma.greenBeanLot.update).not.toHaveBeenCalled()
+    })
+
+    test('404 when the lot was deleted between the read and the swap', async () => {
+      mockAuthUser = processor
+      mockPrisma.greenBeanLot.findUnique
+        .mockResolvedValueOnce({ id: 'lot-1', createdById: 'proc-1', publicTraceId: 'pub-old', qrGeneratedAt: printedAt })
+        .mockResolvedValueOnce(null)
+      mockPrisma.greenBeanLot.updateMany.mockResolvedValue({ count: 0 })
+
+      const { response, body } = await callRoute({ regenerate: true })
+      expect(response.status).toBe(404)
+      expect(body.publicTraceId).toBeUndefined()
+    })
+
+    test('409 when the swap missed and the lot has no id any more', async () => {
+      mockAuthUser = admin
+      mockPrisma.greenBeanLot.findUnique
+        .mockResolvedValueOnce({ id: 'lot-1', createdById: 'proc-1', publicTraceId: 'pub-old', qrGeneratedAt: printedAt })
+        .mockResolvedValueOnce({ id: 'lot-1', publicTraceId: null, qrGeneratedAt: null })
+      mockPrisma.greenBeanLot.updateMany.mockResolvedValue({ count: 0 })
+
+      const { response, body } = await callRoute({ regenerate: true })
+      expect(response.status).toBe(409)
+      expect(body.error).toContain('Reload and try again')
     })
   })
 

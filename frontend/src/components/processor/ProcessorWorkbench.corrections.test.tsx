@@ -94,12 +94,13 @@ const initialData = (): AppData => ({
   greenBeanLots: [mineGreen, theirGreen, mineExternalGreen],
 })
 
-function Harness({ roles = [UserRole.Processor], onData, refreshData = async () => {} }: {
+function Harness({ roles = [UserRole.Processor], onData, refreshData = async () => {}, start = initialData }: {
   roles?: UserRole[]
   onData?: (data: AppData) => void
   refreshData?: () => Promise<void>
+  start?: () => AppData
 }) {
-  const [data, setData] = useState(initialData)
+  const [data, setData] = useState(start)
   useEffect(() => { onData?.(data) }, [data, onData])
   return (
     <DataContext.Provider value={{ data, setData, refreshData, isEditing: false, setIsEditing: () => {} }}>
@@ -276,16 +277,26 @@ describe('Workbench edit and delete (F24)', { timeout: 20000 }, () => {
     expect(latest!.greenBeanLots.find((g) => g.id === 'gbl-mine')?.parchmentProcessType).toBe('Washed')
   })
 
-  it('deletes a green-bean lot after confirming', async () => {
+  it('deletes a green-bean lot after confirming, with its empty roaster stock row', async () => {
     vi.mocked(deleteGreenBeanLot).mockResolvedValue(undefined)
     let latest: AppData | undefined
-    render(<Harness onData={(d) => { latest = d }} />)
+    // A claim released to 0 leaves an empty row; the backend deletes it with the lot.
+    const start = (): AppData => ({
+      ...initialData(),
+      roasterInventory: [
+        { id: 'inv-ext', roasterId: 'roaster', greenBeanLotId: 'gbl-ext', claimedWeightKg: 0, remainingWeightKg: 0 },
+        { id: 'inv-theirs', roasterId: 'roaster', greenBeanLotId: 'gbl-theirs', claimedWeightKg: 5, remainingWeightKg: 5 },
+      ],
+    })
+    render(<Harness start={start} onData={(d) => { latest = d }} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete green bean lot GBL-EXT' }))
 
     expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('GBL-EXT (Grade A)'))
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('a withdrawal that is not void, roaster stock holding kg'))
     await waitFor(() => expect(deleteGreenBeanLot).toHaveBeenCalledWith('gbl-ext'), slow)
     await waitFor(() => expect(latest!.greenBeanLots.map((g) => g.id)).not.toContain('gbl-ext'), slow)
+    expect(latest!.roasterInventory.map((inv) => inv.id)).toEqual(['inv-theirs'])
   })
 
   it('sends Delete on a lot a Hull & Grade made to its parchment lot\'s history, where the Void is', async () => {

@@ -37,10 +37,14 @@ const txMock: any = {
   greenBeanLot: {
     updateMany: jest.fn(),
     update: jest.fn(),
+    deleteMany: jest.fn(),
   },
+  roasterInventoryItem: { deleteMany: jest.fn() },
   pricingHistory: { create: jest.fn() },
   dryingLogEntry: { deleteMany: jest.fn() },
   harvestLot: { updateMany: jest.fn() },
+  // Row locks (the green-bean DELETE takes the lot FOR UPDATE).
+  $queryRaw: jest.fn(),
 }
 
 const mockPrisma: any = {
@@ -76,7 +80,10 @@ function resetMocks() {
   txMock.processingBatch.count.mockImplementation(async () => 0)
   txMock.greenBeanLot.updateMany.mockImplementation(async () => ({ count: 1 }))
   txMock.greenBeanLot.update.mockImplementation(async ({ where, data }: any) => ({ id: where.id, ...data }))
+  txMock.greenBeanLot.deleteMany.mockImplementation(async () => ({ count: 1 }))
+  txMock.roasterInventoryItem.deleteMany.mockImplementation(async () => ({ count: 0 }))
   txMock.harvestLot.updateMany.mockImplementation(async () => ({ count: 1 }))
+  txMock.$queryRaw.mockImplementation(async () => [])
 }
 
 jest.mock('@/lib/prisma', () => ({
@@ -519,7 +526,9 @@ describe('PUT /api/green-bean-lots/[id] — grade and weight', () => {
     mockPrisma.greenBeanLot.findUnique.mockResolvedValueOnce(greenLot())
     expect((await putGreen({ initialWeightKg: 45 })).status).toBe(403)
 
+    // A Roaster corrects only the purchased (External) lots they bought in.
     mockAuthUser = ROASTER
+    mockPrisma.greenBeanLot.findUnique.mockResolvedValueOnce(greenLot())
     expect((await putGreen({ initialWeightKg: 45 })).status).toBe(403)
 
     mockAuthUser = ADMIN
@@ -592,14 +601,35 @@ describe('Deletes refuse while anything depends on the record', () => {
       _count: { ...noDependents, ...counts },
     })
 
-    test('deletes a lot nothing depends on with a guarded delete', async () => {
+    test('deletes a lot nothing depends on with a guarded delete, its empty roaster stock rows first', async () => {
       mockPrisma.greenBeanLot.findUnique.mockResolvedValueOnce(greenLot())
-      mockPrisma.greenBeanLot.deleteMany.mockResolvedValueOnce({ count: 1 })
 
       expect((await deleteGreen()).status).toBe(200)
-      expect(mockPrisma.greenBeanLot.deleteMany).toHaveBeenCalledWith({
+      // Roaster stock counts only while it holds kg or a roast or sale points at it.
+      const read: any = mockPrisma.greenBeanLot.findUnique.mock.calls[0][0]
+      expect(read.select._count.select.roasterInventory).toEqual({
         where: {
-          id: 'gbl-1',
+          OR: [
+            { claimedWeightKg: { gt: 1e-6 } },
+            { remainingWeightKg: { gt: 1e-6 } },
+            { roastBatches: { some: {} } },
+            { saleOrderItems: { some: {} } },
+          ],
+        },
+      })
+      expect(txMock.$queryRaw.mock.calls[0][0].join('?')).toContain('FROM "GreenBeanLot" WHERE "id" = ? FOR UPDATE')
+      expect(txMock.roasterInventoryItem.deleteMany).toHaveBeenCalledWith({
+        where: {
+          greenBeanLotId: { in: ['gbl-1'] },
+          claimedWeightKg: { lte: 1e-6 },
+          remainingWeightKg: { lte: 1e-6 },
+          roastBatches: { none: {} },
+          saleOrderItems: { none: {} },
+        },
+      })
+      expect(txMock.greenBeanLot.deleteMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: ['gbl-1'] },
           withdrawalHistory: { none: { voidedAt: null } },
           roasterInventory: { none: {} },
           roastBatches: { none: {} },
@@ -608,6 +638,7 @@ describe('Deletes refuse while anything depends on the record', () => {
           cuppingSamples: { none: {} },
         },
       })
+      expect(mockPrisma.greenBeanLot.deleteMany).not.toHaveBeenCalled()
     })
 
     test.each([
@@ -626,16 +657,28 @@ describe('Deletes refuse while anything depends on the record', () => {
       expect(body.dependents).toMatchObject(
         Object.fromEntries(Object.entries(counts).map(([key, value]) => [key === 'withdrawalHistory' ? 'withdrawals' : key, value])),
       )
-      expect(mockPrisma.greenBeanLot.deleteMany).not.toHaveBeenCalled()
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+      expect(txMock.greenBeanLot.deleteMany).not.toHaveBeenCalled()
     })
 
     test('answers 404 when the lot went away between the check and the delete', async () => {
       mockPrisma.greenBeanLot.findUnique
         .mockResolvedValueOnce(greenLot())
         .mockResolvedValueOnce(null)
-      mockPrisma.greenBeanLot.deleteMany.mockResolvedValueOnce({ count: 0 })
+      txMock.greenBeanLot.deleteMany.mockResolvedValueOnce({ count: 0 })
 
       expect((await deleteGreen()).status).toBe(404)
+    })
+
+    test('answers 409 when something was drawn from it between the check and the delete', async () => {
+      mockPrisma.greenBeanLot.findUnique
+        .mockResolvedValueOnce(greenLot())
+        .mockResolvedValueOnce({ id: 'gbl-1' })
+      txMock.greenBeanLot.deleteMany.mockResolvedValueOnce({ count: 0 })
+
+      const response = await deleteGreen()
+      expect(response.status).toBe(409)
+      expect((await response.json()).error).toContain('was drawn from since you looked')
     })
 
     test('another processor cannot delete it (403)', async () => {
@@ -643,7 +686,7 @@ describe('Deletes refuse while anything depends on the record', () => {
       mockPrisma.greenBeanLot.findUnique.mockResolvedValueOnce(greenLot())
 
       expect((await deleteGreen()).status).toBe(403)
-      expect(mockPrisma.greenBeanLot.deleteMany).not.toHaveBeenCalled()
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled()
     })
   })
 

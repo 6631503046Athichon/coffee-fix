@@ -60,11 +60,25 @@ describe('green-bean withdrawals', () => {
     expect(result.roasterInventoryItem).toEqual({
       id: 'inv-1', roasterId: 'r-1', greenBeanLotId: 'gbl-1', claimedWeightKg: 0, remainingWeightKg: 0,
     })
+    expect(result.roasterInventoryItemRemoved).toBe(false)
 
     post.mockResolvedValue({ greenBeanLot: greenJson(), withdrawal: voidedPush, roasterInventoryItem: null })
     const plain = await voidGreenBeanWithdrawal('gbl-1', 'w-1', '   ')
     expect(post).toHaveBeenLastCalledWith('/green-bean-lots/gbl-1/withdrawals/w-1/void', {})
     expect(plain.roasterInventoryItem).toBeNull()
+  })
+
+  it('void says when the backend removed the roaster stock row it left holding nothing', async () => {
+    vi.spyOn(api, 'post').mockResolvedValue({
+      greenBeanLot: greenJson([voidedPush]),
+      withdrawal: voidedPush,
+      roasterInventoryItem: { id: 'inv-1', roasterId: 'r-1', greenBeanLotId: 'gbl-1', claimedWeightKg: 0, remainingWeightKg: 0 },
+      roasterInventoryItemRemoved: true,
+      message: 'Withdrawal voided',
+    })
+    const result = await voidGreenBeanWithdrawal('gbl-1', 'w-1')
+    expect(result.roasterInventoryItemRemoved).toBe(true)
+    expect(result.roasterInventoryItem?.id).toBe('inv-1')
   })
 
   it('edit patches only the given sale fields and maps the row back', async () => {

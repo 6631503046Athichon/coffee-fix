@@ -4,9 +4,10 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { UserRole } from '../../types'
 import type { User } from '../../types'
-import { addCustomer, getAllCustomers } from '../../services/sales/customerService'
+import { addCustomer, deleteCustomer, getAllCustomers } from '../../services/sales/customerService'
 import { getSellableGreenLots, getSellableRoasts } from '../../services/sales/saleOrderService'
-import { TestDataProvider, appData, customer, roasterUser, sellable } from '../../test/salesFixtures'
+import { ApiError } from '../../services/apiError'
+import { TestDataProvider, appData, customer, roasterUser, sale, sellable } from '../../test/salesFixtures'
 import type { TestDataHandle } from '../../test/salesFixtures'
 import CustomerManagement from './CustomerManagement'
 
@@ -100,6 +101,77 @@ describe('CustomerManagement', { timeout: 20000 }, () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
 
     expect(await screen.findByRole('row', { name: /Green Leaf/ })).toBeInTheDocument()
+  })
+})
+
+describe('CustomerManagement delete', { timeout: 20000 }, () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    auth.currentUser = roasterUser
+    vi.mocked(getAllCustomers).mockResolvedValue([blueDoor, aroma])
+  })
+
+  const renderPage = (over: Parameters<typeof appData>[0] = {}) =>
+    render(
+      <MemoryRouter initialEntries={['/customers']}>
+        <TestDataProvider initial={appData({ customers: [blueDoor, aroma], ...over })}>
+          <CustomerManagement />
+        </TestDataProvider>
+      </MemoryRouter>,
+    )
+
+  const openDelete = async (name: RegExp) => {
+    const row = await screen.findByRole('row', { name })
+    fireEvent.click(within(row).getByRole('button', { name: 'Delete' }))
+    return screen.getByRole('dialog')
+  }
+
+  it('says up front that a customer with sales cannot be deleted, and offers only Close', async () => {
+    renderPage({ saleOrders: [sale({ id: 'sale-1' }), sale({ id: 'sale-2', orderNumber: 'ORD-2026-0002' })] })
+    const dialog = await openDelete(/Cafe Aroma/)
+
+    expect(dialog).toHaveTextContent('Customer cannot be deleted')
+    expect(dialog).toHaveTextContent('Cafe Aroma has 2 sales, so it cannot be deleted.')
+    expect(within(dialog).getByRole('button', { name: 'Delete customer' })).toBeDisabled()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete customer' }))
+    expect(deleteCustomer).not.toHaveBeenCalled()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('counts cancelled sales too, as the server does', async () => {
+    renderPage({ saleOrders: [sale({ status: 'Cancelled' })] })
+    const dialog = await openDelete(/Cafe Aroma/)
+
+    expect(dialog).toHaveTextContent('Cafe Aroma has 1 cancelled sale, so it cannot be deleted.')
+    expect(within(dialog).getByRole('button', { name: 'Delete customer' })).toBeDisabled()
+  })
+
+  it('turns Delete off once the server refuses it for sales this roaster cannot see (409)', async () => {
+    vi.mocked(deleteCustomer).mockRejectedValue(
+      new ApiError('This customer has sales recorded (by you or another roaster), so it cannot be deleted.', 409),
+    )
+    renderPage()
+    const dialog = await openDelete(/Blue Door/)
+
+    expect(dialog).toHaveTextContent('Delete Blue Door? This cannot be undone.')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete customer' }))
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('so it cannot be deleted')
+    expect(within(dialog).getByRole('button', { name: 'Delete customer' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeEnabled()
+    expect(deleteCustomer).toHaveBeenCalledTimes(1)
+  })
+
+  it('still deletes a customer with no sales', async () => {
+    vi.mocked(deleteCustomer).mockResolvedValue(undefined)
+    renderPage()
+    const dialog = await openDelete(/Blue Door/)
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete customer' }))
+
+    await waitFor(() => expect(deleteCustomer).toHaveBeenCalledWith('cust-2'))
   })
 })
 

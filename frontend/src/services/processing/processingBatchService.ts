@@ -1,7 +1,8 @@
-import { ParchmentLot, ProcessingBatch, ProcessingBatchStatus } from '../../types';
+import { DryingLogEntry, GreenBeanLot, ParchmentLot, ProcessingBatch, ProcessingBatchStatus } from '../../types';
 import { api } from '../api';
 import { toDateOnly } from '../../utils/dateOnly';
 import { transformParchmentLotFromBackend } from '../lots/parchmentLotService';
+import { transformGreenBeanLotFromBackend } from '../lots/greenBeanLotService';
 
 // Status mapping constants
 const STATUS_TO_BACKEND: Record<ProcessingBatchStatus, string> = {
@@ -39,6 +40,20 @@ export const getAllProcessingBatches = async (
   }
 };
 
+// The body POST /processing-batches takes for a new batch.
+const newBatchBody = (batchData: Partial<ProcessingBatch>) => ({
+  harvestLotId: batchData.harvestLotId,
+  status: batchData.status ? STATUS_TO_BACKEND[batchData.status] : 'ToProcess',
+  processType: batchData.processType,
+  processNotes: batchData.processNotes || null,
+  cropYearId: batchData.cropYearId || null,
+  parchmentWeightKg: batchData.parchmentWeightKg ?? null,
+  moistureContent: batchData.moistureContent ?? null,
+  dryingStartDate: batchData.dryingStartDate || null,
+  dryingEndDate: batchData.dryingEndDate || null,
+  baggingDate: batchData.baggingDate || null,
+});
+
 /**
  * Create a new processing batch
  */
@@ -47,20 +62,62 @@ export const addProcessingBatch = async (
 ): Promise<ProcessingBatch> => {
   const response = await api.post<{ processingBatch: any; message: string }>(
     '/processing-batches',
-    {
-      harvestLotId: batchData.harvestLotId,
-      status: batchData.status ? STATUS_TO_BACKEND[batchData.status] : 'ToProcess',
-      processType: batchData.processType,
-      processNotes: batchData.processNotes || null,
-      cropYearId: batchData.cropYearId || null,
-      parchmentWeightKg: batchData.parchmentWeightKg ?? null,
-      moistureContent: batchData.moistureContent ?? null,
-      dryingStartDate: batchData.dryingStartDate || null,
-      dryingEndDate: batchData.dryingEndDate || null,
-      baggingDate: batchData.baggingDate || null,
-    }
+    newBatchBody(batchData)
   );
   return transformProcessingBatchFromBackend(response.processingBatch);
+};
+
+/** The grades a one-step Process & Grade hulls the whole parchment into. */
+export interface ProcessAndGradeInput {
+  totalGreenBeanWeight: number;
+  gradedLots: { grade: string; weight: number; price?: number }[];
+}
+
+export interface ProcessAndGradeResult {
+  processingBatch: ProcessingBatch;
+  /** The batch's parchment lot, hulled whole (0 kg left). */
+  parchmentLot: ParchmentLot;
+  /** One lot per grade, price included. */
+  greenBeanLots: GreenBeanLot[];
+}
+
+/**
+ * Thrown by processAndGradeBatch when the batch came back without its
+ * grading (no parchment lot or no green bean lots): the batch is saved, so
+ * the popup must close and the page reload rather than invite a second save.
+ */
+export const BATCH_NOT_GRADED_MESSAGE =
+  'The batch was saved but not graded. Grade it from Parchment Stock.';
+
+/**
+ * The Parchment page's one-step Process & Grade: a Completed batch, its
+ * parchment lot and the Hull & Grade into green bean lots, in one call the
+ * backend writes in one transaction, so a failed grading leaves nothing
+ * behind and the cherry lot stays ready to process.
+ */
+export const processAndGradeBatch = async (
+  batchData: Partial<ProcessingBatch>,
+  hullAndGrade: ProcessAndGradeInput
+): Promise<ProcessAndGradeResult> => {
+  const response = await api.post<{
+    processingBatch: any;
+    parchmentLot: any;
+    greenBeanLots: Parameters<typeof transformGreenBeanLotFromBackend>[0][];
+    message: string;
+  }>('/processing-batches', {
+    ...newBatchBody({ ...batchData, status: ProcessingBatchStatus.Completed }),
+    hullAndGrade,
+  });
+  // An older backend (or one that skipped hullAndGrade) answers with the
+  // batch alone; say so instead of crashing on the missing parchment lot.
+  if (!response?.parchmentLot || !Array.isArray(response.greenBeanLots)) {
+    throw new Error(BATCH_NOT_GRADED_MESSAGE);
+  }
+  return {
+    processingBatch: transformProcessingBatchFromBackend(response.processingBatch),
+    parchmentLot: transformParchmentLotFromBackend(response.parchmentLot),
+    greenBeanLots: response.greenBeanLots.map(transformGreenBeanLotFromBackend),
+  };
 };
 
 /**
@@ -116,23 +173,52 @@ export const updateProcessingBatch = async (
   };
 };
 
+/** One drying reading as the Drying log popup sends it (date as YYYY-MM-DD). */
+export type DryingLogInput = Omit<DryingLogEntry, 'id'>;
+
+/** A stored reading as the app keeps it: YYYY-MM-DD date, with its id. */
+export const transformDryingLogFromBackend = (log: any): DryingLogEntry => ({
+  id: log.id,
+  date: toDateOnly(log.date),
+  moistureContent: log.moistureContent,
+  ambientTemp: log.ambientTemp,
+  relativeHumidity: log.relativeHumidity,
+});
+
+/** Oldest reading first, the order the drying curve is drawn in. */
+export const sortDryingLog = (logs: DryingLogEntry[]): DryingLogEntry[] =>
+  [...logs].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
 /**
- * Add a drying log entry to a processing batch
+ * Add a drying log entry to a processing batch (its processor or an Admin).
  */
 export const addDryingLog = async (
   batchId: string,
-  logData: {
-    date: string;
-    moistureContent: number;
-    ambientTemp: number;
-    relativeHumidity: number;
-  },
-): Promise<any> => {
+  logData: DryingLogInput,
+): Promise<DryingLogEntry> => {
   const response = await api.post<{ dryingLog: any; message: string }>(
     `/processing-batches/${batchId}/drying-logs`,
     logData,
   );
-  return response.dryingLog;
+  return transformDryingLogFromBackend(response.dryingLog);
+};
+
+/** Correct a stored drying reading; only the fields given are sent. */
+export const updateDryingLog = async (
+  batchId: string,
+  logId: string,
+  changes: Partial<DryingLogInput>,
+): Promise<DryingLogEntry> => {
+  const response = await api.put<{ dryingLog: any; message: string }>(
+    `/processing-batches/${batchId}/drying-logs/${logId}`,
+    changes,
+  );
+  return transformDryingLogFromBackend(response.dryingLog);
+};
+
+/** Remove a stored drying reading. */
+export const deleteDryingLog = async (batchId: string, logId: string): Promise<void> => {
+  await api.delete(`/processing-batches/${batchId}/drying-logs/${logId}`);
 };
 
 export interface DeletedProcessingBatch {
@@ -176,11 +262,8 @@ export function transformProcessingBatchFromBackend(backendBatch: any): Processi
     createdAt: backendBatch.createdAt
       ? new Date(backendBatch.createdAt).toISOString()
       : undefined,
-    dryingLog: backendBatch.dryingLogs?.map((log: any) => ({
-      date: toDateOnly(log.date),
-      moistureContent: log.moistureContent,
-      ambientTemp: log.ambientTemp,
-      relativeHumidity: log.relativeHumidity,
-    })) || [],
+    dryingLog: sortDryingLog(
+      (backendBatch.dryingLogs ?? []).map(transformDryingLogFromBackend),
+    ),
   };
 }

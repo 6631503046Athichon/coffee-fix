@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma, ProcessingBatchStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireRole, handleApiError } from "@/lib/middleware";
-import { nextDisplayId, parseDateOnly, safeParseFloat, withDisplayIdRetry } from "@/lib/utils";
+import { nextDisplayId, nextDisplayIds, parseDateOnly, safeParseFloat, withDisplayIdRetry } from "@/lib/utils";
 import { rateLimit, RATE_LIMITS } from "@/lib/rateLimit";
 import { chainScope } from "@/lib/farmAccess";
+import { checkGradedLots, createGradedLots, type GradedLot } from "@/lib/hullAndGrade";
 
 // Thrown inside the create transaction when the status-conditional claim on
 // the harvest lot updates zero rows (lot already Complete). Mapped to 409.
@@ -57,9 +58,9 @@ export async function GET(request: NextRequest) {
             year: true,
           },
         },
+        // Every reading, oldest first, as bulk-load sends them.
         dryingLogs: {
-          orderBy: { date: "desc" },
-          take: 10,
+          orderBy: [{ date: "asc" }, { createdAt: "asc" }],
         },
         parchmentLots: {
           select: {
@@ -81,7 +82,19 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// The purpose on the Hull & Grade row a one-step Process & Grade records, as
+// the two-step flow sends it.
+const HULL_AND_GRADE_PURPOSE = "Hull and grade";
+
 // POST /api/processing-batches - Create new processing batch
+//
+// With `hullAndGrade: { gradedLots, totalGreenBeanWeight? }` on a Completed
+// batch it is the Parchment page's one-step Process & Grade: the batch, its
+// parchment lot and a Hull & Grade of the whole parchment into one green bean
+// lot per grade are written in ONE transaction, so a grading that fails
+// leaves nothing behind (the cherry lot stays Ready). The grading follows the
+// same rules as POST /api/parchment-lots/:id/withdrawals (lib/hullAndGrade),
+// which the workbench's two-step flow keeps using.
 export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request);
@@ -104,6 +117,7 @@ export async function POST(request: NextRequest) {
       dryingStartDate,
       dryingEndDate,
       baggingDate,
+      hullAndGrade,
     } = body;
 
     // Validation
@@ -145,6 +159,23 @@ export async function POST(request: NextRequest) {
     const isCompletedBatch = status === "Completed";
     const parsedParchmentWeight = safeParseFloat(parchmentWeightKg);
     const parsedMoistureContent = safeParseFloat(moistureContent);
+
+    // Process & Grade: only a Completed batch has parchment to hull.
+    const wantsHull = hullAndGrade !== undefined && hullAndGrade !== null;
+    if (wantsHull) {
+      if (typeof hullAndGrade !== "object" || Array.isArray(hullAndGrade)) {
+        return NextResponse.json(
+          { error: "Hull & Grade must be an object with the graded lots" },
+          { status: 400 },
+        );
+      }
+      if (!isCompletedBatch) {
+        return NextResponse.json(
+          { error: "Hull & Grade needs a Completed batch with its parchment weight" },
+          { status: 400 },
+        );
+      }
+    }
 
     if (isCompletedBatch) {
       if (parsedParchmentWeight === null || parsedParchmentWeight <= 0) {
@@ -217,19 +248,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // The whole parchment is hulled, so the grades may weigh up to it. Checked
+    // before anything is written, with the Hull & Grade withdrawal's rules.
+    let gradedLots: GradedLot[] = [];
+    if (wantsHull && parsedParchmentWeight !== null) {
+      const graded = checkGradedLots(
+        hullAndGrade.gradedLots,
+        hullAndGrade.totalGreenBeanWeight,
+        parsedParchmentWeight,
+      );
+      if (!graded.ok) {
+        return NextResponse.json({ error: graded.error }, { status: 400 });
+      }
+      gradedLots = graded.lots;
+    }
+    const hulling = gradedLots.length > 0;
+
     // Wrap displayId allocation + the whole transaction in a retry helper.
-    // Both ids come from the DocumentSequence counter (lib/documentSequence),
-    // so concurrent callers never share one; if either collides with a row
+    // Every id comes from the DocumentSequence counter (lib/documentSequence),
+    // so concurrent callers never share one; if any collides with a row
     // written without the counter, the entire transaction rolls back and we
-    // take fresh PB and PCH numbers.
-    let processingBatch;
+    // take fresh PB, PCH (and GBL) numbers.
+    let created;
     try {
-      processingBatch = await withDisplayIdRetry(async () => {
+      created = await withDisplayIdRetry(async () => {
         const batchDisplayId = await nextDisplayId(prisma.processingBatch, "PB");
         const parchmentDisplayId =
           isCompletedBatch
             ? await nextDisplayId(prisma.parchmentLot, "PCH")
             : null;
+        const greenBeanDisplayIds = hulling
+          ? await nextDisplayIds(prisma.greenBeanLot, "GBL", gradedLots.length)
+          : [];
 
         // Use transaction to claim the harvest lot and create the batch atomically
         return prisma.$transaction(async (tx) => {
@@ -291,21 +341,52 @@ export async function POST(request: NextRequest) {
             parsedParchmentWeight !== null &&
             parsedMoistureContent !== null
           ) {
-            await tx.parchmentLot.create({
+            const parchmentLot = await tx.parchmentLot.create({
               data: {
                 displayId: parchmentDisplayId,
                 processingBatchId: batch.id,
                 harvestLotId: harvestLotId,
                 initialWeightKg: parsedParchmentWeight,
-                currentWeightKg: parsedParchmentWeight,
+                // Hulled whole in this same transaction: nothing is left of it
+                // to sit in Awaiting Hulling, as after a two-step full hull.
+                currentWeightKg: hulling ? 0 : parsedParchmentWeight,
                 moistureContent: parsedMoistureContent,
                 processType: processType,
-                status: "AwaitingHulling",
+                status: hulling ? "Hulled" : "AwaitingHulling",
               },
             });
+
+            if (hulling) {
+              // The same Hull & Grade row the parchment withdrawal route
+              // records, so the hull shows, voids and corrects like any other.
+              const withdrawal = await tx.parchmentWithdrawal.create({
+                data: {
+                  parchmentLotId: parchmentLot.id,
+                  amountKg: parsedParchmentWeight,
+                  withdrawalType: "HullAndGrade",
+                  purpose: HULL_AND_GRADE_PURPOSE,
+                  withdrawnBy: user.id,
+                  withdrawnByName: user.name,
+                },
+              });
+              // The batch is the caller's, so its green beans are too.
+              const greenBeanLots = await createGradedLots(tx, {
+                parchmentLotId: parchmentLot.id,
+                parchmentWithdrawalId: withdrawal.id,
+                ownerId: user.id,
+                pricedById: user.id,
+                lots: gradedLots,
+                displayIds: greenBeanDisplayIds,
+              });
+              const hulledParchment = await tx.parchmentLot.findUnique({
+                where: { id: parchmentLot.id },
+                include: { withdrawalHistory: { orderBy: { date: "desc" } } },
+              });
+              return { batch, parchmentLot: hulledParchment, greenBeanLots };
+            }
           }
 
-          return batch;
+          return { batch, parchmentLot: null, greenBeanLots: null };
         });
       });
     } catch (error) {
@@ -322,8 +403,22 @@ export async function POST(request: NextRequest) {
       throw error;
     }
 
+    if (created.greenBeanLots) {
+      return NextResponse.json(
+        {
+          processingBatch: created.batch,
+          // As POST /api/parchment-lots/:id/withdrawals answers a Hull &
+          // Grade: the hulled lot and the new lots, prices included.
+          parchmentLot: created.parchmentLot,
+          greenBeanLots: created.greenBeanLots,
+          message: "Processing batch created and graded successfully",
+        },
+        { status: 201 },
+      );
+    }
+
     return NextResponse.json(
-      { processingBatch, message: "Processing batch created successfully" },
+      { processingBatch: created.batch, message: "Processing batch created successfully" },
       { status: 201 },
     );
   } catch (error) {

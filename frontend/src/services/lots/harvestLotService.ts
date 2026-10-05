@@ -169,8 +169,10 @@ const readDependents = (error: unknown): HarvestLotDependents | null => {
  * Delete a harvest lot. With ifUnprocessed the backend deletes it only while
  * it is still unprocessed, whoever asks. A processed lot is refused (409)
  * unless an Admin passes cascade, which deletes it with its whole chain
- * (batches, parchment lots, withdrawals, the green bean lots' source link).
- * A 409 that lists what is linked is thrown as HarvestLotProcessedError.
+ * (batches, parchment lots, withdrawals, and the green bean lots made from it;
+ * if any of those is still in use, nothing is deleted and the 409 message
+ * lists them). A 409 that lists what is linked is thrown as
+ * HarvestLotProcessedError; any other 409 keeps the backend's message as is.
  * With cascade, `expected` is what the Admin was shown: if more is linked by
  * now, the backend deletes nothing and answers with the new counts.
  */
@@ -192,6 +194,11 @@ export const deleteHarvestLot = async (
     const dependents = readDependents(error);
     if (dependents) {
       throw new HarvestLotProcessedError((error as Error).message, dependents);
+    }
+    // A refusal says what to do (e.g. which green bean lots to void first),
+    // and lot numbers like GBL-2026-404 must not read as an HTTP status.
+    if (isApiError(error) && error.status === 409 && error.message) {
+      throw new Error(error.message);
     }
     throw new Error(handleApiError(error, 'delete harvest lot'));
   }

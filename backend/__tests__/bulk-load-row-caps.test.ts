@@ -141,6 +141,19 @@ describe('bulk-load phase 2 keeps the uncapped lists light', () => {
     expect(Object.keys(argsOf(mockPrisma.processingBatch).include)).toEqual(['dryingLogs'])
     expect(Object.keys(argsOf(mockPrisma.parchmentLot).include)).toEqual(['physicalTestResults'])
   })
+
+  // The Drying log popup and Quality Insights' drying curve read every
+  // reading in order; a cap (the old take: 10) would silently drop the rest.
+  test.each([
+    ['Processor', processor],
+    ['Admin', admin],
+  ])('a %s gets every drying reading of a batch, oldest first', async (_role, viewer) => {
+    mockAuthUser = viewer
+    await phase2()
+    const dryingLogs = argsOf(mockPrisma.processingBatch).include.dryingLogs
+    expect(dryingLogs).toEqual({ orderBy: [{ date: 'asc' }, { createdAt: 'asc' }] })
+    expect(dryingLogs).not.toHaveProperty('take')
+  })
 })
 
 describe('bulk-load phase 2 roaster stock rows (D7)', () => {

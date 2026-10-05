@@ -344,7 +344,11 @@ describe('FarmerDataHub delete', { timeout: 20000 }, () => {
     expect(linked.getByText(/2 processing batches/)).toBeInTheDocument()
     expect(linked.getByText(/1 parchment lot \(/)).toBeInTheDocument()
     expect(linked.getByText(/4 parchment withdrawals, including any sale records/)).toBeInTheDocument()
-    expect(dialog).toHaveTextContent('3 green bean lots lose their link back to this harvest.')
+    expect(linked.getByText(/3 green bean lots made from it \(with their price history\)/)).toBeInTheDocument()
+    expect(dialog).toHaveTextContent(
+      'If any of those green bean lots is still in use (a withdrawal that is not void, roaster stock, a roast, a sale, an invoice or a cupping sample), nothing is deleted and you will see which lots to void or settle first.',
+    )
+    expect(dialog).not.toHaveTextContent('lose their link')
     // Nothing is gone yet.
     expect(screen.getByText('HL-2026-2', { selector: 'td' })).toBeInTheDocument()
 
@@ -387,6 +391,39 @@ describe('FarmerDataHub delete', { timeout: 20000 }, () => {
       ['/harvest-lots/hl-2?cascade=1&expect=2,1,3,4'],
       ['/harvest-lots/hl-2?cascade=1&expect=2,1,3,5'],
     ])
+  })
+
+  it('shows which green bean lots to settle first when the cascade is refused over them', async () => {
+    const inUse =
+      'Green bean lots made from this lot are still in use, so nothing was deleted: GBL-2026-404 (AA) has 1 withdrawal. ' +
+      'Void their withdrawals, or settle their stock, roasts, sales and cupping first, then delete again.'
+    vi.mocked(api.delete)
+      .mockRejectedValueOnce(new ApiError(processedBody.error, 409, processedBody))
+      .mockRejectedValueOnce(new ApiError(inUse, 409, { error: inUse, greenBeanLotsInUse: [{ id: 'gbl-1', displayId: 'GBL-2026-404', grade: 'AA' }] }))
+    const refreshData = vi.fn(async () => {})
+    render(<Harness user={admin} refreshData={refreshData} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete harvest lot HL-2026-2' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete with everything linked' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(inUse)
+    expect(screen.getByRole('dialog', { name: 'Delete a processed lot' })).toBeInTheDocument()
+    expect(screen.getByText('HL-2026-2', { selector: 'td' })).toBeInTheDocument()
+    expect(refreshData).not.toHaveBeenCalled()
+  })
+
+  it('does not mention green bean lots in use when none were made from the lot', async () => {
+    const noGreen = { ...processedBody, dependents: { ...processedBody.dependents, greenBeanLots: 0 } }
+    vi.mocked(api.delete).mockRejectedValueOnce(new ApiError(noGreen.error, 409, noGreen))
+    render(<Harness user={admin} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete harvest lot HL-2026-2' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Delete a processed lot' })
+    expect(within(dialog).getByText(/0 green bean lots made from it/)).toBeInTheDocument()
+    expect(dialog).not.toHaveTextContent('still in use')
   })
 
   it('keeps the lot and shows the error when the cascade delete fails', async () => {

@@ -370,6 +370,11 @@ export interface VoidGreenBeanWithdrawalResult {
   withdrawal: GreenBeanWithdrawalRecord;
   /** The roaster stock row the kg were taken back off, or null. */
   roasterInventoryItem: RoasterInventoryItem | null;
+  /**
+   * True when that row was left holding nothing (0 kg, no roast or sale) and
+   * the backend removed it: roasterInventoryItem is then its last state.
+   */
+  roasterInventoryItemRemoved?: boolean;
 }
 
 /**
@@ -388,6 +393,7 @@ export const voidGreenBeanWithdrawal = async (
     greenBeanLot: BackendGreenBeanLot;
     withdrawal: BackendWithdrawal;
     roasterInventoryItem?: BackendRoasterInventoryItem | null;
+    roasterInventoryItemRemoved?: boolean;
   }>(
     `/green-bean-lots/${lotId}/withdrawals/${withdrawalId}/void`,
     trimmed ? { reason: trimmed } : {},
@@ -405,6 +411,7 @@ export const voidGreenBeanWithdrawal = async (
           remainingWeightKg: item.remainingWeightKg,
         }
       : null,
+    roasterInventoryItemRemoved: response.roasterInventoryItemRemoved === true,
   };
 };
 

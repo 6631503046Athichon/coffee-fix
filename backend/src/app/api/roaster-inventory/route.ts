@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
-import { requireAuth, requireRole, handleApiError } from '@/lib/middleware'
+import { requireAuth, requireRole, handleApiError, type AuthenticatedUser } from '@/lib/middleware'
 import { WEIGHT_EPSILON, isAdminUser } from '@/lib/saleOrders'
 import { canClaimGreenBeanLot } from '@/lib/farmAccess'
 
@@ -9,6 +9,25 @@ const NOT_CLAIMABLE_ERROR = 'This green bean lot was bought in by another user, 
 
 /** Kilograms to the milligram, as the sale and withdrawal routes store stock. */
 const round6 = (value: number) => Math.round(value * 1e6) / 1e6
+
+/**
+ * Whose stock row a claim fills. A purchased (External) lot is its buyer's:
+ * when an Admin claims another user's purchased lot (Start roast or Sell on
+ * the Roaster Workbench), the kg go into the buyer's stock row, so the roast
+ * logged from that row is the buyer's too (POST /api/roast-batches records a
+ * roast for its stock row's owner) and the buyer sees both. Every other claim
+ * fills the caller's own stock.
+ */
+const claimStockOwnerId = (
+  user: AuthenticatedUser,
+  lot: { sourceType: string; createdById: string | null },
+): string =>
+  lot.sourceType === 'External' &&
+  lot.createdById &&
+  lot.createdById !== user.id &&
+  isAdminUser(user)
+    ? lot.createdById
+    : user.id
 
 // GET /api/roaster-inventory - List roaster inventory items
 // Roasters see only their own inventory (?roasterId is ignored for them);
@@ -111,6 +130,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Insufficient weight available' }, { status: 400 })
     }
 
+    // An Admin's claim of a roaster's purchased lot is that roaster's stock.
+    const ownerId = claimStockOwnerId(user, lot)
+
     const inventoryInclude = {
       roaster: {
         select: {
@@ -178,7 +200,7 @@ export async function POST(request: NextRequest) {
       const existingItem = await tx.roasterInventoryItem.findUnique({
         where: {
           roasterId_greenBeanLotId: {
-            roasterId: user.id,
+            roasterId: ownerId,
             greenBeanLotId,
           },
         },
@@ -211,7 +233,7 @@ export async function POST(request: NextRequest) {
       } else {
         inventoryItem = await tx.roasterInventoryItem.create({
           data: {
-            roasterId: user.id,
+            roasterId: ownerId,
             greenBeanLotId,
             claimedWeightKg: weight,
             remainingWeightKg: weight,

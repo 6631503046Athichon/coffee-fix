@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Eye, Globe, Loader } from 'lucide-react';
 import { getPublicTraceUrl, getTracePreviewData, PublicTraceData } from '@/services/lots/greenBeanLotService';
-import { toRoaId } from '@/utils/formatters';
+import { useDataContext } from '@/hooks/useDataContext';
+import { formatGreenBeanId } from '@/utils/formatDisplayId';
 import TraceabilityStory from './TraceabilityStory';
 
 // Staff view of a lot's traceability page. It shows the same story customers
@@ -11,6 +12,7 @@ import TraceabilityStory from './TraceabilityStory';
 // to put in it: a QR pointing here would send customers to the login page.
 const TraceabilityPage: React.FC = () => {
   const { lotId } = useParams<{ lotId: string }>();
+  const { data: appData } = useDataContext();
   // Tagged with the lot it belongs to, so switching lots shows the loader
   // instead of the previous lot's story.
   const [loaded, setLoaded] = useState<{ lotId: string; data?: PublicTraceData; error?: string } | null>(null);
@@ -73,6 +75,11 @@ const TraceabilityPage: React.FC = () => {
   }
 
   const publicUrl = data.traceId ? getPublicTraceUrl(data.traceId) : null;
+  // The lot number the hub and the Processor Workbench show (GBL-2026-7). The
+  // story itself does not carry it, so it comes from the lots this user can
+  // read; a lot outside them is just "this lot".
+  const knownLot = appData?.greenBeanLots?.find((g) => g?.id === data.lot.id);
+  const lotLabel = knownLot ? formatGreenBeanId(knownLot) : null;
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
@@ -82,8 +89,8 @@ const TraceabilityPage: React.FC = () => {
           <p className="flex items-center gap-2">
             <Globe className="h-4 w-4 flex-shrink-0" />
             <span>
-              <span className="font-mono font-semibold">{toRoaId(data.lot.id)}</span> is public. This
-              is the page customers see when they scan its QR code.
+              {lotLabel ? <span className="font-mono font-semibold">{lotLabel}</span> : 'This lot'} is
+              public. This is the page customers see when they scan its QR code.
             </span>
           </p>
           <a
@@ -99,7 +106,7 @@ const TraceabilityPage: React.FC = () => {
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <Eye className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <p>
-            Preview of <span className="font-mono font-semibold">{toRoaId(data.lot.id)}</span>.
+            Preview of {lotLabel ? <span className="font-mono font-semibold">{lotLabel}</span> : 'this lot'}.
             Customers can&apos;t open this page yet. Press <span className="font-semibold">Generate</span>{' '}
             for this lot in the Traceability Hub to publish it and get its QR code.
           </p>

@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma'
 import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
 import { rateLimit, RATE_LIMITS } from '@/lib/rateLimit'
 import { SALE_TX_OPTIONS, WEIGHT_EPSILON, formatKgText, type SaleTx } from '@/lib/saleOrders'
+import { EMPTY_ROASTER_STOCK_WHERE, HELD_ROASTER_STOCK_WHERE } from '@/lib/greenLotRemoval'
 import {
   ALREADY_VOID_MESSAGE,
   BODY_NOT_OBJECT_MESSAGE,
@@ -102,15 +103,19 @@ async function gradedLotIdsOf(tx: SaleTx, lotId: string, withdrawal: VoidedWithd
 
 /**
  * Removes the green bean lots a Hull & Grade made, which must be exactly as it
- * made them: still Available with every kg, never withdrawn, claimed, roasted,
- * sold, invoiced or cupped, and with no public trace QR handed out. Otherwise
- * the void is refused (409) and nothing changes.
+ * made them: still Available with every kg, with no withdrawal that still
+ * counts (a voided one is history and goes with the lot), no roaster stock
+ * that holds kg, never roasted, sold, invoiced or cupped, and with no public
+ * trace QR handed out. Otherwise the void is refused (409) and nothing changes.
  *
  * Removing rather than zeroing them: a voided hull never happened, so its lots
  * must not stay behind as 0 kg stock that still counts as green beans made
  * from this parchment (and would be counted again when it is hulled again).
- * Nothing points at an untouched lot except its price history, which goes
- * with it.
+ * Nothing points at an untouched lot except its price history, its voided
+ * withdrawals and an empty roaster stock row (a claim released to 0, or a
+ * voided push from before that void removed its row), which go with it, as
+ * the green bean DELETE and the harvest lot cascade remove them
+ * (lib/greenLotRemoval).
  */
 async function removeGradedLots(tx: SaleTx, ids: string[]) {
   // FOR UPDATE: it waits for, or blocks, anything about to point a new row at
@@ -138,8 +143,11 @@ async function removeGradedLots(tx: SaleTx, ids: string[]) {
       cuppingSweetness: true,
       _count: {
         select: {
-          withdrawalHistory: true,
-          roasterInventory: true,
+          // A voided withdrawal never happened: it is history and goes with
+          // the lot (the schema cascades it).
+          withdrawalHistory: { where: { voidedAt: null } },
+          // An empty roaster stock row holds nothing: it goes with the lot.
+          roasterInventory: { where: HELD_ROASTER_STOCK_WHERE },
           roastBatches: true,
           saleOrderItems: true,
           invoiceItems: true,
@@ -174,6 +182,10 @@ async function removeGradedLots(tx: SaleTx, ids: string[]) {
     )
   }
 
+  // Under the lot lock above, so no claim can fill these rows in between.
+  await tx.roasterInventoryItem.deleteMany({
+    where: { greenBeanLotId: { in: ids }, ...EMPTY_ROASTER_STOCK_WHERE },
+  })
   const removed = await tx.greenBeanLot.deleteMany({ where: { id: { in: ids } } })
   if (removed.count !== ids.length) throw new WithdrawalChangeError(GRADED_LOTS_CHANGED_MESSAGE)
   return lots.map(lot => ({

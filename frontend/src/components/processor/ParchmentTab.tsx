@@ -31,18 +31,13 @@ import {
 import {
   HarvestLot,
   ParchmentLot,
-  ProcessingBatchStatus,
   User,
 } from '../../types'
 import { useDataContext } from '../../hooks/useDataContext'
 import { useGradeNames } from '../../hooks/useGradeOptions'
 import { useToggleScrollAnchor } from '../../hooks/useToggleScrollAnchor'
 import { useToast } from '../../contexts/ToastContext'
-import { addProcessingBatch } from '../../services/processing/processingBatchService'
-import {
-  createParchmentWithdrawal,
-  getAllParchmentLots,
-} from '../../services/lots/parchmentLotService'
+import { BATCH_NOT_GRADED_MESSAGE, processAndGradeBatch } from '../../services/processing/processingBatchService'
 import { createWithdrawal as createGBLWithdrawal } from '../../services/lots/greenBeanLotService'
 import DatePicker from '../common/DatePicker'
 import {
@@ -418,17 +413,12 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     setProcessError(null)
   }
 
-  // Combined Process & Grade submit:
-  //   1. Create the processing batch with status=Completed → server-side
-  //      transaction creates the parchment lot atomically.
-  //   2. Look up the just-created parchment lot by batch id. We hit the
-  //      API directly instead of waiting for refreshData() because the
-  //      DataContext is closure-captured and won't reflect updates inside
-  //      this function.
-  //   3. Create a HullAndGrade withdrawal on that parchment lot — server
-  //      consumes the parchment and creates green-bean lots per grade.
-  //   4. Refresh the UI so the new green-bean buckets appear in the
-  //      Inventory section below.
+  // Combined Process & Grade submit: ONE call (processAndGradeBatch). The
+  // backend writes the Completed batch, its parchment lot and the Hull &
+  // Grade of the whole parchment into green-bean lots in one transaction, so
+  // a grading that fails leaves nothing behind and the cherry lot stays
+  // ready. The batch, the hulled parchment and the new lots come back and go
+  // straight on screen; a reload follows.
   const submitProcess = async () => {
     if (!processLot || processSubmitting) return
 
@@ -509,45 +499,23 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
     }
 
     setProcessSubmitting(true)
-    let batchCreated = false
     try {
-      // Stage 1: create batch + parchment lot
-      const batch = await addProcessingBatch({
-        harvestLotId: processLot.id,
-        status: ProcessingBatchStatus.Completed,
-        processType: processForm.processType,
-        processNotes: processForm.notes || undefined,
-        cropYearId: processForm.cropYearId || undefined,
-        parchmentWeightKg: weight,
-        moistureContent: moisture,
-        dryingStartDate: processForm.dryingStartDate || undefined,
-        dryingEndDate: processForm.dryingEndDate || undefined,
-      })
-
-      batchCreated = true
-      setData((prev) => ({
-        ...prev,
-        harvestLots: prev.harvestLots.map((lot) => lot.id === batch.harvestLotId
-          ? { ...lot, status: 'Complete', remainingWeightKg: 0 }
-          : lot),
-        processingBatches: [...prev.processingBatches.filter((item) => item.id !== batch.id), batch],
-      }))
-
-      // Find the parchment lot just created by this batch
-      const newParchmentLots = await getAllParchmentLots(batch.id)
-      const newParchment = newParchmentLots[0]
-      if (!newParchment) {
-        throw new Error(
-          'Parchment lot was not created. Please refresh and try again.',
-        )
-      }
-
-      // Stage 2: hull-and-grade the parchment → green-bean lots
-      const { parchmentLot: hulledParchment, greenBeanLots: newGreenBeanLots } =
-        await createParchmentWithdrawal(newParchment.id, {
-          amountKg: newParchment.currentWeightKg,
-          withdrawalType: 'HullAndGrade',
-          purpose: 'Hull and grade',
+      const {
+        processingBatch: batch,
+        parchmentLot: hulledParchment,
+        greenBeanLots: newGreenBeanLots,
+      } = await processAndGradeBatch(
+        {
+          harvestLotId: processLot.id,
+          processType: processForm.processType,
+          processNotes: processForm.notes || undefined,
+          cropYearId: processForm.cropYearId || undefined,
+          parchmentWeightKg: weight,
+          moistureContent: moisture,
+          dryingStartDate: processForm.dryingStartDate || undefined,
+          dryingEndDate: processForm.dryingEndDate || undefined,
+        },
+        {
           totalGreenBeanWeight: totalGreen,
           gradedLots: rows.map((r) => {
             const price = parseGradePrice(r.price)
@@ -557,13 +525,18 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
               ...(price !== undefined && { price }),
             }
           }),
-        })
+        },
+      )
 
-      // Show the new green-bean lots (price included) straight away, with
-      // their parchment lot so they group under the right process type,
-      // even if the reload below fails.
+      // Show the used-up cherry lot, the batch, and the new green-bean lots
+      // (price included) straight away, with their parchment lot so they
+      // group under the right process type, even if the reload below fails.
       setData((prev) => ({
         ...prev,
+        harvestLots: prev.harvestLots.map((lot) => lot.id === batch.harvestLotId
+          ? { ...lot, status: 'Complete', remainingWeightKg: 0 }
+          : lot),
+        processingBatches: [...prev.processingBatches.filter((item) => item.id !== batch.id), batch],
         parchmentLots: [
           ...prev.parchmentLots.filter((p) => p.id !== hulledParchment.id),
           hulledParchment,
@@ -585,17 +558,16 @@ const ParchmentTab: React.FC<ParchmentTabProps> = ({ currentUser }) => {
       setProcessLot(null)
       await refreshData()
     } catch (e: any) {
-      if (batchCreated) {
-        // The cherry lot is consumed even when the later grading step fails.
+      if (e?.message === BATCH_NOT_GRADED_MESSAGE) {
+        // The batch is saved but ungraded: saving again would make a second
+        // batch, so close the popup and reload to show what was stored.
+        addToast({ type: 'warning', message: BATCH_NOT_GRADED_MESSAGE })
         setProcessLot(null)
-        addToast({
-          type: 'error',
-          message: 'Parchment was recorded for the whole lot. Grading failed; continue from Parchment Stock.',
-        })
-        await refreshData()
-      } else {
-        setProcessError(e?.message || 'Failed to process and grade.')
+        await refreshData().catch(() => {})
+        return
       }
+      // Nothing was saved: the popup stays open with what was typed.
+      setProcessError(e?.message || 'Failed to process and grade.')
     } finally {
       setProcessSubmitting(false)
     }

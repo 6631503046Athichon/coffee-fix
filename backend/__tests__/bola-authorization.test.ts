@@ -172,7 +172,8 @@ describe('BOLA Authorization Tests', () => {
 
       expect(response.status).toBe(403)
       expect(data.error).toBe('Insufficient permissions')
-      expect(mockRequireRole).toHaveBeenCalledWith(mockAuthUser, ['Processor', 'Admin'])
+      // A Roaster may correct the purchased (External) lots they bought in.
+      expect(mockRequireRole).toHaveBeenCalledWith(mockAuthUser, ['Processor', 'Roaster', 'Admin'])
     })
 
     test('should succeed for Processor role', async () => {
@@ -269,11 +270,39 @@ describe('BOLA Authorization Tests', () => {
 
     test('should return 403 for wrong role', async () => {
       mockAuthUser = {
+        id: 'farmer-123',
+        roles: ['Farmer'],
+        isActive: true,
+        isSuperAdmin: false,
+      }
+
+      const { DELETE } = await import('@/app/api/green-bean-lots/[id]/route')
+
+      const request = new NextRequest('http://localhost:3001/api/green-bean-lots/lot-123')
+
+      const params = Promise.resolve({ id: 'lot-123' })
+      const response = await DELETE(request, { params })
+
+      expect(response.status).toBe(403)
+      expect(mockRequireRole).toHaveBeenCalledWith(mockAuthUser, ['Processor', 'Roaster', 'Admin'])
+      expect(mockPrisma.greenBeanLot.findUnique).not.toHaveBeenCalled()
+    })
+
+    test('should return 403 for a Roaster on a lot out of processing', async () => {
+      mockAuthUser = {
         id: 'roaster-123',
         roles: ['Roaster'],
         isActive: true,
         isSuperAdmin: false,
       }
+      // Even one on record as theirs: only purchased (External) lots are a Roaster's.
+      mockPrisma.greenBeanLot.findUnique.mockResolvedValueOnce({
+        createdById: 'roaster-123',
+        sourceType: 'Internal',
+        parchmentLotId: null,
+        parchmentWithdrawalId: null,
+        _count: {},
+      })
 
       const { DELETE } = await import('@/app/api/green-bean-lots/[id]/route')
 

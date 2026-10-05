@@ -24,6 +24,7 @@ import {
   PricingHistory,
   CropYear,
 } from "../../types";
+import type { DryingLogEntry } from "../../types";
 import {
   Coffee,
   Wind,
@@ -105,6 +106,8 @@ import EditHarvestLotModal from "./modals/EditHarvestLotModal";
 import EditProcessingBatchModal from "./modals/EditProcessingBatchModal";
 import EditParchmentLotModal from "./modals/EditParchmentLotModal";
 import EditGreenBeanLotModal from "./modals/EditGreenBeanLotModal";
+import DryingLogModal from "./modals/DryingLogModal";
+import HideLotModal from "./modals/HideLotModal";
 import { logger } from "../../utils/logger";
 import {
   csvDate,
@@ -159,7 +162,18 @@ import type {
   WithdrawalType,
 } from "./workbench";
 import { canManageGreenBeanLot, isAdminViewer } from "./workbench/stockAccess";
-import { canManageParchmentLot } from "./workbench/recordAccess";
+import {
+  canManageParchmentLot,
+  canManageProcessingBatch,
+} from "./workbench/recordAccess";
+import {
+  availabilityLabel,
+  availabilityToggleTitle,
+  hideNeedsConfirm,
+  isOnSale,
+  withdrawBlockedTitle,
+} from "./workbench/availability";
+import { applyGreenBeanWithdrawal } from "./workbench/roasterStockSync";
 import {
   useParchmentWithdrawalHistory,
   useWithdrawalCorrections,
@@ -200,7 +214,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   // processed; the backend enforces the "unprocessed only" rule.
   const canManageCherryLots =
     isAdmin || (currentUser.roles?.includes(UserRole.Processor) ?? false);
-  // Withdraw, Set price, QC Score and the Available/Withdrawn switch only
+  // Withdraw, Set price, QC Score and the On sale / Hidden switch only
   // where the backend allows them: the lot's creator or an Admin. Another
   // processor's lot (or a roaster's) is still listed, without those
   // controls, instead of refusing with a 403.
@@ -746,6 +760,14 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
   } | null>(null);
   const [editingParchment, setEditingParchment] =
     useState<ParchmentLot | null>(null);
+  // The Drying log popup: the batch's readings, opened from its parchment lot.
+  const [dryingLogFor, setDryingLogFor] = useState<{
+    batchId: string;
+    lotId: string;
+  } | null>(null);
+  const dryingLogBatch = dryingLogFor
+    ? batchById.get(dryingLogFor.batchId)
+    : undefined;
   const [editingGreenBean, setEditingGreenBean] =
     useState<GreenBeanLot | null>(null);
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(
@@ -911,7 +933,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     if (
       !window.confirm(
         `Delete green bean lot ${label}${lot ? ` (${lot.grade})` : ""}? ` +
-          "A lot that was already withdrawn from, sent to a roaster, sold or cupped is not deleted. This cannot be undone.",
+          "A lot with a withdrawal that is not void, roaster stock holding kg, a roast, a sale or invoice line, or a cupping sample is not deleted. " +
+          "Voided withdrawals and empty roaster stock go with it. This cannot be undone.",
       )
     ) {
       return;
@@ -919,9 +942,11 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     setDeletingRecordId(lotId);
     try {
       await deleteGreenBeanLot(lotId);
+      // The backend removes the lot's empty roaster stock rows with it.
       setData((prev) => ({
         ...prev,
         greenBeanLots: prev.greenBeanLots.filter((g) => g.id !== lotId),
+        roasterInventory: prev.roasterInventory.filter((inv) => inv.greenBeanLotId !== lotId),
       }));
       addToast({
         type: "success",
@@ -987,6 +1012,28 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       type: "success",
       message: `Processing batch ${formatProcessingBatchId(saved)} updated.`,
     });
+  };
+
+  // The popup saves each reading itself; the batch keeps the list it ends
+  // with, so Quality Insights and the card's count show it at once.
+  const handleDryingLogChange = (batchId: string, dryingLog: DryingLogEntry[]) => {
+    setData((prev) => ({
+      ...prev,
+      processingBatches: prev.processingBatches.map((b) =>
+        b.id === batchId ? { ...b, dryingLog } : b,
+      ),
+    }));
+  };
+
+  // The Drying log entry on a parchment card or row: the reading count, which
+  // opens the popup. Bought-in parchment has no batch, so no drying log.
+  const dryingLogCount = (lot: ParchmentLot) =>
+    batchOfParchment(lot)?.dryingLog?.length ?? 0;
+  const canEditDryingLog = (lot: ParchmentLot) =>
+    canManageProcessingBatch(currentUser, batchOfParchment(lot));
+  const openDryingLog = (lot: ParchmentLot) => {
+    const batch = batchOfParchment(lot);
+    if (batch) setDryingLogFor({ batchId: batch.id, lotId: lot.id });
   };
 
   const handleParchmentSaved = (saved: ParchmentLot) => {
@@ -1425,22 +1472,18 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
               withdrawDetails.details,
             ),
           });
-          setData((prev) => {
-            const nextLots = prev.greenBeanLots.map((gbl) =>
-              gbl.id === updatedLot.id
-                ? { ...gbl, currentWeightKg: updatedLot.currentWeightKg, availabilityStatus: updatedLot.availabilityStatus, withdrawalHistory: updatedLot.withdrawalHistory }
-                : gbl,
-            );
-            // If a RoasterInventoryItem was auto-created, add/update it in roasterInventory
-            if (roasterInventoryItem) {
-              const exists = prev.roasterInventory.some(inv => inv.id === roasterInventoryItem.id);
-              const nextInventory = exists
-                ? prev.roasterInventory.map(inv => inv.id === roasterInventoryItem.id ? roasterInventoryItem : inv)
-                : [...prev.roasterInventory, roasterInventoryItem];
-              return { ...prev, greenBeanLots: nextLots, roasterInventory: nextInventory };
-            }
-            return { ...prev, greenBeanLots: nextLots };
-          });
+          // The lot's kg and history, and the roaster stock row a Roast
+          // filled: stored with its lot's grade, score, variety and process
+          // (the response row has none), so the roaster's card does not show
+          // "GRADE —" until the next refresh.
+          setData((prev) =>
+            applyGreenBeanWithdrawal(
+              prev,
+              updatedLot,
+              roasterInventoryItem,
+              withdrawalType,
+            ),
+          );
           const roasterName = data.users.find(u => u.id === withdrawDetails.details.targetRoasterId)?.name;
           addToast({
             type: "success",
@@ -1514,9 +1557,49 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
     setModal(type);
   };
 
+  // The On sale / Hidden switch on a green bean card (stored as Available /
+  // Withdrawn). Hiding a lot that still has kg asks first in a popup, since
+  // a hidden lot cannot be withdrawn or claimed by a roaster; putting one
+  // back on sale does not ask.
+  const [hidingLot, setHidingLot] = useState<GreenBeanLot | null>(null);
+  const [savingAvailability, setSavingAvailability] = useState(false);
+
+  const saveAvailability = async (
+    lot: GreenBeanLot,
+    newStatus: GreenBeanLot["availabilityStatus"],
+  ): Promise<boolean> => {
+    setSavingAvailability(true);
+    try {
+      const updatedLot = await updateGreenBeanLotAvailability(lot.id, newStatus);
+      // Only the status: the PUT response does not carry everything
+      // bulk-load does, so swapping the whole lot in would drop data.
+      setData((prev) => ({
+        ...prev,
+        greenBeanLots: prev.greenBeanLots.map((g) =>
+          g.id === lot.id
+            ? { ...g, availabilityStatus: updatedLot.availabilityStatus }
+            : g,
+        ),
+      }));
+      addToast({
+        type: "success",
+        message:
+          updatedLot.availabilityStatus === "Available"
+            ? `${formatGreenBeanId(lot)} is back on sale.`
+            : `${formatGreenBeanId(lot)} is hidden from sale.`,
+      });
+      return true;
+    } catch (err: any) {
+      addToast({ type: "error", message: err?.message || "ไม่สามารถเปลี่ยนสถานะ lot ได้" });
+      return false;
+    } finally {
+      setSavingAvailability(false);
+    }
+  };
+
   const handleToggleAvailability = async (lotId: string) => {
     const lot = data.greenBeanLots.find((g) => g.id === lotId);
-    if (!lot) return;
+    if (!lot || savingAvailability) return;
     if (lot.currentWeightKg <= 0) {
       addToast({
         type: "error",
@@ -1524,18 +1607,16 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       });
       return;
     }
-    const newStatus = lot.availabilityStatus === "Available" ? "Withdrawn" : "Available";
-    try {
-      const updatedLot = await updateGreenBeanLotAvailability(lotId, newStatus);
-      setData((prev) => ({
-        ...prev,
-        greenBeanLots: prev.greenBeanLots.map((g) =>
-          g.id === lotId ? updatedLot : g,
-        ),
-      }));
-    } catch (err: any) {
-      addToast({ type: "error", message: err?.message || "ไม่สามารถเปลี่ยนสถานะ lot ได้" });
+    if (hideNeedsConfirm(lot)) {
+      setHidingLot(lot);
+      return;
     }
+    await saveAvailability(lot, isOnSale(lot) ? "Withdrawn" : "Available");
+  };
+
+  const confirmHideLot = async () => {
+    if (!hidingLot || savingAvailability) return;
+    if (await saveAvailability(hidingLot, "Withdrawn")) setHidingLot(null);
   };
 
   // Merge only the price fields into the stored lot — the PUT response does
@@ -2028,7 +2109,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           "",
         parchment?.processType ?? g.externalSource?.processType ?? "",
         g.grade,
-        g.availabilityStatus,
+        availabilityLabel(g),
         csvFixed(g.initialWeightKg),
         csvFixed(g.currentWeightKg ?? 0),
         csvFixed(price),
@@ -2386,6 +2467,25 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           </button>
                         ) : (
                           // Keeps Hull & Grade lined up with the rows above.
+                          <span className="w-8 h-8" aria-hidden="true" />
+                        )}
+                        {batchOfParchment(p) &&
+                        (dryingLogCount(p) > 0 || canEditDryingLog(p)) ? (
+                          <button
+                            type="button"
+                            onClick={() => openDryingLog(p)}
+                            className="relative inline-flex items-center justify-center w-8 h-8 rounded-md text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
+                            title={`Drying log (${dryingLogCount(p)} reading${dryingLogCount(p) === 1 ? "" : "s"})`}
+                            aria-label={`Drying log of ${formatParchmentId(p)}`}
+                          >
+                            <Wind className="h-4 w-4" />
+                            {dryingLogCount(p) > 0 && (
+                              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-blue-600 text-[10px] font-bold leading-4 text-white">
+                                {dryingLogCount(p)}
+                              </span>
+                            )}
+                          </button>
+                        ) : (
                           <span className="w-8 h-8" aria-hidden="true" />
                         )}
                         {/* Hull & Grade, Edit and Delete: the lot's
@@ -2768,7 +2868,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${g.availabilityStatus === "Available" ? "bg-green-500" : "bg-gray-300"}`}
                           ></span>
-                          {g.availabilityStatus}
+                          {availabilityLabel(g)}
                         </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -2822,6 +2922,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           <button
                             onClick={() => openModal("withdrawStock", g)}
                             disabled={g.availabilityStatus === "Withdrawn"}
+                            title={withdrawBlockedTitle(g)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm transition-all"
                           >
                             <PlayCircle size={14} />
@@ -3169,6 +3270,26 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         {p.moistureContent}%
                       </span>
                     </div>
+                    {batchOfParchment(p) &&
+                      (dryingLogCount(p) > 0 || canEditDryingLog(p)) && (
+                        <div className="flex justify-between items-center">
+                          <span className="flex items-center gap-1.5">
+                            <Wind className="h-3 w-3" />
+                            Drying log
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => openDryingLog(p)}
+                            className="font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                            title="Drying readings: moisture, temperature and humidity"
+                            aria-label={`Drying log of ${formatParchmentId(p)}`}
+                          >
+                            {dryingLogCount(p) > 0
+                              ? `${dryingLogCount(p)} reading${dryingLogCount(p) === 1 ? "" : "s"}`
+                              : "Add readings"}
+                          </button>
+                        </div>
+                      )}
                     <div className="flex justify-between items-center">
                       <span className="flex items-center gap-1.5">
                         <Sprout className="h-3 w-3" />
@@ -3313,14 +3434,16 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           shows without it. */}
                       {canManageLot(g) ? (
                         <button
+                          type="button"
                           onClick={() => handleToggleAvailability(g.id)}
-                          disabled={g.currentWeightKg <= 0}
+                          disabled={g.currentWeightKg <= 0 || savingAvailability}
+                          title={availabilityToggleTitle(g)}
                           className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${g.availabilityStatus === "Available" ? "bg-teal-50 text-teal-700 hover:bg-teal-100" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
                         >
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${g.availabilityStatus === "Available" ? "bg-teal-500" : "bg-gray-400"}`}
                           ></span>
-                          {g.availabilityStatus}
+                          {availabilityLabel(g)}
                         </button>
                       ) : (
                         <span
@@ -3329,7 +3452,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${g.availabilityStatus === "Available" ? "bg-teal-500" : "bg-gray-400"}`}
                           ></span>
-                          {g.availabilityStatus}
+                          {availabilityLabel(g)}
                         </span>
                       )}
                       {canManageLot(g) && (
@@ -3443,6 +3566,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                       <button
                         onClick={() => openModal("withdrawStock", g)}
                         disabled={g.availabilityStatus === "Withdrawn"}
+                        title={withdrawBlockedTitle(g)}
                         className="flex-1 py-2 text-xs font-semibold rounded-md text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed shadow-sm transition-all inline-flex items-center justify-center gap-1.5"
                       >
                         <PlayCircle size={14} />
@@ -4764,7 +4888,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                         <span
                                           className={`w-1.5 h-1.5 rounded-full ${g.availabilityStatus === "Available" ? "bg-green-500" : "bg-gray-300"}`}
                                         ></span>
-                                        {g.availabilityStatus}
+                                        {availabilityLabel(g)}
                                       </span>
                                     </div>
                                     <div>
@@ -4848,7 +4972,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                       }}
                                       disabled={g.availabilityStatus === "Withdrawn"}
                                       className="inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg text-white bg-sky-600 hover:bg-sky-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed transition-all"
-                                      title="Withdraw"
+                                      title={withdrawBlockedTitle(g) ?? "Withdraw"}
                                     >
                                       <Download className="h-3.5 w-3.5" />
                                       Withdraw
@@ -5359,6 +5483,26 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
           onClose={() => setEditingBatch(null)}
           onSaved={handleBatchSaved}
           onError={handleCorrectionError}
+        />
+      )}
+      {dryingLogFor && dryingLogBatch && (
+        <DryingLogModal
+          batch={dryingLogBatch}
+          parchmentLot={data.parchmentLots.find(
+            (p) => p.id === dryingLogFor.lotId,
+          )}
+          canEdit={canManageProcessingBatch(currentUser, dryingLogBatch)}
+          onClose={() => setDryingLogFor(null)}
+          onLogsChange={handleDryingLogChange}
+          onError={handleCorrectionError}
+        />
+      )}
+      {hidingLot && (
+        <HideLotModal
+          lot={hidingLot}
+          saving={savingAvailability}
+          onCancel={() => setHidingLot(null)}
+          onConfirm={confirmHideLot}
         />
       )}
       {editingParchment && (

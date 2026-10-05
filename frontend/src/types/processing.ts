@@ -5,6 +5,8 @@ export enum ProcessingBatchStatus {
 }
 
 export interface DryingLogEntry {
+  /** The stored reading's id: what the Drying log popup edits or deletes. */
+  id?: string;
   date: string;
   moistureContent: number;
   ambientTemp: number;

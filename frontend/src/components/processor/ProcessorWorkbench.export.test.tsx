@@ -109,6 +109,9 @@ describe('Processor workbench CSV export', { timeout: 20000 }, () => {
     // Newest first, as in the grid; the priced lot is the oldest.
     expect(rows[0]).toContain('"GBL-2026-A7"')
     expect(rows[6]).toContain('"10.00","180.00","THB","1800.00"')
+    // The Availability column says what the switch says, not the stored value.
+    expect(rows.every((row) => row.includes('"On sale"'))).toBe(true)
+    expect(rows.join('\n')).not.toMatch(/"Available"/)
     expect(downloads[0].filename).toMatch(/^green-bean-stock_in-stock_grade-a_\d{4}-\d{2}-\d{2}\.csv$/)
   })
 
