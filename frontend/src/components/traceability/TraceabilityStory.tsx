@@ -657,6 +657,12 @@ const TraceabilityStory: React.FC<TraceabilityStoryProps> = ({ data, shareUrl })
                 </div>
                 <h3 className="text-base font-bold text-coffee-950">QC Flavor Profile</h3>
               </div>
+              {lot.qcNotes?.trim() && (
+                <div className="mb-5 rounded-lg border-l-4 border-coffee-400 bg-white p-4">
+                  <p className="mb-1 text-xs font-bold uppercase tracking-wider text-coffee-600">Tasting Notes &amp; Comments</p>
+                  <p className="text-sm italic leading-relaxed text-coffee-700">&quot;{lot.qcNotes.trim()}&quot;</p>
+                </div>
+              )}
               {hasDetailedScores ? (
                 <FlavorProfileChart
                   data={radarData}

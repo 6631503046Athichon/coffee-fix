@@ -836,7 +836,7 @@ const AddFarmPage: React.FC = () => {
 								<div className="p-1.5 bg-blue-50 rounded-lg">
 									<Users className="h-4 w-4 text-blue-600" />
 								</div>
-								<label className="text-sm font-semibold text-gray-700">Farmhands</label>
+								<label className="text-sm font-semibold text-gray-700">Farmwoker</label>
 							</div>
 
 							{/* Add collaborator row */}

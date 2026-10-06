@@ -19,6 +19,14 @@ const story = {
   traceId: null,
 } as unknown as PublicTraceData
 
+const storyWithQcNotes = {
+  ...story,
+  lot: {
+    ...story.lot,
+    qcNotes: 'Stone fruit, honey',
+  },
+} as unknown as PublicTraceData
+
 describe('TraceabilityStory', () => {
   it('shows Unknown, not N/A, for an empty process or variety', () => {
     render(<TraceabilityStory data={story} shareUrl={null} />)
@@ -33,5 +41,12 @@ describe('TraceabilityStory', () => {
         expect(node.nextElementSibling).not.toHaveTextContent('N/A')
       }
     }
+  })
+
+  it('shows the QC notes with the flavor profile', () => {
+    render(<TraceabilityStory data={storyWithQcNotes} shareUrl={null} />)
+
+    expect(screen.getByText('Tasting Notes & Comments')).toBeInTheDocument()
+    expect(screen.getByText('"Stone fruit, honey"')).toBeInTheDocument()
   })
 })

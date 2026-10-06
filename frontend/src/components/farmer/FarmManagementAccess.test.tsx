@@ -343,7 +343,7 @@ describe('A collaborator cannot reach the farm edit form', { timeout: 20000 }, (
     render(<EditRoute user={{ id: 'u-super', name: 'Owner', roles: [UserRole.Processor], isSuperAdmin: true }} />)
 
     expect(await screen.findByRole('button', { name: /Update Farm/ })).toBeInTheDocument()
-    expect(screen.getByText('Farmhands')).toBeInTheDocument()
+    expect(screen.getByText('Farmwoker')).toBeInTheDocument()
   })
 
   it('the owner does not get the Admin-only farmhands section', async () => {
@@ -351,6 +351,6 @@ describe('A collaborator cannot reach the farm edit form', { timeout: 20000 }, (
     render(<EditRoute user={owner} />)
 
     expect(await screen.findByRole('button', { name: /Update Farm/ })).toBeInTheDocument()
-    expect(screen.queryByText('Farmhands')).not.toBeInTheDocument()
+    expect(screen.queryByText('Farmwoker')).not.toBeInTheDocument()
   })
 })

@@ -1,9 +1,6 @@
 import { Prisma } from '@prisma/client'
 
 // The traceability story of one green bean lot, as the public page shows it.
-// Shared by the public trace/[publicId] route and the staff-only
-// green-bean-lots/[id]/trace-preview route, so a preview shows exactly what
-// customers will see once the lot is published.
 //
 // SECURITY: the public route serves this without auth. Never add sensitive
 // fields here — they would never be read out of the DB in the first place:
@@ -27,6 +24,7 @@ export const publicTraceSelect = {
   cuppingUniformity: true,
   cuppingCleanCup: true,
   cuppingSweetness: true,
+  qcNotes: true,
   parchmentLot: {
     select: {
       id: true,
@@ -105,7 +103,14 @@ export const publicTraceSelect = {
   },
 } satisfies Prisma.GreenBeanLotSelect
 
+// Staff preview may show the processor's QC note; the public route must not.
+export const staffTraceSelect = {
+  ...publicTraceSelect,
+  qcNotes: true,
+} satisfies Prisma.GreenBeanLotSelect
+
 export type PublicTraceLot = Prisma.GreenBeanLotGetPayload<{ select: typeof publicTraceSelect }>
+export type StaffTraceLot = Prisma.GreenBeanLotGetPayload<{ select: typeof staffTraceSelect }>
 
 /**
  * The keys of a bought-in lot's externalSource the public page shows. The
@@ -135,7 +140,7 @@ export function publicExternalSource(source: Prisma.JsonValue | null): Prisma.Js
 
 // traceId is the lot's public id, or null for a lot that has not been
 // published yet (only the staff preview can return null).
-export function serializePublicTrace(lot: PublicTraceLot, traceId: string | null) {
+function serializeTrace(lot: PublicTraceLot | StaffTraceLot, traceId: string | null, includeQcNotes: boolean) {
   return {
     lot: {
       id: lot.id,
@@ -152,9 +157,18 @@ export function serializePublicTrace(lot: PublicTraceLot, traceId: string | null
       cuppingUniformity: lot.cuppingUniformity,
       cuppingCleanCup: lot.cuppingCleanCup,
       cuppingSweetness: lot.cuppingSweetness,
+      ...(includeQcNotes && 'qcNotes' in lot ? { qcNotes: lot.qcNotes } : {}),
       parchmentLot: lot.parchmentLot,
       roastBatches: lot.roastBatches,
     },
     traceId,
   }
+}
+
+export function serializePublicTrace(lot: PublicTraceLot, traceId: string | null) {
+  return serializeTrace(lot, traceId, true)
+}
+
+export function serializeStaffTrace(lot: StaffTraceLot, traceId: string | null) {
+  return serializeTrace(lot, traceId, true)
 }

@@ -525,6 +525,7 @@ export interface PublicTraceData {
     cuppingUniformity?: number;
     cuppingCleanCup?: number;
     cuppingSweetness?: number;
+    qcNotes?: string;
     parchmentLot?: any;
     roastBatches: any[];
   };

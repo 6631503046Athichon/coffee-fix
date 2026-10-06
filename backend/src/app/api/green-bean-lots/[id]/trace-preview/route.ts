@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAuth, requireOwnership, requireRole, handleApiError } from '@/lib/middleware'
-import { publicTraceSelect, serializePublicTrace } from '@/lib/trace'
+import { serializeStaffTrace, staffTraceSelect } from '@/lib/trace'
 
 export const dynamic = 'force-dynamic'
 
 // GET /api/green-bean-lots/:id/trace-preview
-// The public traceability story of a lot, for staff to check before (and after)
-// it is published. Same payload as GET /api/trace/:publicId; traceId is null
-// until a public id has been generated.
+// The traceability story of a lot, for staff to check before (and after) it is
+// published. traceId is null until a public id has been generated.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -39,7 +38,7 @@ export async function GET(
 
     const lot = await prisma.greenBeanLot.findUnique({
       where: { id },
-      select: publicTraceSelect
+      select: staffTraceSelect
     })
 
     if (!lot) {
@@ -49,7 +48,7 @@ export async function GET(
       )
     }
 
-    return NextResponse.json(serializePublicTrace(lot, owner.publicTraceId))
+    return NextResponse.json(serializeStaffTrace(lot, owner.publicTraceId))
   } catch (error) {
     return handleApiError(error)
   }

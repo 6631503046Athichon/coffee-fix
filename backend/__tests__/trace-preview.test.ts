@@ -128,12 +128,17 @@ describe('GET /api/green-bean-lots/[id]/trace-preview', () => {
   test('gives the owner the story with a null traceId before publishing', async () => {
     mockAuthUser = processor
     mockOwner({ createdById: 'proc-1', publicTraceId: null })
+    mockPrisma.greenBeanLot.findUnique.mockImplementation(async (args: any) => {
+      if (args.select.createdById) return { createdById: 'proc-1', publicTraceId: null }
+      return { ...storyLot, qcNotes: 'Stone fruit, honey' }
+    })
     const { GET } = await import('@/app/api/green-bean-lots/[id]/trace-preview/route')
     const response = await GET(previewRequest(), routeParams)
     const body: any = await response.json()
     expect(response.status).toBe(200)
     expect(body.traceId).toBeNull()
     expect(body.lot.id).toBe('lot-1')
+    expect(body.lot.qcNotes).toBe('Stone fruit, honey')
   })
 
   test('lets an admin preview any lot and returns its public id', async () => {
@@ -164,14 +169,17 @@ describe('GET /api/trace/[publicId]', () => {
   })
 
   test('returns the same story shape, keyed by the public id', async () => {
-    mockPrisma.greenBeanLot.findFirst.mockResolvedValue(storyLot)
+    mockPrisma.greenBeanLot.findFirst.mockResolvedValue({ ...storyLot, qcNotes: 'Stone fruit, honey' })
     const { GET } = await import('@/app/api/trace/[publicId]/route')
     const response = await GET(new NextRequest('http://localhost:3001/api/trace/pub-9'), {
       params: Promise.resolve({ publicId: 'pub-9' }),
     })
     const body: any = await response.json()
     expect(response.status).toBe(200)
-    expect(body).toEqual({ lot: storyLot, traceId: 'pub-9' })
+    expect(body).toEqual({
+      lot: { ...storyLot, qcNotes: 'Stone fruit, honey' },
+      traceId: 'pub-9',
+    })
   })
 
   test('returns 404 for an unknown public id', async () => {
