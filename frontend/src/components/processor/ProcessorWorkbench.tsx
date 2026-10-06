@@ -4358,8 +4358,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
       {scoringLot && (
         <ModalPortal>
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
-              <div className="p-6 sm:p-8 overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col">
+              <div className="p-5 sm:p-6 overflow-y-auto">
                 {/* Header — title left, the lot's figures inline on the right,
                     matching the Hull & Grade modal in this file. They used to
                     sit in a separate amber card below, which cost a screen of
@@ -4418,15 +4418,23 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  <div>
+                <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)] gap-5">
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h3 className="text-sm font-bold text-gray-800">Sensory Scores</h3>
+                        <p className="text-xs text-gray-500">Rate each attribute from 1 to 10</p>
+                      </div>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">SCA</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {SCA_SENSORY_ATTRIBUTES.map((attr) => {
                       const { value, error } = sensoryScores[attr];
                       return (
-                        <div key={attr} className="mb-2">
+                        <div key={attr}>
                           <label
                             htmlFor={attr}
-                            className="block text-sm font-medium text-gray-700 mb-1"
+                            className="block text-xs font-semibold text-gray-600 mb-1"
                           >
                             {attr}
                           </label>
@@ -4456,7 +4464,8 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                 },
                               }))
                             }
-                            className={`w-full p-2 border rounded-md shadow-sm text-sm text-center ${error ? "border-red-500" : "border-gray-300"}`}
+                            onWheel={(e) => e.currentTarget.blur()}
+                            className={`w-full h-10 px-3 border rounded-lg shadow-sm text-sm text-center ${error ? "border-red-500" : "border-gray-300"}`}
                           />
                           {error && (
                             <p className="text-xs text-red-600 mt-1">{error}</p>
@@ -4464,40 +4473,50 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </div>
                       );
                     })}
+                    </div>
                   </div>
-                  <div>
-                    {SCA_CUP_ATTRIBUTES.map((attr) => {
-                      const count = cupScores[attr];
-                      return (
-                        <div key={attr} className="mb-4">
-                          <div className="flex justify-between items-center mb-1">
-                            <label className="text-sm font-medium text-gray-700">
-                              {attr}
-                            </label>
-                            <span className="text-lg font-bold text-gray-800">
-                              {count * 2}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {Array.from({ length: 5 }).map((_, i) => (
-                              <button
-                                type="button"
-                                key={`${attr}-rating-${i + 1}`}
-                                aria-label={`${attr}: ${(i + 1) * 2} of 10`}
-                                onClick={() =>
-                                  setCupScores((prev) => ({
-                                    ...prev,
-                                    [attr]: i + 1,
-                                  }))
-                                }
-                                className={`flex-1 h-8 rounded-md border transition-colors ${i < count ? "bg-indigo-600 border-indigo-600" : "bg-white border-gray-400 hover:border-indigo-500"}`}
-                              />
-                            ))}
-                          </div>
+                  <div className="space-y-5">
+                    <div className="rounded-xl border border-gray-200 bg-white p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h3 className="text-sm font-bold text-gray-800">Cup Quality</h3>
+                          <p className="text-xs text-gray-500">Select cups scored as good</p>
                         </div>
-                      );
-                    })}
-                    <div className="mt-6 p-4 bg-gray-50 rounded-lg border">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">5 cups</span>
+                      </div>
+                      {SCA_CUP_ATTRIBUTES.map((attr) => {
+                        const count = cupScores[attr];
+                        return (
+                          <div key={attr} className="mb-3 last:mb-0">
+                            <div className="flex justify-between items-center mb-1.5">
+                              <label className="text-xs font-semibold text-gray-600">
+                                {attr}
+                              </label>
+                              <span className="text-sm font-bold text-gray-800">
+                                {count * 2}/10
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {Array.from({ length: 5 }).map((_, i) => (
+                                <button
+                                  type="button"
+                                  key={`${attr}-rating-${i + 1}`}
+                                  aria-label={`${attr}: ${(i + 1) * 2} of 10`}
+                                  onClick={() =>
+                                    setCupScores((prev) => ({
+                                      ...prev,
+                                      [attr]: i + 1,
+                                    }))
+                                  }
+                                  className={`flex-1 h-8 rounded-md border transition-colors ${i < count ? "bg-indigo-600 border-indigo-600" : "bg-white border-gray-400 hover:border-indigo-500"}`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
                       <label className="text-sm font-medium text-gray-700">
                         Defects (subtract)
                       </label>
@@ -4551,7 +4570,7 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </span>
                       </div>
                     </div>
-                    <div className="mt-6 p-4 bg-indigo-50 rounded-lg border border-indigo-200 space-y-2">
+                    <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-200 space-y-2">
                       <div className="flex justify-between items-baseline">
                         <span className="font-semibold text-gray-600">
                           Subtotal
@@ -4578,27 +4597,24 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                         </span>
                       </div>
                     </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Tasting Notes & Comments
+                      </label>
+                      <textarea
+                        rows={5}
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        maxLength={2000}
+                        placeholder="Describe flavor notes, aroma, body, aftertaste..."
+                        className="block w-full border border-gray-300 rounded-xl py-3 px-4 text-sm focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm transition-all resize-none"
+                      ></textarea>
+                    </div>
                   </div>
                 </div>
 
-                {/* Tasting Notes */}
-                <div className="mt-6">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Tasting Notes & Comments
-                  </label>
-                  <textarea
-                    rows={4}
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    // The backend keeps at most 2000 characters (qcNotes).
-                    maxLength={2000}
-                    placeholder="Describe flavor notes, aroma, body, aftertaste..."
-                    className="mt-1 block w-full border border-gray-300 rounded-xl py-3 px-4 text-base focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm transition-all resize-none"
-                  ></textarea>
-                </div>
-
                 {/* Action Buttons */}
-                <div className="mt-8 flex justify-end space-x-3">
+                <div className="mt-5 pt-4 border-t border-gray-100 flex justify-end space-x-3">
                   <button
                     type="button"
                     onClick={() => setScoringLot(null)}
