@@ -4464,7 +4464,6 @@ const ProcessorWorkbench: React.FC<ProcessorWorkbenchProps> = ({
                                 },
                               }))
                             }
-                            onWheel={(e) => e.currentTarget.blur()}
                             className={`w-full h-10 px-3 border rounded-lg shadow-sm text-sm text-center ${error ? "border-red-500" : "border-gray-300"}`}
                           />
                           {error && (

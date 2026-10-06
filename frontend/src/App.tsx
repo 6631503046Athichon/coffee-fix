@@ -835,6 +835,26 @@ const App: React.FC = () => {
   // No app-level data state: internal traceability moved inside
   // ProtectedRoutes (auth-gated). The only public-facing trace view is
   // `/trace/:publicId` which fetches its own data from the public API.
+  useEffect(() => {
+    const preventNumberInputWheelChange = (event: WheelEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || target.type !== 'number') return;
+      if (document.activeElement !== target) return;
+
+      event.preventDefault();
+      target.blur();
+    };
+
+    document.addEventListener('wheel', preventNumberInputWheelChange, {
+      capture: true,
+      passive: false,
+    });
+
+    return () => {
+      document.removeEventListener('wheel', preventNumberInputWheelChange, true);
+    };
+  }, []);
+
   return (
     <AuthProvider>
       <ToastProvider>
