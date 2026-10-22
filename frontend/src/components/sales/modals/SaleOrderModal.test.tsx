@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppData, Customer, RoasterInventoryItem, User } from '../../../types'
 import {
+  ALL_SELLERS,
   createSaleOrder,
   getSellableGreenLots,
   getSellableRoasts,
@@ -728,31 +729,201 @@ describe('SaleOrderModal', { timeout: 20000 }, () => {
       )
     })
 
-    it('asks which roaster the sale is for before listing any stock', async () => {
+    // "All roasters": the Admin's own roast, Bean's and Anchor's, and Anchor's green beans.
+    const rbAdmin = sellable({ id: 'rb-a', label: 'RB-1179', roasterId: adminUser.id, availableKg: 3.8 })
+    const allRoasts = [
+      rbAdmin,
+      { ...rb1, roasterName: 'Bean Roasters' },
+      { ...rb9, roasterName: 'Anchor Roasters' },
+    ]
+    const anchorGreen = sellableGreen({ id: 'inv-9', label: 'ROA-9590', roasterId: anchor.id, roasterName: 'Anchor Roasters' })
+    const sellingToAll = () => {
+      vi.mocked(getSellableRoasts).mockImplementation(async (roasterId) =>
+        roasterId === ALL_SELLERS
+          ? { roasts: allRoasts, missingWeightCount: 0 }
+          : roasterId === anchor.id
+            ? { roasts: [rb9], missingWeightCount: 0 }
+            : { roasts: [rb1, rb2], missingWeightCount: 0 },
+      )
+      vi.mocked(getSellableGreenLots).mockImplementation(async (roasterId) =>
+        roasterId === ALL_SELLERS || roasterId === anchor.id ? [anchorGreen] : [],
+      )
+    }
+
+    it("lists everyone's stock at first, headed by owner with the Admin's own first", async () => {
+      sellingToAll()
       renderModal({ initialCustomerId: 'cust-1' }, adminData())
 
       const picker = within(group('Sell for')).getByRole('button')
-      expect(picker).toHaveTextContent('Choose a roaster')
+      expect(picker).toHaveTextContent('All roasters')
       expect(
-        screen.getByText('Choose who you are selling for to see their roasted coffee and green beans.'),
+        screen.getByText(
+          "Your coffee and every roaster's is listed below. The sale is recorded for the owner of the coffee you choose.",
+        ),
       ).toBeInTheDocument()
-      expect(screen.queryByRole('group', { name: 'Item for line 1' })).not.toBeInTheDocument()
-      expect(getSellableRoasts).not.toHaveBeenCalled()
-      expect(getSellableGreenLots).not.toHaveBeenCalled()
+      await screen.findByRole('group', { name: 'Item for line 1' })
+      expect(getSellableRoasts).toHaveBeenCalledWith(ALL_SELLERS)
+      expect(getSellableGreenLots).toHaveBeenCalledWith(ALL_SELLERS)
 
-      // The Admin first, then only users with the Roaster role, sorted by name.
+      // All roasters, the Admin, then only users with the Roaster role, sorted by name.
       fireEvent.click(picker)
       const names = within(group('Sell for'))
         .getAllByRole('button')
         .slice(1)
         .map((b) => b.textContent)
-      expect(names).toEqual(['Me (Admin)', 'Anchor Roasters', 'Bean Roasters'])
+      expect(names).toEqual(['All roasters', 'Me (Admin)', 'Anchor Roasters', 'Bean Roasters'])
+      fireEvent.click(picker)
 
-      fireEvent.click(within(group('Sell for')).getByRole('button', { name: 'Bean Roasters' }))
-      await screen.findByRole('group', { name: 'Item for line 1' })
-      expect(getSellableRoasts).toHaveBeenCalledWith(roasterUser.id)
-      expect(getSellableGreenLots).toHaveBeenCalledWith(roasterUser.id)
+      fireEvent.click(within(group('Item for line 1')).getAllByRole('button')[0])
+      const list = within(group('Item for line 1')).getAllByRole('button')[1].parentElement!.textContent ?? ''
+      const at = (text: string) => list.indexOf(text)
+      expect(at('Me (Admin)')).toBeGreaterThan(-1)
+      expect(at('Me (Admin)')).toBeLessThan(at('RB-1179'))
+      expect(at('RB-1179')).toBeLessThan(at('Anchor Roasters'))
+      expect(at('Anchor Roasters')).toBeLessThan(at('RB-0900'))
+      expect(at('RB-0900')).toBeLessThan(at('ROA-9590'))
+      expect(at('ROA-9590')).toBeLessThan(at('Bean Roasters'))
+      expect(at('Bean Roasters')).toBeLessThan(at('RB-0421'))
       expect(getAllUsersOrThrow).not.toHaveBeenCalled()
+    })
+
+    it('records a sale from All roasters for the owner of its coffee and greys out everyone else', async () => {
+      sellingToAll()
+      vi.mocked(createSaleOrder).mockResolvedValue({
+        saleOrder: sale({ id: 'sale-new', createdBy: anchor.id }),
+        affectedRoastBatches: [],
+        affectedInventoryItems: [],
+      })
+      renderModal({ initialCustomerId: 'cust-1' }, adminData())
+      await screen.findByRole('group', { name: 'Item for line 1' })
+
+      choose('Item for line 1', /RB-0900/)
+      expect(
+        screen.getByText("Recorded for Anchor Roasters. Another roaster's coffee goes on a separate sale."),
+      ).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Add line' }))
+      fireEvent.click(within(group('Item for line 2')).getAllByRole('button')[0])
+      expect(within(group('Item for line 2')).getByRole('button', { name: /RB-1179/ })).toBeDisabled()
+      expect(within(group('Item for line 2')).getByRole('button', { name: /RB-0421/ })).toBeDisabled()
+      // The sale's owner comes first; everyone else's heading says why it is greyed out.
+      const list = within(group('Item for line 2')).getAllByRole('button')[1].parentElement!.textContent ?? ''
+      expect(list.startsWith('Anchor Roasters')).toBe(true)
+      expect(list).toContain('Me (Admin) · separate sale')
+      expect(list).toContain('Bean Roasters · separate sale')
+      fireEvent.click(within(group('Item for line 2')).getByRole('button', { name: /ROA-9590/ }))
+
+      const kg = screen.getAllByLabelText('Kg')
+      const price = screen.getAllByLabelText('Price / kg')
+      fireEvent.change(kg[0], { target: { value: '1' } })
+      fireEvent.change(price[0], { target: { value: '400' } })
+      fireEvent.change(kg[1], { target: { value: '5' } })
+      fireEvent.change(price[1], { target: { value: '200' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Record sale' }))
+
+      await waitFor(() => expect(createSaleOrder).toHaveBeenCalled())
+      expect(vi.mocked(createSaleOrder).mock.calls[0][0]).toMatchObject({
+        items: [
+          { roastBatchId: 'rb-9', quantity: 1, pricePerKg: 400 },
+          { roasterInventoryId: 'inv-9', quantity: 5, pricePerKg: 200 },
+        ],
+        sellerId: anchor.id,
+      })
+    })
+
+    it("sends no seller for the Admin's own coffee chosen from All roasters", async () => {
+      sellingToAll()
+      vi.mocked(createSaleOrder).mockResolvedValue({
+        saleOrder: sale({ id: 'sale-new', createdBy: adminUser.id }),
+        affectedRoastBatches: [],
+        affectedInventoryItems: [],
+      })
+      renderModal({ initialCustomerId: 'cust-1' }, adminData())
+      await screen.findByRole('group', { name: 'Item for line 1' })
+
+      choose('Item for line 1', /RB-1179/)
+      expect(
+        screen.getByText("Recorded for you. Another roaster's coffee goes on a separate sale."),
+      ).toBeInTheDocument()
+      fireEvent.change(screen.getByLabelText('Kg'), { target: { value: '1' } })
+      fireEvent.change(screen.getByLabelText('Price / kg'), { target: { value: '300' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Record sale' }))
+
+      await waitFor(() => expect(createSaleOrder).toHaveBeenCalled())
+      expect(vi.mocked(createSaleOrder).mock.calls[0][0]).not.toHaveProperty('sellerId')
+    })
+
+    it("takes the owner's last currency when the first coffee is chosen from All roasters", async () => {
+      sellingToAll()
+      const usdSale = sale({ id: 'usd', createdBy: anchor.id, currency: 'USD' })
+      renderModal({ initialCustomerId: 'cust-1' }, adminData({ saleOrders: [usdSale] }))
+      await screen.findByRole('group', { name: 'Item for line 1' })
+      const currencyButton = () => within(group('Currency')).getAllByRole('button')[0]
+      expect(currencyButton()).toHaveTextContent('THB')
+
+      choose('Item for line 1', /RB-0900/)
+      expect(currencyButton()).toHaveTextContent('USD')
+    })
+
+    it('keeps the currency on screen once a price was typed', async () => {
+      sellingToAll()
+      const usdSale = sale({ id: 'usd', createdBy: anchor.id, currency: 'USD' })
+      renderModal({ initialCustomerId: 'cust-1' }, adminData({ saleOrders: [usdSale] }))
+      await screen.findByRole('group', { name: 'Item for line 1' })
+      const currencyButton = () => within(group('Currency')).getAllByRole('button')[0]
+
+      fireEvent.change(screen.getByLabelText('Price / kg'), { target: { value: '400' } })
+      choose('Item for line 1', /RB-0900/)
+      expect(currencyButton()).toHaveTextContent('THB')
+      expect(screen.getByLabelText('Price / kg')).toHaveValue('400')
+
+      choose('Sell for', 'Anchor Roasters')
+      await screen.findByRole('group', { name: 'Item for line 1' })
+      expect(currencyButton()).toHaveTextContent('THB')
+    })
+
+    it('gives two owners with the same name a heading each', async () => {
+      const twin: User = { id: 'user-roaster-3', name: 'Anchor Roasters', roles: [UserRole.Roaster] }
+      const rbTwin = sellable({ id: 'rb-t', label: 'RB-0333', roasterId: twin.id, roasterName: twin.name })
+      vi.mocked(getSellableRoasts).mockResolvedValue({
+        roasts: [{ ...rb9, roasterName: 'Anchor Roasters' }, rbTwin],
+        missingWeightCount: 0,
+      })
+      renderModal({ initialCustomerId: 'cust-1' }, adminData({ users: [adminUser, anchor, twin] }))
+      await screen.findByRole('group', { name: 'Item for line 1' })
+
+      fireEvent.click(within(group('Item for line 1')).getAllByRole('button')[0])
+      const list = within(group('Item for line 1')).getAllByRole('button')[1].parentElement!.textContent ?? ''
+      expect(list.split('Anchor Roasters').length - 1).toBe(2)
+    })
+
+    it("keeps the lines when narrowing All roasters to the owner they already sell", async () => {
+      sellingToAll()
+      renderModal({ initialCustomerId: 'cust-1' }, adminData())
+      await screen.findByRole('group', { name: 'Item for line 1' })
+      choose('Item for line 1', /RB-0900/)
+      fireEvent.change(screen.getByLabelText('Kg'), { target: { value: '2' } })
+
+      choose('Sell for', 'Anchor Roasters')
+      await screen.findByRole('group', { name: 'Item for line 1' })
+      expect(getSellableRoasts).toHaveBeenLastCalledWith(anchor.id)
+      expect(within(group('Item for line 1')).getAllByRole('button')[0]).toHaveTextContent('RB-0900')
+      expect(screen.getByLabelText('Kg')).toHaveValue('2')
+
+      choose('Sell for', 'Bean Roasters')
+      await screen.findByRole('group', { name: 'Item for line 1' })
+      expect(within(group('Item for line 1')).getAllByRole('button')[0]).toHaveTextContent(
+        'Choose roasted coffee or green beans',
+      )
+    })
+
+    it('says so when no roaster has anything left to sell', async () => {
+      vi.mocked(getSellableRoasts).mockResolvedValue({ roasts: [], missingWeightCount: 0 })
+      renderModal({ initialCustomerId: 'cust-1' }, adminData())
+      expect(
+        await screen.findByText(
+          'No roaster has anything left to sell: no roasted coffee with a roasted weight and no green beans in stock.',
+        ),
+      ).toBeInTheDocument()
     })
 
     it('lets an Admin without the Roaster role sell their own stock, with no seller sent', async () => {
@@ -774,14 +945,6 @@ describe('SaleOrderModal', { timeout: 20000 }, () => {
 
       await waitFor(() => expect(createSaleOrder).toHaveBeenCalled())
       expect(vi.mocked(createSaleOrder).mock.calls[0][0]).not.toHaveProperty('sellerId')
-    })
-
-    it('blocks the sale until a roaster is picked', async () => {
-      renderModal({ initialCustomerId: 'cust-1' }, adminData())
-      fireEvent.click(screen.getByRole('button', { name: 'Record sale' }))
-
-      expect(within(group('Sell for')).getByText('Choose a roaster to sell for')).toBeInTheDocument()
-      expect(createSaleOrder).not.toHaveBeenCalled()
     })
 
     it("records the sale for the picked roaster, with sellerId, from that roaster's stock", async () => {
@@ -901,10 +1064,11 @@ describe('SaleOrderModal', { timeout: 20000 }, () => {
       vi.mocked(getAllUsersOrThrow).mockResolvedValue([anchor, farmer])
       renderModal({ initialCustomerId: 'cust-1' }, adminData({ users: [] }))
 
-      expect(within(group('Sell for')).getByRole('button')).toHaveTextContent('Loading roasters…')
+      expect(within(group('Sell for')).getByText('Loading roasters…')).toBeInTheDocument()
       await waitFor(() =>
-        expect(within(group('Sell for')).getByRole('button')).toHaveTextContent('Choose a roaster'),
+        expect(within(group('Sell for')).queryByText('Loading roasters…')).not.toBeInTheDocument(),
       )
+      expect(within(group('Sell for')).getAllByRole('button')[0]).toHaveTextContent('All roasters')
       choose('Sell for', 'Anchor Roasters')
       await screen.findByRole('group', { name: 'Item for line 1' })
       expect(getSellableRoasts).toHaveBeenCalledWith(anchor.id)

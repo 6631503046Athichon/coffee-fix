@@ -177,7 +177,13 @@ export const getSaleOrderById = async (id: string): Promise<SaleOrder> => {
   }
 };
 
-/** Roasts with roasted kg left to sell (the viewer's own; an admin may ask for a roaster's). */
+/** roasterId for the sellable lists: an admin asks for everything they can sell. */
+export const ALL_SELLERS = 'all';
+
+/**
+ * Roasts with roasted kg left to sell (the viewer's own; an admin may ask for
+ * a roaster's, or for ALL_SELLERS).
+ */
 export const getSellableRoasts = async (
   roasterId?: string
 ): Promise<{ roasts: SellableRoast[]; missingWeightCount: number }> => {
@@ -190,6 +196,7 @@ export const getSellableRoasts = async (
       roasts: (response.roastBatches || []).map((raw: any): SellableRoast => ({
         ...transformRoastSummary(raw),
         roasterId: raw.roasterId,
+        roasterName: raw.roasterName || undefined,
       })),
       missingWeightCount: numberOr(response.missingWeightCount, 0),
     };
@@ -198,7 +205,10 @@ export const getSellableRoasts = async (
   }
 };
 
-/** Green stock rows with kg left to sell (the viewer's own; an admin may ask for a roaster's). */
+/**
+ * Green stock rows with kg left to sell (the viewer's own; an admin may ask
+ * for a roaster's, or for ALL_SELLERS).
+ */
 export const getSellableGreenLots = async (roasterId?: string): Promise<SellableGreenLot[]> => {
   try {
     const response = await api.get<{ greenLots: any[] }>(
@@ -208,6 +218,7 @@ export const getSellableGreenLots = async (roasterId?: string): Promise<Sellable
     return (response.greenLots || []).map((raw: any): SellableGreenLot => ({
       ...transformGreenSummary(raw),
       roasterId: raw.roasterId,
+      roasterName: raw.roasterName || undefined,
     }));
   } catch (error) {
     throw new Error(handleApiError(error, 'fetch green beans to sell'));

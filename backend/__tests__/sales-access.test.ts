@@ -203,6 +203,33 @@ describe('sales access and scoping', () => {
       expect(mockPrisma.roastBatch.findMany.mock.calls[1][0].where.roasterId).toBe('admin-1')
     })
 
+    test("an Admin's ?roasterId=all lists their own roasts and every Roaster's, each naming its owner", async () => {
+      mockAuthUser = admin
+      mockPrisma.roastBatch.findMany.mockResolvedValueOnce([
+        { ...summaryRow('1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed', 10, 0), roaster: { name: 'Roaster User' } },
+      ])
+      const { GET } = await import('@/app/api/roast-batches/sellable/route')
+      const body = await (await GET(request('/api/roast-batches/sellable?roasterId=all'))).json()
+
+      const owner = { OR: [{ roasterId: 'admin-1' }, { roaster: { roles: { has: 'Roaster' } } }] }
+      expect(mockPrisma.roastBatch.findMany.mock.calls[0][0].where).toEqual({
+        ...owner,
+        roastedWeightKg: { not: null },
+      })
+      expect(mockPrisma.roastBatch.count).toHaveBeenCalledWith({ where: { ...owner, roastedWeightKg: null } })
+      expect(body.roastBatches[0]).toMatchObject({ roasterId: 'roaster-1', roasterName: 'Roaster User' })
+    })
+
+    test("a roaster's ?roasterId=all still gets only their own roasts", async () => {
+      mockAuthUser = roaster
+      const { GET } = await import('@/app/api/roast-batches/sellable/route')
+      await GET(request('/api/roast-batches/sellable?roasterId=all'))
+      expect(mockPrisma.roastBatch.findMany.mock.calls[0][0].where).toEqual({
+        roasterId: 'roaster-1',
+        roastedWeightKg: { not: null },
+      })
+    })
+
     test('leaves out sold-out and unweighed roasts and reports the kg left', async () => {
       mockAuthUser = roaster
       mockPrisma.roastBatch.findMany.mockResolvedValueOnce([

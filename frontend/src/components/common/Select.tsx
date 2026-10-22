@@ -4,6 +4,10 @@ export type Option<V extends string | number = string> = {
   value: V;
   label: string;
   disabled?: boolean;
+  /** Options next to each other with the same group get one heading above them. */
+  group?: string;
+  /** Tells groups with the same heading apart (two owners with one name); defaults to group. */
+  groupKey?: string;
 };
 
 export type SelectProps<T = Option | string | number> = {
@@ -45,7 +49,9 @@ const Select = <T,>({
       const v = getValue ? getValue(item as any) : (item as any).value;
       const l = getLabel ? getLabel(item as any) : (item as any).label ?? String(v);
       const d = (item as any).disabled ?? false;
-      return { value: v, label: l, disabled: d } as Option;
+      const g = (item as any).group;
+      const gk = (item as any).groupKey ?? g;
+      return { value: v, label: l, disabled: d, group: g, groupKey: gk } as Option;
     });
   }, [options, getValue, getLabel]);
 
@@ -102,22 +108,28 @@ const Select = <T,>({
           {normalized.length === 0 ? (
             <div className="px-3 py-2 text-sm text-gray-500">No options</div>
           ) : (
-            normalized.map((opt) => (
-              <button
-                key={`${opt.value}`}
-                type="button"
-                disabled={!!opt.disabled}
-                onClick={() => handleSelect(opt.value)}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
-                  value === opt.value 
-                    ? colorTheme === 'emerald' 
-                      ? 'bg-emerald-50 text-emerald-700' 
-                      : 'bg-blue-50 text-blue-700'
-                    : 'text-gray-700'
-                } ${opt.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {opt.label}
-              </button>
+            normalized.map((opt, i) => (
+              <React.Fragment key={`${opt.value}`}>
+                {opt.group && opt.groupKey !== normalized[i - 1]?.groupKey && (
+                  <div className="border-t border-gray-100 bg-gray-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500 first:border-t-0">
+                    {opt.group}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  disabled={!!opt.disabled}
+                  onClick={() => handleSelect(opt.value)}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
+                    value === opt.value
+                      ? colorTheme === 'emerald'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-blue-50 text-blue-700'
+                      : 'text-gray-700'
+                  } ${opt.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {opt.label}
+                </button>
+              </React.Fragment>
             ))
           )}
         </div>

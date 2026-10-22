@@ -33,6 +33,22 @@ export const SALE_NOT_FOUND_MESSAGE = 'Sale not found'
 
 export const isAdminUser = (u: AuthenticatedUser) => u.isSuperAdmin || u.roles.includes('Admin')
 export const canSeeSales = (u: AuthenticatedUser) => isAdminUser(u) || u.roles.includes('Roaster')
+
+/** ?roasterId on the sellable routes: an Admin asks for everything they can sell. */
+export const ALL_SELLERS = 'all'
+
+/**
+ * Whose roasts or stock rows a sellable list reads. A Roaster gets their own,
+ * whatever they ask. An Admin gets the user named in ?roasterId, their own
+ * without one, or with ?roasterId=all their own and every Roaster's: the
+ * sellers POST /api/sale-orders accepts, so every row listed can be sold.
+ */
+export function sellableOwnerWhere(user: AuthenticatedUser, requested: string | null) {
+  if (!isAdminUser(user) || !requested) return { roasterId: user.id }
+  if (requested !== ALL_SELLERS) return { roasterId: requested }
+  return { OR: [{ roasterId: user.id }, { roaster: { roles: { has: 'Roaster' as const } } }] }
+}
+
 export const isPrismaCode = (e: unknown, code: string) => (e as { code?: unknown } | null)?.code === code
 
 /** Same algorithm as the frontend's toRoastBatchId, so labels match everywhere. */

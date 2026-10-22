@@ -34,6 +34,8 @@ export interface RoastSaleSummary {
 
 export interface SellableRoast extends RoastSaleSummary {
   roasterId: string;
+  /** The owner's name, as the server sends it. */
+  roasterName?: string;
 }
 
 /** Green beans in a roaster's stock (a RoasterInventoryItem), as on a sale and in the list that can be sold. */
@@ -55,6 +57,8 @@ export interface GreenStockSummary {
 
 export interface SellableGreenLot extends GreenStockSummary {
   roasterId: string;
+  /** The owner's name, as the server sends it. */
+  roasterName?: string;
 }
 
 export interface SaleOrderItem {

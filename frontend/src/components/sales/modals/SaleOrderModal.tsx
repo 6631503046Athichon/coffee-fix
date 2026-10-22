@@ -19,6 +19,7 @@ import { useDataContext } from '../../../hooks/useDataContext'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useToast } from '../../../contexts/ToastContext'
 import {
+  ALL_SELLERS,
   applySaleChange,
   createSaleOrder,
   getSellableGreenLots,
@@ -89,9 +90,12 @@ interface LineDraft {
   priceAuto: boolean
 }
 
-type SourceOption =
-  | { kind: 'roast'; key: string; roast: RoastSaleSummary }
-  | { kind: 'green'; key: string; green: GreenStockSummary }
+// owner: whose roast or stock row it is (a sale sells one owner's coffee);
+// ownerName comes with the sellable lists.
+type SourceOption = { key: string; owner: string; ownerName?: string } & (
+  | { kind: 'roast'; roast: RoastSaleSummary }
+  | { kind: 'green'; green: GreenStockSummary }
+)
 
 // Each list loads on its own: when one fails the other still sells, and a
 // line of the kind that failed waits for Retry.
@@ -285,22 +289,24 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
   const [orderDate, setOrderDate] = useState(order?.orderDate ?? todayLocal())
 
   // The seller: whose roasts and stock the lines come from, and who owns the
-  // sale. An edit keeps its owner; an Admin recording a new sale with no
-  // seller handed over picks the roaster first ("Sell for").
+  // sale. An edit keeps its owner. An Admin recording a new sale with no
+  // seller handed over starts on "All roasters": every stock they can sell,
+  // and the sale goes to the owner of the coffee its lines take (sellerId,
+  // below the lists). Picking one seller in "Sell for" narrows it to theirs.
   const pickSeller = isAdmin && !order && !sellerIdProp
-  const [pickedSellerId, setPickedSellerId] = useState('')
-  const sellerId = order
+  const [pickedSellerId, setPickedSellerId] = useState(ALL_SELLERS)
+  const allSellers = pickSeller && pickedSellerId === ALL_SELLERS
+  // The seller before any line is chosen.
+  const fixedSellerId = order
     ? order.createdBy
-    : (sellerIdProp ?? (pickedSellerId || currentUser?.id || ''))
-  const waitingForSeller = pickSeller && !pickedSellerId
-  const sellingForOther = !!currentUser && sellerId !== currentUser.id
+    : (sellerIdProp ?? ((pickSeller && !allSellers ? pickedSellerId : '') || currentUser?.id || ''))
 
   // A new sale starts in the currency of the seller's last sale.
   const lastCurrencyOf = (id: string): string => {
     const lastOwn = data.saleOrders.find((o) => !id || o.createdBy === id)
     return lastOwn && SALE_CURRENCIES.includes(lastOwn.currency) ? lastOwn.currency : 'THB'
   }
-  const [currency, setCurrency] = useState(() => (order ? order.currency : lastCurrencyOf(sellerId)))
+  const [currency, setCurrency] = useState(() => (order ? order.currency : lastCurrencyOf(fixedSellerId)))
   // Picked by hand: a later "Sell for" choice leaves it alone.
   const [currencyTouched, setCurrencyTouched] = useState(false)
   const [lines, setLines] = useState<LineDraft[]>(() => {
@@ -332,28 +338,32 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
           ...newLine(),
           source: key,
           kg: kg > 0 ? formatKg(kg) : '',
-          price: earlierPrice(data.saleOrders, key, lotId, currency, sellerId),
+          price: earlierPrice(data.saleOrders, key, lotId, currency, fixedSellerId),
           priceAuto: true,
         },
       ]
     }
     return [newLine()]
   })
+  // A price the user typed: the currency no longer changes on its own.
+  const hasTypedPrice = lines.some((line) => !line.priceAuto && line.price.trim() !== '')
   const [notes, setNotes] = useState(order?.notes ?? '')
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   // An Admin selling for (or editing the sale of) another roaster picks from
-  // that roaster's roasts and stock.
-  const roasterId = isAdmin && sellingForOther ? sellerId : undefined
+  // that roaster's roasts and stock; on "All roasters", from everyone's.
+  const roasterId = allSellers
+    ? ALL_SELLERS
+    : isAdmin && !!currentUser && fixedSellerId !== currentUser.id
+      ? fixedSellerId
+      : undefined
   const [reloadKey, setReloadKey] = useState(0)
   const [sellable, setSellable] = useState<SellableState>({ status: 'loading' })
   // The stock row handed over by Start roast was not in the loaded list.
   const [initialGreenGone, setInitialGreenGone] = useState(false)
   useEffect(() => {
-    // Nothing to list until the Admin has picked whose stock it is.
-    if (waitingForSeller) return
     let cancelled = false
     void Promise.allSettled([getSellableRoasts(roasterId), getSellableGreenLots(roasterId)]).then(
       ([roastsResult, greenResult]) => {
@@ -384,16 +394,17 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
     return () => {
       cancelled = true
     }
-  }, [roasterId, reloadKey, initialGreenId, waitingForSeller])
+  }, [roasterId, reloadKey, initialGreenId])
 
   const retryLoad = () => {
     setSellable({ status: 'loading' })
     setReloadKey((k) => k + 1)
   }
 
-  // "Sell for" lists the Admin first ("Me", for stock they claimed or roasts
-  // they logged themselves), then every user with the Roaster role. An
-  // Admin's app data holds all users; when it has none yet, ask the server.
+  // "Sell for" lists "All roasters" first, then the Admin ("Me", for stock
+  // they claimed or roasts they logged themselves), then every user with the
+  // Roaster role. An Admin's app data holds all users; when it has none yet,
+  // ask the server.
   const needUsers = pickSeller && data.users.length === 0
   const [fetchedUsers, setFetchedUsers] = useState<User[] | null>(null)
   const [usersFailed, setUsersFailed] = useState(false)
@@ -418,26 +429,39 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
     setUsersFailed(false)
     setUsersReloadKey((k) => k + 1)
   }
+  const knownUsers = useMemo(
+    () => (data.users.length > 0 ? data.users : (fetchedUsers ?? [])),
+    [data.users, fetchedUsers],
+  )
   const sellerOptions = useMemo(() => {
-    const roasters = (data.users.length > 0 ? data.users : (fetchedUsers ?? []))
+    const roasters = knownUsers
       .filter((u) => u.id !== currentUser?.id && u.roles?.includes(UserRole.Roaster))
       .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
       .map((u) => ({
         value: u.id,
         label: u.isActive === false ? `${u.name} (inactive)` : u.name,
       }))
+    const all = { value: ALL_SELLERS, label: 'All roasters' }
     return currentUser
-      ? [{ value: currentUser.id, label: `Me (${currentUser.name})` }, ...roasters]
-      : roasters
-  }, [data.users, fetchedUsers, currentUser])
+      ? [all, { value: currentUser.id, label: `Me (${currentUser.name})` }, ...roasters]
+      : [all, ...roasters]
+  }, [knownUsers, currentUser])
 
-  // Another seller means other stock: start the lines over and load theirs.
+  // Another seller means other stock: load theirs, and start the lines over
+  // unless every chosen item is already theirs. "All roasters" holds them all.
   const chooseSeller = (id: string) => {
     if (!id || id === pickedSellerId) return
+    const keepLines =
+      id === ALL_SELLERS || lines.every((line) => !line.source || ownerOf(line.source) === id)
     setPickedSellerId(id)
-    if (!currencyTouched) setCurrency(lastCurrencyOf(id))
-    setLines([newLine()])
-    setInitialGreenGone(false)
+    // A price typed on a kept line was meant in the currency on screen.
+    if (!currencyTouched && id !== ALL_SELLERS && !(keepLines && hasTypedPrice)) {
+      setCurrency(lastCurrencyOf(id))
+    }
+    if (!keepLines) {
+      setLines([newLine()])
+      setInitialGreenGone(false)
+    }
     setError('')
     setSellable({ status: 'loading' })
   }
@@ -509,17 +533,20 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
     }
     if (sellable.status === 'done') {
       for (const roast of sellable.roasts ?? []) {
-        add({ kind: 'roast', key: sourceKey('roast', roast.id), roast })
+        const owner = { owner: roast.roasterId, ownerName: roast.roasterName }
+        add({ kind: 'roast', key: sourceKey('roast', roast.id), roast, ...owner })
       }
       for (const green of sellable.greenLots ?? []) {
-        add({ kind: 'green', key: sourceKey('green', green.id), green })
+        const owner = { owner: green.roasterId, ownerName: green.roasterName }
+        add({ kind: 'green', key: sourceKey('green', green.id), green, ...owner })
       }
     }
     for (const item of order?.items ?? []) {
+      const owner = order?.createdBy ?? ''
       if (item.roastBatchId && item.roast) {
-        add({ kind: 'roast', key: sourceKey('roast', item.roastBatchId), roast: item.roast })
+        add({ kind: 'roast', key: sourceKey('roast', item.roastBatchId), roast: item.roast, owner })
       } else if (item.roasterInventoryId && item.green) {
-        add({ kind: 'green', key: sourceKey('green', item.roasterInventoryId), green: item.green })
+        add({ kind: 'green', key: sourceKey('green', item.roasterInventoryId), green: item.green, owner })
       }
     }
     // A stock row handed over by Start roast while the green list failed:
@@ -533,6 +560,7 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
         add({
           kind: 'green',
           key,
+          owner: row.roasterId,
           green: {
             id: row.id,
             label: toRoaId(row.greenBeanLotId),
@@ -546,12 +574,42 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
         })
       }
     }
+    // "All roasters": grouped by owner, the Admin's own first, then by name.
+    // sort is stable, so each owner's items keep the order above.
+    if (allSellers) {
+      const rank = (option: SourceOption) => (option.owner === currentUser?.id ? 0 : 1)
+      list.sort(
+        (a, b) =>
+          rank(a) - rank(b) ||
+          (a.ownerName ?? '').localeCompare(b.ownerName ?? '') ||
+          a.owner.localeCompare(b.owner),
+      )
+    }
     return list
-  }, [sellable, order, lineSources, data.roasterInventory])
+  }, [sellable, order, lineSources, data.roasterInventory, allSellers, currentUser?.id])
   const optionByKey = useMemo(
     () => new Map(sourceOptions.map((option) => [option.key, option])),
     [sourceOptions],
   )
+  const ownerOf = (key: string): string => optionByKey.get(key)?.owner ?? ''
+
+  // On "All roasters" the sale is for whoever owns the coffee its lines take
+  // (one owner per sale: the pickers grey out everyone else's once a line has
+  // some); until then, for the Admin.
+  const lineOwner = allSellers
+    ? (lines.map((line) => ownerOf(line.source)).find(Boolean) ?? '')
+    : ''
+  const sellerId = lineOwner || fixedSellerId
+  const sellingForOther = !!currentUser && sellerId !== currentUser.id
+
+  // A group heading in the "All roasters" pickers, and who a sale is for.
+  const ownerLabel = (ownerId: string): string => {
+    if (ownerId === currentUser?.id) return `Me (${currentUser.name})`
+    const user = knownUsers.find((u) => u.id === ownerId)
+    const name =
+      user?.name || sourceOptions.find((o) => o.owner === ownerId)?.ownerName || 'Another roaster'
+    return user?.isActive === false ? `${name} (inactive)` : name
+  }
   // Free kg per roast or stock row, from the loaded lists only. One missing
   // from them has nothing left (the server lists every one with any kg free);
   // the copy inside this sale (item.roast / item.green) came with the sale
@@ -605,22 +663,31 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
       : undefined
   }
 
-  const prefillPrice = (key: string, cur: string): string =>
-    earlierPrice(data.saleOrders, key, lotIdFor(key), cur, sellerId)
+  const prefillPrice = (key: string, cur: string, seller = sellerId): string =>
+    earlierPrice(data.saleOrders, key, lotIdFor(key), cur, seller)
 
   const updateLine = (key: string, patch: Partial<LineDraft>) =>
     setLines((prev) => prev.map((line) => (line.key === key ? { ...line, ...patch } : line)))
 
-  const chooseSource = (key: string, source: string) =>
+  const chooseSource = (key: string, source: string) => {
+    // On "All roasters" the first item chosen names the seller: their earlier
+    // prices, and their last currency unless one was picked or a price typed.
+    const owner = ownerOf(source) || sellerId
+    const firstChoice =
+      allSellers && !!source && !lines.some((line) => line.key !== key && line.source)
+    const cur =
+      firstChoice && !currencyTouched && !hasTypedPrice ? lastCurrencyOf(owner) : currency
+    if (cur !== currency) setCurrency(cur)
     setLines((prev) =>
       prev.map((line) => {
         if (line.key !== key) return line
         const replacePrice = line.priceAuto || line.price.trim() === ''
         return replacePrice
-          ? { ...line, source, price: prefillPrice(source, currency), priceAuto: true }
+          ? { ...line, source, price: prefillPrice(source, cur, owner), priceAuto: true }
           : { ...line, source }
       }),
     )
+  }
 
   const chooseCurrency = (next: string) => {
     setCurrency(next)
@@ -643,9 +710,8 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
       ? 'Sale date cannot be in the future'
       : ''
   const customerError = customerId ? '' : 'Choose a customer'
-  const sellerError = waitingForSeller ? 'Choose a roaster to sell for' : ''
   // Whose stock the messages talk about.
-  const whose = sellingForOther ? "the roaster's" : 'your'
+  const whose = allSellers ? "the roasters'" : sellingForOther ? "the roaster's" : 'your'
 
   const lineChecks = lines.map((line, index) => {
     // Rounded the way the server records them (kg to the gram, price to 2
@@ -669,6 +735,8 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
         : 'this roast'
     const duplicate =
       !!source && lines.some((l, i) => i < index && l.source === line.source)
+    // Another owner's coffee than the sale's (the pickers grey it out).
+    const otherOwner = allSellers && !!option && option.owner !== lineOwner
     const overMax =
       limitKg && !!source && !unloaded && Number.isFinite(kg) && kg > max + KG_EPSILON
     return {
@@ -683,7 +751,9 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
             ? source.kind === 'green'
               ? 'These green beans are already on another line'
               : 'This roast is already on another line'
-            : '',
+            : otherOwner
+              ? 'This coffee has a different owner. Record it on a separate sale'
+              : '',
       kgError: overMax
         ? `Only ${formatKg(max)} kg of ${label} left`
         : !line.kg.trim()
@@ -712,8 +782,7 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
   const linesReady = isLegacy || (sellable.status === 'done' && !bothFailed && !nothingToSell)
   const linesInvalid =
     !isLegacy && lineChecks.some((c) => c.source || c.kgError || c.priceError)
-  const blocked =
-    !!sellerError || !!dateError || !!customerError || !linesReady || linesInvalid
+  const blocked = !!dateError || !!customerError || !linesReady || linesInvalid
 
   const total = isLegacy
     ? order?.totalAmount ?? 0
@@ -794,10 +863,9 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
   // ---- render -----------------------------------------------------------
 
   const missingWeightCount = sellable.status === 'done' ? sellable.missingWeightCount : 0
-  // The lines themselves are on show (not a waiting, loading, failed, empty
-  // or older-sale state).
-  const showLines =
-    !isLegacy && !waitingForSeller && sellable.status === 'done' && !bothFailed && !nothingToSell
+  // The lines themselves are on show (not a loading, failed, empty or
+  // older-sale state).
+  const showLines = !isLegacy && sellable.status === 'done' && !bothFailed && !nothingToSell
   const partialFailure = showLines && (!roastsLoaded || !greenLoaded)
 
   const retryButton = (
@@ -824,10 +892,6 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
           ))}
         </ul>
       </>
-    ) : waitingForSeller ? (
-      <p className="px-3 py-3 text-sm text-gray-500">
-        Choose who you are selling for to see their roasted coffee and green beans.
-      </p>
     ) : sellable.status === 'loading' ? (
       <p className="flex items-center gap-2 px-3 py-3 text-sm text-gray-500">
         <Loader2 className={`h-4 w-4 animate-spin ${tone.spinner}`} />
@@ -846,11 +910,13 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
     ) : nothingToSell ? (
       <div className="px-3 py-3 text-sm text-gray-700">
         <p>
-          {sellingForOther
-            ? 'This roaster has nothing left to sell: no roasted coffee with a roasted weight and no green beans in stock.'
-            : embedded
-              ? 'Nothing left to sell. Log a roast with its roasted weight, or claim green beans into your stock.'
-              : 'Nothing left to sell. Log a roast with its roasted weight, or claim green beans into your stock, in the Roaster Workbench.'}
+          {allSellers
+            ? 'No roaster has anything left to sell: no roasted coffee with a roasted weight and no green beans in stock.'
+            : sellingForOther
+              ? 'This roaster has nothing left to sell: no roasted coffee with a roasted weight and no green beans in stock.'
+              : embedded
+                ? 'Nothing left to sell. Log a roast with its roasted weight, or claim green beans into your stock.'
+                : 'Nothing left to sell. Log a roast with its roasted weight, or claim green beans into your stock, in the Roaster Workbench.'}
         </p>
         {!embedded && (
           <button
@@ -873,10 +939,30 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
             const kgId = `${line.key}-kg`
             const priceId = `${line.key}-price`
             const showKgError = check.overMax || (submitted && !!check.kgError)
-            const lineOptions = sourceOptions.map((option) => ({
+            // On "All roasters": headed by owner. Once another line has coffee,
+            // its owner comes first and everyone else's is greyed out, its
+            // heading saying why (a sale is one owner's).
+            const ownerOnOtherLines = allSellers
+              ? lines.map((other) => (other.key === line.key ? '' : ownerOf(other.source))).find(Boolean)
+              : undefined
+            const otherOwnerOf = (option: SourceOption) =>
+              !!ownerOnOtherLines && option.owner !== ownerOnOtherLines
+            const lineOptions = (
+              ownerOnOtherLines
+                ? [...sourceOptions].sort((a, b) => Number(otherOwnerOf(a)) - Number(otherOwnerOf(b)))
+                : sourceOptions
+            ).map((option) => ({
               value: option.key,
               label: optionLabel(option),
-              disabled: lines.some((other) => other.key !== line.key && other.source === option.key),
+              group: allSellers
+                ? otherOwnerOf(option)
+                  ? `${ownerLabel(option.owner)} · separate sale`
+                  : ownerLabel(option.owner)
+                : undefined,
+              groupKey: allSellers ? option.owner : undefined,
+              disabled:
+                lines.some((other) => other.key !== line.key && other.source === option.key) ||
+                otherOwnerOf(option),
             }))
             const subtotal = (
               Number.isFinite(check.kg) && Number.isFinite(check.price) ? round2(check.kg * check.price) : 0
@@ -1020,8 +1106,8 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
       )}
 
       <div className="flex-1 space-y-4">
-        {/* Admin, new sale: the roaster it is recorded for. The sale is theirs
-            and every line comes from their stock. */}
+        {/* Admin, new sale: whose stock to list ("All roasters" by default).
+            The sale is recorded for the owner of its coffee. */}
         {pickSeller && (
           <div role="group" aria-labelledby="sale-seller-label" className="text-sm">
             <div className={LABEL_ROW}>
@@ -1031,12 +1117,11 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
             </div>
             <Select
               options={sellerOptions}
-              value={pickedSellerId || null}
+              value={pickedSellerId}
               onChange={(v) => chooseSeller(v ? String(v) : '')}
-              placeholder={usersLoading ? 'Loading roasters…' : 'Choose a roaster'}
-              disabled={usersLoading}
               colorTheme={tone.select}
             />
+            {usersLoading && <p className="mt-1 text-xs text-gray-500">Loading roasters…</p>}
             {usersFailed && (
               <div
                 role="alert"
@@ -1048,7 +1133,15 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
                 </button>
               </div>
             )}
-            {submitted && sellerError && <p className="mt-1 text-xs text-red-600">{sellerError}</p>}
+            {allSellers && (
+              <p className="mt-1 text-xs text-gray-500">
+                {!lineOwner
+                  ? "Your coffee and every roaster's is listed below. The sale is recorded for the owner of the coffee you choose."
+                  : lineOwner === currentUser?.id
+                    ? "Recorded for you. Another roaster's coffee goes on a separate sale."
+                    : `Recorded for ${ownerLabel(lineOwner)}. Another roaster's coffee goes on a separate sale.`}
+              </p>
+            )}
           </div>
         )}
 
@@ -1125,6 +1218,7 @@ export const SaleOrderForm: React.FC<SaleOrderFormProps> = ({
             <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
               <span>
+                {allSellers ? 'Across all roasters, ' : ''}
                 {missingWeightCount === 1
                   ? "1 older roast has no roasted weight and can't be sold until it is added in the Roast Logbook."
                   : `${missingWeightCount} older roasts have no roasted weight and can't be sold until it is added in the Roast Logbook.`}

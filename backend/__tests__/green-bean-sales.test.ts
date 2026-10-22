@@ -1009,6 +1009,29 @@ describe('green bean sales', () => {
       expect(mockPrisma.roasterInventoryItem.findMany.mock.calls[2][0].where.roasterId).toBe('admin-1')
     })
 
+    test("an Admin's ?roasterId=all lists their own stock and every Roaster's; a roaster's is ignored", async () => {
+      mockPrisma.roasterInventoryItem.findMany.mockResolvedValue([
+        greenStockRow(INV_A, { roaster: { name: 'Roaster User' } }),
+      ])
+      const { GET } = await import('@/app/api/roaster-inventory/sellable/route')
+
+      mockAuthUser = admin
+      const response = await GET(sellableRequest('?roasterId=all'))
+      expect(mockPrisma.roasterInventoryItem.findMany.mock.calls[0][0].where).toEqual({
+        OR: [{ roasterId: 'admin-1' }, { roaster: { roles: { has: 'Roaster' } } }],
+        remainingWeightKg: { gt: 0.01 },
+      })
+      expect((await response.json()).greenLots[0]).toMatchObject({
+        id: INV_A,
+        roasterId: 'roaster-1',
+        roasterName: 'Roaster User',
+      })
+
+      mockAuthUser = roaster
+      await GET(sellableRequest('?roasterId=all'))
+      expect(mockPrisma.roasterInventoryItem.findMany.mock.calls[1][0].where.roasterId).toBe('roaster-1')
+    })
+
     test('lists rows with more than 10 g left, kg rounded down to the gram', async () => {
       mockAuthUser = roaster
       mockPrisma.roasterInventoryItem.findMany.mockResolvedValueOnce([
