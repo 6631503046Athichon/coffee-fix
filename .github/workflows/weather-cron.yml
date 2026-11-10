@@ -1,0 +1,39 @@
+name: Weather cron
+
+# Vercel is serverless, so nothing on the backend runs between requests.
+# This schedule calls GET /api/cron/weather every 5 minutes so farms with
+# auto-fetch on keep recording even when nobody has the site open. Each
+# farm still writes only once per its own interval, so calling more often
+# than a farm's interval costs nothing extra.
+#
+# Needs one repository secret: CRON_SECRET (same value as on Vercel).
+# GitHub may start scheduled runs a few minutes late, and pauses schedules
+# on public repos after 60 days without any commit.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: weather-cron
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: Run weather sweep
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Call /api/cron/weather
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          WEATHER_CRON_URL: https://coffee-fix-backend.vercel.app/api/cron/weather
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::Repository secret CRON_SECRET is not set"
+            exit 1
+          fi
+          curl --fail-with-body --silent --show-error --max-time 90 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$WEATHER_CRON_URL"
